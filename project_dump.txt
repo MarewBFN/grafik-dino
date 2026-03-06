@@ -1,0 +1,3574 @@
+===== PROJECT DUMP ===== 
+Generated: 06.03.2026 17:22:07,06 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\main.py 
+================================================== 
+ 
+1: import tkinter as tk 
+2: from ui.main_window import MainWindow 
+3: def main(): 
+4:     root = tk.Tk() 
+5:     MainWindow(root) 
+6:     root.mainloop() 
+7: if __name__ == "__main__": 
+8:     main() 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\last_project.json 
+================================================== 
+ 
+1: { 
+2:   "schedule": { 
+3:     "year": 2026, 
+4:     "month": 2, 
+5:     "employees": [ 
+6:       { 
+7:         "first_name": "dasdsad", 
+8:         "last_name": "asdadsa", 
+9:         "is_opener": false, 
+10:         "is_meat": false, 
+11:         "daily_hours": 8, 
+12:         "days": {} 
+13:       }, 
+14:       { 
+15:         "first_name": "asf", 
+16:         "last_name": "asfaf", 
+17:         "is_opener": true, 
+18:         "is_meat": false, 
+19:         "daily_hours": 8, 
+20:         "days": {} 
+21:       }, 
+22:       { 
+23:         "first_name": "asfaga", 
+24:         "last_name": "asfasf", 
+25:         "is_opener": false, 
+26:         "is_meat": false, 
+27:         "daily_hours": 8, 
+28:         "days": {} 
+29:       }, 
+30:       { 
+31:         "first_name": "asfas", 
+32:         "last_name": "asfasf", 
+33:         "is_opener": true, 
+34:         "is_meat": true, 
+35:         "daily_hours": 8, 
+36:         "days": {} 
+37:       }, 
+38:       { 
+39:         "first_name": "awfaf", 
+40:         "last_name": "asfasf", 
+41:         "is_opener": false, 
+42:         "is_meat": true, 
+43:         "daily_hours": 8, 
+44:         "days": {} 
+45:       }, 
+46:       { 
+47:         "first_name": "asgasg", 
+48:         "last_name": "asgag", 
+49:         "is_opener": false, 
+50:         "is_meat": false, 
+51:         "daily_hours": 8, 
+52:         "days": {} 
+53:       }, 
+54:       { 
+55:         "first_name": "agag", 
+56:         "last_name": "asgasg", 
+57:         "is_opener": false, 
+58:         "is_meat": false, 
+59:         "daily_hours": 8, 
+60:         "days": {} 
+61:       }, 
+62:       { 
+63:         "first_name": "dsafgh", 
+64:         "last_name": "dasfg", 
+65:         "is_opener": true, 
+66:         "is_meat": true, 
+67:         "daily_hours": 8, 
+68:         "days": {} 
+69:       }, 
+70:       { 
+71:         "first_name": "afs", 
+72:         "last_name": "fds", 
+73:         "is_opener": false, 
+74:         "is_meat": true, 
+75:         "daily_hours": 8, 
+76:         "days": {} 
+77:       }, 
+78:       { 
+79:         "first_name": "fasfasg", 
+80:         "last_name": "sfasfasfa", 
+81:         "is_opener": true, 
+82:         "is_meat": false, 
+83:         "daily_hours": 8, 
+84:         "days": {} 
+85:       } 
+86:     ] 
+87:   }, 
+88:   "shop_config": { 
+89:     "year": 2026, 
+90:     "month": 2, 
+91:     "open_hours": { 
+92:       "0": [ 
+93:         "05:30", 
+94:         "22:45" 
+95:       ], 
+96:       "1": [ 
+97:         "05:30", 
+98:         "22:45" 
+99:       ], 
+100:       "2": [ 
+101:         "05:30", 
+102:         "22:45" 
+103:       ], 
+104:       "3": [ 
+105:         "05:30", 
+106:         "22:45" 
+107:       ], 
+108:       "4": [ 
+109:         "05:30", 
+110:         "22:45" 
+111:       ], 
+112:       "5": [ 
+113:         "05:30", 
+114:         "22:45" 
+115:       ], 
+116:       "6": [ 
+117:         "05:30", 
+118:         "22:45" 
+119:       ] 
+120:     }, 
+121:     "trade_sundays": [], 
+122:     "day_overrides": {}, 
+123:     "constraints": { 
+124:       "max_consecutive_days": 4, 
+125:       "min_open_staff": 3, 
+126:       "min_close_staff": 3, 
+127:       "enforce_11h_rest": true, 
+128:       "enforce_meat_coverage": true 
+129:     }, 
+130:     "cell_display_mode": "compact" 
+131:   } 
+132: } 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\project_dump.txt 
+================================================== 
+ 
+1: ===== PROJECT DUMP =====  
+2: Generated: 06.03.2026 17:22:07,06  
+3:   
+4: ==================================================  
+5: FILE: C:\Users\kewi1\Desktop\Grafik dino V2\main.py  
+6: ==================================================  
+7:   
+8: 1: import tkinter as tk  
+9: 2: from ui.main_window import MainWindow  
+10: 3: def main():  
+11: 4:     root = tk.Tk()  
+12: 5:     MainWindow(root)  
+13: 6:     root.mainloop()  
+14: 7: if __name__ == "__main__":  
+15: 8:     main()  
+16:   
+17:   
+18: ==================================================  
+19: FILE: C:\Users\kewi1\Desktop\Grafik dino V2\last_project.json  
+20: ==================================================  
+21:   
+22: 1: {  
+23: 2:   "schedule": {  
+24: 3:     "year": 2026,  
+25: 4:     "month": 2,  
+26: 5:     "employees": [  
+27: 6:       {  
+28: 7:         "first_name": "dasdsad",  
+29: 8:         "last_name": "asdadsa",  
+30: 9:         "is_opener": false,  
+31: 10:         "is_meat": false,  
+32: 11:         "daily_hours": 8,  
+33: 12:         "days": {}  
+34: 13:       },  
+35: 14:       {  
+36: 15:         "first_name": "asf",  
+37: 16:         "last_name": "asfaf",  
+38: 17:         "is_opener": true,  
+39: 18:         "is_meat": false,  
+40: 19:         "daily_hours": 8,  
+41: 20:         "days": {}  
+42: 21:       },  
+43: 22:       {  
+44: 23:         "first_name": "asfaga",  
+45: 24:         "last_name": "asfasf",  
+46: 25:         "is_opener": false,  
+47: 26:         "is_meat": false,  
+48: 27:         "daily_hours": 8,  
+49: 28:         "days": {}  
+50: 29:       },  
+51: 30:       {  
+52: 31:         "first_name": "asfas",  
+53: 32:         "last_name": "asfasf",  
+54: 33:         "is_opener": true,  
+55: 34:         "is_meat": true,  
+56: 35:         "daily_hours": 8,  
+57: 36:         "days": {}  
+58: 37:       },  
+59: 38:       {  
+60: 39:         "first_name": "awfaf",  
+61: 40:         "last_name": "asfasf",  
+62: 41:         "is_opener": false,  
+63: 42:         "is_meat": true,  
+64: 43:         "daily_hours": 8,  
+65: 44:         "days": {}  
+66: 45:       },  
+67: 46:       {  
+68: 47:         "first_name": "asgasg",  
+69: 48:         "last_name": "asgag",  
+70: 49:         "is_opener": false,  
+71: 50:         "is_meat": false,  
+72: 51:         "daily_hours": 8,  
+73: 52:         "days": {}  
+74: 53:       },  
+75: 54:       {  
+76: 55:         "first_name": "agag",  
+77: 56:         "last_name": "asgasg",  
+78: 57:         "is_opener": false,  
+79: 58:         "is_meat": false,  
+80: 59:         "daily_hours": 8,  
+81: 60:         "days": {}  
+82: 61:       },  
+83: 62:       {  
+84: 63:         "first_name": "dsafgh",  
+85: 64:         "last_name": "dasfg",  
+86: 65:         "is_opener": true,  
+87: 66:         "is_meat": true,  
+88: 67:         "daily_hours": 8,  
+89: 68:         "days": {}  
+90: 69:       },  
+91: 70:       {  
+92: 71:         "first_name": "afs",  
+93: 72:         "last_name": "fds",  
+94: 73:         "is_opener": false,  
+95: 74:         "is_meat": true,  
+96: 75:         "daily_hours": 8,  
+97: 76:         "days": {}  
+98: 77:       },  
+99: 78:       {  
+100: 79:         "first_name": "fasfasg",  
+101: 80:         "last_name": "sfasfasfa",  
+102: 81:         "is_opener": true,  
+103: 82:         "is_meat": false,  
+104: 83:         "daily_hours": 8,  
+105: 84:         "days": {}  
+106: 85:       }  
+107: 86:     ]  
+108: 87:   },  
+109: 88:   "shop_config": {  
+110: 89:     "year": 2026,  
+111: 90:     "month": 2,  
+112: 91:     "open_hours": {  
+113: 92:       "0": [  
+114: 93:         "05:30",  
+115: 94:         "22:45"  
+116: 95:       ],  
+117: 96:       "1": [  
+118: 97:         "05:30",  
+119: 98:         "22:45"  
+120: 99:       ],  
+121: 100:       "2": [  
+122: 101:         "05:30",  
+123: 102:         "22:45"  
+124: 103:       ],  
+125: 104:       "3": [  
+126: 105:         "05:30",  
+127: 106:         "22:45"  
+128: 107:       ],  
+129: 108:       "4": [  
+130: 109:         "05:30",  
+131: 110:         "22:45"  
+132: 111:       ],  
+133: 112:       "5": [  
+134: 113:         "05:30",  
+135: 114:         "22:45"  
+136: 115:       ],  
+137: 116:       "6": [  
+138: 117:         "05:30",  
+139: 118:         "22:45"  
+140: 119:       ]  
+141: 120:     },  
+142: 121:     "trade_sundays": [],  
+143: 122:     "day_overrides": {},  
+144: 123:     "constraints": {  
+145: 124:       "max_consecutive_days": 4,  
+146: 125:       "min_open_staff": 3,  
+147: 126:       "min_close_staff": 3,  
+148: 127:       "enforce_11h_rest": true,  
+149: 128:       "enforce_meat_coverage": true  
+150: 129:     },  
+151: 130:     "cell_display_mode": "compact"  
+152: 131:   }  
+153: 132: }  
+154:   
+155:   
+156: ==================================================  
+157: FILE: C:\Users\kewi1\Desktop\Grafik dino V2\project_dump.txt  
+158: ==================================================  
+159:   
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\export\excel_exporter.py 
+================================================== 
+ 
+1: from openpyxl import Workbook 
+2: from openpyxl.styles import Alignment, Font 
+3: from openpyxl.utils import get_column_letter 
+4: import calendar 
+5: def export_schedule_to_excel(schedule, year, month, path): 
+6:     wb = Workbook() 
+7:     ws = wb.active 
+8:     ws.title = "Grafik" 
+9:     days_in_month = calendar.monthrange(year, month)[1] 
+10:     weekdays = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"] 
+11:     # ========================= 
+12:     # NAGŁÓWEK 
+13:     # ========================= 
+14:     ws.cell(row=1, column=1, value="Pracownik") 
+15:     for day in range(1, days_in_month + 1): 
+16:         wd = calendar.weekday(year, month, day) 
+17:         ws.cell( 
+18:             row=1, 
+19:             column=day + 1, 
+20:             value=f"{weekdays[wd]} {day}" 
+21:         ) 
+22:     ws.cell(row=1, column=days_in_month + 2, value="H") 
+23:     # style nagłówka 
+24:     for col in range(1, days_in_month + 3): 
+25:         c = ws.cell(row=1, column=col) 
+26:         c.font = Font(bold=True) 
+27:         c.alignment = Alignment(horizontal="center") 
+28:     # ========================= 
+29:     # DANE 
+30:     # ========================= 
+31:     start_row = 2 
+32:     for r, emp in enumerate(schedule.employees): 
+33:         row = start_row + r 
+34:         ws.cell(row=row, column=1, value=emp.display_name()) 
+35:         for day in range(1, days_in_month + 1): 
+36:             ds = schedule.get_day(emp, day) 
+37:             s, e, t = ds.as_rows() 
+38:             ws.cell(row=row, column=day + 1, value=f"{s}\n{e}\n{t}") 
+39:             ws.cell(row=row, column=day + 1).alignment = Alignment(wrap_text=True) 
+40:         ws.cell( 
+41:             row=row, 
+42:             column=days_in_month + 2, 
+43:             value=schedule.total_hours_for_employee(emp) 
+44:         ) 
+45:     # ========================= 
+46:     # SIZING 
+47:     # ========================= 
+48:     ws.column_dimensions["A"].width = 22 
+49:     for col in range(2, days_in_month + 3): 
+50:         ws.column_dimensions[get_column_letter(col)].width = 12 
+51:     wb.save(path) 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\auto_generator.py 
+================================================== 
+ 
+1: from pyexpat import model 
+2: from ortools.sat.python import cp_model 
+3: from model.month_schedule import MonthSchedule 
+4: from model.shop_config import ShopConfig 
+5: from model.constraint_policy import ConstraintPolicy 
+6: class AutoScheduleGenerator: 
+7:     def __init__(self, schedule: MonthSchedule, shop: ShopConfig): 
+8:         self.schedule = schedule 
+9:         self.shop = shop 
+10:         # ===== SHIFT ID ===== 
+11:         self.SHIFT_OPEN = 0 
+12:         self.SHIFT_CLOSE = 1 
+13:         # WORK od otwarcia 
+14:         self.SHIFT_WORK_START_15 = 2 
+15:         self.SHIFT_WORK_START_30 = 3 
+16:         self.SHIFT_WORK_START_45 = 4 
+17:         self.SHIFT_WORK_START_60 = 5 
+18:         self.SHIFT_WORK_START_75 = 6 
+19:         self.SHIFT_WORK_START_90 = 7 
+20:         # WORK od zamknięcia 
+21:         self.SHIFT_WORK_END_15 = 8 
+22:         self.SHIFT_WORK_END_30 = 9 
+23:         self.SHIFT_WORK_END_45 = 10 
+24:         self.SHIFT_WORK_END_60 = 11 
+25:         self.SHIFT_WORK_END_75 = 12 
+26:         self.SHIFT_WORK_END_90 = 13 
+27:         # wszystkie zmiany (tu można dodawać kolejne typy zmian) 
+28:         self.ALL_SHIFTS = ( 
+29:             self.SHIFT_OPEN, 
+30:             self.SHIFT_CLOSE, 
+31:             self.SHIFT_WORK_START_15, 
+32:             self.SHIFT_WORK_START_30, 
+33:             self.SHIFT_WORK_START_45, 
+34:             self.SHIFT_WORK_START_60, 
+35:             self.SHIFT_WORK_START_75, 
+36:             self.SHIFT_WORK_START_90, 
+37:             self.SHIFT_WORK_END_15, 
+38:             self.SHIFT_WORK_END_30, 
+39:             self.SHIFT_WORK_END_45, 
+40:             self.SHIFT_WORK_END_60, 
+41:             self.SHIFT_WORK_END_75, 
+42:             self.SHIFT_WORK_END_90, 
+43:         ) 
+44:         # Wagi dla soft constraintów (im wyższa, tym ważniejszy constraint)     
+45:         self.constraint_weights = { 
+46:             "meat": 10000, 
+47:             "meat_coverage": 15000, 
+48:             "rest_11h": 5000, 
+49:             "balance": 1, 
+50:             "max_consecutive": 1000, 
+51:             "open": 20000, 
+52:             "close": 20000, 
+53:             "monthly_hours": 2000, 
+54:         } 
+55:     # ================================================== 
+56:     # PUBLIC 
+57:     # ================================================== 
+58:     def generate(self): 
+59:         print("=== START CP-SAT GENERATOR ===") 
+60:         self._clear_schedule() 
+61:         model = cp_model.CpModel() 
+62:         employees = self.schedule.employees 
+63:         days = list(range(1, self.schedule.days_in_month + 1)) 
+64:         min_open = self.shop.constraints.get("min_open_staff", 3) 
+65:         min_close = self.shop.constraints.get("min_close_staff", 3) 
+66:         max_consecutive = self.shop.constraints.get("max_consecutive_days", 4) 
+67:         trade_days = [d for d in days if self.shop.is_trade_day(d)] 
+68:         print("Liczba pracowników:", len(employees)) 
+69:         print("Dni w miesiącu:", len(days)) 
+70:         print("Dni handlowe:", len(trade_days)) 
+71:         print("Min OPEN:", min_open) 
+72:         print("Min CLOSE:", min_close) 
+73:         print("Max consecutive:", max_consecutive) 
+74:         x = self._create_variables(model, employees, days) 
+75:         self._add_non_trade_day_constraints(model, x, employees, days) 
+76:         self._add_total_open_close_limit(model, x, employees, trade_days) 
+77:         self._add_leave_constraints(model, x, employees, days) 
+78:         self._add_day_off_constraints(model, x, employees, days) 
+79:         self._add_manual_shift_constraints(model, x, employees, days) 
+80:         self._add_work_dependency_constraint(model, x, employees, days) 
+81:         self._add_one_shift_per_day_constraint(model, x, employees, days) 
+82:         open_violations = self._apply_policy( 
+83:             "open", 
+84:             hard_fn=lambda: self._add_fixed_staff_shift_constraints( 
+85:                 model, x, employees, trade_days, 
+86:                 self.SHIFT_OPEN, 
+87:                 min_open, 
+88:                 soft=False 
+89:             ), 
+90:             soft_fn=lambda: self._add_fixed_staff_shift_constraints( 
+91:                 model, x, employees, trade_days, 
+92:                 self.SHIFT_OPEN, 
+93:                 min_open, 
+94:                 soft=True 
+95:             ) 
+96:         ) 
+97:         close_violations = self._apply_policy( 
+98:             "close", 
+99:             hard_fn=lambda: self._add_fixed_staff_shift_constraints( 
+100:                 model, x, employees, trade_days, 
+101:                 self.SHIFT_CLOSE, 
+102:                 min_close, 
+103:                 soft=False 
+104:             ), 
+105:             soft_fn=lambda: self._add_fixed_staff_shift_constraints( 
+106:                 model, x, employees, trade_days, 
+107:                 self.SHIFT_CLOSE, 
+108:                 min_close, 
+109:                 soft=True 
+110:             ) 
+111:         ) 
+112:         rest_violations = self._apply_policy( 
+113:             "rest_11h", 
+114:             hard_fn=lambda: self._add_rest_11h_constraint( 
+115:                 model, x, employees, days, trade_days, soft=False 
+116:             ), 
+117:             soft_fn=lambda: self._add_rest_11h_constraint( 
+118:                 model, x, employees, days, trade_days, soft=True 
+119:             ) 
+120:         ) 
+121:         balance_violations = self._apply_policy( 
+122:             "balance", 
+123:             hard_fn=lambda: self._add_balance_constraint( 
+124:                 model, x, employees, days, soft=False 
+125:             ), 
+126:             soft_fn=lambda: self._add_balance_constraint( 
+127:                 model, x, employees, days, soft=True 
+128:             ) 
+129:         ) 
+130:         meat_violations = self._apply_policy( 
+131:             "meat", 
+132:             hard_fn=lambda: self._add_meat_constraint( 
+133:                 model, x, employees, days, trade_days, soft=False 
+134:             ), 
+135:             soft_fn=lambda: self._add_meat_constraint( 
+136:                 model, x, employees, days, trade_days, soft=True 
+137:             ) 
+138:         ) 
+139:         coverage_violations = self._apply_policy( 
+140:             "meat_coverage", 
+141:             hard_fn=lambda: self._add_meat_coverage_constraint( 
+142:                 model, x, employees, trade_days 
+143:             ), 
+144:             soft_fn=lambda: self._add_meat_coverage_constraint( 
+145:                 model, x, employees, trade_days, soft=True 
+146:             ) 
+147:         ) 
+148:         max_consec_violations = self._apply_policy( 
+149:             "max_consecutive", 
+150:             hard_fn=lambda: self._add_max_consecutive_constraint( 
+151:                 model, x, employees, days, max_consecutive, soft=False 
+152:             ), 
+153:             soft_fn=lambda: self._add_max_consecutive_constraint( 
+154:                 model, x, employees, days, max_consecutive, soft=True 
+155:             ) 
+156:         ) 
+157:         monthly_hours_violations = self._apply_policy( 
+158:             "monthly_hours", 
+159:             hard_fn=lambda: self._add_monthly_hours_constraint( 
+160:                 model, x, employees, days, soft=False 
+161:             ), 
+162:             soft_fn=lambda: self._add_monthly_hours_constraint( 
+163:                 model, x, employees, days, soft=True 
+164:             ) 
+165:         ) 
+166:         all_soft_violations = [] 
+167:         all_soft_violations.extend(rest_violations) 
+168:         all_soft_violations.extend(balance_violations) 
+169:         all_soft_violations.extend(meat_violations) 
+170:         all_soft_violations.extend(coverage_violations) 
+171:         all_soft_violations.extend(max_consec_violations) 
+172:         all_soft_violations.extend(open_violations) 
+173:         all_soft_violations.extend(close_violations) 
+174:         all_soft_violations.extend(monthly_hours_violations) 
+175:         all_soft_violations.extend( 
+176:             self._add_work_balance_penalty(model, x, employees, trade_days) 
+177:         ) 
+178:         all_soft_violations.extend( 
+179:             self._add_open_close_penalty(x, employees, trade_days) 
+180:         ) 
+181:          
+182:         self._build_objective(model, all_soft_violations) 
+183:         solver, status = self._solve_model(model) 
+184:         success = self._save_solution(solver, status, x, employees, trade_days) 
+185:         return { 
+186:             "status": status, 
+187:             "success": success, 
+188:             "conflicts": solver.NumConflicts(), 
+189:             "branches": solver.NumBranches(), 
+190:             "wall_time": solver.WallTime() 
+191:         } 
+192:     def _clear_schedule(self): 
+193:         for emp in self.schedule.employees: 
+194:             for day in range(1, self.schedule.days_in_month + 1): 
+195:                 ds = self.schedule.get_day(emp, day) 
+196:                 if ( 
+197:                     ds.is_leave 
+198:                     or ds.is_locked 
+199:                     or getattr(ds, "is_day_off", False) 
+200:                     or getattr(ds, "start_time", None) 
+201:                 ): 
+202:                     continue 
+203:                 self.schedule.set_day_free(emp, day) 
+204:     def _calc_end(self, start_str, hours): 
+205:         from datetime import datetime, timedelta 
+206:         fmt = "%H:%M" 
+207:         start = datetime.strptime(start_str, fmt) 
+208:         end = start + timedelta(hours=hours) 
+209:         return end.strftime(fmt) 
+210:     def _calc_start(self, end_str, hours): 
+211:         from datetime import datetime, timedelta 
+212:         fmt = "%H:%M" 
+213:         end = datetime.strptime(end_str, fmt) 
+214:         start = end - timedelta(hours=hours) 
+215:         return start.strftime(fmt) 
+216:      
+217:     def _create_variables(self, model, employees, days): 
+218:         x = {} 
+219:         for e in range(len(employees)): 
+220:             for d in days: 
+221:                 for s in (self.ALL_SHIFTS): 
+222:                     x[e, d, s] = model.NewBoolVar(f"x_e{e}_d{d}_s{s}") 
+223:         print(f"[MODEL] variables: {len(x)}") 
+224:         return x 
+225:      
+226:     def _add_non_trade_day_constraints(self, model, x, employees, days): 
+227:         for e in range(len(employees)): 
+228:             for d in days: 
+229:                 if not self.shop.is_trade_day(d): 
+230:                     for s in self.ALL_SHIFTS: 
+231:                         model.Add(x[e, d, s] == 0) 
+232:     def _add_one_shift_per_day_constraint(self, model, x, employees, days): 
+233:         for e in range(len(employees)): 
+234:             for d in days: 
+235:                 model.Add( 
+236:                     sum(x[e, d, s] for s in self.ALL_SHIFTS) <= 1 
+237:                 ) 
+238:     def _add_fixed_staff_shift_constraints( 
+239:         self, 
+240:         model, 
+241:         x, 
+242:         employees, 
+243:         trade_days, 
+244:         shift_type, 
+245:         min_staff, 
+246:         soft=False 
+247:     ): 
+248:         print(f"[CONSTRAINT] fixed_staff shift={shift_type} min={min_staff} soft={soft}") 
+249:         violations = [] 
+250:         for d in trade_days: 
+251:             print(f"  day={d}") 
+252:             # tylko OPEN / CLOSE 
+253:             total_staff = sum( 
+254:                 x[e, d, shift_type] for e in range(len(employees)) 
+255:             ) 
+256:             opener_staff = sum( 
+257:                 x[e, d, shift_type] 
+258:                 for e in range(len(employees)) 
+259:                 if employees[e].is_opener 
+260:             ) 
+261:             if not soft: 
+262:                 meat_staff = sum( 
+263:                     x[e, d, shift_type] 
+264:                     for e in range(len(employees)) 
+265:                     if employees[e].is_meat 
+266:                 ) 
+267:                 model.Add(total_staff == min_staff) 
+268:                 model.Add(opener_staff == 1) 
+269:                 model.Add(meat_staff == 1) 
+270:             else: 
+271:                 # kara za brak ludzi 
+272:                 total_violation = model.NewIntVar( 
+273:                     0, min_staff, 
+274:                     f"staff_v_d{d}_{shift_type}" 
+275:                 ) 
+276:                 model.Add(total_staff + total_violation >= min_staff) 
+277:                 violations.append(total_violation) 
+278:                 # kara za brak opener 
+279:                 opener_violation = model.NewBoolVar( 
+280:                     f"opener_v_d{d}_{shift_type}" 
+281:                 ) 
+282:                 model.Add(opener_staff + opener_violation >= 1) 
+283:                 violations.append(opener_violation) 
+284:         return violations 
+285:     def _add_max_consecutive_constraint( 
+286:         self, 
+287:         model, 
+288:         x, 
+289:         employees, 
+290:         days, 
+291:         max_consecutive, 
+292:         soft=False 
+293:     ): 
+294:         violations = [] 
+295:         for e in range(len(employees)): 
+296:             for start in range(1, len(days) - max_consecutive + 1): 
+297:                 work_sum = sum( 
+298:                     x[e, d, s] 
+299:                     for d in range(start, start + max_consecutive + 1) 
+300:                     for s in self.ALL_SHIFTS 
+301:                 ) 
+302:                 if not soft: 
+303:                     model.Add(work_sum <= max_consecutive) 
+304:                 else: 
+305:                     violation = model.NewIntVar( 
+306:                         0, len(days),   # ← duży zakres 
+307:                         f"max_consec_violation_e{e}_d{start}" 
+308:                     ) 
+309:                     model.Add(work_sum <= max_consecutive + violation) 
+310:                     violations.append(violation) 
+311:         return violations 
+312:     def _add_rest_11h_constraint( 
+313:         self, 
+314:         model, 
+315:         x, 
+316:         employees, 
+317:         days, 
+318:         trade_days, 
+319:         soft=False 
+320:     ): 
+321:         from datetime import datetime, timedelta 
+322:         fmt = "%H:%M" 
+323:         violations = [] 
+324:         rest_constraints = 0 
+325:         for e in range(len(employees)): 
+326:             for i in range(len(days) - 1): 
+327:                 d = days[i] 
+328:                 d_next = days[i + 1] 
+329:                 if d not in trade_days or d_next not in trade_days: 
+330:                     continue 
+331:                 hours_d = self.shop.get_open_hours_for_day(d) 
+332:                 hours_next = self.shop.get_open_hours_for_day(d_next) 
+333:                 if not hours_d or not hours_next: 
+334:                     continue 
+335:                 open_d, close_d = hours_d 
+336:                 open_next, close_next = hours_next 
+337:                 shifts_today = {} 
+338:                 # OPEN 
+339:                 shifts_today[self.SHIFT_OPEN] = ( 
+340:                     open_d, 
+341:                     self._calc_end(open_d, employees[e].daily_hours) 
+342:                 ) 
+343:                 # CLOSE 
+344:                 shifts_today[self.SHIFT_CLOSE] = ( 
+345:                     self._calc_start(close_d, employees[e].daily_hours), 
+346:                     close_d 
+347:                 ) 
+348:                 # WORK_START offsets 
+349:                 for off, shift in [ 
+350:                     (15, self.SHIFT_WORK_START_15), 
+351:                     (30, self.SHIFT_WORK_START_30), 
+352:                     (45, self.SHIFT_WORK_START_45), 
+353:                     (60, self.SHIFT_WORK_START_60), 
+354:                     (75, self.SHIFT_WORK_START_75), 
+355:                     (90, self.SHIFT_WORK_START_90), 
+356:                 ]: 
+357:                     start = ( 
+358:                         datetime.strptime(open_d, fmt) 
+359:                         + timedelta(minutes=off) 
+360:                     ).strftime(fmt) 
+361:                     shifts_today[shift] = ( 
+362:                         start, 
+363:                         self._calc_end(start, employees[e].daily_hours) 
+364:                     ) 
+365:                 # WORK_END offsets 
+366:                 for off, shift in [ 
+367:                     (15, self.SHIFT_WORK_END_15), 
+368:                     (30, self.SHIFT_WORK_END_30), 
+369:                     (45, self.SHIFT_WORK_END_45), 
+370:                     (60, self.SHIFT_WORK_END_60), 
+371:                     (75, self.SHIFT_WORK_END_75), 
+372:                     (90, self.SHIFT_WORK_END_90), 
+373:                 ]: 
+374:                     end = ( 
+375:                         datetime.strptime(close_d, fmt) 
+376:                         - timedelta(minutes=off) 
+377:                     ).strftime(fmt) 
+378:                     shifts_today[shift] = ( 
+379:                         self._calc_start(end, employees[e].daily_hours), 
+380:                         end 
+381:                     ) 
+382:                 shifts_next = {} 
+383:                 # OPEN 
+384:                 shifts_next[self.SHIFT_OPEN] = ( 
+385:                     open_next, 
+386:                     self._calc_end(open_next, employees[e].daily_hours) 
+387:                 ) 
+388:                 # CLOSE 
+389:                 shifts_next[self.SHIFT_CLOSE] = ( 
+390:                     self._calc_start(close_next, employees[e].daily_hours), 
+391:                     close_next 
+392:                 ) 
+393:                 # WORK_START offsets 
+394:                 for off, shift in [ 
+395:                     (15, self.SHIFT_WORK_START_15), 
+396:                     (30, self.SHIFT_WORK_START_30), 
+397:                     (45, self.SHIFT_WORK_START_45), 
+398:                     (60, self.SHIFT_WORK_START_60), 
+399:                     (75, self.SHIFT_WORK_START_75), 
+400:                     (90, self.SHIFT_WORK_START_90), 
+401:                 ]: 
+402:                     start = ( 
+403:                         datetime.strptime(open_next, fmt) 
+404:                         + timedelta(minutes=off) 
+405:                     ).strftime(fmt) 
+406:                     shifts_next[shift] = ( 
+407:                         start, 
+408:                         self._calc_end(start, employees[e].daily_hours) 
+409:                     ) 
+410:                 # WORK_END offsets 
+411:                 for off, shift in [ 
+412:                     (15, self.SHIFT_WORK_END_15), 
+413:                     (30, self.SHIFT_WORK_END_30), 
+414:                     (45, self.SHIFT_WORK_END_45), 
+415:                     (60, self.SHIFT_WORK_END_60), 
+416:                     (75, self.SHIFT_WORK_END_75), 
+417:                     (90, self.SHIFT_WORK_END_90), 
+418:                 ]: 
+419:                     end = ( 
+420:                         datetime.strptime(close_next, fmt) 
+421:                         - timedelta(minutes=off) 
+422:                     ).strftime(fmt) 
+423:                     shifts_next[shift] = ( 
+424:                         self._calc_start(end, employees[e].daily_hours), 
+425:                         end 
+426:                     ) 
+427:                 for s1 in shifts_today: 
+428:                     for s2 in shifts_next: 
+429:                         end_today = datetime.strptime(shifts_today[s1][1], fmt) 
+430:                         start_next = datetime.strptime(shifts_next[s2][0], fmt) 
+431:                         rest = start_next - end_today 
+432:                         if rest.total_seconds() < 0: 
+433:                             rest += timedelta(days=1) 
+434:                         if rest < timedelta(hours=11): 
+435:                             if not soft: 
+436:                                 model.Add( 
+437:                                     x[e, d, s1] + x[e, d_next, s2] <= 1 
+438:                                 ) 
+439:                             else: 
+440:                                 violation = model.NewBoolVar( 
+441:                                     f"rest_violation_e{e}_d{d}_{s1}_{s2}" 
+442:                                 ) 
+443:                                 model.Add( 
+444:                                     x[e, d, s1] + x[e, d_next, s2] <= 1 + violation 
+445:                                 ) 
+446:                                 violations.append(violation) 
+447:                             rest_constraints += 1 
+448:         print("Constrainty 11h rest:", rest_constraints) 
+449:         return violations 
+450:     def _add_meat_constraint(self, model, x, employees, days, trade_days, soft=False): 
+451:         violations = [] 
+452:         for d in trade_days: 
+453:             meat_on_open = sum( 
+454:                 x[e, d, self.SHIFT_OPEN] 
+455:                 for e in range(len(employees)) 
+456:                 if employees[e].is_meat 
+457:             ) 
+458:             meat_on_close = sum( 
+459:                 x[e, d, self.SHIFT_CLOSE] 
+460:                 for e in range(len(employees)) 
+461:                 if employees[e].is_meat 
+462:             ) 
+463:             meat_on_work = sum( 
+464:                 x[e, d, s] 
+465:                 for e in range(len(employees)) 
+466:                 for s in self.ALL_SHIFTS 
+467:                 if s not in (self.SHIFT_OPEN, self.SHIFT_CLOSE) 
+468:                 and employees[e].is_meat 
+469:             ) 
+470:             total_work = sum( 
+471:                 x[e, d, s] 
+472:                 for e in range(len(employees)) 
+473:                 for s in self.ALL_SHIFTS 
+474:                 if s not in (self.SHIFT_OPEN, self.SHIFT_CLOSE) 
+475:             ) 
+476:             if not soft: 
+477:                 work_exists = model.NewBoolVar(f"work_exists_d{d}") 
+478:                 model.Add(total_work >= 1).OnlyEnforceIf(work_exists) 
+479:                 model.Add(total_work == 0).OnlyEnforceIf(work_exists.Not()) 
+480:                 meat_on_work = sum( 
+481:                     x[e, d, s] 
+482:                     for e in range(len(employees)) 
+483:                     for s in self.ALL_SHIFTS 
+484:                     if s not in (self.SHIFT_OPEN, self.SHIFT_CLOSE) 
+485:                     and employees[e].is_meat 
+486:                 ) 
+487:                 model.Add( 
+488:                     meat_on_work >= 1 
+489:                 ).OnlyEnforceIf(work_exists) 
+490:             else: 
+491:                 v1 = model.NewBoolVar(f"meat_open_v_d{d}") 
+492:                 model.Add(meat_on_open + v1 >= 1) 
+493:                 violations.append(v1) 
+494:                 v2 = model.NewBoolVar(f"meat_close_v_d{d}") 
+495:                 model.Add(meat_on_close + v2 >= 1) 
+496:                 violations.append(v2) 
+497:         return violations 
+498:      
+499:     def _add_meat_coverage_constraint( 
+500:         self, 
+501:         model, 
+502:         x, 
+503:         employees, 
+504:         trade_days, 
+505:         soft=False 
+506:     ): 
+507:         from datetime import datetime, timedelta 
+508:         violations = [] 
+509:         for d in trade_days: 
+510:             hours = self.shop.get_open_hours_for_day(d) 
+511:             if not hours: 
+512:                 continue 
+513:             open_time, close_time = hours 
+514:             fmt = "%H:%M" 
+515:             open_dt = datetime.strptime(open_time, fmt) 
+516:             close_dt = datetime.strptime(close_time, fmt) 
+517:             t = open_dt 
+518:             while t < close_dt: 
+519:                 slot = t.strftime(fmt) 
+520:                 meat_cover = [] 
+521:                 for e in range(len(employees)): 
+522:                     if not employees[e].is_meat: 
+523:                         continue 
+524:                     emp = employees[e] 
+525:                     shift_len = timedelta(hours=emp.daily_hours) 
+526:                     # OPEN 
+527:                     start = open_dt 
+528:                     end = start + shift_len 
+529:                     if start <= t < end: 
+530:                         meat_cover.append(x[e, d, self.SHIFT_OPEN]) 
+531:                     # CLOSE 
+532:                     end = close_dt 
+533:                     start = end - shift_len 
+534:                     if start <= t < end: 
+535:                         meat_cover.append(x[e, d, self.SHIFT_CLOSE]) 
+536:                     for s in self.ALL_SHIFTS: 
+537:                         if s in (self.SHIFT_OPEN, self.SHIFT_CLOSE): 
+538:                             continue 
+539:                         meat_cover.append(x[e, d, s]) 
+540:                 if not meat_cover: 
+541:                     t += timedelta(minutes=15) 
+542:                     continue 
+543:                 if not soft: 
+544:                     model.Add(sum(meat_cover) >= 1) 
+545:                 else: 
+546:                     v = model.NewBoolVar(f"meat_cover_v_d{d}_{slot}") 
+547:                     model.Add(sum(meat_cover) + v >= 1) 
+548:                     violations.append(v) 
+549:                 t += timedelta(minutes=15) 
+550:         return violations 
+551:  #tu trzeba sprawdzić, zmieniłem min_target na max_minutes, bo inaczej nie można było zrobić soft constraintu (nie można dać nierówności z zmienną boolowską po prawej stronie)    
+552:     def _add_monthly_hours_constraint( 
+553:         self, 
+554:         model, 
+555:         x, 
+556:         employees, 
+557:         days, 
+558:         soft=False 
+559:     ): 
+560:         violations = [] 
+561:         nominal_hours = self.shop.get_full_time_nominal_hours() 
+562:         nominal_minutes = nominal_hours * 60 
+563:         all_totals = [] 
+564:         for e in range(len(employees)): 
+565:             emp = employees[e] 
+566:             shift_minutes = int(emp.daily_hours * 60) 
+567:             total_minutes = model.NewIntVar(0, 50000, f"month_total_e{e}") 
+568:             model.Add( 
+569:                 total_minutes == 
+570:                 sum( 
+571:                     x[e, d, s] * shift_minutes 
+572:                     for d in days 
+573:                     for s in self.ALL_SHIFTS 
+574:                 ) 
+575:             ) 
+576:             all_totals.append(total_minutes) 
+577:             leave_days = sum( 
+578:                 1 for d in days 
+579:                 if self.schedule.get_day(emp, d).is_leave 
+580:             ) 
+581:             leave_minutes = leave_days * 480 
+582:             target_minutes = int(nominal_minutes * (emp.daily_hours / 8) - leave_minutes) 
+583:             max_minutes = target_minutes + (8 * 60) 
+584:             if not soft: 
+585:                 model.Add(total_minutes >= target_minutes) 
+586:                 model.Add(total_minutes <= max_minutes) 
+587:             else: 
+588:                 under = model.NewIntVar(0, 50000, f"under_e{e}") 
+589:                 model.Add(total_minutes + under >= max_minutes) 
+590:                 over = model.NewIntVar(0, 50000, f"over_e{e}") 
+591:                 model.Add(total_minutes <= target_minutes + over) 
+592:                 violations.append(under) 
+593:                 violations.append(over) 
+594:         # ⬇️ DODANE: fairness między pracownikami (tylko w soft) 
+595:         if soft and len(all_totals) > 1: 
+596:             max_total = model.NewIntVar(0, 50000, "month_max_total") 
+597:             min_total = model.NewIntVar(0, 50000, "month_min_total") 
+598:             model.AddMaxEquality(max_total, all_totals) 
+599:             model.AddMinEquality(min_total, all_totals) 
+600:             spread = model.NewIntVar(0, 50000, "month_spread") 
+601:             model.Add(spread == max_total - min_total) 
+602:             violations.append(spread) 
+603:         return violations 
+604:      
+605:     def _add_leave_constraints( 
+606:         self, 
+607:         model, 
+608:         x, 
+609:         employees, 
+610:         days 
+611:     ): 
+612:         for e in range(len(employees)): 
+613:             emp = employees[e] 
+614:             for d in days: 
+615:                 day_state = self.schedule.get_day(emp, d) 
+616:                 if day_state.is_leave: 
+617:                     for s in self.ALL_SHIFTS: 
+618:                         model.Add(x[e, d, s] == 0) 
+619:     def _add_balance_constraint( 
+620:         self, 
+621:         model, 
+622:         x, 
+623:         employees, 
+624:         days, 
+625:         soft=True 
+626:     ): 
+627:         nominal = self.shop.get_full_time_nominal_hours() 
+628:         if not nominal: 
+629:             return [] 
+630:         nominal_minutes = int(nominal * 60) 
+631:         violations = [] 
+632:         for e in range(len(employees)): 
+633:             shift_minutes = int(employees[e].daily_hours * 60) 
+634:             total_minutes = model.NewIntVar(0, 20000, f"total_minutes_e{e}") 
+635:             model.Add( 
+636:                 total_minutes == 
+637:                 sum( 
+638:                     sum(x[e, d, s] for s in self.ALL_SHIFTS) * shift_minutes 
+639:                     for d in days 
+640:                 ) 
+641:             ) 
+642:             if not soft: 
+643:                 # MANDATORY → dokładnie nominal 
+644:                 model.Add(total_minutes == nominal_minutes) 
+645:             else: 
+646:                 # PREFERRED → kara za odchylenie 
+647:                 diff = model.NewIntVar(-20000, 20000, f"diff_e{e}") 
+648:                 model.Add(diff == total_minutes - nominal_minutes) 
+649:                 abs_diff = model.NewIntVar(0, 20000, f"abs_diff_e{e}") 
+650:                 model.AddAbsEquality(abs_diff, diff) 
+651:                 violations.append(abs_diff) 
+652:         return violations 
+653:      
+654:     def _add_work_dependency_constraint( 
+655:         self, 
+656:         model, 
+657:         x, 
+658:         employees, 
+659:         days 
+660:     ): 
+661:         print("[CONSTRAINT] work_dependency") 
+662:         for d in days: 
+663:             total_open_close = sum( 
+664:                 x[e, d, self.SHIFT_OPEN] + x[e, d, self.SHIFT_CLOSE] 
+665:                 for e in range(len(employees)) 
+666:             ) 
+667:             for e in range(len(employees)): 
+668:                 for s in self.ALL_SHIFTS: 
+669:                     if s in (self.SHIFT_OPEN, self.SHIFT_CLOSE): 
+670:                         continue 
+671:                     model.Add( 
+672:                         x[e, d, s] <= total_open_close 
+673:                     ) 
+674:     def _add_total_open_close_limit( 
+675:         self, 
+676:         model, 
+677:         x, 
+678:         employees, 
+679:         trade_days 
+680:     ): 
+681:         print("[CONSTRAINT] total_open_close_limit = 6") 
+682:         for d in trade_days: 
+683:             print(f"  day={d}") 
+684:             total_open_close = sum( 
+685:                 x[e, d, self.SHIFT_OPEN] + x[e, d, self.SHIFT_CLOSE] 
+686:                 for e in range(len(employees)) 
+687:             ) 
+688:             model.Add(total_open_close == 6) 
+689:     def _add_open_close_penalty( 
+690:         self, 
+691:         x, 
+692:         employees, 
+693:         days 
+694:     ): 
+695:         print("[OBJECTIVE] penalty OPEN/CLOSE usage") 
+696:         penalties = [] 
+697:         for e in range(len(employees)): 
+698:             for d in days: 
+699:                 penalties.append(x[e, d, self.SHIFT_OPEN]) 
+700:                 penalties.append(x[e, d, self.SHIFT_CLOSE]) 
+701:         return penalties 
+702:      
+703:     def _add_work_offset_constraint(self, model, x, work_offset, employees, days): 
+704:         for e in range(len(employees)): 
+705:             for d in days: 
+706:                 # jeśli nie WORK -> offset = 1 (dummy) 
+707:                 model.Add(work_offset[e,d] == 1).OnlyEnforceIf( 
+708:                     x[e,d,self.SHIFT_WORK_START].Not(), 
+709:                     x[e,d,self.SHIFT_WORK_END].Not() 
+710:                 ) 
+711:     def _add_work_balance_penalty( 
+712:         self, 
+713:         model, 
+714:         x, 
+715:         employees, 
+716:         days 
+717:     ): 
+718:         penalties = [] 
+719:         START_SHIFTS = ( 
+720:             self.SHIFT_WORK_START_15, 
+721:             self.SHIFT_WORK_START_30, 
+722:             self.SHIFT_WORK_START_45, 
+723:             self.SHIFT_WORK_START_60, 
+724:             self.SHIFT_WORK_START_75, 
+725:             self.SHIFT_WORK_START_90, 
+726:         ) 
+727:         END_SHIFTS = ( 
+728:             self.SHIFT_WORK_END_15, 
+729:             self.SHIFT_WORK_END_30, 
+730:             self.SHIFT_WORK_END_45, 
+731:             self.SHIFT_WORK_END_60, 
+732:             self.SHIFT_WORK_END_75, 
+733:             self.SHIFT_WORK_END_90, 
+734:         ) 
+735:         for e in range(len(employees)): 
+736:             work_start = sum( 
+737:                 x[e, d, s] 
+738:                 for d in days 
+739:                 for s in START_SHIFTS 
+740:             ) 
+741:             work_end = sum( 
+742:                 x[e, d, s] 
+743:                 for d in days 
+744:                 for s in END_SHIFTS 
+745:             ) 
+746:             diff = model.NewIntVar(-31, 31, f"work_balance_diff_e{e}") 
+747:             model.Add(diff == work_start - work_end) 
+748:             abs_diff = model.NewIntVar(0, 31, f"work_balance_abs_e{e}") 
+749:             model.AddAbsEquality(abs_diff, diff) 
+750:             penalties.append(abs_diff) 
+751:         return penalties 
+752:     def _add_day_off_constraints( 
+753:         self, 
+754:         model, 
+755:         x, 
+756:         employees, 
+757:         days 
+758:     ): 
+759:         for e in range(len(employees)): 
+760:             emp = employees[e] 
+761:             for d in days: 
+762:                 day_state = self.schedule.get_day(emp, d) 
+763:                 if getattr(day_state, "is_day_off", False): 
+764:                     for s in self.ALL_SHIFTS: 
+765:                         model.Add(x[e, d, s] == 0) 
+766:     def _add_manual_shift_constraints( 
+767:         self, 
+768:         model, 
+769:         x, 
+770:         employees, 
+771:         days 
+772:     ): 
+773:         from datetime import datetime 
+774:         fmt = "%H:%M" 
+775:         start_map = { 
+776:             15: self.SHIFT_WORK_START_15, 
+777:             30: self.SHIFT_WORK_START_30, 
+778:             45: self.SHIFT_WORK_START_45, 
+779:             60: self.SHIFT_WORK_START_60, 
+780:             75: self.SHIFT_WORK_START_75, 
+781:             90: self.SHIFT_WORK_START_90, 
+782:         } 
+783:         end_map = { 
+784:             15: self.SHIFT_WORK_END_15, 
+785:             30: self.SHIFT_WORK_END_30, 
+786:             45: self.SHIFT_WORK_END_45, 
+787:             60: self.SHIFT_WORK_END_60, 
+788:             75: self.SHIFT_WORK_END_75, 
+789:             90: self.SHIFT_WORK_END_90, 
+790:         } 
+791:         for e in range(len(employees)): 
+792:             emp = employees[e] 
+793:             for d in days: 
+794:                 day_state = self.schedule.get_day(emp, d) 
+795:                 start = getattr(day_state, "start_time", None) 
+796:                 end = getattr(day_state, "end_time", None) 
+797:                 if not start or not end: 
+798:                     continue 
+799:                 hours = self.shop.get_open_hours_for_day(d) 
+800:                 if not hours: 
+801:                     continue 
+802:                 open_time, close_time = hours 
+803:                 shift = None 
+804:                 if start == open_time: 
+805:                     shift = self.SHIFT_OPEN 
+806:                 elif end == close_time: 
+807:                     shift = self.SHIFT_CLOSE 
+808:                 else: 
+809:                     open_dt = datetime.strptime(open_time, fmt) 
+810:                     start_dt = datetime.strptime(start, fmt) 
+811:                     diff = int((start_dt - open_dt).total_seconds() / 60) 
+812:                     if diff in start_map: 
+813:                         shift = start_map[diff] 
+814:                     else: 
+815:                         close_dt = datetime.strptime(close_time, fmt) 
+816:                         end_dt = datetime.strptime(end, fmt) 
+817:                         diff = int((close_dt - end_dt).total_seconds() / 60) 
+818:                         if diff in end_map: 
+819:                             shift = end_map[diff] 
+820:                 if shift is None: 
+821:                     continue 
+822:                 model.Add(x[e, d, shift] == 1) 
+823:                 for s in self.ALL_SHIFTS: 
+824:                     if s  
+825:                         model.Add(x[e, d, s] == 0) 
+826: ######################################################### 
+827: # Kalkulacja celu i zapisywanie rozwiązania 
+828: ######################################################### 
+829:     def _build_objective( 
+830:         self, 
+831:         model, 
+832:         weighted_soft_terms 
+833:     ): 
+834:         if weighted_soft_terms: 
+835:             print("[OBJECTIVE] terms:", len(weighted_soft_terms)) 
+836:             model.Maximize(-sum(weighted_soft_terms)) 
+837:     def _solve_model(self, model): 
+838:         solver = cp_model.CpSolver() 
+839:         solver.parameters.max_time_in_seconds = 20 
+840:         status = solver.Solve(model) 
+841:         print("Status:", solver.StatusName(status)) 
+842:         print("Czas:", solver.WallTime(), "s") 
+843:         print("Conflicts:", solver.NumConflicts()) 
+844:         print("Branches:", solver.NumBranches()) 
+845:         return solver, status 
+846:      
+847:     def _save_solution( 
+848:         self, 
+849:         solver, 
+850:         status, 
+851:         x, 
+852:         employees, 
+853:         trade_days 
+854:     ): 
+855:         from ortools.sat.python import cp_model 
+856:         from datetime import datetime, timedelta 
+857:         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE): 
+858:             print("❌ BRAK ROZWIĄZANIA") 
+859:             print("DEBUG INFEASIBLE:") 
+860:             print("- Sprawdź czy liczba mięsiarzy >= dni handlowe") 
+861:             print("- Sprawdź czy min_open/min_close nie za duże") 
+862:             print("- Sprawdź czy max_consecutive nie blokuje miesiąca") 
+863:             print("- Sprawdź czy 11h rest nie koliduje z mięsem") 
+864:             return False 
+865:         print("✅ ROZWIĄZANIE ZNALEZIONE") 
+866:         print("=== PODSUMOWANIE ZMIAN ===") 
+867:         for d in trade_days: 
+868:             open_count = sum( 
+869:                 solver.Value(x[e, d, self.SHIFT_OPEN]) 
+870:                 for e in range(len(employees)) 
+871:             ) 
+872:             close_count = sum( 
+873:                 solver.Value(x[e, d, self.SHIFT_CLOSE]) 
+874:                 for e in range(len(employees)) 
+875:             ) 
+876:             work_count = sum( 
+877:                 solver.Value(x[e, d, s]) 
+878:                 for e in range(len(employees)) 
+879:                 for s in self.ALL_SHIFTS 
+880:                 if s not in (self.SHIFT_OPEN, self.SHIFT_CLOSE) 
+881:             ) 
+882:             print(f"Dzień {d}: OPEN={open_count} CLOSE={close_count} WORK={work_count}") 
+883:         START_SHIFTS = { 
+884:             self.SHIFT_WORK_START_15: 15, 
+885:             self.SHIFT_WORK_START_30: 30, 
+886:             self.SHIFT_WORK_START_45: 45, 
+887:             self.SHIFT_WORK_START_60: 60, 
+888:             self.SHIFT_WORK_START_75: 75, 
+889:             self.SHIFT_WORK_START_90: 90, 
+890:         } 
+891:         END_SHIFTS = { 
+892:             self.SHIFT_WORK_END_15: 15, 
+893:             self.SHIFT_WORK_END_30: 30, 
+894:             self.SHIFT_WORK_END_45: 45, 
+895:             self.SHIFT_WORK_END_60: 60, 
+896:             self.SHIFT_WORK_END_75: 75, 
+897:             self.SHIFT_WORK_END_90: 90, 
+898:         } 
+899:         for e in range(len(employees)): 
+900:             emp = employees[e] 
+901:             for d in trade_days: 
+902:                 day_state = self.schedule.get_day(emp, d) 
+903:                 if ( 
+904:                     day_state.is_leave 
+905:                     or day_state.is_locked 
+906:                     or getattr(day_state, "is_day_off", False) 
+907:                     or getattr(day_state, "start_time", None) 
+908:                 ): 
+909:                     continue 
+910:                 hours = self.shop.get_open_hours_for_day(d) 
+911:                 if not hours: 
+912:                     continue 
+913:                 open_time, close_time = hours 
+914:                 fmt = "%H:%M" 
+915:                 if solver.Value(x[e, d, self.SHIFT_OPEN]) == 1: 
+916:                     end = self._calc_end(open_time, emp.daily_hours) 
+917:                     self.schedule.set_day_hours(emp, d, open_time, end) 
+918:                     continue 
+919:                 if solver.Value(x[e, d, self.SHIFT_CLOSE]) == 1: 
+920:                     start = self._calc_start(close_time, emp.daily_hours) 
+921:                     self.schedule.set_day_hours(emp, d, start, close_time) 
+922:                     continue 
+923:                 for shift, offset in START_SHIFTS.items(): 
+924:                     if solver.Value(x[e, d, shift]) == 1: 
+925:                         start_dt = datetime.strptime(open_time, fmt) + timedelta(minutes=offset) 
+926:                         start = start_dt.strftime(fmt) 
+927:                         end = self._calc_end(start, emp.daily_hours) 
+928:                         self.schedule.set_day_hours(emp, d, start, end) 
+929:                         break 
+930:                 for shift, offset in END_SHIFTS.items(): 
+931:                     if solver.Value(x[e, d, shift]) == 1: 
+932:                         end_dt = datetime.strptime(close_time, fmt) - timedelta(minutes=offset) 
+933:                         end = end_dt.strftime(fmt) 
+934:                         start = self._calc_start(end, emp.daily_hours) 
+935:                         self.schedule.set_day_hours(emp, d, start, end) 
+936:                         break 
+937:         print("=== KONIEC GENERATORA ===") 
+938:         return True 
+939:      
+940:     def _apply_policy( 
+941:         self, 
+942:         policy_name, 
+943:         hard_fn, 
+944:         soft_fn=None 
+945:     ): 
+946:         from model.constraint_policy import ConstraintPolicy 
+947:         policy = self.shop.constraint_policies.get(policy_name) 
+948:         weight = self.constraint_weights.get(policy_name, 1) 
+949:         print(f"[POLICY] {policy_name} -> {policy}") 
+950:         if policy == ConstraintPolicy.MANDATORY: 
+951:             print(f"[HARD] {policy_name}") 
+952:             hard_fn() 
+953:             return [] 
+954:         elif policy == ConstraintPolicy.PREFERRED: 
+955:             print(f"[SOFT] {policy_name} weight={weight}") 
+956:             if soft_fn: 
+957:                 violations = soft_fn() 
+958:                 # zamieniamy violation vars na weighted terms 
+959:                 return [weight * v for v in violations] 
+960:             else: 
+961:                 hard_fn() 
+962:                 return [] 
+963:         elif policy == ConstraintPolicy.DISABLED: 
+964:             return [] 
+965:         return [] 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\constraint_presenter.py 
+================================================== 
+ 
+1: from dataclasses import dataclass 
+2: from ui import theme 
+3: from model.constraints import ConstraintEngine 
+4: @dataclass 
+5: class ValidationCellView: 
+6:     bg: str = theme.BG_MAIN 
+7:     text: str = "" 
+8:     tooltip: str | None = None 
+9: class ConstraintPresenter: 
+10:     def __init__(self, schedule, shop_config): 
+11:         self.schedule = schedule 
+12:         self.shop_config = shop_config 
+13:         self.violations = ConstraintEngine.evaluate( 
+14:             schedule, 
+15:             shop_config 
+16:         ) 
+17:     def get_cell_error(self, emp, day): 
+18:         """ 
+19:         Zwraca True jeśli komórka pracownika ma być czerwona. 
+20:         """ 
+21:         for v in self.violations: 
+22:             if v.employee == emp and v.day == day: 
+23:                 return True 
+24:         return False 
+25:     def get_validation_cell_view(self, key, day): 
+26:         """ 
+27:         key: "open" | "close" | "meat" 
+28:         """ 
+29:         view = ValidationCellView() 
+30:         for v in self.violations: 
+31:             if v.day  
+32:                 continue 
+33:             if key == "open" and v.type == "min_open_staff": 
+34:                 view.bg = theme.ERR_RED 
+35:                 view.tooltip = v.message 
+36:             elif key == "close" and v.type == "min_close_staff": 
+37:                 view.bg = theme.ERR_RED 
+38:                 view.tooltip = v.message 
+39:             elif key == "meat" and v.type == "meat_coverage": 
+40:                 view.bg = theme.ERR_RED 
+41:                 view.tooltip = v.message 
+42:         return view 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\schedule_controller.py 
+================================================== 
+ 
+1: class ScheduleController: 
+2:     """ 
+3:     Warstwa pośrednia między UI a MonthSchedule. 
+4:     Zarządza operacjami oraz historią (undo). 
+5:     """ 
+6:     def __init__(self, schedule, shop_config): 
+7:         self.schedule = schedule 
+8:         self.shop_config = shop_config 
+9:         self.history = [] 
+10:     # ================================================== 
+11:     # UNDO 
+12:     # ================================================== 
+13:     def snapshot(self): 
+14:         self.history.append(self.schedule.snapshot()) 
+15:     def undo(self): 
+16:         if not self.history: 
+17:             return self.schedule 
+18:         self.schedule = self.history.pop() 
+19:         return self.schedule 
+20:     # ================================================== 
+21:     # DAY OPERATIONS 
+22:     # ================================================== 
+23:     def set_day_free(self, emp, day): 
+24:         self.snapshot() 
+25:         self.schedule.set_day_free(emp, day) 
+26:         ds = self.schedule.get_day(emp, day) 
+27:         ds.is_locked = True 
+28:     def set_day_hours(self, emp, day, start, end): 
+29:         self.snapshot() 
+30:         self.schedule.set_day_hours(emp, day, start, end) 
+31:         ds = self.schedule.get_day(emp, day) 
+32:         ds.is_locked = True 
+33:     def set_day_leave(self, emp, day): 
+34:         self.snapshot() 
+35:         ds = self.schedule.get_day(emp, day) 
+36:         ds.set_leave() 
+37:     # ================================================== 
+38:     # EMPLOYEE OPERATIONS 
+39:     # ================================================== 
+40:     def add_employee(self, emp): 
+41:         self.snapshot() 
+42:         self.schedule.add_employee(emp) 
+43:     def replace_employee(self, old, new): 
+44:         self.snapshot() 
+45:         self.schedule.replace_employee(old, new) 
+46:     # ================================================== 
+47:     # READ 
+48:     # ================================================== 
+49:     def get_day(self, emp, day): 
+50:         return self.schedule.get_day(emp, day) 
+51:     # ================================================== 
+52:     # GENERATION 
+53:     # ================================================== 
+54:     def generate_schedule(self): 
+55:         from logic.auto_generator import AutoScheduleGenerator 
+56:         generator = AutoScheduleGenerator( 
+57:             self.schedule, 
+58:             self.shop_config 
+59:         ) 
+60:         generator.generate() 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\schedule_presenter.py 
+================================================== 
+ 
+1: from dataclasses import dataclass 
+2: from ui import theme 
+3: @dataclass 
+4: class CellView: 
+5:     text_start: str = "" 
+6:     text_end: str = "" 
+7:     text_total: str = "" 
+8:     bg: str = theme.BG_MAIN 
+9:     tooltip: str | None = None 
+10: class SchedulePresenter: 
+11:     def __init__(self, schedule, shop_config): 
+12:         self.schedule = schedule 
+13:         self.shop_config = shop_config 
+14:     def get_cell_view(self, emp, day) -> CellView: 
+15:         ds = self.schedule.get_day(emp, day) 
+16:         s, e, t = ds.as_rows() 
+17:         if not self.shop_config.is_trade_day(day): 
+18:             return CellView(bg=theme.BG_DISABLED) 
+19:         base_bg = theme.BG_MAIN 
+20:         if not s or not e: 
+21:             return CellView(bg=base_bg) 
+22:         hours = self.shop_config.get_open_hours_for_day(day) 
+23:         text_start = "" 
+24:         text_end = "" 
+25:         text_total = "" 
+26:         bg = base_bg 
+27:         if hours: 
+28:             open_t, close_t = hours 
+29:             # STANDARD OTW 
+30:             if s == open_t and emp.daily_hours == 8: 
+31:                 text_start = "OTW" 
+32:             # STANDARD ZAM 
+33:             elif e == close_t and emp.daily_hours == 8: 
+34:                 text_start = "ZAM" 
+35:             else: 
+36:                 text_start = s 
+37:                 text_end = e 
+38:         else: 
+39:             text_start = s 
+40:             text_end = e 
+41:         # Kolor zmiany 
+42:         if hours: 
+43:             open_t, close_t = hours 
+44:             if s == open_t: 
+45:                 bg = theme.SHIFT_MORNING 
+46:             elif e == close_t: 
+47:                 bg = theme.SHIFT_CLOSE 
+48:         tooltip = f"{s} - {e}\nSuma: {t}" 
+49:         return CellView( 
+50:             text_start=text_start, 
+51:             text_end=text_end, 
+52:             text_total=text_total, 
+53:             bg=bg, 
+54:             tooltip=tooltip 
+55:         ) 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\__init__.py 
+================================================== 
+ 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\model\constraints.py 
+================================================== 
+ 
+1: from dataclasses import dataclass 
+2: from typing import List 
+3: from model.month_schedule import MonthSchedule 
+4: from model.shop_config import ShopConfig 
+5: # ========================================== 
+6: # RESULT 
+7: # ========================================== 
+8: @dataclass 
+9: class ConstraintViolation: 
+10:     type: str          # np. "max_consecutive_days" 
+11:     employee: object   # Employee lub None (jeśli globalne) 
+12:     day: int | None 
+13:     message: str 
+14: # ========================================== 
+15: # ENGINE 
+16: # ========================================== 
+17: # ========================================== 
+18: # RULE BASE 
+19: # ========================================== 
+20: class Rule: 
+21:     def apply(self, schedule: MonthSchedule, shop: ShopConfig) -> List[ConstraintViolation]: 
+22:         raise NotImplementedError 
+23: # ========================================== 
+24: # RULES 
+25: # ========================================== 
+26: class MaxConsecutiveDaysRule(Rule): 
+27:     def __init__(self, limit: int): 
+28:         self.limit = limit 
+29:     def apply(self, schedule, shop): 
+30:         results = [] 
+31:         for emp in schedule.employees: 
+32:             streak = 0 
+33:             for day in range(1, schedule.days_in_month + 1): 
+34:                 ds = schedule.get_day(emp, day) 
+35:                 if not ds.is_empty(): 
+36:                     streak += 1 
+37:                 else: 
+38:                     streak = 0 
+39:                 if streak > self.limit: 
+40:                     results.append( 
+41:                         ConstraintViolation( 
+42:                             type="max_consecutive_days", 
+43:                             employee=emp, 
+44:                             day=day, 
+45:                             message=f"Więcej niż {self.limit} dni pracy pod rząd" 
+46:                         ) 
+47:                     ) 
+48:         return results 
+49: class MinStaffRule(Rule): 
+50:     def __init__(self, minimum: int, mode: str): 
+51:         self.minimum = minimum 
+52:         self.mode = mode  # "open" | "close" 
+53:     def apply(self, schedule, shop): 
+54:         results = [] 
+55:         for day in range(1, schedule.days_in_month + 1): 
+56:             stats = opening_closing_stats(schedule, shop, day, self.mode) 
+57:             if stats["count"] < self.minimum: 
+58:                 results.append( 
+59:                     ConstraintViolation( 
+60:                         type=f"min_{self.mode}_staff", 
+61:                         employee=None, 
+62:                         day=day, 
+63:                         message=( 
+64:                             f"Za mało osób na " 
+65:                             f"{'otwarciu' if self.mode == 'open' else 'zamknięciu'} " 
+66:                             f"(min {self.minimum})" 
+67:                         ) 
+68:                     ) 
+69:                 ) 
+70:         return results 
+71: class Rest11hRule(Rule): 
+72:     def apply(self, schedule, shop): 
+73:         from datetime import datetime, timedelta 
+74:         results = [] 
+75:         fmt = "%H:%M" 
+76:         for emp in schedule.employees: 
+77:             for day in range(1, schedule.days_in_month): 
+78:                 today = schedule.get_day(emp, day) 
+79:                 next_day = schedule.get_day(emp, day + 1) 
+80:                 if today.is_empty() or next_day.is_empty(): 
+81:                     continue 
+82:                 end_today = datetime.strptime(today.end, fmt) 
+83:                 start_next = datetime.strptime(next_day.start, fmt) 
+84:                 start_next += timedelta(days=1) 
+85:                 rest = start_next - end_today 
+86:                 hours = rest.total_seconds() / 3600 
+87:                 if hours < 11: 
+88:                     results.append( 
+89:                         ConstraintViolation( 
+90:                             type="rest_11h", 
+91:                             employee=emp, 
+92:                             day=day + 1, 
+93:                             message=f"Przerwa tylko {round(hours,2)}h (min 11h)" 
+94:                         ) 
+95:                     ) 
+96:         return results 
+97: class MeatCoverageRule(Rule): 
+98:     def apply(self, schedule, shop): 
+99:         results = [] 
+100:         for day in range(1, schedule.days_in_month + 1): 
+101:             result = meat_coverage(schedule, shop, day) 
+102:             if not result["ok"]: 
+103:                 if result["gap"] is None: 
+104:                     msg = "Brak mięsa przez cały dzień" 
+105:                 else: 
+106:                     start, end = result["gap"] 
+107:                     msg = f"Brak mięsa od {start} do {end}" 
+108:                 results.append( 
+109:                     ConstraintViolation( 
+110:                         type="meat_coverage", 
+111:                         employee=None, 
+112:                         day=day, 
+113:                         message=msg 
+114:                     ) 
+115:                 ) 
+116:         return results 
+117: # ========================================== 
+118: # ENGINE 
+119: # ========================================== 
+120: class ConstraintEngine: 
+121:     @staticmethod 
+122:     def evaluate(schedule: MonthSchedule, 
+123:                  shop: ShopConfig) -> List[ConstraintViolation]: 
+124:         cfg = shop.constraints 
+125:         rules: List[Rule] = [] 
+126:         if "max_consecutive_days" in cfg: 
+127:             rules.append( 
+128:                 MaxConsecutiveDaysRule(cfg["max_consecutive_days"]) 
+129:             ) 
+130:         if "min_open_staff" in cfg: 
+131:             rules.append( 
+132:                 MinStaffRule(cfg["min_open_staff"], "open") 
+133:             ) 
+134:         if "min_close_staff" in cfg: 
+135:             rules.append( 
+136:                 MinStaffRule(cfg["min_close_staff"], "close") 
+137:             ) 
+138:         if cfg.get("enforce_11h_rest", False): 
+139:             rules.append(Rest11hRule()) 
+140:         if cfg.get("enforce_meat_coverage", False): 
+141:             rules.append(MeatCoverageRule()) 
+142:         violations: List[ConstraintViolation] = [] 
+143:         for rule in rules: 
+144:             violations.extend(rule.apply(schedule, shop)) 
+145:         return violations 
+146: def opening_closing_stats( 
+147:     schedule: MonthSchedule, 
+148:     shop: ShopConfig, 
+149:     day: int, 
+150:     mode: str  # "open" | "close" 
+151: ) -> dict: 
+152:     open_hours = shop.get_open_hours_for_day(day) 
+153:     if not open_hours: 
+154:         return {"count": 0, "has_opener": False} 
+155:     target_time = open_hours[0] if mode == "open" else open_hours[1] 
+156:     count = 0 
+157:     has_opener = False 
+158:     for emp in schedule.employees: 
+159:         ds = schedule.get_day(emp, day) 
+160:         if ds.is_empty(): 
+161:             continue 
+162:         time = ds.start if mode == "open" else ds.end 
+163:         if time == target_time: 
+164:             count += 1 
+165:             if emp.is_opener: 
+166:                 has_opener = True 
+167:     return {"count": count, "has_opener": has_opener} 
+168: # ================================================== 
+169: # MIĘSO 
+170: # ================================================== 
+171: from datetime import datetime 
+172: FMT = "%H:%M" 
+173: def meat_coverage(schedule, shop, day: int) -> dict: 
+174:     """ 
+175:     Sprawdza czy mięso jest pokryte przez cały dzień. 
+176:     Wersja zoptymalizowana – analiza przedziałowa. 
+177:     """ 
+178:     open_hours = shop.get_open_hours_for_day(day) 
+179:     if not open_hours: 
+180:         return {"ok": True, "gap": None} 
+181:     open_t = datetime.strptime(open_hours[0], FMT) 
+182:     close_t = datetime.strptime(open_hours[1], FMT) 
+183:     intervals = [] 
+184:     # 🔹 zbierz przedziały tylko dla pracowników z mięsem 
+185:     for emp in schedule.employees: 
+186:         if not emp.is_meat: 
+187:             continue 
+188:         ds = schedule.get_day(emp, day) 
+189:         if ds.is_empty(): 
+190:             continue 
+191:         start = datetime.strptime(ds.start, FMT) 
+192:         end = datetime.strptime(ds.end, FMT) 
+193:         # ignorujemy błędne zakresy 
+194:         if start >= end: 
+195:             continue 
+196:         intervals.append((start, end)) 
+197:     if not intervals: 
+198:         return { 
+199:             "ok": False, 
+200:             "gap": (open_t.strftime(FMT), close_t.strftime(FMT)) 
+201:         } 
+202:     # 🔹 sortujemy po czasie rozpoczęcia 
+203:     intervals.sort(key=lambda x: x[0]) 
+204:     current = open_t 
+205:     for start, end in intervals: 
+206:         # luka przed kolejnym przedziałem 
+207:         if start > current: 
+208:             return { 
+209:                 "ok": False, 
+210:                 "gap": (current.strftime(FMT), start.strftime(FMT)) 
+211:             } 
+212:         # rozszerzamy pokrycie 
+213:         if end > current: 
+214:             current = end 
+215:         if current >= close_t: 
+216:             return {"ok": True, "gap": None} 
+217:     # jeśli po przejściu wszystkich nadal nie pokryliśmy 
+218:     if current < close_t: 
+219:         return { 
+220:             "ok": False, 
+221:             "gap": (current.strftime(FMT), close_t.strftime(FMT)) 
+222:         } 
+223:     return {"ok": True, "gap": None} 
+224: def rest_11h_violation(schedule: MonthSchedule, emp, day: int): 
+225:     """ 
+226:     Zwraca: 
+227:     { 
+228:         "violation": bool, 
+229:         "rest_hours": float | None 
+230:     } 
+231:     """ 
+232:     if day < 1 or day >= schedule.days_in_month: 
+233:         return {"violation": False, "rest_hours": None} 
+234:     today = schedule.get_day(emp, day) 
+235:     next_day = schedule.get_day(emp, day + 1) 
+236:     if today.is_empty() or next_day.is_empty(): 
+237:         return {"violation": False, "rest_hours": None} 
+238:     from datetime import datetime, timedelta 
+239:     fmt = "%H:%M" 
+240:     end_today = datetime.strptime(today.end, fmt) 
+241:     start_next = datetime.strptime(next_day.start, fmt) 
+242:     # 🔥 uwzględnij przejście do kolejnego dnia 
+243:     start_next += timedelta(days=1) 
+244:     rest = start_next - end_today 
+245:     hours = rest.total_seconds() / 3600 
+246:     return { 
+247:         "violation": hours < 11, 
+248:         "rest_hours": round(hours, 2) 
+249:     } 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\model\constraint_policy.py 
+================================================== 
+ 
+1: from enum import Enum 
+2: class ConstraintPolicy(str, Enum): 
+3:     MANDATORY = "MANDATORY"     # constraint twardy (musi być spełniony) 
+4:     PREFERRED = "PREFERRED"     # soft – jeśli możliwe 
+5:     DISABLED = "DISABLED"       # wyłączony 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\model\day_schedule.py 
+================================================== 
+ 
+1: from dataclasses import dataclass 
+2: from datetime import datetime, timedelta 
+3: _TIME_FORMAT = "%H:%M" 
+4: def _parse_time(value: str) -> datetime: 
+5:     return datetime.strptime(value, _TIME_FORMAT) 
+6: @dataclass 
+7: class DaySchedule: 
+8:     """ 
+9:     Jedna komórka grafiku (jeden dzień, jeden pracownik). 
+10:     Przechowuje: 
+11:     - start pracy 
+12:     - koniec pracy 
+13:     - flagę urlopu 
+14:     """ 
+15:     start: str | None = None 
+16:     end: str | None = None 
+17:     is_leave: bool = False   # ← DODANE 
+18:     is_locked: bool = False 
+19:     def is_empty(self) -> bool: 
+20:         """Czy dzień jest pusty (wolne).""" 
+21:         return self.start is None and self.end is None 
+22:     def set_free(self) -> None: 
+23:         """Ustawia dzień jako wolny.""" 
+24:         self.start = None 
+25:         self.end = None 
+26:         self.is_leave = False   # ← DODANE 
+27:     def set_leave(self) -> None: 
+28:         """Ustawia dzień jako urlop.""" 
+29:         self.start = None 
+30:         self.end = None 
+31:         self.is_leave = True 
+32:     def set_hours(self, start: str, end: str) -> None: 
+33:         """ 
+34:         Ustawia godziny pracy. 
+35:         Format: 'HH:MM' 
+36:         """ 
+37:         start_dt = _parse_time(start) 
+38:         end_dt = _parse_time(end) 
+39:         if end_dt <= start_dt: 
+40:             raise ValueError("Godzina zakończenia musi być późniejsza niż rozpoczęcia") 
+41:         self.start = start 
+42:         self.end = end 
+43:         self.is_leave = False   # ← DODANE (godziny kasują urlop) 
+44:     def total_duration(self) -> timedelta | None: 
+45:         """ 
+46:         Zwraca czas pracy jako timedelta. 
+47:         """ 
+48:         if self.is_empty() or self.is_leave: 
+49:             return None 
+50:         start_dt = _parse_time(self.start) 
+51:         end_dt = _parse_time(self.end) 
+52:         return end_dt - start_dt 
+53:     def total_as_str(self) -> str | None: 
+54:         """ 
+55:         Zwraca sumę godzin w formacie HH:MM. 
+56:         """ 
+57:         duration = self.total_duration() 
+58:         if duration is None: 
+59:             return None 
+60:         total_minutes = int(duration.total_seconds() // 60) 
+61:         hours = total_minutes // 60 
+62:         minutes = total_minutes % 60 
+63:         return f"{hours}:{minutes:02d}" 
+64:     def as_rows(self) -> tuple[str, str, str]: 
+65:         """ 
+66:         Zwraca dane dokładnie pod GUI: 
+67:         (start, end, suma) 
+68:         Jeśli wolne → puste stringi 
+69:         Jeśli urlop → 🌴 w pierwszej linii 
+70:         """ 
+71:         if self.is_leave: 
+72:             return "🌴", "", "" 
+73:         if self.is_empty(): 
+74:             return "", "", "" 
+75:         return ( 
+76:             self.start or "", 
+77:             self.end or "", 
+78:             self.total_as_str() or "", 
+79:         ) 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\model\employee.py 
+================================================== 
+ 
+1: from dataclasses import dataclass, field 
+2: import uuid 
+3: @dataclass(order=True, frozen=True) 
+4: class Employee: 
+5:     """ 
+6:     Reprezentuje jednego pracownika. 
+7:     frozen=True: 
+8:     - obiekt jest hashowalny 
+9:     - może być bezpiecznie używany jako klucz w dict 
+10:     """ 
+11:     # pola do sortowania 
+12:     last_name: str 
+13:     first_name: str 
+14:     # pozostałe dane (nie wpływają na sortowanie) 
+15:     is_opener: bool = field(default=False, compare=False) 
+16:     is_meat: bool = field(default=False, compare=False) 
+17:     monthly_target_hours: int = field(default=160, compare=False) 
+18:     daily_hours: int = field(default=8, compare=False) 
+19:     id: str = field(default_factory=lambda: str(uuid.uuid4()), compare=False) 
+20:     def display_name(self) -> str: 
+21:         return f"{self.last_name} {self.first_name}" 
+22:     def validate(self) -> None: 
+23:         if not self.last_name.strip(): 
+24:             raise ValueError("Nazwisko nie może być puste") 
+25:         if not self.first_name.strip(): 
+26:             raise ValueError("Imię nie może być puste") 
+27:         if self.daily_hours < 6 or self.daily_hours > 8: 
+28:             raise ValueError("Dzienna liczba godzin musi być w zakresie 6–8") 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\model\month_schedule.py 
+================================================== 
+ 
+1: import calendar 
+2: from copy import deepcopy 
+3: from typing import Dict 
+4: from model.employee import Employee 
+5: from model.day_schedule import DaySchedule 
+6: class MonthSchedule: 
+7:     """ 
+8:     Reprezentuje cały grafik dla jednego miesiąca. 
+9:     """ 
+10:     def __init__(self, year: int, month: int): 
+11:         self.year = year 
+12:         self.month = month 
+13:         self.days_in_month = calendar.monthrange(year, month)[1] 
+14:         # lista pracowników (zawsze posortowana) 
+15:         self.employees: list[Employee] = [] 
+16:         # dane: 
+17:         # employee -> day(int) -> DaySchedule 
+18:         self._data: Dict[Employee, Dict[int, DaySchedule]] = {} 
+19:         # bufor do kopiuj / wklej 
+20:         self._clipboard: DaySchedule | None = None 
+21:     # ===================================================== 
+22:     # PRACOWNICY 
+23:     # ===================================================== 
+24:     def add_employee(self, employee: Employee) -> None: 
+25:         """ 
+26:         Dodaje pracownika i tworzy dla niego puste dni. 
+27:         """ 
+28:         employee.validate() 
+29:         if employee in self._data: 
+30:             raise ValueError("Ten pracownik już istnieje w grafiku") 
+31:         self.employees.append(employee) 
+32:         self.employees.sort() 
+33:         self._data[employee] = { 
+34:             day: DaySchedule() 
+35:             for day in range(1, self.days_in_month + 1) 
+36:         } 
+37:     def remove_employee(self, employee: Employee) -> None: 
+38:         """ 
+39:         Usuwa pracownika z grafiku. 
+40:         """ 
+41:         if employee not in self._data: 
+42:             return 
+43:         self.employees.remove(employee) 
+44:         del self._data[employee] 
+45:     # ===================================================== 
+46:     # DOSTĘP DO KOMÓREK 
+47:     # ===================================================== 
+48:     def get_day(self, employee: Employee, day: int) -> DaySchedule: 
+49:         self._validate_day(day) 
+50:         return self._data[employee][day] 
+51:     def set_day_hours(self, employee: Employee, day: int, start: str, end: str) -> None: 
+52:         self._validate_day(day) 
+53:         self._data[employee][day].set_hours(start, end) 
+54:     def set_day_free(self, employee: Employee, day: int) -> None: 
+55:         self._validate_day(day) 
+56:         self._data[employee][day].set_free() 
+57:     # ===================================================== 
+58:     # KOPIUJ / WKLEJ 
+59:     # ===================================================== 
+60:     def copy_day(self, employee: Employee, day: int) -> None: 
+61:         """ 
+62:         Kopiuje jedną komórkę dnia do schowka. 
+63:         """ 
+64:         self._validate_day(day) 
+65:         self._clipboard = deepcopy(self._data[employee][day]) 
+66:     def paste_day(self, employee: Employee, day: int) -> None: 
+67:         """ 
+68:         Wkleja zawartość schowka do danej komórki. 
+69:         """ 
+70:         if self._clipboard is None: 
+71:             return 
+72:         self._validate_day(day) 
+73:         self._data[employee][day] = deepcopy(self._clipboard) 
+74:     # ===================================================== 
+75:     # PODSUMOWANIA 
+76:     # ===================================================== 
+77:     def total_hours_for_employee(self, employee: Employee) -> str: 
+78:         """ 
+79:         Suma godzin dla jednego pracownika (kolumna H). 
+80:         """ 
+81:         total_minutes = 0 
+82:         for day in range(1, self.days_in_month + 1): 
+83:             duration = self._data[employee][day].total_duration() 
+84:             if duration: 
+85:                 total_minutes += int(duration.total_seconds() // 60) 
+86:         hours = total_minutes // 60 
+87:         minutes = total_minutes % 60 
+88:         return f"{hours}:{minutes:02d}" 
+89:     def leave_hours_for_employee(self, employee: Employee) -> str: 
+90:         """ 
+91:         Suma godzin urlopowych (liczone jako daily_hours pracownika). 
+92:         """ 
+93:         total_minutes = 0 
+94:         for day in range(1, self.days_in_month + 1): 
+95:             ds = self._data[employee][day] 
+96:             if ds.is_leave: 
+97:                 total_minutes += employee.daily_hours * 60 
+98:         hours = total_minutes // 60 
+99:         minutes = total_minutes % 60 
+100:         return f"{hours}:{minutes:02d}" 
+101:      
+102:     def total_with_leave_for_employee(self, employee: Employee) -> str: 
+103:         """ 
+104:         Suma godzin pracy + urlopu. 
+105:         """ 
+106:         total_minutes = 0 
+107:         for day in range(1, self.days_in_month + 1): 
+108:             ds = self._data[employee][day] 
+109:             # godziny pracy 
+110:             duration = ds.total_duration() 
+111:             if duration: 
+112:                 total_minutes += int(duration.total_seconds() // 60) 
+113:             # urlop 
+114:             if ds.is_leave: 
+115:                 total_minutes += employee.daily_hours * 60 
+116:         hours = total_minutes // 60 
+117:         minutes = total_minutes % 60 
+118:         return f"{hours}:{minutes:02d}"     
+119:     def total_hours_for_day(self, day: int) -> int: 
+120:         """ 
+121:         Liczba pracowników pracujących danego dnia. 
+122:         """ 
+123:         self._validate_day(day) 
+124:         count = 0 
+125:         for emp in self.employees: 
+126:             if not self._data[emp][day].is_empty(): 
+127:                 count += 1 
+128:         return count 
+129:     # ===================================================== 
+130:     # POMOCNICZE 
+131:     # ===================================================== 
+132:     def snapshot(self) -> "MonthSchedule": 
+133:         """ 
+134:         Tworzy pełną kopię grafiku (pod undo). 
+135:         """ 
+136:         return deepcopy(self) 
+137:     def _validate_day(self, day: int) -> None: 
+138:         if day < 1 or day > self.days_in_month: 
+139:             raise ValueError("Nieprawidłowy dzień miesiąca") 
+140:     def to_dict(self): 
+141:         return { 
+142:             "year": self.year, 
+143:             "month": self.month, 
+144:             "employees": [ 
+145:                 { 
+146:                     "first_name": e.first_name, 
+147:                     "last_name": e.last_name, 
+148:                     "is_opener": e.is_opener, 
+149:                     "is_meat": e.is_meat, 
+150:                     "daily_hours": e.daily_hours, 
+151:                     "days": { 
+152:                         day: { 
+153:                             "start": self.get_day(e, day).start, 
+154:                             "end": self.get_day(e, day).end, 
+155:                             "is_leave": self.get_day(e, day).is_leave 
+156:                         } 
+157:                         for day in range(1, self.days_in_month + 1) 
+158:                         if not self.get_day(e, day).is_empty() 
+159:                     } 
+160:                 } 
+161:                 for e in self.employees 
+162:             ] 
+163:         } 
+164:     @classmethod 
+165:     def from_dict(cls, data): 
+166:         from model.employee import Employee 
+167:         sched = cls(data["year"], data["month"]) 
+168:         for ed in data["employees"]: 
+169:             emp = Employee( 
+170:                 ed["last_name"], 
+171:                 ed["first_name"], 
+172:                 ed["is_opener"], 
+173:                 ed["is_meat"], 
+174:                 ed["daily_hours"] 
+175:             ) 
+176:             sched.add_employee(emp) 
+177:             # WYZERUJ WSZYSTKIE DNI 
+178:             for day in range(1, sched.days_in_month + 1): 
+179:                 ds = sched.get_day(emp, day) 
+180:                 ds.start = None 
+181:                 ds.end = None 
+182:                 ds.is_leave = False   # ← DODANE 
+183:             for day, dd in ed.get("days", {}).items(): 
+184:                 ds = sched.get_day(emp, int(day)) 
+185:                 ds.start = dd.get("start") 
+186:                 ds.end = dd.get("end") 
+187:                 ds.is_leave = dd.get("is_leave", False)   # ← DODANE 
+188:         sched.employees.sort(key=lambda e: e.last_name.lower()) 
+189:         return sched 
+190:     def replace_employee(self, old, new): 
+191:         if old not in self._data: 
+192:             return 
+193:         # zachowaj grafik 
+194:         days_data = self._data[old] 
+195:         # usuń starego 
+196:         self.remove_employee(old) 
+197:         # dodaj nowego 
+198:         self.add_employee(new) 
+199:         # przywróć grafik 
+200:         self._data[new] = days_data 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\model\shop_config.py 
+================================================== 
+ 
+1: import calendar 
+2: from model.constraint_policy import ConstraintPolicy 
+3: class ShopConfig: 
+4:     """ 
+5:     Konfiguracja sklepu: 
+6:     - niedziele handlowe 
+7:     - godziny otwarcia per dzień tygodnia 
+8:     - constrainty 
+9:     - opcje UI 
+10:     """ 
+11:     def __init__(self, year: int, month: int): 
+12:         self.year = year 
+13:         self.month = month 
+14:         # Toggle dla constraintów z model.constraint_policy 
+15:         self.constraint_policies = { 
+16:             "rest_11h": ConstraintPolicy.MANDATORY, 
+17:             "meat": ConstraintPolicy.MANDATORY, 
+18:             "balance": ConstraintPolicy.PREFERRED, 
+19:             "max_consecutive": ConstraintPolicy.PREFERRED, 
+20:             "open": ConstraintPolicy.MANDATORY, 
+21:             "close": ConstraintPolicy.MANDATORY, 
+22:             "monthly_hours": ConstraintPolicy.PREFERRED, 
+23:             "meat_coverage": ConstraintPolicy.MANDATORY, 
+24:         } 
+25:         # ----------------------------- 
+26:         # Override godzin dla konkretnego dnia 
+27:         # ----------------------------- 
+28:         self.day_overrides: dict[int, tuple[str, str]] = {} 
+29:         # ----------------------------- 
+30:         # CONSTRAINTS CONFIG 
+31:         # ----------------------------- 
+32:         self.constraints = { 
+33:             "max_consecutive_days": 4, 
+34:             "min_open_staff": 3, 
+35:             "min_close_staff": 3, 
+36:         } 
+37:         # ----------------------------- 
+38:         # UI OPTIONS 
+39:         # ----------------------------- 
+40:         # "compact" | "detailed" 
+41:         self.cell_display_mode = "compact" 
+42:         # ----------------------------- 
+43:         # Niedziele handlowe 
+44:         # ----------------------------- 
+45:         self.trade_sundays: set[int] = set() 
+46:         # dni ustawowo wolne 
+47:         self.public_holidays: set[int] = set() 
+48:         # ----------------------------- 
+49:         # Godziny otwarcia per weekday 
+50:         # (0=Pn ... 6=Nd) 
+51:         # ----------------------------- 
+52:         self.open_hours: dict[int, tuple[str, str]] = { 
+53:             0: ("05:30", "22:45"), 
+54:             1: ("05:30", "22:45"), 
+55:             2: ("05:30", "22:45"), 
+56:             3: ("05:30", "22:45"), 
+57:             4: ("05:30", "22:45"), 
+58:             5: ("05:30", "22:45"), 
+59:             6: ("05:30", "22:45"),  # Nd (jeśli handlowa) 
+60:         } 
+61:     # ========================================================== 
+62:     # PODSTAWOWE METODY 
+63:     # ========================================================== 
+64:     def weekday(self, day: int) -> int: 
+65:         return calendar.weekday(self.year, self.month, day) 
+66:     def is_sunday(self, day: int) -> bool: 
+67:         return self.weekday(day) == 6 
+68:     def is_trade_day(self, day: int) -> bool: 
+69:         if day in self.public_holidays: 
+70:             return False 
+71:         if self.is_sunday(day): 
+72:             return day in self.trade_sundays 
+73:         return True 
+74:     # ========================================================== 
+75:     # GODZINY OTWARCIA 
+76:     # ========================================================== 
+77:     def get_open_hours_for_day(self, day: int) -> tuple[str, str] | None: 
+78:         """ 
+79:         Zwraca (open, close) albo None jeśli sklep zamknięty 
+80:         lub brak poprawnych godzin. 
+81:         """ 
+82:         if not self.is_trade_day(day): 
+83:             return None 
+84:         # override ma najwyższy priorytet 
+85:         if day in self.day_overrides: 
+86:             start, end = self.day_overrides[day] 
+87:             if start and end: 
+88:                 return start, end 
+89:             return None 
+90:         wd = self.weekday(day) 
+91:         hours = self.open_hours.get(wd) 
+92:         if not hours: 
+93:             return None 
+94:         start, end = hours 
+95:         if not start or not end: 
+96:             return None 
+97:         return start, end 
+98:     def get_open_hours_for_weekday(self, weekday: int) -> tuple[str, str]: 
+99:         return self.open_hours[weekday] 
+100:     def set_open_hours_for_weekday(self, weekday: int, start: str, end: str): 
+101:         self.open_hours[weekday] = (start, end) 
+102:     # ========================================================== 
+103:     # SERIALIZACJA 
+104:     # ========================================================== 
+105:     def to_dict(self): 
+106:         return { 
+107:             "year": self.year, 
+108:             "month": self.month, 
+109:             "open_hours": self.open_hours, 
+110:             "trade_sundays": list(self.trade_sundays), 
+111:             "day_overrides": self.day_overrides, 
+112:             "constraints": self.constraints, 
+113:             "cell_display_mode": self.cell_display_mode, 
+114:             "public_holidays": list(self.public_holidays), 
+115:         } 
+116:     @classmethod 
+117:     def from_dict(cls, data): 
+118:         cfg = cls(data["year"], data["month"]) 
+119:         # open_hours 
+120:         cfg.open_hours = { 
+121:             int(k): tuple(v) 
+122:             for k, v in data.get("open_hours", {}).items() 
+123:         } 
+124:         # niedziele handlowe 
+125:         cfg.trade_sundays = set(data.get("trade_sundays", [])) 
+126:         #święta ustawowo wolne 
+127:         cfg.public_holidays = set(data.get("public_holidays", [])) 
+128:         # override dni 
+129:         cfg.day_overrides = { 
+130:             int(day): tuple(hours) 
+131:             for day, hours in data.get("day_overrides", {}).items() 
+132:         } 
+133:         # constraints 
+134:         saved_constraints = data.get("constraints", {}) 
+135:         cfg.constraints.update(saved_constraints) 
+136:         # UI 
+137:         cfg.cell_display_mode = data.get("cell_display_mode", "compact") 
+138:         return cfg 
+139:     def get_full_time_nominal_hours(self) -> int: 
+140:         """ 
+141:         Zwraca nominalny wymiar czasu pracy (pełny etat) 
+142:         dla danego miesiąca zgodnie z kodeksem pracy. 
+143:         """ 
+144:         import calendar 
+145:         from datetime import date 
+146:         workdays = 0 
+147:         days_in_month = calendar.monthrange(self.year, self.month)[1] 
+148:         for d in range(1, days_in_month + 1): 
+149:             wd = calendar.weekday(self.year, self.month, d) 
+150:             # pon–pt 
+151:             if wd < 5: 
+152:                 # jeśli to święto ustawowe → nie liczymy 
+153:                 if d in self.public_holidays: 
+154:                     continue 
+155:                 workdays += 1 
+156:         return workdays * 8 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\persistence\project_io.py 
+================================================== 
+ 
+1: import json 
+2: from model.month_schedule import MonthSchedule 
+3: from model.shop_config import ShopConfig 
+4: def save_project(path, schedule: MonthSchedule, shop_config: ShopConfig): 
+5:     data = { 
+6:         "schedule": schedule.to_dict(), 
+7:         "shop_config": shop_config.to_dict() 
+8:     } 
+9:     with open(path, "w", encoding="utf-8") as f: 
+10:         json.dump(data, f, indent=2, ensure_ascii=False) 
+11: def load_project(path): 
+12:     with open(path, "r", encoding="utf-8") as f: 
+13:         data = json.load(f) 
+14:     schedule = MonthSchedule.from_dict(data["schedule"]) 
+15:     shop_config = ShopConfig.from_dict(data["shop_config"]) 
+16:     return schedule, shop_config 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\config_dialog.py 
+================================================== 
+ 
+1: import tkinter as tk 
+2: from tkinter import ttk, messagebox 
+3: import calendar 
+4: class ConfigDialog(tk.Toplevel): 
+5:     def __init__(self, parent, shop_config, on_save): 
+6:         super().__init__(parent) 
+7:         self.title("Konfiguracja") 
+8:         self.geometry("420x360") 
+9:         self.resizable(False, False) 
+10:         self.shop_config = shop_config 
+11:         self.on_save = on_save 
+12:         self._build_ui() 
+13:     # ================================================== 
+14:     def _build_ui(self): 
+15:         notebook = ttk.Notebook(self) 
+16:         notebook.pack(fill="both", expand=True, padx=10, pady=10) 
+17:         self._build_open_hours_tab(notebook) 
+18:         self._build_trade_sundays_tab(notebook) 
+19:         bottom = ttk.Frame(self) 
+20:         bottom.pack(fill="x", padx=10, pady=5) 
+21:         ttk.Button(bottom, text="Zamknij", command=self._close).pack(side="right") 
+22:     # ================================================== 
+23:     # GODZINY OTWARCIA 
+24:     # ================================================== 
+25:     def _build_open_hours_tab(self, notebook): 
+26:         tab = ttk.Frame(notebook) 
+27:         notebook.add(tab, text="Godziny otwarcia") 
+28:         self.open_vars = {} 
+29:         days = ["Pon", "Wt", "Śr", "Cz", "Pt", "So", "Nd"] 
+30:         for wd, name in enumerate(days): 
+31:             ttk.Label(tab, text=name).grid(row=wd, column=0, padx=10, pady=5, sticky="w") 
+32:             start, end = self.shop_config.open_hours[wd] 
+33:             sv = tk.StringVar(value=start) 
+34:             ev = tk.StringVar(value=end) 
+35:             ttk.Entry(tab, width=6, textvariable=sv).grid(row=wd, column=1, padx=5) 
+36:             ttk.Label(tab, text="–").grid(row=wd, column=2) 
+37:             ttk.Entry(tab, width=6, textvariable=ev).grid(row=wd, column=3, padx=5) 
+38:             self.open_vars[wd] = (sv, ev) 
+39:     # ================================================== 
+40:     # NIEDZIELE HANDLOWE 
+41:     # ================================================== 
+42:     def _build_trade_sundays_tab(self, notebook): 
+43:         tab = ttk.Frame(notebook) 
+44:         notebook.add(tab, text="Niedziele handlowe") 
+45:         self.sunday_vars = {} 
+46:         cal = calendar.Calendar() 
+47:         sundays = [ 
+48:             d for d, wd in cal.itermonthdays2( 
+49:                 self.shop_config.year, 
+50:                 self.shop_config.month 
+51:             ) 
+52:             if d = 0 and wd == 6 
+53:         ] 
+54:         for day in sundays: 
+55:             var = tk.BooleanVar(value=day in self.shop_config.trade_sundays) 
+56:             self.sunday_vars[day] = var 
+57:             ttk.Checkbutton( 
+58:                 tab, 
+59:                 text=f"{day}.{self.shop_config.month}.{self.shop_config.year}", 
+60:                 variable=var 
+61:             ).pack(anchor="w", padx=10, pady=4) 
+62:     # ================================================== 
+63:     def _close(self): 
+64:         # zapis godzin 
+65:         try: 
+66:             for wd, (sv, ev) in self.open_vars.items(): 
+67:                 s = sv.get().strip() 
+68:                 e = ev.get().strip() 
+69:                 if not s or not e: 
+70:                     raise ValueError("Godziny nie mogą być puste") 
+71:                 self.shop_config.open_hours[wd] = (s, e) 
+72:         except Exception as ex: 
+73:             messagebox.showerror("Błąd", str(ex)) 
+74:             return 
+75:         # zapis niedziel 
+76:         self.shop_config.trade_sundays = { 
+77:             day for day, var in self.sunday_vars.items() if var.get() 
+78:         } 
+79:         self.on_save() 
+80:         self.destroy() 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\day_edit_dialog.py 
+================================================== 
+ 
+1: import tkinter as tk 
+2: from tkinter import ttk, messagebox 
+3: from datetime import datetime, timedelta 
+4: class DayEditDialog(tk.Toplevel): 
+5:     def __init__(self, parent, day_schedule, open_start, open_end, daily_hours, on_save): 
+6:         super().__init__(parent) 
+7:         self.title("Edycja dnia") 
+8:         self.resizable(False, False) 
+9:         self.daily_hours = daily_hours 
+10:         self._manual_end = False 
+11:         self._updating_suggestion = False 
+12:         self.day_schedule = day_schedule 
+13:         self.on_save = on_save 
+14:         self.start_h = tk.StringVar() 
+15:         self.start_m = tk.StringVar() 
+16:         self.end_h = tk.StringVar() 
+17:         self.end_m = tk.StringVar() 
+18:         self.allowed_times = self._generate_times(open_start, open_end) 
+19:         self._prefill() 
+20:         self._build() 
+21:         self._on_time_change() 
+22:     # ----------------------------- 
+23:     def _generate_times(self, start: str, end: str): 
+24:         fmt = "%H:%M" 
+25:         s = datetime.strptime(start, fmt) 
+26:         e = datetime.strptime(end, fmt) 
+27:         times = [] 
+28:         while s <= e: 
+29:             times.append(s.strftime(fmt)) 
+30:             s += timedelta(minutes=15) 
+31:         return times 
+32:     def _prefill(self): 
+33:         if self.day_schedule.start: 
+34:             h, m = self.day_schedule.start.split(":") 
+35:             self.start_h.set(h) 
+36:             self.start_m.set(m) 
+37:         if self.day_schedule.end: 
+38:             h, m = self.day_schedule.end.split(":") 
+39:             self.end_h.set(h) 
+40:             self.end_m.set(m) 
+41:     def _build(self): 
+42:         pad = {"padx": 10, "pady": 6} 
+43:         # --- budowa mapy godzin -> minut 
+44:         def split(times): 
+45:             hours_map = {} 
+46:             for t in times: 
+47:                 h, m = t.split(":") 
+48:                 hours_map.setdefault(h, []).append(m) 
+49:             hours = sorted(hours_map.keys()) 
+50:             return hours, hours_map 
+51:         hours, self._hours_map = split(self.allowed_times) 
+52:         # ---------------- START ---------------- 
+53:         ttk.Label(self, text="Start").grid(row=0, column=0, **pad) 
+54:         ttk.Combobox(self, values=hours, 
+55:                      textvariable=self.start_h, 
+56:                      width=4, state="readonly")\ 
+57:             .grid(row=0, column=1, **pad) 
+58:         self.start_m_cb = ttk.Combobox( 
+59:             self, 
+60:             textvariable=self.start_m, 
+61:             width=4, 
+62:             state="readonly" 
+63:         ) 
+64:         self.start_m_cb.grid(row=0, column=2, **pad) 
+65:         # ---------------- KONIEC ---------------- 
+66:         ttk.Label(self, text="Koniec").grid(row=1, column=0, **pad) 
+67:         self.end_h_cb = ttk.Combobox( 
+68:             self, 
+69:             values=hours, 
+70:             textvariable=self.end_h, 
+71:             width=4, 
+72:             state="readonly" 
+73:         ) 
+74:         self.end_h_cb.grid(row=1, column=1, **pad) 
+75:         self.end_m_cb = ttk.Combobox( 
+76:             self, 
+77:             textvariable=self.end_m, 
+78:             width=4, 
+79:             state="readonly" 
+80:         ) 
+81:         self.end_m_cb.grid(row=1, column=2, **pad) 
+82:         # --- aktualizacja dostępnych minut 
+83:         self.start_h.trace_add("write", self._update_minute_options) 
+84:         self.end_h.trace_add("write", self._update_minute_options) 
+85:         # --- wykrycie ręcznej zmiany końca 
+86:         def mark_manual(*_): 
+87:             if self._updating_suggestion: 
+88:                 return 
+89:             self._manual_end = True 
+90:             self.end_h_cb.configure(foreground="black") 
+91:             self.end_m_cb.configure(foreground="black") 
+92:         self.end_h.trace_add("write", mark_manual) 
+93:         self.end_m.trace_add("write", mark_manual) 
+94:         # --- licznik czasu 
+95:         self.duration_label = ttk.Label(self, text="Czas pracy: 0:00") 
+96:         self.duration_label.grid(row=2, column=0, columnspan=3, pady=(0, 5)) 
+97:         # --- trigger logiki 
+98:         self.start_h.trace_add("write", self._on_time_change) 
+99:         self.start_m.trace_add("write", self._on_time_change) 
+100:         self.end_h.trace_add("write", self._update_duration_only) 
+101:         self.end_m.trace_add("write", self._update_duration_only) 
+102:         # --- przyciski 
+103:         btns = ttk.Frame(self) 
+104:         btns.grid(row=3, column=0, columnspan=3, pady=10) 
+105:         ttk.Button(btns, text="Wolne", command=self._set_free)\ 
+106:             .pack(side="left", padx=5) 
+107:         ttk.Button(btns, text="Anuluj", command=self.destroy)\ 
+108:             .pack(side="right", padx=5) 
+109:         ttk.Button(btns, text="Zapisz", command=self._save)\ 
+110:             .pack(side="right") 
+111:         # --- domyślne minuty 
+112:         self._update_minute_options() 
+113:         if not self.start_m.get() and self.start_h.get(): 
+114:             self.start_m.set(self._hours_map[self.start_h.get()][0]) 
+115:         if not self.end_m.get() and self.end_h.get(): 
+116:             self.end_m.set(self._hours_map[self.end_h.get()][0]) 
+117:     # ----------------------------- 
+118:     def _set_free(self): 
+119:         self.day_schedule.set_free() 
+120:         self.on_save() 
+121:         self.destroy() 
+122:     def _save(self): 
+123:         try: 
+124:             start = f"{self.start_h.get()}:{self.start_m.get()}" 
+125:             end = f"{self.end_h.get()}:{self.end_m.get()}" 
+126:             self.day_schedule.set_hours(start, end) 
+127:         except Exception as e: 
+128:             messagebox.showerror("Błąd", str(e)) 
+129:             return 
+130:         self.on_save() 
+131:         self.destroy() 
+132:     # ----------------------------- 
+133:     def _on_time_change(self, *_): 
+134:         if not self.start_h.get() or not self.start_m.get(): 
+135:             return 
+136:         try: 
+137:             fmt = "%H:%M" 
+138:             start = datetime.strptime( 
+139:                 f"{self.start_h.get()}:{self.start_m.get()}", 
+140:                 fmt 
+141:             ) 
+142:             if not self._manual_end: 
+143:                 suggested = start + timedelta(hours=self.daily_hours) 
+144:                 self._updating_suggestion = True 
+145:                 self.end_h.set(suggested.strftime("%H")) 
+146:                 self.end_m.set(suggested.strftime("%M")) 
+147:                 self._updating_suggestion = False 
+148:                 self.end_h_cb.configure(foreground="gray") 
+149:                 self.end_m_cb.configure(foreground="gray") 
+150:             self._update_duration_only() 
+151:         except Exception: 
+152:             pass 
+153:     # ----------------------------- 
+154:     def _update_duration_only(self, *_): 
+155:         if not self.start_h.get() or not self.start_m.get(): 
+156:             return 
+157:         if not self.end_h.get() or not self.end_m.get(): 
+158:             return 
+159:         try: 
+160:             fmt = "%H:%M" 
+161:             start = datetime.strptime( 
+162:                 f"{self.start_h.get()}:{self.start_m.get()}", 
+163:                 fmt 
+164:             ) 
+165:             end = datetime.strptime( 
+166:                 f"{self.end_h.get()}:{self.end_m.get()}", 
+167:                 fmt 
+168:             ) 
+169:             duration = end - start 
+170:             minutes = int(duration.total_seconds() // 60) 
+171:             if minutes >= 0: 
+172:                 h = minutes // 60 
+173:                 m = minutes % 60 
+174:                 self.duration_label.config( 
+175:                     text=f"Czas pracy: {h}:{m:02d}" 
+176:                 ) 
+177:         except Exception: 
+178:             pass 
+179:     # ----------------------------- 
+180:     def _update_minute_options(self, *_): 
+181:         h = self.start_h.get() 
+182:         if h in self._hours_map: 
+183:             values = self._hours_map[h] 
+184:             self.start_m_cb["values"] = values 
+185:             # 🔥 wymuś ustawienie pierwszej dozwolonej minuty 
+186:             if self.start_m.get() not in values: 
+187:                 self.start_m.set(values[0]) 
+188:         h_end = self.end_h.get() 
+189:         if h_end in self._hours_map: 
+190:             values = self._hours_map[h_end] 
+191:             self.end_m_cb["values"] = values 
+192:             if self.end_m.get() not in values: 
+193:                 self.end_m.set(values[0]) 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\day_override_dialog.py 
+================================================== 
+ 
+1: import tkinter as tk 
+2: from tkinter import ttk, messagebox 
+3: class DayOverrideDialog(tk.Toplevel): 
+4:     def __init__(self, parent, day, current_hours, shop_config, on_save): 
+5:         super().__init__(parent) 
+6:         self.title(f"Godziny dla dnia {day}") 
+7:         self.resizable(False, False) 
+8:         self.day = day 
+9:         self.shop_config = shop_config 
+10:         self.on_save = on_save 
+11:         self.start_var = tk.StringVar(value=current_hours[0]) 
+12:         self.end_var = tk.StringVar(value=current_hours[1]) 
+13:         self.holiday_var = tk.BooleanVar( 
+14:             value=self.day in self.shop_config.public_holidays 
+15:         ) 
+16:         self._build_ui() 
+17:     def _build_ui(self): 
+18:         pad = {"padx": 10, "pady": 6} 
+19:         ttk.Label(self, text="Otwarcie").grid(row=0, column=0, **pad) 
+20:         ttk.Entry(self, width=7, textvariable=self.start_var)\ 
+21:             .grid(row=0, column=1, **pad) 
+22:         ttk.Label(self, text="Zamknięcie").grid(row=1, column=0, **pad) 
+23:         ttk.Entry(self, width=7, textvariable=self.end_var)\ 
+24:             .grid(row=1, column=1, **pad) 
+25:         btns = ttk.Frame(self) 
+26:         btns.grid(row=2, column=0, columnspan=2, pady=10) 
+27:         ttk.Button(btns, text="Anuluj", command=self.destroy)\ 
+28:             .pack(side="right", padx=5) 
+29:         ttk.Button(btns, text="Zapisz", command=self._save)\ 
+30:             .pack(side="right") 
+31:         # Checkbox święta ustawowego 
+32:         ttk.Checkbutton( 
+33:             self, 
+34:             text="Dzień wolny ustawowo", 
+35:             variable=self.holiday_var 
+36:         ).grid(row=3, column=0, columnspan=2, padx=10, pady=(0, 10)) 
+37:     def _save(self): 
+38:         start = self.start_var.get().strip() 
+39:         end = self.end_var.get().strip() 
+40:         if not start or not end: 
+41:             messagebox.showerror("Błąd", "Godziny nie mogą być puste") 
+42:             return 
+43:         # zapis święta 
+44:         if self.holiday_var.get(): 
+45:             self.shop_config.public_holidays.add(self.day) 
+46:         else: 
+47:             self.shop_config.public_holidays.discard(self.day) 
+48:         self.on_save(start, end) 
+49:         self.destroy() 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\employee_dialog.py 
+================================================== 
+ 
+1: import tkinter as tk 
+2: from tkinter import ttk, messagebox 
+3: from model.employee import Employee 
+4: class EmployeeDialog(tk.Toplevel): 
+5:     def __init__(self, parent, on_save, employee=None): 
+6:         super().__init__(parent) 
+7:         self.title("Dodaj pracownika") 
+8:         self.resizable(False, False) 
+9:         self.on_save = on_save 
+10:         self.employee = employee 
+11:         self.last_name = tk.StringVar() 
+12:         self.first_name = tk.StringVar() 
+13:         self.is_opener = tk.BooleanVar() 
+14:         self.is_meat = tk.BooleanVar() 
+15:         self.daily_hours = tk.IntVar(value=8) 
+16:         if self.employee: 
+17:             self.last_name.set(self.employee.last_name) 
+18:             self.first_name.set(self.employee.first_name) 
+19:             self.is_opener.set(self.employee.is_opener) 
+20:             self.is_meat.set(self.employee.is_meat) 
+21:             self.daily_hours.set(self.employee.daily_hours) 
+22:         self._build() 
+23:     def _build(self): 
+24:         pad = {"padx": 10, "pady": 6} 
+25:         ttk.Label(self, text="Nazwisko").grid(row=0, column=0, sticky="w", **pad) 
+26:         ttk.Entry(self, textvariable=self.last_name).grid(row=0, column=1, **pad) 
+27:         ttk.Label(self, text="Imię").grid(row=1, column=0, sticky="w", **pad) 
+28:         ttk.Entry(self, textvariable=self.first_name).grid(row=1, column=1, **pad) 
+29:         ttk.Checkbutton(self, text="Otwarcie", variable=self.is_opener)\ 
+30:             .grid(row=2, column=0, columnspan=2, sticky="w", **pad) 
+31:         ttk.Checkbutton(self, text="Mięso", variable=self.is_meat)\ 
+32:             .grid(row=3, column=0, columnspan=2, sticky="w", **pad) 
+33:         ttk.Label(self, text="Praca przez x godzin dziennie")\ 
+34:             .grid(row=4, column=0, sticky="w", **pad) 
+35:         ttk.Combobox( 
+36:             self, 
+37:             values=[6, 7, 8], 
+38:             width=5, 
+39:             state="readonly", 
+40:             textvariable=self.daily_hours 
+41:         ).grid(row=4, column=1, sticky="w", **pad) 
+42:         btns = ttk.Frame(self) 
+43:         btns.grid(row=5, column=0, columnspan=2, pady=10) 
+44:         ttk.Button(btns, text="Anuluj", command=self.destroy).pack(side="right", padx=5) 
+45:         ttk.Button(btns, text="Dodaj", command=self._save).pack(side="right") 
+46:     def _save(self): 
+47:         try: 
+48:             emp = Employee( 
+49:                 last_name=self.last_name.get().strip(), 
+50:                 first_name=self.first_name.get().strip(), 
+51:                 is_opener=self.is_opener.get(), 
+52:                 is_meat=self.is_meat.get(), 
+53:                 daily_hours=self.daily_hours.get(), 
+54:             ) 
+55:             emp.validate() 
+56:         except Exception as e: 
+57:             messagebox.showerror("Błąd", str(e)) 
+58:             return 
+59:         self.on_save(emp) 
+60:         self.destroy() 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\grid_view.py 
+================================================== 
+ 
+1: import tkinter as tk 
+2: import calendar 
+3: from logic.schedule_presenter import SchedulePresenter 
+4: from logic.constraint_presenter import ConstraintPresenter 
+5: from ui import theme 
+6: from ui.tooltip import Tooltip 
+7: class ScheduleGrid: 
+8:     def __init__( 
+9:         self, 
+10:         parent, 
+11:         schedule, 
+12:         shop_config, 
+13:         on_edit_day, 
+14:         on_edit_employee, 
+15:         on_context_menu, 
+16:         on_header_menu, 
+17:         on_add_employee, 
+18:     ): 
+19:         self.parent = parent 
+20:         self.schedule = schedule 
+21:         self.shop_config = shop_config 
+22:         self._row_widgets = {} 
+23:         self.on_edit_day = on_edit_day 
+24:         self.on_edit_employee = on_edit_employee 
+25:         self.on_context_menu = on_context_menu 
+26:         self.on_header_menu = on_header_menu 
+27:         self.on_add_employee = on_add_employee 
+28:         self.frame = tk.Frame(parent, bg=theme.BG_MAIN) 
+29:         self._day_labels = {} 
+30:         self._total_labels = {} 
+31:         self._validation_cells = {} 
+32:     # ================================================== 
+33:     # PUBLIC API 
+34:     # ================================================== 
+35:     def build(self): 
+36:         self._build_grid() 
+37:     def refresh(self): 
+38:         self._refresh_values() 
+39:     # ================================================== 
+40:     # GRID BUILD 
+41:     # ================================================== 
+42:     def _build_grid(self): 
+43:         for w in self.frame.winfo_children(): 
+44:             w.destroy() 
+45:         self._day_labels.clear() 
+46:         self._total_labels.clear() 
+47:         self._validation_cells.clear() 
+48:         if not self.schedule: 
+49:             return 
+50:         y = self.schedule.year 
+51:         m = self.schedule.month 
+52:         days = calendar.monthrange(y, m)[1] 
+53:         names = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"] 
+54:         # ===== KOLUMNY DYNAMICZNE ===== 
+55:         self.frame.grid_columnconfigure(0, weight=0, minsize=180) 
+56:         for col in range(1, days + 1): 
+57:             self.frame.grid_columnconfigure(col, weight=0, minsize=50) 
+58:         self.frame.grid_columnconfigure(days + 1, weight=0, minsize=70) 
+59:         # ===== HEADER PLUS ===== 
+60:         plus = tk.Label( 
+61:             self.frame, 
+62:             text="+", 
+63:             bg=theme.BG_HEADER, 
+64:             cursor="hand2", 
+65:             highlightbackground=theme.GRID_BORDER, 
+66:             highlightthickness=1 
+67:         ) 
+68:         plus.grid(row=0, column=0, rowspan=2, sticky="nsew") 
+69:         plus.bind("<Button-1>", lambda e: self.on_add_employee()) 
+70:         # ===== HEADER DNI ===== 
+71:         for d in range(1, days + 1): 
+72:             wd = calendar.weekday(y, m, d) 
+73:             if d in self.shop_config.public_holidays: 
+74:                 bg = theme.BG_DISABLED 
+75:             elif not self.shop_config.is_trade_day(d): 
+76:                 bg = theme.BG_DISABLED 
+77:             else: 
+78:                 bg = theme.BG_WEEKEND if wd >= 5 else theme.BG_HEADER 
+79:             header = tk.Frame( 
+80:                 self.frame, 
+81:                 bg=bg, 
+82:                 highlightbackground=theme.GRID_BORDER, 
+83:                 highlightthickness=1 
+84:             ) 
+85:             header.grid(row=0, column=d, rowspan=2, sticky="nsew") 
+86:             lbl_wd = tk.Label(header, text=names[wd], bg=bg) 
+87:             lbl_day = tk.Label(header, text=str(d), bg=bg) 
+88:             lbl_wd.pack(expand=True) 
+89:             lbl_day.pack(expand=True) 
+90:             if d in self.shop_config.day_overrides: 
+91:                 tk.Label(header, text="🕒", bg=bg).pack() 
+92:             header.bind("<Button-3>", lambda ev, day=d: self.on_header_menu(ev, day)) 
+93:             lbl_wd.bind("<Button-3>", lambda ev, day=d: self.on_header_menu(ev, day)) 
+94:             lbl_day.bind("<Button-3>", lambda ev, day=d: self.on_header_menu(ev, day)) 
+95:         # ===== KOLUMNY SUM ===== 
+96:         headers = ["Praca", "Urlop", "Razem"] 
+97:         for i, title in enumerate(headers): 
+98:             col = days + 1 + i 
+99:             self.frame.grid_columnconfigure(col, weight=0, minsize=70) 
+100:             lbl = tk.Label( 
+101:                 self.frame, 
+102:                 text=title, 
+103:                 bg=theme.BG_HEADER, 
+104:                 highlightbackground=theme.GRID_BORDER, 
+105:                 highlightthickness=1 
+106:             ) 
+107:             lbl.grid(row=0, column=col, rowspan=2, sticky="nsew") 
+108:         start_row = 2 
+109:         # ===== EMPLOYEES ===== 
+110:         for r, emp in enumerate(self.schedule.employees): 
+111:             row = start_row + r 
+112:             name_frame = tk.Frame(self.frame, bg=theme.BG_MAIN) 
+113:             name_frame.grid(row=row, column=0, sticky="nsew") 
+114:             self._row_widgets[emp] = [name_frame] 
+115:             name_label = tk.Label( 
+116:                 name_frame, 
+117:                 text=emp.display_name(), 
+118:                 bg=theme.BG_MAIN, 
+119:                 anchor="w", 
+120:                 cursor="hand2" 
+121:             ) 
+122:             name_label.pack(side="left", padx=(4, 2)) 
+123:             icons = "" 
+124:             if emp.is_opener: 
+125:                 icons += "🕓 " 
+126:             if emp.is_meat: 
+127:                 icons += "🥩" 
+128:             icon_label = tk.Label( 
+129:                 name_frame, 
+130:                 text=icons, 
+131:                 bg=theme.BG_MAIN, 
+132:                 cursor="hand2" 
+133:             ) 
+134:             icon_label.pack(side="left") 
+135:             for widget in (name_frame, name_label, icon_label): 
+136:                 widget.bind( 
+137:                     "<Double-Button-1>", 
+138:                     lambda e, emp=emp: self.on_edit_employee(emp) 
+139:                 ) 
+140:             for d in range(1, days + 1): 
+141:                 if d in self.shop_config.public_holidays: 
+142:                     cell_bg = theme.BG_DISABLED 
+143:                 elif not self.shop_config.is_trade_day(d): 
+144:                     cell_bg = theme.BG_DISABLED 
+145:                 else: 
+146:                     cell_bg = theme.BG_MAIN 
+147:                 height = 32 if self.shop_config.cell_display_mode == "compact" else 55 
+148:                 cell = tk.Frame( 
+149:                     self.frame, 
+150:                     bg=cell_bg, 
+151:                     height=height, 
+152:                     highlightbackground=theme.GRID_BORDER, 
+153:                     highlightthickness=1 
+154:                 ) 
+155:                 cell.grid(row=row, column=d, sticky="nsew") 
+156:                 cell.grid_propagate(False) 
+157:                 self._row_widgets[emp].append(cell) 
+158:                 lbl_start = tk.Label(cell, bg=cell_bg, anchor="center") 
+159:                 lbl_end = tk.Label(cell, bg=cell_bg, anchor="center") 
+160:                 lbl_total = tk.Label( 
+161:                     cell, 
+162:                     bg=cell_bg, 
+163:                     font=("Arial", 8, "bold"), 
+164:                     anchor="center" 
+165:                 ) 
+166:                 cell.rowconfigure(0, weight=1) 
+167:                 cell.rowconfigure(1, weight=1) 
+168:                 cell.rowconfigure(2, weight=1) 
+169:                 cell.columnconfigure(0, weight=1) 
+170:                 lbl_start.grid(row=0, column=0, sticky="nsew") 
+171:                 lbl_end.grid(row=1, column=0, sticky="nsew") 
+172:                 lbl_total.grid(row=2, column=0, sticky="nsew") 
+173:                 self._day_labels[(emp, d)] = (lbl_start, lbl_end, lbl_total) 
+174:                 if self.shop_config.is_trade_day(d): 
+175:                     def bind_all(widget): 
+176:                         widget.bind( 
+177:                             "<Button-1>", 
+178:                             lambda ev, emp=emp, day=d: 
+179:                             self.on_edit_day(emp, day) 
+180:                         ) 
+181:                         widget.bind( 
+182:                             "<Button-3>", 
+183:                             lambda ev, emp=emp, day=d: 
+184:                             self.on_context_menu(ev, emp, day) 
+185:                         ) 
+186:                     bind_all(cell) 
+187:                     bind_all(lbl_start) 
+188:                     bind_all(lbl_end) 
+189:                     bind_all(lbl_total) 
+190:                     for widget in (cell, lbl_start, lbl_end, lbl_total): 
+191:                         widget.bind( 
+192:                             "<Enter>", 
+193:                             lambda e, emp=emp, day=d: 
+194:                             self._hover_enter(emp, day) 
+195:                         ) 
+196:                         widget.bind( 
+197:                             "<Leave>", 
+198:                             lambda e, emp=emp, day=d: 
+199:                             self._hover_leave(emp, day) 
+200:                         ) 
+201:             # ===== 3 KOLUMNY SUM ===== 
+202:             work_lbl = tk.Label( 
+203:                 self.frame, 
+204:                 text="", 
+205:                 anchor="center", 
+206:                 bg=theme.BG_MAIN, 
+207:                 highlightbackground=theme.GRID_BORDER, 
+208:                 highlightthickness=1 
+209:             ) 
+210:             work_lbl.grid(row=row, column=days + 1, sticky="nsew") 
+211:             leave_lbl = tk.Label( 
+212:                 self.frame, 
+213:                 text="", 
+214:                 anchor="center", 
+215:                 bg=theme.BG_MAIN, 
+216:                 highlightbackground=theme.GRID_BORDER, 
+217:                 highlightthickness=1 
+218:             ) 
+219:             leave_lbl.grid(row=row, column=days + 2, sticky="nsew") 
+220:             total_lbl = tk.Label( 
+221:                 self.frame, 
+222:                 text="", 
+223:                 anchor="center", 
+224:                 bg=theme.BG_MAIN, 
+225:                 highlightbackground=theme.GRID_BORDER, 
+226:                 highlightthickness=1 
+227:             ) 
+228:             total_lbl.grid(row=row, column=days + 3, sticky="nsew") 
+229:             self._total_labels[emp] = (work_lbl, leave_lbl, total_lbl) 
+230:         # ===== VALIDATION ROWS ===== 
+231:         val_row = start_row + len(self.schedule.employees) 
+232:         for label, key in [("Otwarcie", "open"), 
+233:                         ("Zamknięcie", "close"), 
+234:                         ("Mięso", "meat")]: 
+235:             lbl = tk.Label( 
+236:                 self.frame, 
+237:                 text=label, 
+238:                 anchor="w", 
+239:                 bg=theme.BG_HEADER, 
+240:                 highlightbackground=theme.GRID_BORDER, 
+241:                 highlightthickness=1 
+242:             ) 
+243:             lbl.grid(row=val_row, column=0, sticky="nsew") 
+244:             for d in range(1, days + 1): 
+245:                 cell = tk.Label( 
+246:                     self.frame, 
+247:                     bg=theme.BG_MAIN, 
+248:                     highlightbackground=theme.GRID_BORDER, 
+249:                     highlightthickness=1 
+250:                 ) 
+251:                 cell.grid(row=val_row, column=d, sticky="nsew") 
+252:                 self._validation_cells[(key, d)] = cell 
+253:             val_row += 1 
+254:         self._refresh_values() 
+255:     # ================================================== 
+256:     # REFRESH 
+257:     # ================================================== 
+258:     def _refresh_values(self): 
+259:         if not self.schedule: 
+260:             return 
+261:         presenter = SchedulePresenter(self.schedule, self.shop_config) 
+262:         constraint_presenter = ConstraintPresenter( 
+263:             self.schedule, 
+264:             self.shop_config 
+265:         ) 
+266:         y = self.schedule.year 
+267:         m = self.schedule.month 
+268:         days = calendar.monthrange(y, m)[1] 
+269:         for emp in self.schedule.employees: 
+270:             for d in range(1, days + 1): 
+271:                 lbl_start, lbl_end, lbl_total = self._day_labels[(emp, d)] 
+272:                 ds = self.schedule.get_day(emp, d) 
+273:                 # ===== URLOP ===== 
+274:                 if ds.is_leave: 
+275:                     lbl_start.config(text="🌴", anchor="center", justify="center") 
+276:                     lbl_end.config(text="") 
+277:                     lbl_total.config(text="") 
+278:                     for lbl in (lbl_start, lbl_end, lbl_total): 
+279:                         lbl.config(bg=theme.BG_MAIN) 
+280:                     continue 
+281:                 # ===== STANDARDOWE WYŚWIETLANIE ===== 
+282:                 cell_view = presenter.get_cell_view(emp, d) 
+283:                 lbl_start.config(text=cell_view.text_start, anchor="center", justify="center") 
+284:                 lbl_end.config(text=cell_view.text_end, anchor="center", justify="center") 
+285:                 lbl_total.config(text=cell_view.text_total) 
+286:                 for lbl in (lbl_start, lbl_end, lbl_total): 
+287:                     lbl.config(bg=cell_view.bg) 
+288:                 for lbl in (lbl_start, lbl_end, lbl_total): 
+289:                     if hasattr(lbl, "_tooltip") and lbl._tooltip: 
+290:                         lbl._tooltip.destroy() 
+291:                         lbl._tooltip = None 
+292:                 if cell_view.tooltip: 
+293:                     for lbl in (lbl_start, lbl_end, lbl_total): 
+294:                         lbl._tooltip = Tooltip(lbl, cell_view.tooltip) 
+295:                 # BŁĄD KOMÓRKI PRACOWNIKA 
+296:                 if constraint_presenter.get_cell_error(emp, d): 
+297:                     for lbl in (lbl_start, lbl_end, lbl_total): 
+298:                         lbl.config(bg=theme.ERR_RED) 
+299:             work_lbl, leave_lbl, total_lbl = self._total_labels[emp] 
+300:             work_lbl.config( 
+301:                 text=self.schedule.total_hours_for_employee(emp) 
+302:             ) 
+303:             leave_lbl.config( 
+304:                 text=self.schedule.leave_hours_for_employee(emp) 
+305:             ) 
+306:             total_lbl.config( 
+307:                 text=self.schedule.total_with_leave_for_employee(emp) 
+308:             ) 
+309:         # ===== RESET VALIDATION CELLS ===== 
+310:         for cell in self._validation_cells.values(): 
+311:             cell.config(bg=theme.BG_MAIN, text="") 
+312:             if hasattr(cell, "_tooltip") and cell._tooltip: 
+313:                 cell._tooltip.destroy() 
+314:                 cell._tooltip = None 
+315:         # ===== VALIDATION ROWS Z PRESENTERA ===== 
+316:         for key in ("open", "close", "meat"): 
+317:             for d in range(1, days + 1): 
+318:                 cell = self._validation_cells.get((key, d)) 
+319:                 if not cell: 
+320:                     continue 
+321:                 # 🔹 dzień niehandlowy → wyszarz i pomiń walidację 
+322:                 if d in self.shop_config.public_holidays or not self.shop_config.is_trade_day(d): 
+323:                     cell.config(bg=theme.BG_DISABLED) 
+324:                     if hasattr(cell, "_tooltip") and cell._tooltip: 
+325:                         cell._tooltip.destroy() 
+326:                         cell._tooltip = None 
+327:                     continue 
+328:                 view = constraint_presenter.get_validation_cell_view(key, d) 
+329:                 cell.config(bg=view.bg) 
+330:                 if hasattr(cell, "_tooltip") and cell._tooltip: 
+331:                     cell._tooltip.destroy() 
+332:                     cell._tooltip = None 
+333:                 if view.tooltip: 
+334:                     cell._tooltip = Tooltip(cell, view.tooltip) 
+335:     # ================================================== 
+336:     # HOVER 
+337:     # ================================================== 
+338:     def _hover_enter(self, emp, day): 
+339:         if not self.shop_config.is_trade_day(day): 
+340:             return 
+341:         lbls = self._day_labels.get((emp, day)) 
+342:         if not lbls: 
+343:             return 
+344:         # podświetlenie komórki 
+345:         for lbl in lbls: 
+346:             if lbl.cget("bg")  
+347:                 lbl.config(bg="#e2e8f0") 
+348:         # czarna obramówka całego wiersza 
+349:         row_widgets = self._row_widgets.get(emp, []) 
+350:         if not row_widgets: 
+351:             return 
+352:         first = row_widgets[0] 
+353:         last = row_widgets[-1] 
+354:         for widget in row_widgets: 
+355:             widget.config(highlightthickness=0) 
+356:         # lewa krawędź 
+357:         first.config(highlightbackground="black", highlightthickness=2) 
+358:         # prawa krawędź 
+359:         last.config(highlightbackground="black", highlightthickness=2) 
+360:         # góra i dół – wszystkie 
+361:         for widget in row_widgets: 
+362:             widget.config(highlightbackground="black", highlightthickness=1) 
+363:     def _hover_leave(self, emp, day): 
+364:         lbls = self._day_labels.get((emp, day)) 
+365:         if not lbls: 
+366:             return 
+367:         ds = self.schedule.get_day(emp, day) 
+368:         hours = self.shop_config.get_open_hours_for_day(day) 
+369:         if not self.shop_config.is_trade_day(day): 
+370:             base = theme.BG_DISABLED 
+371:         else: 
+372:             base = theme.BG_MAIN 
+373:         if hours and not ds.is_empty(): 
+374:             open_t, close_t = hours 
+375:             if ds.start == open_t: 
+376:                 base = theme.SHIFT_MORNING 
+377:             elif ds.end == close_t: 
+378:                 base = theme.SHIFT_CLOSE 
+379:         for lbl in lbls: 
+380:             if lbl.cget("bg")  
+381:                 lbl.config(bg=base) 
+382:         # reset obramówki wiersza 
+383:         for widget in self._row_widgets.get(emp, []): 
+384:             widget.config( 
+385:                 highlightbackground=theme.GRID_BORDER, 
+386:                 highlightthickness=1 
+387:             ) 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\main_window.py 
+================================================== 
+ 
+1: import tkinter as tk 
+2: from tkinter import ttk, filedialog, messagebox 
+3: from datetime import date 
+4: from model.month_schedule import MonthSchedule 
+5: from model.shop_config import ShopConfig 
+6: from export.excel_exporter import export_schedule_to_excel 
+7: from persistence.project_io import save_project, load_project 
+8: from ui.config_dialog import ConfigDialog 
+9: from ui.employee_dialog import EmployeeDialog 
+10: from ui.day_edit_dialog import DayEditDialog 
+11: from ui.day_override_dialog import DayOverrideDialog 
+12: from ui import theme 
+13: from ui.grid_view import ScheduleGrid 
+14: from logic.schedule_controller import ScheduleController 
+15: class MainWindow: 
+16:     def __init__(self, root: tk.Tk): 
+17:         self.root = root 
+18:         self.root.title("Grafik Dino v2") 
+19:         self.root.geometry("1200x800") 
+20:         today = date.today() 
+21:         self.year_var = tk.IntVar(value=today.year) 
+22:         self.month_var = tk.IntVar(value=today.month) 
+23:         self.schedule: MonthSchedule | None = None 
+24:         self.shop_config: ShopConfig | None = None 
+25:         self._clipboard_day = None 
+26:         self._build_ui() 
+27:         self._init_state() 
+28:         # GRID 
+29:         self.grid = ScheduleGrid( 
+30:             parent=self.schedule_frame, 
+31:             schedule=self.schedule, 
+32:             shop_config=self.shop_config, 
+33:             on_edit_day=self._edit_day, 
+34:             on_edit_employee=self._edit_employee, 
+35:             on_context_menu=self._open_context_menu, 
+36:             on_header_menu=self._open_header_menu, 
+37:             on_add_employee=self._open_add_employee, 
+38:         ) 
+39:         self.grid.frame.pack(fill="both", expand=True) 
+40:         self.grid.build() 
+41:         self.grid.refresh() 
+42:         self._try_load_last_project() 
+43:     # ================================================== 
+44:     # INIT / UNDO 
+45:     # ================================================== 
+46:     def _init_state(self): 
+47:         self.schedule = MonthSchedule( 
+48:             self.year_var.get(), 
+49:             self.month_var.get() 
+50:         ) 
+51:         self.shop_config = ShopConfig( 
+52:             self.year_var.get(), 
+53:             self.month_var.get() 
+54:         ) 
+55:         self.controller = ScheduleController(self.schedule, self.shop_config) 
+56:         self._update_nominal_hours_label() 
+57:     def _undo(self): 
+58:         new_schedule = self.controller.undo() 
+59:         self.schedule = new_schedule 
+60:         self.grid.schedule = self.schedule 
+61:         self.grid.build() 
+62:         self.grid.refresh() 
+63:     # ================================================== 
+64:     # UI 
+65:     # ================================================== 
+66:     def _build_ui(self): 
+67:         top = ttk.Frame(self.root, padding=8) 
+68:         top.pack(fill="x") 
+69:         ttk.Label(top, text="Grafik na:").pack(side="left") 
+70:         ttk.Spinbox( 
+71:             top, 
+72:             from_=1, 
+73:             to=12, 
+74:             width=5, 
+75:             textvariable=self.month_var, 
+76:             command=self._on_date_change 
+77:         ).pack(side="left", padx=5) 
+78:         ttk.Spinbox( 
+79:             top, 
+80:             from_=2024, 
+81:             to=2035, 
+82:             width=7, 
+83:             textvariable=self.year_var, 
+84:             command=self._on_date_change 
+85:         ).pack(side="left") 
+86:         ttk.Button( 
+87:             top, 
+88:             text="Konfiguracja", 
+89:             command=self._open_config 
+90:         ).pack(side="left", padx=10) 
+91:         ttk.Button( 
+92:             top, 
+93:             text="Generuj grafik", 
+94:             command=self._generate_schedule 
+95:         ).pack(side="left", padx=5) 
+96:         self.nominal_hours_var = tk.StringVar() 
+97:         self.nominal_hours_label = tk.Label( 
+98:             top, 
+99:             textvariable=self.nominal_hours_var, 
+100:             bg=theme.BG_MAIN 
+101:         ) 
+102:         self.nominal_hours_label.pack(side="left", padx=15) 
+103:         self._update_nominal_hours_label() 
+104:         # ===== CONTAINER ===== 
+105:         container = ttk.Frame(self.root) 
+106:         container.pack(fill="both", expand=True, padx=10, pady=5) 
+107:         # ===== CANVAS ===== 
+108:         self.canvas = tk.Canvas(container, bg=theme.BG_MAIN) 
+109:         self.canvas.pack(side="left", fill="both", expand=True) 
+110:         # ===== PIONOWY SCROLL ===== 
+111:         scrollbar_y = ttk.Scrollbar( 
+112:             container, 
+113:             orient="vertical", 
+114:             command=self.canvas.yview 
+115:         ) 
+116:         scrollbar_y.pack(side="right", fill="y") 
+117:         # ===== POZIOMY SCROLL ===== 
+118:         scrollbar_x = ttk.Scrollbar( 
+119:             self.root, 
+120:             orient="horizontal", 
+121:             command=self.canvas.xview 
+122:         ) 
+123:         scrollbar_x.pack(fill="x") 
+124:         self.canvas.configure( 
+125:             yscrollcommand=scrollbar_y.set, 
+126:             xscrollcommand=scrollbar_x.set 
+127:         ) 
+128:         # ===== FRAME W CANVAS ===== 
+129:         self.schedule_frame = ttk.Frame(self.canvas) 
+130:         self.canvas_window = self.canvas.create_window( 
+131:             (0, 0), 
+132:             window=self.schedule_frame, 
+133:             anchor="nw" 
+134:         ) 
+135:         # ===== AUTO AKTUALIZACJA SCROLL REGION ===== 
+136:         def _on_frame_configure(event): 
+137:             self.canvas.configure(scrollregion=self.canvas.bbox("all")) 
+138:         self.schedule_frame.bind("<Configure>", _on_frame_configure) 
+139:         bottom = ttk.Frame(self.root, padding=6) 
+140:         bottom.pack(fill="x") 
+141:         ttk.Button(bottom, text="Cofnij", 
+142:                 command=self._undo).pack(side="left") 
+143:         ttk.Button(bottom, text="Zapisz", 
+144:                 command=self._save_project).pack(side="left", padx=5) 
+145:         ttk.Button(bottom, text="Wczytaj", 
+146:                 command=self._load_project).pack(side="left") 
+147:         ttk.Button(bottom, text="Eksport Excel", 
+148:                 command=self._export_excel).pack(side="left", padx=10) 
+149:     # ================================================== 
+150:     # DATE / CONFIG 
+151:     # ================================================== 
+152:     def _on_date_change(self): 
+153:         self._init_state() 
+154:         self.grid.schedule = self.schedule 
+155:         self.grid.shop_config = self.shop_config 
+156:         self.grid.build() 
+157:         self.grid.refresh() 
+158:         self._update_nominal_hours_label() 
+159:     def _open_config(self): 
+160:         ConfigDialog( 
+161:             self.root, 
+162:             self.shop_config, 
+163:             on_save=self._render_schedule 
+164:         ) 
+165:     def _render_schedule(self): 
+166:         self.grid.shop_config = self.shop_config 
+167:         self.grid.build() 
+168:         self.grid.refresh() 
+169:     # ================================================== 
+170:     # EMPLOYEE 
+171:     # ================================================== 
+172:     def _open_add_employee(self): 
+173:         EmployeeDialog(self.root, self._add_employee) 
+174:     def _add_employee(self, emp): 
+175:         def action(): 
+176:             self.controller.add_employee(emp) 
+177:         action() 
+178:         self.grid.build() 
+179:         self.grid.refresh() 
+180:     def _edit_employee(self, emp): 
+181:         EmployeeDialog( 
+182:             self.root, 
+183:             lambda new_emp: self._replace_employee(emp, new_emp), 
+184:             employee=emp 
+185:         ) 
+186:     def _replace_employee(self, old, new): 
+187:         def action(): 
+188:             self.controller.replace_employee(old, new) 
+189:         action() 
+190:         self.grid.build() 
+191:         self.grid.refresh() 
+192:     # ================================================== 
+193:     # DAY EDIT 
+194:     # ================================================== 
+195:     def _edit_day(self, emp, day): 
+196:         hours = self.shop_config.get_open_hours_for_day(day) 
+197:         if not hours: 
+198:             return 
+199:         ds = self.controller.get_day(emp, day) 
+200:         DayEditDialog( 
+201:             self.root, 
+202:             ds, 
+203:             hours[0], 
+204:             hours[1], 
+205:             emp.daily_hours, 
+206:             on_save=lambda: self.grid.refresh() 
+207:         ) 
+208:     # ================================================== 
+209:     # INTERNAL ACTION WRAPPER 
+210:     # ================================================== 
+211:     def _apply_and_refresh(self, action): 
+212:         action() 
+213:         self.grid.refresh() 
+214:     # ================================================== 
+215:     # CONTEXT MENU 
+216:     # ================================================== 
+217:     def _open_context_menu(self, event, emp, day): 
+218:         if not self.shop_config.is_trade_day(day): 
+219:             return 
+220:         menu = tk.Menu(self.root, tearoff=0) 
+221:         menu.add_command( 
+222:             label="🌅 Rano", 
+223:             command=lambda: self._ctx_morning(emp, day) 
+224:         ) 
+225:         menu.add_command( 
+226:             label="🌇 Zamknięcie", 
+227:             command=lambda: self._ctx_close(emp, day) 
+228:         ) 
+229:         menu.add_separator() 
+230:         menu.add_command( 
+231:             label="📋 Kopiuj dzień", 
+232:             command=lambda: self._ctx_copy(emp, day) 
+233:         ) 
+234:         menu.add_command( 
+235:             label="📌 Wklej dzień", 
+236:             command=lambda: self._ctx_paste(emp, day) 
+237:         ) 
+238:         menu.add_separator() 
+239:         menu.add_command( 
+240:             label="❌ Ustaw wolne", 
+241:             command=lambda: self._ctx_free(emp, day) 
+242:         ) 
+243:         menu.add_command( 
+244:             label="🌴 Urlop", 
+245:             command=lambda: self._ctx_leave(emp, day) 
+246:         ) 
+247:         menu.tk_popup(event.x_root, event.y_root) 
+248:     def _ctx_free(self, emp, day): 
+249:         self._apply_and_refresh( 
+250:             lambda: self.controller.set_day_free(emp, day) 
+251:         ) 
+252:     def _ctx_leave(self, emp, day): 
+253:         self._apply_and_refresh( 
+254:             lambda: self.controller.set_day_leave(emp, day) 
+255:         ) 
+256:     def _ctx_morning(self, emp, day): 
+257:         hours = self.shop_config.get_open_hours_for_day(day) 
+258:         if not hours: 
+259:             return 
+260:         start = hours[0] 
+261:         end = self._calc_end_from_daily(start, emp.daily_hours) 
+262:         self._apply_and_refresh( 
+263:             lambda: self.controller.set_day_hours(emp, day, start, end) 
+264:         ) 
+265:     def _ctx_close(self, emp, day): 
+266:         hours = self.shop_config.get_open_hours_for_day(day) 
+267:         if not hours: 
+268:             return 
+269:         end = hours[1] 
+270:         start = self._calc_start_from_daily(end, emp.daily_hours) 
+271:         self._apply_and_refresh( 
+272:             lambda: self.controller.set_day_hours(emp, day, start, end) 
+273:         ) 
+274:     # ================================================== 
+275:     # HEADER MENU 
+276:     # ================================================== 
+277:     def _open_header_menu(self, event, day): 
+278:         # spróbuj pobrać godziny normalnie 
+279:         hours = self.shop_config.get_open_hours_for_day(day) 
+280:         # jeśli dzień niehandlowy → pobierz bazowe godziny z tygodnia 
+281:         if not hours: 
+282:             weekday = self.shop_config.weekday(day) 
+283:             hours = self.shop_config.get_open_hours_for_weekday(weekday) 
+284:         def save_override(start, end): 
+285:             self.controller.snapshot() 
+286:             self.shop_config.day_overrides[day] = (start, end) 
+287:             self._update_nominal_hours_label() 
+288:             self.grid.build() 
+289:             self.grid.refresh() 
+290:         DayOverrideDialog( 
+291:             self.root, 
+292:             day, 
+293:             hours, 
+294:             self.shop_config, 
+295:             on_save=save_override 
+296:         ) 
+297:     # ================================================== 
+298:     # SAVE / LOAD / EXPORT 
+299:     # ================================================== 
+300:     def _save_project(self): 
+301:         path = filedialog.asksaveasfilename( 
+302:             defaultextension=".json", 
+303:             filetypes=[("Projekt grafiku", "*.json")] 
+304:         ) 
+305:         if not path: 
+306:             return 
+307:         # normalny zapis 
+308:         save_project(path, self.schedule, self.shop_config) 
+309:         # zapis jako ostatni projekt 
+310:         save_project("last_project.json", self.schedule, self.shop_config) 
+311:     def _load_project(self): 
+312:         path = filedialog.askopenfilename( 
+313:             filetypes=[("Projekt grafiku", "*.json")] 
+314:         ) 
+315:         if not path: 
+316:             return 
+317:         self.schedule, self.shop_config = load_project(path) 
+318:         # 🔥 NOWY CONTROLLER DLA NOWEGO PROJEKTU 
+319:         self.controller = ScheduleController( 
+320:             self.schedule, 
+321:             self.shop_config 
+322:         ) 
+323:         self.year_var.set(self.schedule.year) 
+324:         self.month_var.set(self.schedule.month) 
+325:         self.grid.schedule = self.schedule 
+326:         self.grid.shop_config = self.shop_config 
+327:         self.grid.build() 
+328:         self.grid.refresh() 
+329:         self._update_nominal_hours_label() 
+330:     def _export_excel(self): 
+331:         if not self.schedule.employees: 
+332:             messagebox.showinfo("Eksport", "Brak danych.") 
+333:             return 
+334:         path = filedialog.asksaveasfilename( 
+335:             defaultextension=".xlsx", 
+336:             filetypes=[("Excel", "*.xlsx")] 
+337:         ) 
+338:         if path: 
+339:             export_schedule_to_excel( 
+340:                 self.schedule, 
+341:                 self.year_var.get(), 
+342:                 self.month_var.get(), 
+343:                 path 
+344:             ) 
+345:     # ================================================== 
+346:     # TIME HELPERS 
+347:     # ================================================== 
+348:     def _calc_end_from_daily(self, start_str, hours): 
+349:         from datetime import datetime, timedelta 
+350:         fmt = "%H:%M" 
+351:         start = datetime.strptime(start_str, fmt) 
+352:         end = start + timedelta(hours=hours) 
+353:         return end.strftime(fmt) 
+354:     def _calc_start_from_daily(self, end_str, hours): 
+355:         from datetime import datetime, timedelta 
+356:         fmt = "%H:%M" 
+357:         end = datetime.strptime(end_str, fmt) 
+358:         start = end - timedelta(hours=hours) 
+359:         return start.strftime(fmt) 
+360:     def _ctx_copy(self, emp, day): 
+361:         ds = self.controller.get_day(emp, day) 
+362:         if ds.is_empty(): 
+363:             self._clipboard_day = None 
+364:         else: 
+365:             self._clipboard_day = (ds.start, ds.end) 
+366:     def _ctx_paste(self, emp, day): 
+367:         if not self._clipboard_day: 
+368:             return 
+369:         start, end = self._clipboard_day 
+370:         self._apply_and_refresh( 
+371:             lambda: self.controller.set_day_hours(emp, day, start, end) 
+372:         ) 
+373:     def _try_load_last_project(self): 
+374:         import os 
+375:         if not os.path.exists("last_project.json"): 
+376:             return 
+377:         try: 
+378:             self.schedule, self.shop_config = load_project("last_project.json") 
+379:             # 🔥 NOWY CONTROLLER 
+380:             self.controller = ScheduleController(self.schedule, self.shop_config) 
+381:             self.year_var.set(self.schedule.year) 
+382:             self.month_var.set(self.schedule.month) 
+383:             self.grid.schedule = self.schedule 
+384:             self.grid.shop_config = self.shop_config 
+385:             self.grid.build() 
+386:             self._update_nominal_hours_label() 
+387:             self.grid.refresh() 
+388:         except Exception: 
+389:             pass 
+390:     def _generate_schedule(self): 
+391:         self.controller.generate_schedule() 
+392:         # 🔥 zawsze zsynchronizuj referencję 
+393:         self.schedule = self.controller.schedule 
+394:         self.grid.schedule = self.schedule 
+395:         self.grid.shop_config = self.shop_config 
+396:         self.grid.build() 
+397:         self.grid.refresh() 
+398:     def _update_nominal_hours_label(self): 
+399:         if not self.shop_config: 
+400:             self.nominal_hours_var.set("") 
+401:             return 
+402:         hours = self.shop_config.get_full_time_nominal_hours() 
+403:         self.nominal_hours_var.set(f"Nominalny etat: {hours} h") 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\theme.py 
+================================================== 
+ 
+1: # ui/theme.py 
+2: BG_MAIN = "#f5f6f8" 
+3: BG_HEADER = "#eceff3" 
+4: BG_WEEKEND = "#e6e9ef" 
+5: BG_DISABLED = "#dddddd" 
+6: OK_GREEN = "#c7e8ca" 
+7: WARN_YELLOW = "#ffe8a3" 
+8: ERR_RED = "#f4c7c3" 
+9: SHIFT_MORNING = "#dbeafe"   # jasny niebieski 
+10: SHIFT_CLOSE = "#ede9fe"     # jasny fiolet 
+11: TEXT_MAIN = "#1f2937" 
+12: TEXT_MUTED = "#6b7280" 
+13: GRID_BORDER = "#cbd5e1" 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\tooltip.py 
+================================================== 
+ 
+1: import tkinter as tk 
+2: class Tooltip: 
+3:     def __init__(self, widget, text: str): 
+4:         self.widget = widget 
+5:         self.text = text 
+6:         self.tip = None 
+7:         # zapamiętaj ID bindingów 
+8:         self._enter_id = widget.bind("<Enter>", self.show) 
+9:         self._leave_id = widget.bind("<Leave>", self.hide) 
+10:     def show(self, _=None): 
+11:         if self.tip or not self.text: 
+12:             return 
+13:         x = self.widget.winfo_rootx() + 15 
+14:         y = self.widget.winfo_rooty() + 15 
+15:         self.tip = tk.Toplevel(self.widget) 
+16:         self.tip.wm_overrideredirect(True) 
+17:         self.tip.wm_geometry(f"+{x}+{y}") 
+18:         tk.Label( 
+19:             self.tip, 
+20:             text=self.text, 
+21:             background="#ffffe0", 
+22:             relief="solid", 
+23:             borderwidth=1, 
+24:             font=("Arial", 9) 
+25:         ).pack() 
+26:     def hide(self, _=None): 
+27:         if self.tip: 
+28:             self.tip.destroy() 
+29:             self.tip = None 
+30:     def destroy(self): 
+31:         # usuń tooltip jeśli widoczny 
+32:         self.hide() 
+33:         # odłącz bindingi 
+34:         if self._enter_id: 
+35:             self.widget.unbind("<Enter>", self._enter_id) 
+36:         if self._leave_id: 
+37:             self.widget.unbind("<Leave>", self._leave_id) 
+ 
+ 
