@@ -102,3 +102,15 @@ class DaySchedule:
             self.end or "",
             self.total_as_str() or "",
         )
+
+def calc_end(start_str: str, hours: int) -> str:
+    fmt = "%H:%M"
+    start = datetime.strptime(start_str, fmt)
+    end = start + timedelta(hours=hours)
+    return end.strftime(fmt)
+
+def calc_start(end_str: str, hours: int) -> str:
+    fmt = "%H:%M"
+    end = datetime.strptime(end_str, fmt)
+    start = end - timedelta(hours=hours)
+    return start.strftime(fmt)

@@ -252,3 +252,16 @@ class MonthSchedule:
 
         # przywróć grafik
         self._data[new] = days_data
+
+    def clear_unlocked_days(self):
+        for emp in self.employees:
+            for day in range(1, self.days_in_month + 1):
+                ds = self.get_day(emp, day)
+                if (
+                    ds.is_leave
+                    or ds.is_locked
+                    or getattr(ds, "is_day_off", False)
+                    or getattr(ds, "start_time", None)
+                ):
+                    continue
+                self.set_day_free(emp, day)

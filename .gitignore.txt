@@ -9,3 +9,5 @@ venv/
 *.log
 dist/
 build/
+project_dump.py
+wyciągarka.bat
