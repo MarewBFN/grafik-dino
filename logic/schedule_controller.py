@@ -75,3 +75,7 @@ class ScheduleController:
             self.shop_config
         )
         generator.generate()
+
+    def clear_schedule(self):
+        self.snapshot()
+        self.schedule.clear_all_days()

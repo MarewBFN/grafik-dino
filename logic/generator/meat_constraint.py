@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+
 def add_meat_constraint(
     model,
     x,
@@ -69,9 +70,10 @@ def add_meat_coverage_constraint(
     employees,
     trade_days,
     shop,
-    all_shifts,
     SHIFT_OPEN,
     SHIFT_CLOSE,
+    START_SHIFT_MAP,
+    END_SHIFT_MAP,
     soft=False
 ):
     violations = []
@@ -93,7 +95,6 @@ def add_meat_coverage_constraint(
         while t < close_dt:
 
             slot = t.strftime(fmt)
-
             meat_cover = []
 
             for e in range(len(employees)):
@@ -118,23 +119,28 @@ def add_meat_coverage_constraint(
                 if start <= t < end:
                     meat_cover.append(x[e, d, SHIFT_CLOSE])
 
-                for s in all_shifts:
+                # WORK od otwarcia
+                for shift, offset in START_SHIFT_MAP.items():
+                    work_start = open_dt + timedelta(minutes=offset)
+                    work_end = work_start + shift_len
+                    if work_start <= t < work_end:
+                        meat_cover.append(x[e, d, shift])
 
-                    if s in (SHIFT_OPEN, SHIFT_CLOSE):
-                        continue
-
-                    meat_cover.append(x[e, d, s])
+                # WORK od zamknięcia
+                for shift, offset in END_SHIFT_MAP.items():
+                    work_end = close_dt - timedelta(minutes=offset)
+                    work_start = work_end - shift_len
+                    if work_start <= t < work_end:
+                        meat_cover.append(x[e, d, shift])
 
             if not meat_cover:
                 t += timedelta(minutes=15)
                 continue
 
             if not soft:
-
                 model.Add(sum(meat_cover) >= 1)
 
             else:
-
                 v = model.NewBoolVar(f"meat_cover_v_d{d}_{slot}")
                 model.Add(sum(meat_cover) + v >= 1)
                 violations.append(v)

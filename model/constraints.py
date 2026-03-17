@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import List
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
+from model.constraint_policy import ConstraintPolicy
 
 
 # ==========================================
@@ -195,7 +196,8 @@ class ConstraintEngine:
         if cfg.get("enforce_11h_rest", False):
             rules.append(Rest11hRule())
 
-        if cfg.get("enforce_meat_coverage", False):
+        meat_policy = shop.constraint_policies.get("meat_coverage", ConstraintPolicy.MANDATORY)
+        if meat_policy != ConstraintPolicy.DISABLED or cfg.get("enforce_meat_coverage", False):
             rules.append(MeatCoverageRule())
 
         violations: List[ConstraintViolation] = []

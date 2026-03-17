@@ -1,5 +1,5 @@
 ===== PROJECT DUMP ===== 
-Generated: 17.03.2026 15:21:41,26 
+Generated: 17.03.2026 17:18:40,49 
  
 ================================================== 
 FILE: C:\Users\kewi1\Desktop\Grafik dino V2\main.py 
@@ -2095,7 +2095,7 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\project_dump.txt
 ================================================== 
  
 1: ===== PROJECT DUMP =====  
-2: Generated: 17.03.2026 15:21:41,26  
+2: Generated: 17.03.2026 17:18:40,49  
 3:   
 4: ==================================================  
 5: FILE: C:\Users\kewi1\Desktop\Grafik dino V2\main.py  
@@ -4253,966 +4253,339 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\export\excel_exporter.py
 FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\auto_generator.py 
 ================================================== 
  
-1: from pyexpat import model 
-2: from ortools.sat.python import cp_model 
-3: from model.month_schedule import MonthSchedule 
-4: from model.shop_config import ShopConfig 
-5: from model.constraint_policy import ConstraintPolicy 
-6: class AutoScheduleGenerator: 
-7:     def __init__(self, schedule: MonthSchedule, shop: ShopConfig): 
-8:         self.schedule = schedule 
-9:         self.shop = shop 
-10:         # ===== SHIFT ID ===== 
-11:         self.SHIFT_OPEN = 0 
-12:         self.SHIFT_CLOSE = 1 
-13:         # WORK od otwarcia 
-14:         self.SHIFT_WORK_START_15 = 2 
-15:         self.SHIFT_WORK_START_30 = 3 
-16:         self.SHIFT_WORK_START_45 = 4 
-17:         self.SHIFT_WORK_START_60 = 5 
-18:         self.SHIFT_WORK_START_75 = 6 
-19:         self.SHIFT_WORK_START_90 = 7 
-20:         # WORK od zamknięcia 
-21:         self.SHIFT_WORK_END_15 = 8 
-22:         self.SHIFT_WORK_END_30 = 9 
-23:         self.SHIFT_WORK_END_45 = 10 
-24:         self.SHIFT_WORK_END_60 = 11 
-25:         self.SHIFT_WORK_END_75 = 12 
-26:         self.SHIFT_WORK_END_90 = 13 
-27:         # wszystkie zmiany (tu można dodawać kolejne typy zmian) 
-28:         self.ALL_SHIFTS = ( 
-29:             self.SHIFT_OPEN, 
-30:             self.SHIFT_CLOSE, 
-31:             self.SHIFT_WORK_START_15, 
-32:             self.SHIFT_WORK_START_30, 
-33:             self.SHIFT_WORK_START_45, 
-34:             self.SHIFT_WORK_START_60, 
-35:             self.SHIFT_WORK_START_75, 
-36:             self.SHIFT_WORK_START_90, 
-37:             self.SHIFT_WORK_END_15, 
-38:             self.SHIFT_WORK_END_30, 
-39:             self.SHIFT_WORK_END_45, 
-40:             self.SHIFT_WORK_END_60, 
-41:             self.SHIFT_WORK_END_75, 
-42:             self.SHIFT_WORK_END_90, 
-43:         ) 
-44:         # Wagi dla soft constraintów (im wyższa, tym ważniejszy constraint)     
-45:         self.constraint_weights = { 
-46:             "meat": 10000, 
-47:             "meat_coverage": 15000, 
-48:             "rest_11h": 5000, 
-49:             "balance": 1, 
-50:             "max_consecutive": 1000, 
-51:             "open": 20000, 
-52:             "close": 20000, 
-53:             "monthly_hours": 2000, 
-54:         } 
-55:     # ================================================== 
-56:     # PUBLIC 
-57:     # ================================================== 
-58:     def generate(self): 
-59:         print("=== START CP-SAT GENERATOR ===") 
-60:         self._clear_schedule() 
-61:         model = cp_model.CpModel() 
-62:         employees = self.schedule.employees 
-63:         days = list(range(1, self.schedule.days_in_month + 1)) 
-64:         min_open = self.shop.constraints.get("min_open_staff", 3) 
-65:         min_close = self.shop.constraints.get("min_close_staff", 3) 
-66:         max_consecutive = self.shop.constraints.get("max_consecutive_days", 4) 
-67:         trade_days = [d for d in days if self.shop.is_trade_day(d)] 
-68:         print("Liczba pracowników:", len(employees)) 
-69:         print("Dni w miesiącu:", len(days)) 
-70:         print("Dni handlowe:", len(trade_days)) 
-71:         print("Min OPEN:", min_open) 
-72:         print("Min CLOSE:", min_close) 
-73:         print("Max consecutive:", max_consecutive) 
-74:         x = self._create_variables(model, employees, days) 
-75:         self._add_non_trade_day_constraints(model, x, employees, days) 
-76:         self._add_total_open_close_limit(model, x, employees, trade_days) 
-77:         self._add_leave_constraints(model, x, employees, days) 
-78:         self._add_day_off_constraints(model, x, employees, days) 
-79:         self._add_manual_shift_constraints(model, x, employees, days) 
-80:         self._add_work_dependency_constraint(model, x, employees, days) 
-81:         self._add_one_shift_per_day_constraint(model, x, employees, days) 
-82:         open_violations = self._apply_policy( 
-83:             "open", 
-84:             hard_fn=lambda: self._add_fixed_staff_shift_constraints( 
-85:                 model, x, employees, trade_days, 
-86:                 self.SHIFT_OPEN, 
-87:                 min_open, 
-88:                 soft=False 
-89:             ), 
-90:             soft_fn=lambda: self._add_fixed_staff_shift_constraints( 
-91:                 model, x, employees, trade_days, 
-92:                 self.SHIFT_OPEN, 
-93:                 min_open, 
-94:                 soft=True 
-95:             ) 
-96:         ) 
-97:         close_violations = self._apply_policy( 
-98:             "close", 
-99:             hard_fn=lambda: self._add_fixed_staff_shift_constraints( 
-100:                 model, x, employees, trade_days, 
-101:                 self.SHIFT_CLOSE, 
-102:                 min_close, 
-103:                 soft=False 
-104:             ), 
-105:             soft_fn=lambda: self._add_fixed_staff_shift_constraints( 
-106:                 model, x, employees, trade_days, 
-107:                 self.SHIFT_CLOSE, 
-108:                 min_close, 
-109:                 soft=True 
-110:             ) 
-111:         ) 
-112:         rest_violations = self._apply_policy( 
-113:             "rest_11h", 
-114:             hard_fn=lambda: self._add_rest_11h_constraint( 
-115:                 model, x, employees, days, trade_days, soft=False 
-116:             ), 
-117:             soft_fn=lambda: self._add_rest_11h_constraint( 
-118:                 model, x, employees, days, trade_days, soft=True 
-119:             ) 
-120:         ) 
-121:         balance_violations = self._apply_policy( 
-122:             "balance", 
-123:             hard_fn=lambda: self._add_balance_constraint( 
-124:                 model, x, employees, days, soft=False 
-125:             ), 
-126:             soft_fn=lambda: self._add_balance_constraint( 
-127:                 model, x, employees, days, soft=True 
-128:             ) 
-129:         ) 
-130:         meat_violations = self._apply_policy( 
-131:             "meat", 
-132:             hard_fn=lambda: self._add_meat_constraint( 
-133:                 model, x, employees, days, trade_days, soft=False 
-134:             ), 
-135:             soft_fn=lambda: self._add_meat_constraint( 
-136:                 model, x, employees, days, trade_days, soft=True 
-137:             ) 
-138:         ) 
-139:         coverage_violations = self._apply_policy( 
-140:             "meat_coverage", 
-141:             hard_fn=lambda: self._add_meat_coverage_constraint( 
-142:                 model, x, employees, trade_days 
-143:             ), 
-144:             soft_fn=lambda: self._add_meat_coverage_constraint( 
-145:                 model, x, employees, trade_days, soft=True 
-146:             ) 
-147:         ) 
-148:         max_consec_violations = self._apply_policy( 
-149:             "max_consecutive", 
-150:             hard_fn=lambda: self._add_max_consecutive_constraint( 
-151:                 model, x, employees, days, max_consecutive, soft=False 
-152:             ), 
-153:             soft_fn=lambda: self._add_max_consecutive_constraint( 
-154:                 model, x, employees, days, max_consecutive, soft=True 
-155:             ) 
-156:         ) 
-157:         monthly_hours_violations = self._apply_policy( 
-158:             "monthly_hours", 
-159:             hard_fn=lambda: self._add_monthly_hours_constraint( 
-160:                 model, x, employees, days, soft=False 
-161:             ), 
-162:             soft_fn=lambda: self._add_monthly_hours_constraint( 
-163:                 model, x, employees, days, soft=True 
-164:             ) 
-165:         ) 
-166:         all_soft_violations = [] 
-167:         all_soft_violations.extend(rest_violations) 
-168:         all_soft_violations.extend(balance_violations) 
-169:         all_soft_violations.extend(meat_violations) 
-170:         all_soft_violations.extend(coverage_violations) 
-171:         all_soft_violations.extend(max_consec_violations) 
-172:         all_soft_violations.extend(open_violations) 
-173:         all_soft_violations.extend(close_violations) 
-174:         all_soft_violations.extend(monthly_hours_violations) 
-175:         all_soft_violations.extend( 
-176:             self._add_work_balance_penalty(model, x, employees, trade_days) 
-177:         ) 
-178:         all_soft_violations.extend( 
-179:             self._add_open_close_penalty(x, employees, trade_days) 
-180:         ) 
-181:          
-182:         self._build_objective(model, all_soft_violations) 
-183:         solver, status = self._solve_model(model) 
-184:         success = self._save_solution(solver, status, x, employees, trade_days) 
-185:         return { 
-186:             "status": status, 
-187:             "success": success, 
-188:             "conflicts": solver.NumConflicts(), 
-189:             "branches": solver.NumBranches(), 
-190:             "wall_time": solver.WallTime() 
-191:         } 
-192:     def _clear_schedule(self): 
-193:         for emp in self.schedule.employees: 
-194:             for day in range(1, self.schedule.days_in_month + 1): 
-195:                 ds = self.schedule.get_day(emp, day) 
-196:                 if ( 
-197:                     ds.is_leave 
-198:                     or ds.is_locked 
-199:                     or getattr(ds, "is_day_off", False) 
-200:                     or getattr(ds, "start_time", None) 
-201:                 ): 
-202:                     continue 
-203:                 self.schedule.set_day_free(emp, day) 
-204:     def _calc_end(self, start_str, hours): 
-205:         from datetime import datetime, timedelta 
-206:         fmt = "%H:%M" 
-207:         start = datetime.strptime(start_str, fmt) 
-208:         end = start + timedelta(hours=hours) 
-209:         return end.strftime(fmt) 
-210:     def _calc_start(self, end_str, hours): 
-211:         from datetime import datetime, timedelta 
-212:         fmt = "%H:%M" 
-213:         end = datetime.strptime(end_str, fmt) 
-214:         start = end - timedelta(hours=hours) 
-215:         return start.strftime(fmt) 
-216:      
-217:     def _create_variables(self, model, employees, days): 
-218:         x = {} 
-219:         for e in range(len(employees)): 
-220:             for d in days: 
-221:                 for s in (self.ALL_SHIFTS): 
-222:                     x[e, d, s] = model.NewBoolVar(f"x_e{e}_d{d}_s{s}") 
-223:         print(f"[MODEL] variables: {len(x)}") 
-224:         return x 
-225:      
-226:     def _add_non_trade_day_constraints(self, model, x, employees, days): 
-227:         for e in range(len(employees)): 
-228:             for d in days: 
-229:                 if not self.shop.is_trade_day(d): 
-230:                     for s in self.ALL_SHIFTS: 
-231:                         model.Add(x[e, d, s] == 0) 
-232:     def _add_one_shift_per_day_constraint(self, model, x, employees, days): 
-233:         for e in range(len(employees)): 
-234:             for d in days: 
-235:                 model.Add( 
-236:                     sum(x[e, d, s] for s in self.ALL_SHIFTS) <= 1 
-237:                 ) 
-238:     def _add_fixed_staff_shift_constraints( 
-239:         self, 
-240:         model, 
-241:         x, 
-242:         employees, 
-243:         trade_days, 
-244:         shift_type, 
-245:         min_staff, 
-246:         soft=False 
-247:     ): 
-248:         print(f"[CONSTRAINT] fixed_staff shift={shift_type} min={min_staff} soft={soft}") 
-249:         violations = [] 
-250:         for d in trade_days: 
-251:             print(f"  day={d}") 
-252:             # tylko OPEN / CLOSE 
-253:             total_staff = sum( 
-254:                 x[e, d, shift_type] for e in range(len(employees)) 
-255:             ) 
-256:             opener_staff = sum( 
-257:                 x[e, d, shift_type] 
-258:                 for e in range(len(employees)) 
-259:                 if employees[e].is_opener 
-260:             ) 
-261:             if not soft: 
-262:                 meat_staff = sum( 
-263:                     x[e, d, shift_type] 
-264:                     for e in range(len(employees)) 
-265:                     if employees[e].is_meat 
-266:                 ) 
-267:                 model.Add(total_staff == min_staff) 
-268:                 model.Add(opener_staff == 1) 
-269:                 model.Add(meat_staff == 1) 
-270:             else: 
-271:                 # kara za brak ludzi 
-272:                 total_violation = model.NewIntVar( 
-273:                     0, min_staff, 
-274:                     f"staff_v_d{d}_{shift_type}" 
-275:                 ) 
-276:                 model.Add(total_staff + total_violation >= min_staff) 
-277:                 violations.append(total_violation) 
-278:                 # kara za brak opener 
-279:                 opener_violation = model.NewBoolVar( 
-280:                     f"opener_v_d{d}_{shift_type}" 
-281:                 ) 
-282:                 model.Add(opener_staff + opener_violation >= 1) 
-283:                 violations.append(opener_violation) 
-284:         return violations 
-285:     def _add_max_consecutive_constraint( 
-286:         self, 
-287:         model, 
-288:         x, 
-289:         employees, 
-290:         days, 
-291:         max_consecutive, 
-292:         soft=False 
-293:     ): 
-294:         violations = [] 
-295:         for e in range(len(employees)): 
-296:             for start in range(1, len(days) - max_consecutive + 1): 
-297:                 work_sum = sum( 
-298:                     x[e, d, s] 
-299:                     for d in range(start, start + max_consecutive + 1) 
-300:                     for s in self.ALL_SHIFTS 
-301:                 ) 
-302:                 if not soft: 
-303:                     model.Add(work_sum <= max_consecutive) 
-304:                 else: 
-305:                     violation = model.NewIntVar( 
-306:                         0, len(days),   # ← duży zakres 
-307:                         f"max_consec_violation_e{e}_d{start}" 
-308:                     ) 
-309:                     model.Add(work_sum <= max_consecutive + violation) 
-310:                     violations.append(violation) 
-311:         return violations 
-312:     def _add_rest_11h_constraint( 
-313:         self, 
-314:         model, 
-315:         x, 
-316:         employees, 
-317:         days, 
-318:         trade_days, 
-319:         soft=False 
-320:     ): 
-321:         from datetime import datetime, timedelta 
-322:         fmt = "%H:%M" 
-323:         violations = [] 
-324:         rest_constraints = 0 
-325:         for e in range(len(employees)): 
-326:             for i in range(len(days) - 1): 
-327:                 d = days[i] 
-328:                 d_next = days[i + 1] 
-329:                 if d not in trade_days or d_next not in trade_days: 
-330:                     continue 
-331:                 hours_d = self.shop.get_open_hours_for_day(d) 
-332:                 hours_next = self.shop.get_open_hours_for_day(d_next) 
-333:                 if not hours_d or not hours_next: 
-334:                     continue 
-335:                 open_d, close_d = hours_d 
-336:                 open_next, close_next = hours_next 
-337:                 shifts_today = {} 
-338:                 # OPEN 
-339:                 shifts_today[self.SHIFT_OPEN] = ( 
-340:                     open_d, 
-341:                     self._calc_end(open_d, employees[e].daily_hours) 
-342:                 ) 
-343:                 # CLOSE 
-344:                 shifts_today[self.SHIFT_CLOSE] = ( 
-345:                     self._calc_start(close_d, employees[e].daily_hours), 
-346:                     close_d 
-347:                 ) 
-348:                 # WORK_START offsets 
-349:                 for off, shift in [ 
-350:                     (15, self.SHIFT_WORK_START_15), 
-351:                     (30, self.SHIFT_WORK_START_30), 
-352:                     (45, self.SHIFT_WORK_START_45), 
-353:                     (60, self.SHIFT_WORK_START_60), 
-354:                     (75, self.SHIFT_WORK_START_75), 
-355:                     (90, self.SHIFT_WORK_START_90), 
-356:                 ]: 
-357:                     start = ( 
-358:                         datetime.strptime(open_d, fmt) 
-359:                         + timedelta(minutes=off) 
-360:                     ).strftime(fmt) 
-361:                     shifts_today[shift] = ( 
-362:                         start, 
-363:                         self._calc_end(start, employees[e].daily_hours) 
-364:                     ) 
-365:                 # WORK_END offsets 
-366:                 for off, shift in [ 
-367:                     (15, self.SHIFT_WORK_END_15), 
-368:                     (30, self.SHIFT_WORK_END_30), 
-369:                     (45, self.SHIFT_WORK_END_45), 
-370:                     (60, self.SHIFT_WORK_END_60), 
-371:                     (75, self.SHIFT_WORK_END_75), 
-372:                     (90, self.SHIFT_WORK_END_90), 
-373:                 ]: 
-374:                     end = ( 
-375:                         datetime.strptime(close_d, fmt) 
-376:                         - timedelta(minutes=off) 
-377:                     ).strftime(fmt) 
-378:                     shifts_today[shift] = ( 
-379:                         self._calc_start(end, employees[e].daily_hours), 
-380:                         end 
-381:                     ) 
-382:                 shifts_next = {} 
-383:                 # OPEN 
-384:                 shifts_next[self.SHIFT_OPEN] = ( 
-385:                     open_next, 
-386:                     self._calc_end(open_next, employees[e].daily_hours) 
-387:                 ) 
-388:                 # CLOSE 
-389:                 shifts_next[self.SHIFT_CLOSE] = ( 
-390:                     self._calc_start(close_next, employees[e].daily_hours), 
-391:                     close_next 
-392:                 ) 
-393:                 # WORK_START offsets 
-394:                 for off, shift in [ 
-395:                     (15, self.SHIFT_WORK_START_15), 
-396:                     (30, self.SHIFT_WORK_START_30), 
-397:                     (45, self.SHIFT_WORK_START_45), 
-398:                     (60, self.SHIFT_WORK_START_60), 
-399:                     (75, self.SHIFT_WORK_START_75), 
-400:                     (90, self.SHIFT_WORK_START_90), 
-401:                 ]: 
-402:                     start = ( 
-403:                         datetime.strptime(open_next, fmt) 
-404:                         + timedelta(minutes=off) 
-405:                     ).strftime(fmt) 
-406:                     shifts_next[shift] = ( 
-407:                         start, 
-408:                         self._calc_end(start, employees[e].daily_hours) 
-409:                     ) 
-410:                 # WORK_END offsets 
-411:                 for off, shift in [ 
-412:                     (15, self.SHIFT_WORK_END_15), 
-413:                     (30, self.SHIFT_WORK_END_30), 
-414:                     (45, self.SHIFT_WORK_END_45), 
-415:                     (60, self.SHIFT_WORK_END_60), 
-416:                     (75, self.SHIFT_WORK_END_75), 
-417:                     (90, self.SHIFT_WORK_END_90), 
-418:                 ]: 
-419:                     end = ( 
-420:                         datetime.strptime(close_next, fmt) 
-421:                         - timedelta(minutes=off) 
-422:                     ).strftime(fmt) 
-423:                     shifts_next[shift] = ( 
-424:                         self._calc_start(end, employees[e].daily_hours), 
-425:                         end 
-426:                     ) 
-427:                 for s1 in shifts_today: 
-428:                     for s2 in shifts_next: 
-429:                         end_today = datetime.strptime(shifts_today[s1][1], fmt) 
-430:                         start_next = datetime.strptime(shifts_next[s2][0], fmt) 
-431:                         rest = start_next - end_today 
-432:                         if rest.total_seconds() < 0: 
-433:                             rest += timedelta(days=1) 
-434:                         if rest < timedelta(hours=11): 
-435:                             if not soft: 
-436:                                 model.Add( 
-437:                                     x[e, d, s1] + x[e, d_next, s2] <= 1 
-438:                                 ) 
-439:                             else: 
-440:                                 violation = model.NewBoolVar( 
-441:                                     f"rest_violation_e{e}_d{d}_{s1}_{s2}" 
-442:                                 ) 
-443:                                 model.Add( 
-444:                                     x[e, d, s1] + x[e, d_next, s2] <= 1 + violation 
-445:                                 ) 
-446:                                 violations.append(violation) 
-447:                             rest_constraints += 1 
-448:         print("Constrainty 11h rest:", rest_constraints) 
-449:         return violations 
-450:     def _add_meat_constraint(self, model, x, employees, days, trade_days, soft=False): 
-451:         violations = [] 
-452:         for d in trade_days: 
-453:             meat_on_open = sum( 
-454:                 x[e, d, self.SHIFT_OPEN] 
-455:                 for e in range(len(employees)) 
-456:                 if employees[e].is_meat 
-457:             ) 
-458:             meat_on_close = sum( 
-459:                 x[e, d, self.SHIFT_CLOSE] 
-460:                 for e in range(len(employees)) 
-461:                 if employees[e].is_meat 
-462:             ) 
-463:             meat_on_work = sum( 
-464:                 x[e, d, s] 
-465:                 for e in range(len(employees)) 
-466:                 for s in self.ALL_SHIFTS 
-467:                 if s not in (self.SHIFT_OPEN, self.SHIFT_CLOSE) 
-468:                 and employees[e].is_meat 
-469:             ) 
-470:             total_work = sum( 
-471:                 x[e, d, s] 
-472:                 for e in range(len(employees)) 
-473:                 for s in self.ALL_SHIFTS 
-474:                 if s not in (self.SHIFT_OPEN, self.SHIFT_CLOSE) 
-475:             ) 
-476:             if not soft: 
-477:                 work_exists = model.NewBoolVar(f"work_exists_d{d}") 
-478:                 model.Add(total_work >= 1).OnlyEnforceIf(work_exists) 
-479:                 model.Add(total_work == 0).OnlyEnforceIf(work_exists.Not()) 
-480:                 meat_on_work = sum( 
-481:                     x[e, d, s] 
-482:                     for e in range(len(employees)) 
-483:                     for s in self.ALL_SHIFTS 
-484:                     if s not in (self.SHIFT_OPEN, self.SHIFT_CLOSE) 
-485:                     and employees[e].is_meat 
-486:                 ) 
-487:                 model.Add( 
-488:                     meat_on_work >= 1 
-489:                 ).OnlyEnforceIf(work_exists) 
-490:             else: 
-491:                 v1 = model.NewBoolVar(f"meat_open_v_d{d}") 
-492:                 model.Add(meat_on_open + v1 >= 1) 
-493:                 violations.append(v1) 
-494:                 v2 = model.NewBoolVar(f"meat_close_v_d{d}") 
-495:                 model.Add(meat_on_close + v2 >= 1) 
-496:                 violations.append(v2) 
-497:         return violations 
-498:      
-499:     def _add_meat_coverage_constraint( 
-500:         self, 
-501:         model, 
-502:         x, 
-503:         employees, 
-504:         trade_days, 
-505:         soft=False 
-506:     ): 
-507:         from datetime import datetime, timedelta 
-508:         violations = [] 
-509:         for d in trade_days: 
-510:             hours = self.shop.get_open_hours_for_day(d) 
-511:             if not hours: 
-512:                 continue 
-513:             open_time, close_time = hours 
-514:             fmt = "%H:%M" 
-515:             open_dt = datetime.strptime(open_time, fmt) 
-516:             close_dt = datetime.strptime(close_time, fmt) 
-517:             t = open_dt 
-518:             while t < close_dt: 
-519:                 slot = t.strftime(fmt) 
-520:                 meat_cover = [] 
-521:                 for e in range(len(employees)): 
-522:                     if not employees[e].is_meat: 
-523:                         continue 
-524:                     emp = employees[e] 
-525:                     shift_len = timedelta(hours=emp.daily_hours) 
-526:                     # OPEN 
-527:                     start = open_dt 
-528:                     end = start + shift_len 
-529:                     if start <= t < end: 
-530:                         meat_cover.append(x[e, d, self.SHIFT_OPEN]) 
-531:                     # CLOSE 
-532:                     end = close_dt 
-533:                     start = end - shift_len 
-534:                     if start <= t < end: 
-535:                         meat_cover.append(x[e, d, self.SHIFT_CLOSE]) 
-536:                     for s in self.ALL_SHIFTS: 
-537:                         if s in (self.SHIFT_OPEN, self.SHIFT_CLOSE): 
-538:                             continue 
-539:                         meat_cover.append(x[e, d, s]) 
-540:                 if not meat_cover: 
-541:                     t += timedelta(minutes=15) 
-542:                     continue 
-543:                 if not soft: 
-544:                     model.Add(sum(meat_cover) >= 1) 
-545:                 else: 
-546:                     v = model.NewBoolVar(f"meat_cover_v_d{d}_{slot}") 
-547:                     model.Add(sum(meat_cover) + v >= 1) 
-548:                     violations.append(v) 
-549:                 t += timedelta(minutes=15) 
-550:         return violations 
-551:  #tu trzeba sprawdzić, zmieniłem min_target na max_minutes, bo inaczej nie można było zrobić soft constraintu (nie można dać nierówności z zmienną boolowską po prawej stronie)    
-552:     def _add_monthly_hours_constraint( 
-553:         self, 
-554:         model, 
-555:         x, 
-556:         employees, 
-557:         days, 
-558:         soft=False 
-559:     ): 
-560:         violations = [] 
-561:         nominal_hours = self.shop.get_full_time_nominal_hours() 
-562:         nominal_minutes = nominal_hours * 60 
-563:         all_totals = [] 
-564:         for e in range(len(employees)): 
-565:             emp = employees[e] 
-566:             shift_minutes = int(emp.daily_hours * 60) 
-567:             total_minutes = model.NewIntVar(0, 50000, f"month_total_e{e}") 
-568:             model.Add( 
-569:                 total_minutes == 
-570:                 sum( 
-571:                     x[e, d, s] * shift_minutes 
-572:                     for d in days 
-573:                     for s in self.ALL_SHIFTS 
-574:                 ) 
-575:             ) 
-576:             all_totals.append(total_minutes) 
-577:             leave_days = sum( 
-578:                 1 for d in days 
-579:                 if self.schedule.get_day(emp, d).is_leave 
-580:             ) 
-581:             leave_minutes = leave_days * 480 
-582:             target_minutes = int(nominal_minutes * (emp.daily_hours / 8) - leave_minutes) 
-583:             max_minutes = target_minutes + (8 * 60) 
-584:             if not soft: 
-585:                 model.Add(total_minutes >= target_minutes) 
-586:                 model.Add(total_minutes <= max_minutes) 
-587:             else: 
-588:                 under = model.NewIntVar(0, 50000, f"under_e{e}") 
-589:                 model.Add(total_minutes + under >= max_minutes) 
-590:                 over = model.NewIntVar(0, 50000, f"over_e{e}") 
-591:                 model.Add(total_minutes <= target_minutes + over) 
-592:                 violations.append(under) 
-593:                 violations.append(over) 
-594:         # ⬇️ DODANE: fairness między pracownikami (tylko w soft) 
-595:         if soft and len(all_totals) > 1: 
-596:             max_total = model.NewIntVar(0, 50000, "month_max_total") 
-597:             min_total = model.NewIntVar(0, 50000, "month_min_total") 
-598:             model.AddMaxEquality(max_total, all_totals) 
-599:             model.AddMinEquality(min_total, all_totals) 
-600:             spread = model.NewIntVar(0, 50000, "month_spread") 
-601:             model.Add(spread == max_total - min_total) 
-602:             violations.append(spread) 
-603:         return violations 
-604:      
-605:     def _add_leave_constraints( 
-606:         self, 
-607:         model, 
-608:         x, 
-609:         employees, 
-610:         days 
-611:     ): 
-612:         for e in range(len(employees)): 
-613:             emp = employees[e] 
-614:             for d in days: 
-615:                 day_state = self.schedule.get_day(emp, d) 
-616:                 if day_state.is_leave: 
-617:                     for s in self.ALL_SHIFTS: 
-618:                         model.Add(x[e, d, s] == 0) 
-619:     def _add_balance_constraint( 
-620:         self, 
-621:         model, 
-622:         x, 
-623:         employees, 
-624:         days, 
-625:         soft=True 
-626:     ): 
-627:         nominal = self.shop.get_full_time_nominal_hours() 
-628:         if not nominal: 
-629:             return [] 
-630:         nominal_minutes = int(nominal * 60) 
-631:         violations = [] 
-632:         for e in range(len(employees)): 
-633:             shift_minutes = int(employees[e].daily_hours * 60) 
-634:             total_minutes = model.NewIntVar(0, 20000, f"total_minutes_e{e}") 
-635:             model.Add( 
-636:                 total_minutes == 
-637:                 sum( 
-638:                     sum(x[e, d, s] for s in self.ALL_SHIFTS) * shift_minutes 
-639:                     for d in days 
-640:                 ) 
-641:             ) 
-642:             if not soft: 
-643:                 # MANDATORY → dokładnie nominal 
-644:                 model.Add(total_minutes == nominal_minutes) 
-645:             else: 
-646:                 # PREFERRED → kara za odchylenie 
-647:                 diff = model.NewIntVar(-20000, 20000, f"diff_e{e}") 
-648:                 model.Add(diff == total_minutes - nominal_minutes) 
-649:                 abs_diff = model.NewIntVar(0, 20000, f"abs_diff_e{e}") 
-650:                 model.AddAbsEquality(abs_diff, diff) 
-651:                 violations.append(abs_diff) 
-652:         return violations 
-653:      
-654:     def _add_work_dependency_constraint( 
-655:         self, 
-656:         model, 
-657:         x, 
-658:         employees, 
-659:         days 
-660:     ): 
-661:         print("[CONSTRAINT] work_dependency") 
-662:         for d in days: 
-663:             total_open_close = sum( 
-664:                 x[e, d, self.SHIFT_OPEN] + x[e, d, self.SHIFT_CLOSE] 
-665:                 for e in range(len(employees)) 
-666:             ) 
-667:             for e in range(len(employees)): 
-668:                 for s in self.ALL_SHIFTS: 
-669:                     if s in (self.SHIFT_OPEN, self.SHIFT_CLOSE): 
-670:                         continue 
-671:                     model.Add( 
-672:                         x[e, d, s] <= total_open_close 
-673:                     ) 
-674:     def _add_total_open_close_limit( 
-675:         self, 
-676:         model, 
-677:         x, 
-678:         employees, 
-679:         trade_days 
-680:     ): 
-681:         print("[CONSTRAINT] total_open_close_limit = 6") 
-682:         for d in trade_days: 
-683:             print(f"  day={d}") 
-684:             total_open_close = sum( 
-685:                 x[e, d, self.SHIFT_OPEN] + x[e, d, self.SHIFT_CLOSE] 
-686:                 for e in range(len(employees)) 
-687:             ) 
-688:             model.Add(total_open_close == 6) 
-689:     def _add_open_close_penalty( 
-690:         self, 
-691:         x, 
-692:         employees, 
-693:         days 
-694:     ): 
-695:         print("[OBJECTIVE] penalty OPEN/CLOSE usage") 
-696:         penalties = [] 
-697:         for e in range(len(employees)): 
-698:             for d in days: 
-699:                 penalties.append(x[e, d, self.SHIFT_OPEN]) 
-700:                 penalties.append(x[e, d, self.SHIFT_CLOSE]) 
-701:         return penalties 
-702:      
-703:     def _add_work_offset_constraint(self, model, x, work_offset, employees, days): 
-704:         for e in range(len(employees)): 
-705:             for d in days: 
-706:                 # jeśli nie WORK -> offset = 1 (dummy) 
-707:                 model.Add(work_offset[e,d] == 1).OnlyEnforceIf( 
-708:                     x[e,d,self.SHIFT_WORK_START].Not(), 
-709:                     x[e,d,self.SHIFT_WORK_END].Not() 
-710:                 ) 
-711:     def _add_work_balance_penalty( 
-712:         self, 
-713:         model, 
-714:         x, 
-715:         employees, 
-716:         days 
-717:     ): 
-718:         penalties = [] 
-719:         START_SHIFTS = ( 
-720:             self.SHIFT_WORK_START_15, 
-721:             self.SHIFT_WORK_START_30, 
-722:             self.SHIFT_WORK_START_45, 
-723:             self.SHIFT_WORK_START_60, 
-724:             self.SHIFT_WORK_START_75, 
-725:             self.SHIFT_WORK_START_90, 
-726:         ) 
-727:         END_SHIFTS = ( 
-728:             self.SHIFT_WORK_END_15, 
-729:             self.SHIFT_WORK_END_30, 
-730:             self.SHIFT_WORK_END_45, 
-731:             self.SHIFT_WORK_END_60, 
-732:             self.SHIFT_WORK_END_75, 
-733:             self.SHIFT_WORK_END_90, 
-734:         ) 
-735:         for e in range(len(employees)): 
-736:             work_start = sum( 
-737:                 x[e, d, s] 
-738:                 for d in days 
-739:                 for s in START_SHIFTS 
-740:             ) 
-741:             work_end = sum( 
-742:                 x[e, d, s] 
-743:                 for d in days 
-744:                 for s in END_SHIFTS 
-745:             ) 
-746:             diff = model.NewIntVar(-31, 31, f"work_balance_diff_e{e}") 
-747:             model.Add(diff == work_start - work_end) 
-748:             abs_diff = model.NewIntVar(0, 31, f"work_balance_abs_e{e}") 
-749:             model.AddAbsEquality(abs_diff, diff) 
-750:             penalties.append(abs_diff) 
-751:         return penalties 
-752:     def _add_day_off_constraints( 
-753:         self, 
-754:         model, 
-755:         x, 
-756:         employees, 
-757:         days 
-758:     ): 
-759:         for e in range(len(employees)): 
-760:             emp = employees[e] 
-761:             for d in days: 
-762:                 day_state = self.schedule.get_day(emp, d) 
-763:                 if getattr(day_state, "is_day_off", False): 
-764:                     for s in self.ALL_SHIFTS: 
-765:                         model.Add(x[e, d, s] == 0) 
-766:     def _add_manual_shift_constraints( 
-767:         self, 
-768:         model, 
-769:         x, 
-770:         employees, 
-771:         days 
-772:     ): 
-773:         from datetime import datetime 
-774:         fmt = "%H:%M" 
-775:         start_map = { 
-776:             15: self.SHIFT_WORK_START_15, 
-777:             30: self.SHIFT_WORK_START_30, 
-778:             45: self.SHIFT_WORK_START_45, 
-779:             60: self.SHIFT_WORK_START_60, 
-780:             75: self.SHIFT_WORK_START_75, 
-781:             90: self.SHIFT_WORK_START_90, 
-782:         } 
-783:         end_map = { 
-784:             15: self.SHIFT_WORK_END_15, 
-785:             30: self.SHIFT_WORK_END_30, 
-786:             45: self.SHIFT_WORK_END_45, 
-787:             60: self.SHIFT_WORK_END_60, 
-788:             75: self.SHIFT_WORK_END_75, 
-789:             90: self.SHIFT_WORK_END_90, 
-790:         } 
-791:         for e in range(len(employees)): 
-792:             emp = employees[e] 
-793:             for d in days: 
-794:                 day_state = self.schedule.get_day(emp, d) 
-795:                 start = getattr(day_state, "start_time", None) 
-796:                 end = getattr(day_state, "end_time", None) 
-797:                 if not start or not end: 
-798:                     continue 
-799:                 hours = self.shop.get_open_hours_for_day(d) 
-800:                 if not hours: 
-801:                     continue 
-802:                 open_time, close_time = hours 
-803:                 shift = None 
-804:                 if start == open_time: 
-805:                     shift = self.SHIFT_OPEN 
-806:                 elif end == close_time: 
-807:                     shift = self.SHIFT_CLOSE 
-808:                 else: 
-809:                     open_dt = datetime.strptime(open_time, fmt) 
-810:                     start_dt = datetime.strptime(start, fmt) 
-811:                     diff = int((start_dt - open_dt).total_seconds() / 60) 
-812:                     if diff in start_map: 
-813:                         shift = start_map[diff] 
-814:                     else: 
-815:                         close_dt = datetime.strptime(close_time, fmt) 
-816:                         end_dt = datetime.strptime(end, fmt) 
-817:                         diff = int((close_dt - end_dt).total_seconds() / 60) 
-818:                         if diff in end_map: 
-819:                             shift = end_map[diff] 
-820:                 if shift is None: 
-821:                     continue 
-822:                 model.Add(x[e, d, shift] == 1) 
-823:                 for s in self.ALL_SHIFTS: 
-824:                     if s  
-825:                         model.Add(x[e, d, s] == 0) 
-826: ######################################################### 
-827: # Kalkulacja celu i zapisywanie rozwiązania 
-828: ######################################################### 
-829:     def _build_objective( 
-830:         self, 
-831:         model, 
-832:         weighted_soft_terms 
-833:     ): 
-834:         if weighted_soft_terms: 
-835:             print("[OBJECTIVE] terms:", len(weighted_soft_terms)) 
-836:             model.Maximize(-sum(weighted_soft_terms)) 
-837:     def _solve_model(self, model): 
-838:         solver = cp_model.CpSolver() 
-839:         solver.parameters.max_time_in_seconds = 20 
-840:         status = solver.Solve(model) 
-841:         print("Status:", solver.StatusName(status)) 
-842:         print("Czas:", solver.WallTime(), "s") 
-843:         print("Conflicts:", solver.NumConflicts()) 
-844:         print("Branches:", solver.NumBranches()) 
-845:         return solver, status 
-846:      
-847:     def _save_solution( 
-848:         self, 
-849:         solver, 
-850:         status, 
-851:         x, 
-852:         employees, 
-853:         trade_days 
-854:     ): 
-855:         from ortools.sat.python import cp_model 
-856:         from datetime import datetime, timedelta 
-857:         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE): 
-858:             print("❌ BRAK ROZWIĄZANIA") 
-859:             return False 
-860:         print("✅ ROZWIĄZANIE ZNALEZIONE") 
-861:         print("=== PODSUMOWANIE ZMIAN ===") 
-862:         for d in trade_days: 
-863:             open_count = sum( 
-864:                 solver.Value(x[e, d, self.SHIFT_OPEN]) 
-865:                 for e in range(len(employees)) 
-866:             ) 
-867:             close_count = sum( 
-868:                 solver.Value(x[e, d, self.SHIFT_CLOSE]) 
-869:                 for e in range(len(employees)) 
-870:             ) 
-871:             work_count = sum( 
-872:                 solver.Value(x[e, d, s]) 
-873:                 for e in range(len(employees)) 
-874:                 for s in self.ALL_SHIFTS 
-875:                 if s not in (self.SHIFT_OPEN, self.SHIFT_CLOSE) 
-876:             ) 
-877:             print(f"Dzień {d}: OPEN={open_count} CLOSE={close_count} WORK={work_count}") 
-878:         START_SHIFTS = { 
-879:             self.SHIFT_WORK_START_15: 15, 
-880:             self.SHIFT_WORK_START_30: 30, 
-881:             self.SHIFT_WORK_START_45: 45, 
-882:             self.SHIFT_WORK_START_60: 60, 
-883:             self.SHIFT_WORK_START_75: 75, 
-884:             self.SHIFT_WORK_START_90: 90, 
-885:         } 
-886:         END_SHIFTS = { 
-887:             self.SHIFT_WORK_END_15: 15, 
-888:             self.SHIFT_WORK_END_30: 30, 
-889:             self.SHIFT_WORK_END_45: 45, 
-890:             self.SHIFT_WORK_END_60: 60, 
-891:             self.SHIFT_WORK_END_75: 75, 
-892:             self.SHIFT_WORK_END_90: 90, 
-893:         } 
-894:         for e in range(len(employees)): 
-895:             emp = employees[e] 
-896:             for d in trade_days: 
-897:                 day_state = self.schedule.get_day(emp, d) 
-898:                 if ( 
-899:                     day_state.is_leave 
-900:                     or day_state.is_locked 
-901:                     or getattr(day_state, "is_day_off", False) 
-902:                     or getattr(day_state, "start_time", None) 
-903:                 ): 
-904:                     continue 
-905:                 hours = self.shop.get_open_hours_for_day(d) 
-906:                 if not hours: 
-907:                     continue 
-908:                 open_time, close_time = hours 
-909:                 fmt = "%H:%M" 
-910:                 if solver.Value(x[e, d, self.SHIFT_OPEN]) == 1: 
-911:                     end = self._calc_end(open_time, emp.daily_hours) 
-912:                     self.schedule.set_day_hours(emp, d, open_time, end) 
-913:                     continue 
-914:                 if solver.Value(x[e, d, self.SHIFT_CLOSE]) == 1: 
-915:                     start = self._calc_start(close_time, emp.daily_hours) 
-916:                     self.schedule.set_day_hours(emp, d, start, close_time) 
-917:                     continue 
-918:                 for shift, offset in START_SHIFTS.items(): 
-919:                     if solver.Value(x[e, d, shift]) == 1: 
-920:                         start_dt = datetime.strptime(open_time, fmt) + timedelta(minutes=offset) 
-921:                         start = start_dt.strftime(fmt) 
-922:                         end = self._calc_end(start, emp.daily_hours) 
-923:                         self.schedule.set_day_hours(emp, d, start, end) 
-924:                         break 
-925:                 for shift, offset in END_SHIFTS.items(): 
-926:                     if solver.Value(x[e, d, shift]) == 1: 
-927:                         end_dt = datetime.strptime(close_time, fmt) - timedelta(minutes=offset) 
-928:                         end = end_dt.strftime(fmt) 
-929:                         start = self._calc_start(end, emp.daily_hours) 
-930:                         self.schedule.set_day_hours(emp, d, start, end) 
-931:                         break 
-932:         print("=== KONIEC GENERATORA ===") 
-933:         return True 
-934:      
-935:     def _apply_policy( 
-936:         self, 
-937:         policy_name, 
-938:         hard_fn, 
-939:         soft_fn=None 
-940:     ): 
-941:         from model.constraint_policy import ConstraintPolicy 
-942:         policy = self.shop.constraint_policies.get(policy_name) 
-943:         weight = self.constraint_weights.get(policy_name, 1) 
-944:         print(f"[POLICY] {policy_name} -> {policy}") 
-945:         if policy == ConstraintPolicy.MANDATORY: 
-946:             print(f"[HARD] {policy_name}") 
-947:             hard_fn() 
-948:             return [] 
-949:         elif policy == ConstraintPolicy.PREFERRED: 
-950:             print(f"[SOFT] {policy_name} weight={weight}") 
-951:             if soft_fn: 
-952:                 violations = soft_fn() 
-953:                 # zamieniamy violation vars na weighted terms 
-954:                 return [weight * v for v in violations] 
-955:             else: 
-956:                 hard_fn() 
-957:                 return [] 
-958:         elif policy == ConstraintPolicy.DISABLED: 
-959:             return [] 
-960:         return [] 
+1: from ortools.sat.python import cp_model 
+2: from model.month_schedule import MonthSchedule 
+3: from model.shop_config import ShopConfig 
+4: from model.constraint_policy import ConstraintPolicy 
+5: from model.day_schedule import calc_start, calc_end 
+6: from logic.generator.solver import build_objective, solve_model 
+7: from logic.generator.solution_mapper import save_solution 
+8: from logic.generator.constraints_basic import ( 
+9:     add_one_shift_per_day_constraint, 
+10:     add_non_trade_day_constraints, 
+11:     add_leave_constraints, 
+12:     add_day_off_constraints, 
+13:     add_total_open_close_limit 
+14: ) 
+15: from logic.generator.constraints_staff import ( 
+16:     add_fixed_staff_shift_constraints, 
+17:     add_max_consecutive_constraint, 
+18: ) 
+19: from logic.generator.rest_constraint import add_rest_11h_constraint 
+20: from logic.generator.meat_constraint import (add_meat_constraint, add_meat_coverage_constraint) 
+21: from logic.generator.hours_constraint import ( 
+22:     add_monthly_hours_constraint, 
+23:     add_balance_constraint 
+24: ) 
+25: from logic.generator.manual_constraint import add_manual_shift_constraints 
+26: from logic.generator.constraints_logic import add_work_dependency_constraint 
+27: from logic.generator.objective import ( 
+28:     add_open_close_penalty, 
+29:     add_work_balance_penalty 
+30: ) 
+31: class AutoScheduleGenerator: 
+32:     def __init__(self, schedule: MonthSchedule, shop: ShopConfig): 
+33:         self.schedule = schedule 
+34:         self.shop = shop 
+35:         # ===== SHIFT ID ===== 
+36:         self.SHIFT_OPEN = 0 
+37:         self.SHIFT_CLOSE = 1 
+38:         # WORK od otwarcia 
+39:         self.SHIFT_WORK_START_15 = 2 
+40:         self.SHIFT_WORK_START_30 = 3 
+41:         self.SHIFT_WORK_START_45 = 4 
+42:         self.SHIFT_WORK_START_60 = 5 
+43:         self.SHIFT_WORK_START_75 = 6 
+44:         self.SHIFT_WORK_START_90 = 7 
+45:         # WORK od zamknięcia 
+46:         self.SHIFT_WORK_END_15 = 8 
+47:         self.SHIFT_WORK_END_30 = 9 
+48:         self.SHIFT_WORK_END_45 = 10 
+49:         self.SHIFT_WORK_END_60 = 11 
+50:         self.SHIFT_WORK_END_75 = 12 
+51:         self.SHIFT_WORK_END_90 = 13 
+52:         self.START_SHIFT_MAP = { 
+53:             self.SHIFT_WORK_START_15: 15, 
+54:             self.SHIFT_WORK_START_30: 30, 
+55:             self.SHIFT_WORK_START_45: 45, 
+56:             self.SHIFT_WORK_START_60: 60, 
+57:             self.SHIFT_WORK_START_75: 75, 
+58:             self.SHIFT_WORK_START_90: 90, 
+59:         } 
+60:         self.END_SHIFT_MAP = { 
+61:             self.SHIFT_WORK_END_15: 15, 
+62:             self.SHIFT_WORK_END_30: 30, 
+63:             self.SHIFT_WORK_END_45: 45, 
+64:             self.SHIFT_WORK_END_60: 60, 
+65:             self.SHIFT_WORK_END_75: 75, 
+66:             self.SHIFT_WORK_END_90: 90, 
+67:         } 
+68:         # wszystkie zmiany (tu można dodawać kolejne typy zmian) 
+69:         self.ALL_SHIFTS = ( 
+70:             self.SHIFT_OPEN, 
+71:             self.SHIFT_CLOSE, 
+72:             self.SHIFT_WORK_START_15, 
+73:             self.SHIFT_WORK_START_30, 
+74:             self.SHIFT_WORK_START_45, 
+75:             self.SHIFT_WORK_START_60, 
+76:             self.SHIFT_WORK_START_75, 
+77:             self.SHIFT_WORK_START_90, 
+78:             self.SHIFT_WORK_END_15, 
+79:             self.SHIFT_WORK_END_30, 
+80:             self.SHIFT_WORK_END_45, 
+81:             self.SHIFT_WORK_END_60, 
+82:             self.SHIFT_WORK_END_75, 
+83:             self.SHIFT_WORK_END_90, 
+84:         ) 
+85:         # Wagi dla soft constraintów (im wyższa, tym ważniejszy constraint)     
+86:         self.constraint_weights = { 
+87:             "meat": 10000, 
+88:             "meat_coverage": 15000, 
+89:             "rest_11h": 5000, 
+90:             "balance": 1, 
+91:             "max_consecutive": 1000, 
+92:             "open": 20000, 
+93:             "close": 20000, 
+94:             "monthly_hours": 2000, 
+95:         } 
+96:     # ================================================== 
+97:     # PUBLIC 
+98:     # ================================================== 
+99:     def generate(self): 
+100:         print("=== START CP-SAT GENERATOR ===") 
+101:         self.schedule.clear_unlocked_days() 
+102:         model = cp_model.CpModel() 
+103:         employees = self.schedule.employees 
+104:         days = list(range(1, self.schedule.days_in_month + 1)) 
+105:         min_open = self.shop.constraints.get("min_open_staff", 3) 
+106:         min_close = self.shop.constraints.get("min_close_staff", 3) 
+107:         max_consecutive = self.shop.constraints.get("max_consecutive_days", 4) 
+108:         trade_days = [d for d in days if self.shop.is_trade_day(d)] 
+109:         print("Liczba pracowników:", len(employees)) 
+110:         print("Dni w miesiącu:", len(days)) 
+111:         print("Dni handlowe:", len(trade_days)) 
+112:         print("Min OPEN:", min_open) 
+113:         print("Min CLOSE:", min_close) 
+114:         print("Max consecutive:", max_consecutive) 
+115:         x = self._create_variables(model, employees, days) 
+116:         add_non_trade_day_constraints(model, x, employees, days, self.shop, self.ALL_SHIFTS) 
+117:         add_total_open_close_limit(model, x, employees, trade_days, self.SHIFT_OPEN, self.SHIFT_CLOSE) 
+118:         add_leave_constraints(model, x, employees, days, self.schedule, self.ALL_SHIFTS) 
+119:         add_day_off_constraints(model, x, employees, days, self.schedule, self.ALL_SHIFTS) 
+120:         add_manual_shift_constraints( 
+121:             model, 
+122:             x, 
+123:             employees, 
+124:             days, 
+125:             self.schedule, 
+126:             self.shop, 
+127:             self.ALL_SHIFTS, 
+128:             self.SHIFT_OPEN, 
+129:             self.SHIFT_CLOSE, 
+130:             self.START_SHIFT_MAP, 
+131:             self.END_SHIFT_MAP 
+132:         ) 
+133:         add_work_dependency_constraint( 
+134:             model, 
+135:             x, 
+136:             employees, 
+137:             days, 
+138:             self.SHIFT_OPEN, 
+139:             self.SHIFT_CLOSE, 
+140:             self.ALL_SHIFTS 
+141:         ) 
+142:         add_one_shift_per_day_constraint(model, x, employees, days, self.ALL_SHIFTS) 
+143:         open_violations = self._apply_policy( 
+144:             "open", 
+145:             hard_fn=lambda: add_fixed_staff_shift_constraints( 
+146:                 model, x, employees, trade_days, 
+147:                 self.SHIFT_OPEN, 
+148:                 min_open, 
+149:                 soft=False 
+150:             ), 
+151:             soft_fn=lambda: add_fixed_staff_shift_constraints( 
+152:                 model, x, employees, trade_days, 
+153:                 self.SHIFT_OPEN, 
+154:                 min_open, 
+155:                 soft=True 
+156:             ) 
+157:         ) 
+158:         close_violations = self._apply_policy( 
+159:             "close", 
+160:             hard_fn=lambda: add_fixed_staff_shift_constraints( 
+161:                 model, x, employees, trade_days, 
+162:                 self.SHIFT_CLOSE, 
+163:                 min_close, 
+164:                 soft=False 
+165:             ), 
+166:             soft_fn=lambda: add_fixed_staff_shift_constraints( 
+167:                 model, x, employees, trade_days, 
+168:                 self.SHIFT_CLOSE, 
+169:                 min_close, 
+170:                 soft=True 
+171:             ) 
+172:         ) 
+173:         rest_violations = self._apply_policy( 
+174:             "rest_11h", 
+175:             hard_fn=lambda: add_rest_11h_constraint( 
+176:                 model, 
+177:                 x, 
+178:                 employees, 
+179:                 days, 
+180:                 trade_days, 
+181:                 self.shop, 
+182:                 self.SHIFT_OPEN, 
+183:                 self.SHIFT_CLOSE, 
+184:                 self.START_SHIFT_MAP, 
+185:                 self.END_SHIFT_MAP, 
+186:                 soft=False 
+187:             ), 
+188:             soft_fn=lambda: add_rest_11h_constraint( 
+189:                 model, 
+190:                 x, 
+191:                 employees, 
+192:                 days, 
+193:                 trade_days, 
+194:                 self.shop, 
+195:                 self.SHIFT_OPEN, 
+196:                 self.SHIFT_CLOSE, 
+197:                 self.START_SHIFT_MAP, 
+198:                 self.END_SHIFT_MAP, 
+199:                 soft=True 
+200:             ) 
+201:         ) 
+202:         balance_violations = self._apply_policy( 
+203:             "balance", 
+204:             hard_fn=lambda: add_balance_constraint( 
+205:                 model, x, employees, days, self.shop, self.ALL_SHIFTS, soft=False 
+206:             ), 
+207:             soft_fn=lambda: add_balance_constraint( 
+208:                 model, x, employees, days, self.shop, self.ALL_SHIFTS, soft=True 
+209:             ) 
+210:         ) 
+211:         meat_violations = self._apply_policy( 
+212:             "meat", 
+213:             hard_fn=lambda: add_meat_constraint( 
+214:                 model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=False 
+215:             ), 
+216:             soft_fn=lambda: add_meat_constraint( 
+217:                 model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=True 
+218:             ) 
+219:         ) 
+220:         coverage_violations = self._apply_policy( 
+221:             "meat_coverage", 
+222:             hard_fn=lambda: add_meat_coverage_constraint( 
+223:                 model, x, employees, trade_days, self.shop, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=False 
+224:             ), 
+225:             soft_fn=lambda: add_meat_coverage_constraint( 
+226:                 model, x, employees, trade_days, self.shop, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=True 
+227:             ) 
+228:         ) 
+229:         max_consec_violations = self._apply_policy( 
+230:             "max_consecutive", 
+231:             hard_fn=lambda: add_max_consecutive_constraint( 
+232:                 model, x, employees, days, max_consecutive, self.ALL_SHIFTS, soft=False 
+233:             ), 
+234:             soft_fn=lambda: add_max_consecutive_constraint( 
+235:                 model, x, employees, days, max_consecutive, self.ALL_SHIFTS, soft=True 
+236:             ) 
+237:         ) 
+238:         monthly_hours_violations = self._apply_policy( 
+239:             "monthly_hours", 
+240:             hard_fn=lambda: add_monthly_hours_constraint( 
+241:                 model, x, employees, days, self.schedule, self.shop, self.ALL_SHIFTS, soft=False 
+242:             ), 
+243:             soft_fn=lambda: add_monthly_hours_constraint( 
+244:                 model, x, employees, days, self.schedule, self.shop, self.ALL_SHIFTS, soft=True 
+245:             ) 
+246:         ) 
+247:         all_soft_violations = [] 
+248:         all_soft_violations.extend(rest_violations) 
+249:         all_soft_violations.extend(balance_violations) 
+250:         all_soft_violations.extend(meat_violations) 
+251:         all_soft_violations.extend(coverage_violations) 
+252:         all_soft_violations.extend(max_consec_violations) 
+253:         all_soft_violations.extend(open_violations) 
+254:         all_soft_violations.extend(close_violations) 
+255:         all_soft_violations.extend(monthly_hours_violations) 
+256:         all_soft_violations.extend( 
+257:             add_work_balance_penalty( 
+258:                 model, 
+259:                 x, 
+260:                 employees, 
+261:                 trade_days, 
+262:                 self.START_SHIFT_MAP, 
+263:                 self.END_SHIFT_MAP 
+264:             ) 
+265:         ) 
+266:         all_soft_violations.extend( 
+267:             add_open_close_penalty( 
+268:                 x, 
+269:                 employees, 
+270:                 trade_days, 
+271:                 self.SHIFT_OPEN, 
+272:                 self.SHIFT_CLOSE 
+273:             ) 
+274:         ) 
+275:          
+276:         build_objective(model, all_soft_violations) 
+277:         solver, status = solve_model(model) 
+278:         success = save_solution( 
+279:             self.schedule, 
+280:             self.shop, 
+281:             solver, 
+282:             status, 
+283:             x, 
+284:             employees, 
+285:             trade_days, 
+286:             self.SHIFT_OPEN, 
+287:             self.SHIFT_CLOSE, 
+288:             self.START_SHIFT_MAP, 
+289:             self.END_SHIFT_MAP, 
+290:         ) 
+291:         return { 
+292:             "status": status, 
+293:             "success": success, 
+294:             "conflicts": solver.NumConflicts(), 
+295:             "branches": solver.NumBranches(), 
+296:             "wall_time": solver.WallTime() 
+297:         } 
+298:      
+299:     def _create_variables(self, model, employees, days): 
+300:         x = {} 
+301:         for e in range(len(employees)): 
+302:             for d in days: 
+303:                 for s in (self.ALL_SHIFTS): 
+304:                     x[e, d, s] = model.NewBoolVar(f"x_e{e}_d{d}_s{s}") 
+305:         print(f"[MODEL] variables: {len(x)}") 
+306:         return x 
+307:      
+308:     def _apply_policy( 
+309:         self, 
+310:         policy_name, 
+311:         hard_fn, 
+312:         soft_fn=None 
+313:     ): 
+314:         from model.constraint_policy import ConstraintPolicy 
+315:         policy = self.shop.constraint_policies.get(policy_name) 
+316:         weight = self.constraint_weights.get(policy_name, 1) 
+317:         print(f"[POLICY] {policy_name} -> {policy}") 
+318:         if policy == ConstraintPolicy.MANDATORY: 
+319:             print(f"[HARD] {policy_name}") 
+320:             hard_fn() 
+321:             return [] 
+322:         elif policy == ConstraintPolicy.PREFERRED: 
+323:             print(f"[SOFT] {policy_name} weight={weight}") 
+324:             if soft_fn: 
+325:                 violations = soft_fn() 
+326:                 # zamieniamy violation vars na weighted terms 
+327:                 return [weight * v for v in violations] 
+328:             else: 
+329:                 hard_fn() 
+330:                 return [] 
+331:         elif policy == ConstraintPolicy.DISABLED: 
+332:             return [] 
+333:         return [] 
  
  
 ================================================== 
@@ -5394,6 +4767,686 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\schedule_presenter.py
 FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\__init__.py 
 ================================================== 
  
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\constraints_basic.py 
+================================================== 
+ 
+1: def add_one_shift_per_day_constraint(model, x, employees, days, all_shifts): 
+2:     for e in range(len(employees)): 
+3:         for d in days: 
+4:             model.Add( 
+5:                 sum(x[e, d, s] for s in all_shifts) <= 1 
+6:             ) 
+7: def add_non_trade_day_constraints(model, x, employees, days, shop, all_shifts): 
+8:     for e in range(len(employees)): 
+9:         for d in days: 
+10:             if not shop.is_trade_day(d): 
+11:                 for s in all_shifts: 
+12:                     model.Add(x[e, d, s] == 0) 
+13: def add_leave_constraints(model, x, employees, days, schedule, all_shifts): 
+14:     for e in range(len(employees)): 
+15:         emp = employees[e] 
+16:         for d in days: 
+17:             day_state = schedule.get_day(emp, d) 
+18:             if day_state.is_leave: 
+19:                 for s in all_shifts: 
+20:                     model.Add(x[e, d, s] == 0) 
+21: def add_day_off_constraints(model, x, employees, days, schedule, all_shifts): 
+22:     for e in range(len(employees)): 
+23:         emp = employees[e] 
+24:         for d in days: 
+25:             day_state = schedule.get_day(emp, d) 
+26:             if getattr(day_state, "is_day_off", False): 
+27:                 for s in all_shifts: 
+28:                     model.Add(x[e, d, s] == 0) 
+29: def add_total_open_close_limit(model, x, employees, trade_days, shift_open, shift_close): 
+30:     print("[CONSTRAINT] total_open_close_limit = 6") 
+31:     for d in trade_days: 
+32:         print(f"  day={d}") 
+33:         total_open_close = sum( 
+34:             x[e, d, shift_open] + x[e, d, shift_close] 
+35:             for e in range(len(employees)) 
+36:         ) 
+37:         model.Add(total_open_close == 6) 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\constraints_logic.py 
+================================================== 
+ 
+1: def add_work_dependency_constraint( 
+2:     model, 
+3:     x, 
+4:     employees, 
+5:     days, 
+6:     SHIFT_OPEN, 
+7:     SHIFT_CLOSE, 
+8:     ALL_SHIFTS 
+9: ): 
+10:     print("[CONSTRAINT] work_dependency") 
+11:     for d in days: 
+12:         total_open_close = sum( 
+13:             x[e, d, SHIFT_OPEN] + x[e, d, SHIFT_CLOSE] 
+14:             for e in range(len(employees)) 
+15:         ) 
+16:         for e in range(len(employees)): 
+17:             for s in ALL_SHIFTS: 
+18:                 if s in (SHIFT_OPEN, SHIFT_CLOSE): 
+19:                     continue 
+20:                 model.Add( 
+21:                     x[e, d, s] <= total_open_close 
+22:                 ) 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\constraints_staff.py 
+================================================== 
+ 
+1: def add_fixed_staff_shift_constraints( 
+2:     model, 
+3:     x, 
+4:     employees, 
+5:     trade_days, 
+6:     shift_type, 
+7:     min_staff, 
+8:     soft=False 
+9: ): 
+10:     print(f"[CONSTRAINT] fixed_staff shift={shift_type} min={min_staff} soft={soft}") 
+11:     violations = [] 
+12:     for d in trade_days: 
+13:         print(f"  day={d}") 
+14:         total_staff = sum( 
+15:             x[e, d, shift_type] for e in range(len(employees)) 
+16:         ) 
+17:         opener_staff = sum( 
+18:             x[e, d, shift_type] 
+19:             for e in range(len(employees)) 
+20:             if employees[e].is_opener 
+21:         ) 
+22:         if not soft: 
+23:             meat_staff = sum( 
+24:                 x[e, d, shift_type] 
+25:                 for e in range(len(employees)) 
+26:                 if employees[e].is_meat 
+27:             ) 
+28:             model.Add(total_staff == min_staff) 
+29:             model.Add(opener_staff == 1) 
+30:             model.Add(meat_staff == 1) 
+31:         else: 
+32:             total_violation = model.NewIntVar( 
+33:                 0, min_staff, 
+34:                 f"staff_v_d{d}_{shift_type}" 
+35:             ) 
+36:             model.Add(total_staff + total_violation >= min_staff) 
+37:             violations.append(total_violation) 
+38:             opener_violation = model.NewBoolVar( 
+39:                 f"opener_v_d{d}_{shift_type}" 
+40:             ) 
+41:             model.Add(opener_staff + opener_violation >= 1) 
+42:             violations.append(opener_violation) 
+43:     return violations 
+44: def add_max_consecutive_constraint( 
+45:     model, 
+46:     x, 
+47:     employees, 
+48:     days, 
+49:     max_consecutive, 
+50:     all_shifts, 
+51:     soft=False 
+52: ): 
+53:     violations = [] 
+54:     for e in range(len(employees)): 
+55:         for start in range(1, len(days) - max_consecutive + 1): 
+56:             work_sum = sum( 
+57:                 x[e, d, s] 
+58:                 for d in range(start, start + max_consecutive + 1) 
+59:                 for s in all_shifts 
+60:             ) 
+61:             if not soft: 
+62:                 model.Add(work_sum <= max_consecutive) 
+63:             else: 
+64:                 violation = model.NewIntVar( 
+65:                     0, len(days), 
+66:                     f"max_consec_violation_e{e}_d{start}" 
+67:                 ) 
+68:                 model.Add(work_sum <= max_consecutive + violation) 
+69:                 violations.append(violation) 
+70:     return violations 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\hours_constraint.py 
+================================================== 
+ 
+1: def add_monthly_hours_constraint( 
+2:     model, 
+3:     x, 
+4:     employees, 
+5:     days, 
+6:     schedule, 
+7:     shop, 
+8:     all_shifts, 
+9:     soft=False 
+10: ): 
+11:     violations = [] 
+12:     nominal_hours = shop.get_full_time_nominal_hours() 
+13:     nominal_minutes = nominal_hours * 60 
+14:     all_totals = [] 
+15:     for e in range(len(employees)): 
+16:         emp = employees[e] 
+17:         shift_minutes = int(emp.daily_hours * 60) 
+18:         total_minutes = model.NewIntVar(0, 50000, f"month_total_e{e}") 
+19:         model.Add( 
+20:             total_minutes == 
+21:             sum( 
+22:                 x[e, d, s] * shift_minutes 
+23:                 for d in days 
+24:                 for s in all_shifts 
+25:             ) 
+26:         ) 
+27:         all_totals.append(total_minutes) 
+28:         leave_days = sum( 
+29:             1 for d in days 
+30:             if schedule.get_day(emp, d).is_leave 
+31:         ) 
+32:         leave_minutes = leave_days * 480 
+33:         target_minutes = int(nominal_minutes * (emp.daily_hours / 8) - leave_minutes) 
+34:         max_minutes = target_minutes + (8 * 60) 
+35:         if not soft: 
+36:             model.Add(total_minutes >= target_minutes) 
+37:             model.Add(total_minutes <= max_minutes) 
+38:         else: 
+39:             under = model.NewIntVar(0, 50000, f"under_e{e}") 
+40:             model.Add(total_minutes + under >= max_minutes) 
+41:             over = model.NewIntVar(0, 50000, f"over_e{e}") 
+42:             model.Add(total_minutes <= target_minutes + over) 
+43:             violations.append(under) 
+44:             violations.append(over) 
+45:     if soft and len(all_totals) > 1: 
+46:         max_total = model.NewIntVar(0, 50000, "month_max_total") 
+47:         min_total = model.NewIntVar(0, 50000, "month_min_total") 
+48:         model.AddMaxEquality(max_total, all_totals) 
+49:         model.AddMinEquality(min_total, all_totals) 
+50:         spread = model.NewIntVar(0, 50000, "month_spread") 
+51:         model.Add(spread == max_total - min_total) 
+52:         violations.append(spread) 
+53:     return violations 
+54: def add_balance_constraint( 
+55:     model, 
+56:     x, 
+57:     employees, 
+58:     days, 
+59:     shop, 
+60:     all_shifts, 
+61:     soft=True 
+62: ): 
+63:     nominal = shop.get_full_time_nominal_hours() 
+64:     if not nominal: 
+65:         return [] 
+66:     nominal_minutes = int(nominal * 60) 
+67:     violations = [] 
+68:     for e in range(len(employees)): 
+69:         shift_minutes = int(employees[e].daily_hours * 60) 
+70:         total_minutes = model.NewIntVar(0, 20000, f"total_minutes_e{e}") 
+71:         model.Add( 
+72:             total_minutes == 
+73:             sum( 
+74:                 sum(x[e, d, s] for s in all_shifts) * shift_minutes 
+75:                 for d in days 
+76:             ) 
+77:         ) 
+78:         if not soft: 
+79:             model.Add(total_minutes == nominal_minutes) 
+80:         else: 
+81:             diff = model.NewIntVar(-20000, 20000, f"diff_e{e}") 
+82:             model.Add(diff == total_minutes - nominal_minutes) 
+83:             abs_diff = model.NewIntVar(0, 20000, f"abs_diff_e{e}") 
+84:             model.AddAbsEquality(abs_diff, diff) 
+85:             violations.append(abs_diff) 
+86:     return violations 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\manual_constraint.py 
+================================================== 
+ 
+1: from datetime import datetime 
+2: def resolve_manual_shift( 
+3:     start, 
+4:     end, 
+5:     open_time, 
+6:     close_time, 
+7:     start_map, 
+8:     end_map 
+9: ): 
+10:     fmt = "%H:%M" 
+11:     if start == open_time: 
+12:         return "OPEN" 
+13:     if end == close_time: 
+14:         return "CLOSE" 
+15:     open_dt = datetime.strptime(open_time, fmt) 
+16:     start_dt = datetime.strptime(start, fmt) 
+17:     diff = int((start_dt - open_dt).total_seconds() / 60) 
+18:     if diff in start_map: 
+19:         return start_map[diff] 
+20:     close_dt = datetime.strptime(close_time, fmt) 
+21:     end_dt = datetime.strptime(end, fmt) 
+22:     diff = int((close_dt - end_dt).total_seconds() / 60) 
+23:     if diff in end_map: 
+24:         return end_map[diff] 
+25:     return None 
+26: def add_manual_shift_constraints( 
+27:     model, 
+28:     x, 
+29:     employees, 
+30:     days, 
+31:     schedule, 
+32:     shop, 
+33:     all_shifts, 
+34:     SHIFT_OPEN, 
+35:     SHIFT_CLOSE, 
+36:     START_SHIFT_MAP, 
+37:     END_SHIFT_MAP 
+38: ): 
+39:     for e in range(len(employees)): 
+40:         emp = employees[e] 
+41:         for d in days: 
+42:             day_state = schedule.get_day(emp, d) 
+43:             start = getattr(day_state, "start_time", None) 
+44:             end = getattr(day_state, "end_time", None) 
+45:             if not start or not end: 
+46:                 continue 
+47:             hours = shop.get_open_hours_for_day(d) 
+48:             if not hours: 
+49:                 continue 
+50:             open_time, close_time = hours 
+51:             shift = resolve_manual_shift( 
+52:                 start, 
+53:                 end, 
+54:                 open_time, 
+55:                 close_time, 
+56:                 {v: k for k, v in START_SHIFT_MAP.items()}, 
+57:                 {v: k for k, v in END_SHIFT_MAP.items()} 
+58:             ) 
+59:             if shift == "OPEN": 
+60:                 shift = SHIFT_OPEN 
+61:             elif shift == "CLOSE": 
+62:                 shift = SHIFT_CLOSE 
+63:             if shift is None: 
+64:                 continue 
+65:             model.Add(x[e, d, shift] == 1) 
+66:             for s in all_shifts: 
+67:                 if s  
+68:                     model.Add(x[e, d, s] == 0) 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\meat_constraint.py 
+================================================== 
+ 
+1: from datetime import datetime, timedelta 
+2: def add_meat_constraint( 
+3:     model, 
+4:     x, 
+5:     employees, 
+6:     days, 
+7:     trade_days, 
+8:     all_shifts, 
+9:     SHIFT_OPEN, 
+10:     SHIFT_CLOSE, 
+11:     soft=False 
+12: ): 
+13:     violations = [] 
+14:     for d in trade_days: 
+15:         meat_on_open = sum( 
+16:             x[e, d, SHIFT_OPEN] 
+17:             for e in range(len(employees)) 
+18:             if employees[e].is_meat 
+19:         ) 
+20:         meat_on_close = sum( 
+21:             x[e, d, SHIFT_CLOSE] 
+22:             for e in range(len(employees)) 
+23:             if employees[e].is_meat 
+24:         ) 
+25:         meat_on_work = sum( 
+26:             x[e, d, s] 
+27:             for e in range(len(employees)) 
+28:             for s in all_shifts 
+29:             if s not in (SHIFT_OPEN, SHIFT_CLOSE) 
+30:             and employees[e].is_meat 
+31:         ) 
+32:         total_work = sum( 
+33:             x[e, d, s] 
+34:             for e in range(len(employees)) 
+35:             for s in all_shifts 
+36:             if s not in (SHIFT_OPEN, SHIFT_CLOSE) 
+37:         ) 
+38:         if not soft: 
+39:             work_exists = model.NewBoolVar(f"work_exists_d{d}") 
+40:             model.Add(total_work >= 1).OnlyEnforceIf(work_exists) 
+41:             model.Add(total_work == 0).OnlyEnforceIf(work_exists.Not()) 
+42:             model.Add( 
+43:                 meat_on_work >= 1 
+44:             ).OnlyEnforceIf(work_exists) 
+45:         else: 
+46:             v1 = model.NewBoolVar(f"meat_open_v_d{d}") 
+47:             model.Add(meat_on_open + v1 >= 1) 
+48:             violations.append(v1) 
+49:             v2 = model.NewBoolVar(f"meat_close_v_d{d}") 
+50:             model.Add(meat_on_close + v2 >= 1) 
+51:             violations.append(v2) 
+52:     return violations 
+53: def add_meat_coverage_constraint( 
+54:     model, 
+55:     x, 
+56:     employees, 
+57:     trade_days, 
+58:     shop, 
+59:     all_shifts, 
+60:     SHIFT_OPEN, 
+61:     SHIFT_CLOSE, 
+62:     soft=False 
+63: ): 
+64:     violations = [] 
+65:     for d in trade_days: 
+66:         hours = shop.get_open_hours_for_day(d) 
+67:         if not hours: 
+68:             continue 
+69:         open_time, close_time = hours 
+70:         fmt = "%H:%M" 
+71:         open_dt = datetime.strptime(open_time, fmt) 
+72:         close_dt = datetime.strptime(close_time, fmt) 
+73:         t = open_dt 
+74:         while t < close_dt: 
+75:             slot = t.strftime(fmt) 
+76:             meat_cover = [] 
+77:             for e in range(len(employees)): 
+78:                 if not employees[e].is_meat: 
+79:                     continue 
+80:                 emp = employees[e] 
+81:                 shift_len = timedelta(hours=emp.daily_hours) 
+82:                 # OPEN 
+83:                 start = open_dt 
+84:                 end = start + shift_len 
+85:                 if start <= t < end: 
+86:                     meat_cover.append(x[e, d, SHIFT_OPEN]) 
+87:                 # CLOSE 
+88:                 end = close_dt 
+89:                 start = end - shift_len 
+90:                 if start <= t < end: 
+91:                     meat_cover.append(x[e, d, SHIFT_CLOSE]) 
+92:                 for s in all_shifts: 
+93:                     if s in (SHIFT_OPEN, SHIFT_CLOSE): 
+94:                         continue 
+95:                     meat_cover.append(x[e, d, s]) 
+96:             if not meat_cover: 
+97:                 t += timedelta(minutes=15) 
+98:                 continue 
+99:             if not soft: 
+100:                 model.Add(sum(meat_cover) >= 1) 
+101:             else: 
+102:                 v = model.NewBoolVar(f"meat_cover_v_d{d}_{slot}") 
+103:                 model.Add(sum(meat_cover) + v >= 1) 
+104:                 violations.append(v) 
+105:             t += timedelta(minutes=15) 
+106:     return violations 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\objective.py 
+================================================== 
+ 
+1: def add_open_close_penalty(x, employees, days, SHIFT_OPEN, SHIFT_CLOSE): 
+2:     print("[OBJECTIVE] penalty OPEN/CLOSE usage") 
+3:     penalties = [] 
+4:     for e in range(len(employees)): 
+5:         for d in days: 
+6:             penalties.append(x[e, d, SHIFT_OPEN]) 
+7:             penalties.append(x[e, d, SHIFT_CLOSE]) 
+8:     return penalties 
+9: def add_work_balance_penalty( 
+10:     model, 
+11:     x, 
+12:     employees, 
+13:     days, 
+14:     START_SHIFT_MAP, 
+15:     END_SHIFT_MAP 
+16: ): 
+17:     penalties = [] 
+18:     for e in range(len(employees)): 
+19:         work_start = sum( 
+20:             x[e, d, s] 
+21:             for d in days 
+22:             for s in START_SHIFT_MAP.keys() 
+23:         ) 
+24:         work_end = sum( 
+25:             x[e, d, s] 
+26:             for d in days 
+27:             for s in END_SHIFT_MAP.keys() 
+28:         ) 
+29:         diff = model.NewIntVar(-31, 31, f"work_balance_diff_e{e}") 
+30:         model.Add(diff == work_start - work_end) 
+31:         abs_diff = model.NewIntVar(0, 31, f"work_balance_abs_e{e}") 
+32:         model.AddAbsEquality(abs_diff, diff) 
+33:         penalties.append(abs_diff) 
+34:     return penalties 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\rest_constraint.py 
+================================================== 
+ 
+1: from datetime import datetime, timedelta 
+2: from model.day_schedule import calc_start, calc_end 
+3: def add_rest_11h_constraint( 
+4:     model, 
+5:     x, 
+6:     employees, 
+7:     days, 
+8:     trade_days, 
+9:     shop, 
+10:     SHIFT_OPEN, 
+11:     SHIFT_CLOSE, 
+12:     START_SHIFTS, 
+13:     END_SHIFTS, 
+14:     soft=False 
+15: ): 
+16:     fmt = "%H:%M" 
+17:     violations = [] 
+18:     rest_constraints = 0 
+19:     for e in range(len(employees)): 
+20:         for i in range(len(days) - 1): 
+21:             d = days[i] 
+22:             d_next = days[i + 1] 
+23:             if d not in trade_days or d_next not in trade_days: 
+24:                 continue 
+25:             hours_d = shop.get_open_hours_for_day(d) 
+26:             hours_next = shop.get_open_hours_for_day(d_next) 
+27:             if not hours_d or not hours_next: 
+28:                 continue 
+29:             open_d, close_d = hours_d 
+30:             open_next, close_next = hours_next 
+31:             shifts_today = {} 
+32:             shifts_today[SHIFT_OPEN] = ( 
+33:                 open_d, 
+34:                 calc_end(open_d, employees[e].daily_hours) 
+35:             ) 
+36:             shifts_today[SHIFT_CLOSE] = ( 
+37:                 calc_start(close_d, employees[e].daily_hours), 
+38:                 close_d 
+39:             ) 
+40:             for shift, off in START_SHIFTS.items(): 
+41:                 start = ( 
+42:                     datetime.strptime(open_d, fmt) 
+43:                     + timedelta(minutes=off) 
+44:                 ).strftime(fmt) 
+45:                 shifts_today[shift] = ( 
+46:                     start, 
+47:                     calc_end(start, employees[e].daily_hours) 
+48:                 ) 
+49:             for shift, off in END_SHIFTS.items(): 
+50:                 end = ( 
+51:                     datetime.strptime(close_d, fmt) 
+52:                     - timedelta(minutes=off) 
+53:                 ).strftime(fmt) 
+54:                 shifts_today[shift] = ( 
+55:                     calc_start(end, employees[e].daily_hours), 
+56:                     end 
+57:                 ) 
+58:             shifts_next = {} 
+59:             shifts_next[SHIFT_OPEN] = ( 
+60:                 open_next, 
+61:                 calc_end(open_next, employees[e].daily_hours) 
+62:             ) 
+63:             shifts_next[SHIFT_CLOSE] = ( 
+64:                 calc_start(close_next, employees[e].daily_hours), 
+65:                 close_next 
+66:             ) 
+67:             for shift, off in START_SHIFTS.items(): 
+68:                 start = ( 
+69:                     datetime.strptime(open_next, fmt) 
+70:                     + timedelta(minutes=off) 
+71:                 ).strftime(fmt) 
+72:                 shifts_next[shift] = ( 
+73:                     start, 
+74:                     calc_end(start, employees[e].daily_hours) 
+75:                 ) 
+76:             for shift, off in END_SHIFTS.items(): 
+77:                 end = ( 
+78:                     datetime.strptime(close_next, fmt) 
+79:                     - timedelta(minutes=off) 
+80:                 ).strftime(fmt) 
+81:                 shifts_next[shift] = ( 
+82:                     calc_start(end, employees[e].daily_hours), 
+83:                     end 
+84:                 ) 
+85:             for s1 in shifts_today: 
+86:                 for s2 in shifts_next: 
+87:                     end_today = datetime.strptime(shifts_today[s1][1], fmt) 
+88:                     start_next = datetime.strptime(shifts_next[s2][0], fmt) 
+89:                     rest = start_next - end_today 
+90:                     if rest.total_seconds() < 0: 
+91:                         rest += timedelta(days=1) 
+92:                     if rest < timedelta(hours=11): 
+93:                         if not soft: 
+94:                             model.Add( 
+95:                                 x[e, d, s1] + x[e, d_next, s2] <= 1 
+96:                             ) 
+97:                         else: 
+98:                             violation = model.NewBoolVar( 
+99:                                 f"rest_violation_e{e}_d{d}_{s1}_{s2}" 
+100:                             ) 
+101:                             model.Add( 
+102:                                 x[e, d, s1] + x[e, d_next, s2] <= 1 + violation 
+103:                             ) 
+104:                             violations.append(violation) 
+105:                         rest_constraints += 1 
+106:     print("Constrainty 11h rest:", rest_constraints) 
+107:     return violations 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\solution_mapper.py 
+================================================== 
+ 
+1: from ortools.sat.python import cp_model 
+2: from datetime import datetime, timedelta 
+3: from model.day_schedule import calc_start, calc_end 
+4: def save_solution( 
+5:     schedule, 
+6:     shop, 
+7:     solver, 
+8:     status, 
+9:     x, 
+10:     employees, 
+11:     trade_days, 
+12:     SHIFT_OPEN, 
+13:     SHIFT_CLOSE, 
+14:     START_SHIFTS, 
+15:     END_SHIFTS 
+16: ): 
+17:     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE): 
+18:         print("❌ BRAK ROZWIĄZANIA") 
+19:         return False 
+20:     print("✅ ROZWIĄZANIE ZNALEZIONE") 
+21:     print("=== PODSUMOWANIE ZMIAN ===") 
+22:     for d in trade_days: 
+23:         open_count = sum( 
+24:             solver.Value(x[e, d, SHIFT_OPEN]) 
+25:             for e in range(len(employees)) 
+26:         ) 
+27:         close_count = sum( 
+28:             solver.Value(x[e, d, SHIFT_CLOSE]) 
+29:             for e in range(len(employees)) 
+30:         ) 
+31:         work_count = sum( 
+32:             solver.Value(x[e, d, s]) 
+33:             for e in range(len(employees)) 
+34:             for s in list(START_SHIFTS.keys()) + list(END_SHIFTS.keys()) 
+35:         ) 
+36:         print(f"Dzień {d}: OPEN={open_count} CLOSE={close_count} WORK={work_count}") 
+37:     for e in range(len(employees)): 
+38:         emp = employees[e] 
+39:         for d in trade_days: 
+40:             day_state = schedule.get_day(emp, d) 
+41:             if ( 
+42:                 day_state.is_leave 
+43:                 or day_state.is_locked 
+44:                 or getattr(day_state, "is_day_off", False) 
+45:                 or getattr(day_state, "start_time", None) 
+46:             ): 
+47:                 continue 
+48:             hours = shop.get_open_hours_for_day(d) 
+49:             if not hours: 
+50:                 continue 
+51:             open_time, close_time = hours 
+52:             fmt = "%H:%M" 
+53:             if solver.Value(x[e, d, SHIFT_OPEN]) == 1: 
+54:                 end = calc_end(open_time, emp.daily_hours) 
+55:                 schedule.set_day_hours(emp, d, open_time, end) 
+56:                 continue 
+57:             if solver.Value(x[e, d, SHIFT_CLOSE]) == 1: 
+58:                 start = calc_start(close_time, emp.daily_hours) 
+59:                 schedule.set_day_hours(emp, d, start, close_time) 
+60:                 continue 
+61:             for shift, offset in START_SHIFTS.items(): 
+62:                 if solver.Value(x[e, d, shift]) == 1: 
+63:                     start_dt = datetime.strptime(open_time, fmt) + timedelta(minutes=offset) 
+64:                     start = start_dt.strftime(fmt) 
+65:                     end = calc_end(start, emp.daily_hours) 
+66:                     schedule.set_day_hours(emp, d, start, end) 
+67:                     break 
+68:             for shift, offset in END_SHIFTS.items(): 
+69:                 if solver.Value(x[e, d, shift]) == 1: 
+70:                     end_dt = datetime.strptime(close_time, fmt) - timedelta(minutes=offset) 
+71:                     end = end_dt.strftime(fmt) 
+72:                     start = calc_start(end, emp.daily_hours) 
+73:                     schedule.set_day_hours(emp, d, start, end) 
+74:                     break 
+75:     print("=== KONIEC GENERATORA ===") 
+76:     return True 
+ 
+ 
+================================================== 
+FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\solver.py 
+================================================== 
+ 
+1: from ortools.sat.python import cp_model 
+2: def build_objective(model, weighted_soft_terms): 
+3:     if weighted_soft_terms: 
+4:         print("[OBJECTIVE] terms:", len(weighted_soft_terms)) 
+5:         model.Maximize(-sum(weighted_soft_terms)) 
+6: def solve_model(model): 
+7:     solver = cp_model.CpSolver() 
+8:     solver.parameters.max_time_in_seconds = 20 
+9:     status = solver.Solve(model) 
+10:     print("Status:", solver.StatusName(status)) 
+11:     print("Czas:", solver.WallTime(), "s") 
+12:     print("Conflicts:", solver.NumConflicts()) 
+13:     print("Branches:", solver.NumBranches()) 
+14:     return solver, status 
  
  
 ================================================== 
@@ -5745,6 +5798,16 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\model\day_schedule.py
 77:             self.end or "", 
 78:             self.total_as_str() or "", 
 79:         ) 
+80: def calc_end(start_str: str, hours: int) -> str: 
+81:     fmt = "%H:%M" 
+82:     start = datetime.strptime(start_str, fmt) 
+83:     end = start + timedelta(hours=hours) 
+84:     return end.strftime(fmt) 
+85: def calc_start(end_str: str, hours: int) -> str: 
+86:     fmt = "%H:%M" 
+87:     end = datetime.strptime(end_str, fmt) 
+88:     start = end - timedelta(hours=hours) 
+89:     return start.strftime(fmt) 
  
  
 ================================================== 
@@ -5987,6 +6050,18 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\model\month_schedule.py
 200:         self.add_employee(new) 
 201:         # przywróć grafik 
 202:         self._data[new] = days_data 
+203:     def clear_unlocked_days(self): 
+204:         for emp in self.employees: 
+205:             for day in range(1, self.days_in_month + 1): 
+206:                 ds = self.get_day(emp, day) 
+207:                 if ( 
+208:                     ds.is_leave 
+209:                     or ds.is_locked 
+210:                     or getattr(ds, "is_day_off", False) 
+211:                     or getattr(ds, "start_time", None) 
+212:                 ): 
+213:                     continue 
+214:                 self.set_day_free(emp, day) 
  
  
 ================================================== 

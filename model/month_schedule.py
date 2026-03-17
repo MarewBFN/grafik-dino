@@ -188,6 +188,7 @@ class MonthSchedule:
                     "is_opener": e.is_opener,
                     "is_meat": e.is_meat,
                     "daily_hours": e.daily_hours,
+                    "availability": e.availability,
                     "days": {
                         day: {
                             "start": self.get_day(e, day).start,
@@ -212,11 +213,14 @@ class MonthSchedule:
 
         for ed in data["employees"]:
             emp = Employee(
-                ed["last_name"],
-                ed["first_name"],
-                ed["is_opener"],
-                ed["is_meat"],
-                ed["daily_hours"]
+                last_name=ed["last_name"],
+                first_name=ed["first_name"],
+                is_opener=ed["is_opener"],
+                is_meat=ed["is_meat"],
+                monthly_target_hours=ed.get("monthly_target_hours", 160),
+                daily_hours=ed.get("daily_hours", 8),
+                id=ed.get("id"),
+                availability=ed.get("availability", {})
             )
             sched.add_employee(emp)
 
@@ -234,7 +238,6 @@ class MonthSchedule:
                 ds.is_leave = dd.get("is_leave", False)
                 ds.is_locked = dd.get("is_locked", False)
 
-        sched.employees.sort(key=lambda e: e.last_name.lower())
         return sched
 
     def replace_employee(self, old, new):
@@ -261,7 +264,16 @@ class MonthSchedule:
                     ds.is_leave
                     or ds.is_locked
                     or getattr(ds, "is_day_off", False)
-                    or getattr(ds, "start_time", None)
                 ):
                     continue
                 self.set_day_free(emp, day)
+
+    def clear_all_days(self):
+        for emp in self.employees:
+            for day in range(1, self.days_in_month + 1):
+                ds = self.get_day(emp, day)
+
+                ds.start = None
+                ds.end = None
+                ds.is_leave = False
+                ds.is_locked = False

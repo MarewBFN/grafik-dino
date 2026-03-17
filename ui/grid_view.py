@@ -360,8 +360,15 @@ class ScheduleGrid:
                 lbl_end.config(text=cell_view.text_end, anchor="center", justify="center")
                 lbl_total.config(text=cell_view.text_total)
 
+                if ds.is_locked:
+                    bg = "#afa9a9"  # czerwony = LOCKED
+                elif ds.is_leave:
+                    bg = "#9999ff"  # opcjonalnie urlop
+                else:
+                    bg = cell_view.bg
+
                 for lbl in (lbl_start, lbl_end, lbl_total):
-                    lbl.config(bg=cell_view.bg)
+                    lbl.config(bg=bg)
 
                 for lbl in (lbl_start, lbl_end, lbl_total):
                     if hasattr(lbl, "_tooltip") and lbl._tooltip:
@@ -483,7 +490,9 @@ class ScheduleGrid:
         else:
             base = theme.BG_MAIN
 
-        if hours and not ds.is_empty():
+        if ds.is_locked:
+            base = "#afa9a9"
+        elif hours and not ds.is_empty():
             open_t, close_t = hours
 
             if ds.start == open_t:

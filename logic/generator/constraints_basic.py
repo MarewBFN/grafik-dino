@@ -33,16 +33,3 @@ def add_day_off_constraints(model, x, employees, days, schedule, all_shifts):
             if getattr(day_state, "is_day_off", False):
                 for s in all_shifts:
                     model.Add(x[e, d, s] == 0)
-
-def add_total_open_close_limit(model, x, employees, trade_days, shift_open, shift_close):
-    print("[CONSTRAINT] total_open_close_limit = 6")
-
-    for d in trade_days:
-        print(f"  day={d}")
-
-        total_open_close = sum(
-            x[e, d, shift_open] + x[e, d, shift_close]
-            for e in range(len(employees))
-        )
-
-        model.Add(total_open_close == 6)

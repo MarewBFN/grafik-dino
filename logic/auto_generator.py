@@ -10,7 +10,6 @@ from logic.generator.constraints_basic import (
     add_non_trade_day_constraints,
     add_leave_constraints,
     add_day_off_constraints,
-    add_total_open_close_limit
 )
 from logic.generator.constraints_staff import (
     add_fixed_staff_shift_constraints,
@@ -28,6 +27,7 @@ from logic.generator.objective import (
     add_open_close_penalty,
     add_work_balance_penalty
 )
+from logic.generator.availability_constraint import add_availability_constraint
 
 class AutoScheduleGenerator:
 
@@ -102,6 +102,7 @@ class AutoScheduleGenerator:
             "open": 20000,
             "close": 20000,
             "monthly_hours": 2000,
+            "availability": 5000,
         }
     # ==================================================
     # PUBLIC
@@ -130,10 +131,24 @@ class AutoScheduleGenerator:
         print("Min CLOSE:", min_close)
         print("Max consecutive:", max_consecutive)
 
+        for d in trade_days:
+            available = 0
+
+            for emp in employees:
+                ds = self.schedule.get_day(emp, d)
+
+                if not (
+                    ds.is_leave
+                    or ds.is_locked
+                    or getattr(ds, "is_day_off", False)
+                ):
+                    available += 1
+
+            print(f"[DEBUG] DAY {d}: available={available}")
+
         x = self._create_variables(model, employees, days)
 
         add_non_trade_day_constraints(model, x, employees, days, self.shop, self.ALL_SHIFTS)
-        add_total_open_close_limit(model, x, employees, trade_days, self.SHIFT_OPEN, self.SHIFT_CLOSE)
         add_leave_constraints(model, x, employees, days, self.schedule, self.ALL_SHIFTS)
         add_day_off_constraints(model, x, employees, days, self.schedule, self.ALL_SHIFTS)
         add_manual_shift_constraints(
@@ -232,6 +247,36 @@ class AutoScheduleGenerator:
             )
         )
 
+        availability_violations = self._apply_policy(
+            "availability",
+            hard_fn=lambda: add_availability_constraint(
+                model,
+                x,
+                employees,
+                days,
+                self.shop,
+                self.ALL_SHIFTS,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP,
+                soft=False
+            ),
+            soft_fn=lambda: add_availability_constraint(
+                model,
+                x,
+                employees,
+                days,
+                self.shop,
+                self.ALL_SHIFTS,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP,
+                soft=True
+            )
+        )
+
         meat_violations = self._apply_policy(
             "meat",
             hard_fn=lambda: add_meat_constraint(
@@ -245,10 +290,15 @@ class AutoScheduleGenerator:
         coverage_violations = self._apply_policy(
             "meat_coverage",
             hard_fn=lambda: add_meat_coverage_constraint(
-                model, x, employees, trade_days, self.shop, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=False
+                model, x, employees, trade_days, self.shop, self.SHIFT_OPEN, self.SHIFT_CLOSE, self.START_SHIFT_MAP, self.END_SHIFT_MAP, soft=False
             ),
             soft_fn=lambda: add_meat_coverage_constraint(
-                model, x, employees, trade_days, self.shop, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=True
+                model, x, employees, trade_days, self.shop,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP,
+                soft=True
             )
         )
 
@@ -282,6 +332,7 @@ class AutoScheduleGenerator:
         all_soft_violations.extend(open_violations)
         all_soft_violations.extend(close_violations)
         all_soft_violations.extend(monthly_hours_violations)
+        all_soft_violations.extend(availability_violations)
         all_soft_violations.extend(
             add_work_balance_penalty(
                 model,

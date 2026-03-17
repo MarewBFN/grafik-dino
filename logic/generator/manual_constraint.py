@@ -56,8 +56,8 @@ def add_manual_shift_constraints(
 
             day_state = schedule.get_day(emp, d)
 
-            start = getattr(day_state, "start_time", None)
-            end = getattr(day_state, "end_time", None)
+            start = getattr(day_state, "start", None)
+            end = getattr(day_state, "end", None)
 
             if not start or not end:
                 continue

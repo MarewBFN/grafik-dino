@@ -175,6 +175,12 @@ class MainWindow:
 
         ttk.Button(bottom, text="Cofnij",
                 command=self._undo).pack(side="left")
+        
+        ttk.Button(
+            bottom,
+            text="Wyczyść grafik",
+            command=self._clear_schedule
+        ).pack(side="left", padx=5)
 
         ttk.Button(bottom, text="Zapisz",
                 command=self._save_project).pack(side="left", padx=5)
@@ -526,3 +532,12 @@ class MainWindow:
 
         hours = self.shop_config.get_full_time_nominal_hours()
         self.nominal_hours_var.set(f"Nominalny etat: {hours} h")
+
+    def _clear_schedule(self):
+        self.controller.clear_schedule()
+
+        self.schedule = self.controller.schedule
+        self.grid.schedule = self.schedule
+
+        self.grid.build()
+        self.grid.refresh()

@@ -54,7 +54,6 @@ def save_solution(
                 day_state.is_leave
                 or day_state.is_locked
                 or getattr(day_state, "is_day_off", False)
-                or getattr(day_state, "start_time", None)
             ):
                 continue
 
