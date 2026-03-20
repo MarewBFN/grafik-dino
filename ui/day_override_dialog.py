@@ -1,66 +1,97 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
+from PySide6.QtCore import QTime
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTimeEdit,
+    QVBoxLayout,
+)
 
 
-class DayOverrideDialog(tk.Toplevel):
-    def __init__(self, parent, day, current_hours, shop_config, on_save):
+def _parse_time(value: str) -> QTime:
+    hour, minute = value.split(":")
+    return QTime(int(hour), int(minute))
+
+
+class DayOverrideDialog(QDialog):
+    def __init__(self, parent, day, current_hours, shop_config):
         super().__init__(parent)
-        self.title(f"Godziny dla dnia {day}")
-        self.resizable(False, False)
-
         self.day = day
         self.shop_config = shop_config
-        self.on_save = on_save
+        self.current_hours = current_hours
 
-        self.start_var = tk.StringVar(value=current_hours[0])
-        self.end_var = tk.StringVar(value=current_hours[1])
-
-        self.holiday_var = tk.BooleanVar(
-            value=self.day in self.shop_config.public_holidays
-        )
+        self.setWindowTitle(f"Godziny dla dnia {day}")
+        self.setModal(True)
+        self.setMinimumWidth(360)
 
         self._build_ui()
 
     def _build_ui(self):
-        pad = {"padx": 10, "pady": 6}
+        root = QVBoxLayout(self)
 
-        ttk.Label(self, text="Otwarcie").grid(row=0, column=0, **pad)
-        ttk.Entry(self, width=7, textvariable=self.start_var)\
-            .grid(row=0, column=1, **pad)
+        label = QLabel("Ustaw godziny dla wybranego dnia")
+        label.setObjectName("sectionLabel")
+        root.addWidget(label)
 
-        ttk.Label(self, text="Zamknięcie").grid(row=1, column=0, **pad)
-        ttk.Entry(self, width=7, textvariable=self.end_var)\
-            .grid(row=1, column=1, **pad)
+        form = QFormLayout()
 
-        btns = ttk.Frame(self)
-        btns.grid(row=2, column=0, columnspan=2, pady=10)
+        self.start_edit = QTimeEdit()
+        self.start_edit.setDisplayFormat("HH:mm")
+        self.start_edit.setTime(_parse_time(self.current_hours[0]))
 
-        ttk.Button(btns, text="Anuluj", command=self.destroy)\
-            .pack(side="right", padx=5)
+        self.end_edit = QTimeEdit()
+        self.end_edit.setDisplayFormat("HH:mm")
+        self.end_edit.setTime(_parse_time(self.current_hours[1]))
 
-        ttk.Button(btns, text="Zapisz", command=self._save)\
-            .pack(side="right")
+        self.holiday_box = QCheckBox("Dzień wolny ustawowo")
+        self.holiday_box.setChecked(self.day in self.shop_config.public_holidays)
 
-        # Checkbox święta ustawowego
-        ttk.Checkbutton(
-            self,
-            text="Dzień wolny ustawowo",
-            variable=self.holiday_var
-        ).grid(row=3, column=0, columnspan=2, padx=10, pady=(0, 10))
+        form.addRow("Otwarcie", self.start_edit)
+        form.addRow("Zamknięcie", self.end_edit)
+
+        root.addLayout(form)
+        root.addWidget(self.holiday_box)
+
+        row = QHBoxLayout()
+        reset_btn = QPushButton("Przywróć domyślne")
+        reset_btn.clicked.connect(self._reset_to_default)
+        row.addWidget(reset_btn)
+        row.addStretch()
+        root.addLayout(row)
+
+        buttons = QDialogButtonBox()
+        cancel_btn = QPushButton("Anuluj")
+        save_btn = QPushButton("Zapisz")
+        save_btn.setObjectName("primaryButton")
+        buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
+        buttons.addButton(save_btn, QDialogButtonBox.AcceptRole)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self._save)
+        root.addWidget(buttons)
+
+    def _reset_to_default(self):
+        self.result_mode = "reset"
+        self.accept()
 
     def _save(self):
-        start = self.start_var.get().strip()
-        end = self.end_var.get().strip()
+        start = self.start_edit.time().toString("HH:mm")
+        end = self.end_edit.time().toString("HH:mm")
 
         if not start or not end:
-            messagebox.showerror("Błąd", "Godziny nie mogą być puste")
+            QMessageBox.critical(self, "Błąd", "Godziny nie mogą być puste.")
             return
 
-        # zapis święta
-        if self.holiday_var.get():
-            self.shop_config.public_holidays.add(self.day)
-        else:
-            self.shop_config.public_holidays.discard(self.day)
+        if self.end_edit.time() <= self.start_edit.time():
+            QMessageBox.critical(self, "Błąd", "Zamknięcie musi być później niż otwarcie.")
+            return
 
-        self.on_save(start, end)
-        self.destroy()
+        self.result_mode = "save"
+        self.result_start = start
+        self.result_end = end
+        self.result_holiday = self.holiday_box.isChecked()
+        self.accept()

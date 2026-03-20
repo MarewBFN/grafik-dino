@@ -1,243 +1,162 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-from datetime import datetime, timedelta
+from PySide6.QtCore import QTime
+from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTimeEdit,
+    QVBoxLayout,
+)
 
 
-class DayEditDialog(tk.Toplevel):
-    def __init__(self, parent, day_schedule, open_start, open_end, daily_hours, on_save):
+def _parse_time(value: str) -> QTime:
+    hour, minute = value.split(":")
+    return QTime(int(hour), int(minute))
+
+
+class DayEditDialog(QDialog):
+    def __init__(self, parent=None, start=None, end=None, open_start="05:30", open_end="22:45", daily_hours=8):
         super().__init__(parent)
-        self.title("Edycja dnia")
-        self.resizable(False, False)
+        self.setWindowTitle("Edycja dnia")
+        self.setModal(True)
+        self.setMinimumWidth(420)
 
         self.daily_hours = daily_hours
         self._manual_end = False
-        self._updating_suggestion = False
+        self._updating = False
+        self._open_start = _parse_time(open_start)
+        self._open_end = _parse_time(open_end)
 
-        self.day_schedule = day_schedule
-        self.on_save = on_save
+        self._build_ui()
+        self._fill_values(start, end)
 
-        self.start_h = tk.StringVar()
-        self.start_m = tk.StringVar()
-        self.end_h = tk.StringVar()
-        self.end_m = tk.StringVar()
+        if start is None:
+            self.start_edit.setTime(self._open_start)
 
-        self.allowed_times = self._generate_times(open_start, open_end)
+        self._update_duration()
+        if end is None:
+            self._suggest_end()
 
-        self._prefill()
-        self._build()
+    def _build_ui(self):
+        root = QVBoxLayout(self)
 
-        self._on_time_change()
+        title = QLabel("Wybierz godziny albo ustaw wolne / urlop")
+        title.setObjectName("sectionLabel")
+        root.addWidget(title)
 
-    # -----------------------------
-    def _generate_times(self, start: str, end: str):
-        fmt = "%H:%M"
-        s = datetime.strptime(start, fmt)
-        e = datetime.strptime(end, fmt)
+        form = QFormLayout()
 
-        times = []
-        while s <= e:
-            times.append(s.strftime(fmt))
-            s += timedelta(minutes=15)
-        return times
+        self.start_edit = QTimeEdit()
+        self.start_edit.setDisplayFormat("HH:mm")
+        self.start_edit.setMinimumTime(self._open_start)
+        self.start_edit.setMaximumTime(self._open_end)
+        self.start_edit.timeChanged.connect(self._on_start_changed)
 
-    def _prefill(self):
-        if self.day_schedule.start:
-            h, m = self.day_schedule.start.split(":")
-            self.start_h.set(h)
-            self.start_m.set(m)
-        if self.day_schedule.end:
-            h, m = self.day_schedule.end.split(":")
-            self.end_h.set(h)
-            self.end_m.set(m)
+        self.end_edit = QTimeEdit()
+        self.end_edit.setDisplayFormat("HH:mm")
+        self.end_edit.setMinimumTime(self._open_start)
+        self.end_edit.setMaximumTime(self._open_end)
+        self.end_edit.timeChanged.connect(self._on_end_changed)
 
-    def _build(self):
-        pad = {"padx": 10, "pady": 6}
+        form.addRow("Start", self.start_edit)
+        form.addRow("Koniec", self.end_edit)
 
-        # --- budowa mapy godzin -> minut
-        def split(times):
-            hours_map = {}
-            for t in times:
-                h, m = t.split(":")
-                hours_map.setdefault(h, []).append(m)
+        root.addLayout(form)
 
-            hours = sorted(hours_map.keys())
-            return hours, hours_map
+        self.duration_label = QLabel("Czas pracy: 0:00")
+        self.duration_label.setObjectName("metricValue")
+        root.addWidget(self.duration_label)
 
-        hours, self._hours_map = split(self.allowed_times)
+        row = QHBoxLayout()
+        self.free_btn = QPushButton("Wolne")
+        self.leave_btn = QPushButton("Urlop")
+        self.free_btn.clicked.connect(self._set_free)
+        self.leave_btn.clicked.connect(self._set_leave)
+        row.addWidget(self.free_btn)
+        row.addWidget(self.leave_btn)
+        row.addStretch()
+        root.addLayout(row)
 
-        # ---------------- START ----------------
-        ttk.Label(self, text="Start").grid(row=0, column=0, **pad)
+        buttons = QDialogButtonBox()
+        cancel_btn = QPushButton("Anuluj")
+        save_btn = QPushButton("Zapisz")
+        save_btn.setObjectName("primaryButton")
+        buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
+        buttons.addButton(save_btn, QDialogButtonBox.AcceptRole)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self._save)
+        root.addWidget(buttons)
 
-        ttk.Combobox(self, values=hours,
-                     textvariable=self.start_h,
-                     width=4, state="readonly")\
-            .grid(row=0, column=1, **pad)
-
-        self.start_m_cb = ttk.Combobox(
-            self,
-            textvariable=self.start_m,
-            width=4,
-            state="readonly"
-        )
-        self.start_m_cb.grid(row=0, column=2, **pad)
-
-        # ---------------- KONIEC ----------------
-        ttk.Label(self, text="Koniec").grid(row=1, column=0, **pad)
-
-        self.end_h_cb = ttk.Combobox(
-            self,
-            values=hours,
-            textvariable=self.end_h,
-            width=4,
-            state="readonly"
-        )
-        self.end_h_cb.grid(row=1, column=1, **pad)
-
-        self.end_m_cb = ttk.Combobox(
-            self,
-            textvariable=self.end_m,
-            width=4,
-            state="readonly"
-        )
-        self.end_m_cb.grid(row=1, column=2, **pad)
-
-        # --- aktualizacja dostępnych minut
-        self.start_h.trace_add("write", self._update_minute_options)
-        self.end_h.trace_add("write", self._update_minute_options)
-
-        # --- wykrycie ręcznej zmiany końca
-        def mark_manual(*_):
-            if self._updating_suggestion:
-                return
+    def _fill_values(self, start, end):
+        if start:
+            self.start_edit.setTime(_parse_time(start))
+        if end:
             self._manual_end = True
-            self.end_h_cb.configure(foreground="black")
-            self.end_m_cb.configure(foreground="black")
+            self.end_edit.setTime(_parse_time(end))
 
-        self.end_h.trace_add("write", mark_manual)
-        self.end_m.trace_add("write", mark_manual)
+    def _suggest_end(self):
+        if self._manual_end:
+            self._update_duration()
+            return
 
-        # --- licznik czasu
-        self.duration_label = ttk.Label(self, text="Czas pracy: 0:00")
-        self.duration_label.grid(row=2, column=0, columnspan=3, pady=(0, 5))
+        start = self.start_edit.time()
+        suggested = start.addSecs(self.daily_hours * 3600)
+        if suggested > self._open_end:
+            suggested = self._open_end
 
-        # --- trigger logiki
-        self.start_h.trace_add("write", self._on_time_change)
-        self.start_m.trace_add("write", self._on_time_change)
-        self.end_h.trace_add("write", self._update_duration_only)
-        self.end_m.trace_add("write", self._update_duration_only)
+        self._updating = True
+        self.end_edit.setTime(suggested)
+        self._updating = False
+        self._update_duration()
 
-        # --- przyciski
-        btns = ttk.Frame(self)
-        btns.grid(row=3, column=0, columnspan=3, pady=10)
+    def _on_start_changed(self, _):
+        if self._updating:
+            return
+        if not self._manual_end:
+            self._suggest_end()
+        else:
+            self._update_duration()
 
-        ttk.Button(btns, text="Wolne", command=self._set_free)\
-            .pack(side="left", padx=5)
-        ttk.Button(btns, text="Anuluj", command=self.destroy)\
-            .pack(side="right", padx=5)
-        ttk.Button(btns, text="Zapisz", command=self._save)\
-            .pack(side="right")
+    def _on_end_changed(self, _):
+        if self._updating:
+            return
+        self._manual_end = True
+        self._update_duration()
 
-        # --- domyślne minuty
-        self._update_minute_options()
+    def _update_duration(self):
+        start = self.start_edit.time()
+        end = self.end_edit.time()
+        minutes = start.secsTo(end) // 60
+        if minutes < 0:
+            minutes = 0
+        hours = minutes // 60
+        mins = minutes % 60
+        self.duration_label.setText(f"Czas pracy: {hours}:{mins:02d}")
 
-        if not self.start_m.get() and self.start_h.get():
-            self.start_m.set(self._hours_map[self.start_h.get()][0])
-
-        if not self.end_m.get() and self.end_h.get():
-            self.end_m.set(self._hours_map[self.end_h.get()][0])
-
-    # -----------------------------
     def _set_free(self):
-        self.day_schedule.set_free()
-        self.on_save()
-        self.destroy()
+        self.result_mode = "free"
+        self.accept()
+
+    def _set_leave(self):
+        self.result_mode = "leave"
+        self.accept()
 
     def _save(self):
-        try:
-            start = f"{self.start_h.get()}:{self.start_m.get()}"
-            end = f"{self.end_h.get()}:{self.end_m.get()}"
-            self.day_schedule.set_hours(start, end)
-        except Exception as e:
-            messagebox.showerror("Błąd", str(e))
+        start = self.start_edit.time()
+        end = self.end_edit.time()
+
+        if end <= start:
+            QMessageBox.critical(self, "Błąd", "Koniec musi być później niż start.")
             return
 
-        self.on_save()
-        self.destroy()
-
-    # -----------------------------
-    def _on_time_change(self, *_):
-        if not self.start_h.get() or not self.start_m.get():
+        if start < self._open_start or end > self._open_end:
+            QMessageBox.critical(self, "Błąd", "Godziny muszą mieścić się w czasie otwarcia sklepu.")
             return
 
-        try:
-            fmt = "%H:%M"
-            start = datetime.strptime(
-                f"{self.start_h.get()}:{self.start_m.get()}",
-                fmt
-            )
-
-            if not self._manual_end:
-                suggested = start + timedelta(hours=self.daily_hours)
-
-                self._updating_suggestion = True
-                self.end_h.set(suggested.strftime("%H"))
-                self.end_m.set(suggested.strftime("%M"))
-                self._updating_suggestion = False
-
-                self.end_h_cb.configure(foreground="gray")
-                self.end_m_cb.configure(foreground="gray")
-
-            self._update_duration_only()
-
-        except Exception:
-            pass
-
-    # -----------------------------
-    def _update_duration_only(self, *_):
-        if not self.start_h.get() or not self.start_m.get():
-            return
-
-        if not self.end_h.get() or not self.end_m.get():
-            return
-
-        try:
-            fmt = "%H:%M"
-            start = datetime.strptime(
-                f"{self.start_h.get()}:{self.start_m.get()}",
-                fmt
-            )
-            end = datetime.strptime(
-                f"{self.end_h.get()}:{self.end_m.get()}",
-                fmt
-            )
-
-            duration = end - start
-            minutes = int(duration.total_seconds() // 60)
-
-            if minutes >= 0:
-                h = minutes // 60
-                m = minutes % 60
-                self.duration_label.config(
-                    text=f"Czas pracy: {h}:{m:02d}"
-                )
-        except Exception:
-            pass
-
-    # -----------------------------
-    def _update_minute_options(self, *_):
-        h = self.start_h.get()
-        if h in self._hours_map:
-            values = self._hours_map[h]
-            self.start_m_cb["values"] = values
-
-            # 🔥 wymuś ustawienie pierwszej dozwolonej minuty
-            if self.start_m.get() not in values:
-                self.start_m.set(values[0])
-
-        h_end = self.end_h.get()
-        if h_end in self._hours_map:
-            values = self._hours_map[h_end]
-            self.end_m_cb["values"] = values
-
-            if self.end_m.get() not in values:
-                self.end_m.set(values[0])
+        self.result_mode = "hours"
+        self.result_start = start.toString("HH:mm")
+        self.result_end = end.toString("HH:mm")
+        self.accept()

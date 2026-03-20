@@ -1,260 +1,325 @@
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+import calendar
+import os
 from datetime import date
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+    QDialog,
+    QToolBar,
+)
+
+from export.excel_exporter import export_schedule_to_excel
+from logic.schedule_controller import ScheduleController
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
-from export.excel_exporter import export_schedule_to_excel
-from persistence.project_io import save_project, load_project
+from persistence.project_io import load_project, save_project
 from ui.config_dialog import ConfigDialog
-from ui.employee_dialog import EmployeeDialog
 from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
-from ui import theme
+from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import ScheduleGrid
-from logic.schedule_controller import ScheduleController
 
-class MainWindow:
 
-    def __init__(self, root: tk.Tk):
-        self.root = root
-        self.root.title("Grafik Dino v2")
-        self.root.geometry("1200x800")
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("Grafik Dino v2")
+        self.resize(1540, 920)
 
         today = date.today()
-        self.year_var = tk.IntVar(value=today.year)
-        self.month_var = tk.IntVar(value=today.month)
+        self.year = today.year
+        self.month = today.month
 
-        self.schedule: MonthSchedule | None = None
-        self.shop_config: ShopConfig | None = None
+        self.schedule = None
+        self.shop_config = None
+        self.controller = None
+
         self._clipboard_day = None
-
+        self._loading = False
 
         self._build_ui()
         self._init_state()
-
-        # GRID
-        self.grid = ScheduleGrid(
-            parent=self.schedule_frame,
-            schedule=self.schedule,
-            shop_config=self.shop_config,
-            on_edit_day=self._edit_day,
-            on_edit_employee=self._edit_employee,
-            on_context_menu=self._open_context_menu,
-            on_header_menu=self._open_header_menu,
-            on_add_employee=self._open_add_employee,
-        )
-
-        self.grid.frame.pack(fill="both", expand=True)
-        self.grid.build()
-        self.grid.refresh()
+        self._sync_everything()
         self._try_load_last_project()
 
-    # ==================================================
-    # INIT / UNDO
-    # ==================================================
+        self.statusBar().showMessage("Gotowe")
+
+    def _build_ui(self):
+        self._build_menu()  # ❌ toolbar usunięty
+
+        root = QWidget()
+        self.setCentralWidget(root)
+
+        outer = QHBoxLayout(root)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(16)
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        outer.addWidget(splitter)
+
+        self.left_panel = self._build_left_panel()
+        splitter.addWidget(self.left_panel)
+
+        self.right_panel = self._build_right_panel()
+        splitter.addWidget(self.right_panel)
+
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([320, 1120])
+
+    def _build_left_panel(self):
+        panel = QFrame()
+        panel.setObjectName("panelCard")
+        panel.setMinimumWidth(300)
+        panel.setMaximumWidth(360)
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(14)
+
+        title = QLabel("Grafik Dino v2")
+        title.setObjectName("titleLabel")
+        layout.addWidget(title)
+
+        # ❌ usunięty subtitle
+
+        section = QLabel("Miesiąc i rok")
+        section.setObjectName("sectionLabel")
+        layout.addWidget(section)
+
+        date_row = QHBoxLayout()
+        date_row.addWidget(QLabel("Miesiąc"))
+        self.month_spin = QSpinBox()
+        self.month_spin.setRange(1, 12)
+        self.month_spin.setValue(self.month)
+        self.month_spin.valueChanged.connect(self._on_date_change)
+        date_row.addWidget(self.month_spin)
+
+        date_row.addWidget(QLabel("Rok"))
+        self.year_spin = QSpinBox()
+        self.year_spin.setRange(2024, 2035)
+        self.year_spin.setValue(self.year)
+        self.year_spin.valueChanged.connect(self._on_date_change)
+        date_row.addWidget(self.year_spin)
+        layout.addLayout(date_row)
+
+        metric_hint = QLabel("Nominalny etat")
+        metric_hint.setObjectName("metricHint")
+        layout.addWidget(metric_hint)
+
+        self.nominal_hours_label = QLabel("-")
+        self.nominal_hours_label.setObjectName("metricValue")
+        layout.addWidget(self.nominal_hours_label)
+
+        self.btn_generate = QPushButton("Generuj grafik")
+        self.btn_generate.setObjectName("primaryButton")
+        self.btn_generate.setMinimumHeight(44)
+        self.btn_generate.clicked.connect(self._generate_schedule)
+
+        self.btn_add_employee = QPushButton("Dodaj pracownika")
+        self.btn_add_employee.setObjectName("secondaryButton")
+        self.btn_add_employee.setMinimumHeight(44)
+        self.btn_add_employee.clicked.connect(self._open_add_employee)
+
+        # ❌ usunięty przycisk konfiguracji
+
+        self.btn_undo = QPushButton("Cofnij")
+        self.btn_undo.setMinimumHeight(40)
+        self.btn_undo.clicked.connect(self._undo)
+
+        layout.addWidget(self.btn_generate)
+        layout.addWidget(self.btn_add_employee)
+        layout.addWidget(self.btn_undo)
+
+        # ❌ usunięty footer
+
+        layout.addStretch(1)
+        return panel
+
+    def _build_right_panel(self):
+        panel = QFrame()
+        panel.setObjectName("contentCard")
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        top = QHBoxLayout()
+        self.grid_title = QLabel("Widok grafiku")
+        self.grid_title.setObjectName("sectionLabel")
+        top.addWidget(self.grid_title)
+
+        top.addStretch(1)
+        self.state_label = QLabel("")
+        self.state_label.setObjectName("subtitleLabel")
+        top.addWidget(self.state_label)
+        layout.addLayout(top)
+
+        self.grid = ScheduleGrid()
+        layout.addWidget(self.grid, 1)
+
+        return panel
+
+    def _build_menu(self):
+        file_menu = self.menuBar().addMenu("Plik")
+        edit_menu = self.menuBar().addMenu("Edycja")
+        config_menu = self.menuBar().addMenu("Konfiguracja")  # 🔁 zmiana nazwy
+        help_menu = self.menuBar().addMenu("Pomoc")
+
+        file_menu.addAction("Zapisz", self._save_project)
+        file_menu.addAction("Wczytaj", self._load_project)
+
+        # 🔽 submenu eksport
+        export_menu = QMenu("Eksport", self)
+        export_menu.addAction("Excel", self._export_excel)
+        file_menu.addMenu(export_menu)
+
+        file_menu.addSeparator()
+        file_menu.addAction("Zamknij", self.close)
+
+        edit_menu.addAction("Cofnij", self._undo)
+
+        config_menu.addAction("Konfiguracja", self._open_config)
+
+        help_menu.addAction("O programie", self._about)
+
+    def _build_toolbar(self):
+        toolbar = QToolBar("Szybkie akcje", self)
+        toolbar.setMovable(False)
+        toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.addToolBar(toolbar)
+
+        act_save = QAction("Zapisz", self)
+        act_save.triggered.connect(self._save_project)
+        toolbar.addAction(act_save)
+
+        act_load = QAction("Wczytaj", self)
+        act_load.triggered.connect(self._load_project)
+        toolbar.addAction(act_load)
+
+        act_excel = QAction("Excel", self)
+        act_excel.triggered.connect(self._export_excel)
+        toolbar.addAction(act_excel)
+
+        toolbar.addSeparator()
+
+        act_config = QAction("Konfiguracja", self)
+        act_config.triggered.connect(self._open_config)
+        toolbar.addAction(act_config)
+
+        act_undo = QAction("Cofnij", self)
+        act_undo.triggered.connect(self._undo)
+        toolbar.addAction(act_undo)
 
     def _init_state(self):
-        self.schedule = MonthSchedule(
-            self.year_var.get(),
-            self.month_var.get()
-        )
-        self.shop_config = ShopConfig(
-            self.year_var.get(),
-            self.month_var.get()
-        )
+        self.schedule = MonthSchedule(self.year, self.month)
+        self.shop_config = ShopConfig(self.year, self.month)
         self.controller = ScheduleController(self.schedule, self.shop_config)
         self._update_nominal_hours_label()
 
-    def _undo(self):
-        new_schedule = self.controller.undo()
-        self.schedule = new_schedule
+    def _sync_everything(self):
+        self._sync_grid()
+        self._update_window_title()
+        self._update_state_label()
 
-        self.grid.schedule = self.schedule
+    def _sync_grid(self):
+        self.grid.set_data(
+            self.schedule,
+            self.shop_config,
+            self.controller,
+            on_edit_day=self._edit_day,
+            on_edit_employee=self._edit_employee,
+            on_context_menu=self._open_day_context_menu,
+            on_header_menu=self._open_header_menu,
+        )
         self.grid.build()
         self.grid.refresh()
 
-    # ==================================================
-    # UI
-    # ==================================================
+    def _update_window_title(self):
+        self.setWindowTitle(f"Grafik Dino v2 — {self.month:02d}.{self.year}")
 
-    def _build_ui(self):
+    def _update_nominal_hours_label(self):
+        if not self.shop_config:
+            self.nominal_hours_label.setText("-")
+            return
+        hours = self.shop_config.get_full_time_nominal_hours()
+        self.nominal_hours_label.setText(f"{hours} h")
 
-        top = ttk.Frame(self.root, padding=8)
-        top.pack(fill="x")
+    def _update_state_label(self):
+        if not self.schedule:
+            self.state_label.setText("")
+            return
+        self.state_label.setText(f"{self.month:02d}.{self.year}")
 
-        ttk.Label(top, text="Grafik na:").pack(side="left")
-
-        ttk.Spinbox(
-            top,
-            from_=1,
-            to=12,
-            width=5,
-            textvariable=self.month_var,
-            command=self._on_date_change
-        ).pack(side="left", padx=5)
-
-        ttk.Spinbox(
-            top,
-            from_=2024,
-            to=2035,
-            width=7,
-            textvariable=self.year_var,
-            command=self._on_date_change
-        ).pack(side="left")
-
-        ttk.Button(
-            top,
-            text="Konfiguracja",
-            command=self._open_config
-        ).pack(side="left", padx=10)
-
-        ttk.Button(
-            top,
-            text="Generuj grafik",
-            command=self._generate_schedule
-        ).pack(side="left", padx=5)
-
-        self.nominal_hours_var = tk.StringVar()
-
-        self.nominal_hours_label = tk.Label(
-            top,
-            textvariable=self.nominal_hours_var,
-            bg=theme.BG_MAIN
-        )
-        self.nominal_hours_label.pack(side="left", padx=15)
-
-        self._update_nominal_hours_label()
-
-        # ===== CONTAINER =====
-        container = ttk.Frame(self.root)
-        container.pack(fill="both", expand=True, padx=10, pady=5)
-
-        # ===== CANVAS =====
-        self.canvas = tk.Canvas(container, bg=theme.BG_MAIN)
-        self.canvas.pack(side="left", fill="both", expand=True)
-
-        # ===== PIONOWY SCROLL =====
-        scrollbar_y = ttk.Scrollbar(
-            container,
-            orient="vertical",
-            command=self.canvas.yview
-        )
-        scrollbar_y.pack(side="right", fill="y")
-
-        # ===== POZIOMY SCROLL =====
-        scrollbar_x = ttk.Scrollbar(
-            self.root,
-            orient="horizontal",
-            command=self.canvas.xview
-        )
-        scrollbar_x.pack(fill="x")
-
-        self.canvas.configure(
-            yscrollcommand=scrollbar_y.set,
-            xscrollcommand=scrollbar_x.set
-        )
-
-        # ===== FRAME W CANVAS =====
-        self.schedule_frame = ttk.Frame(self.canvas)
-
-        self.canvas_window = self.canvas.create_window(
-            (0, 0),
-            window=self.schedule_frame,
-            anchor="nw"
-        )
-
-        # ===== AUTO AKTUALIZACJA SCROLL REGION =====
-        def _on_frame_configure(event):
-            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-        self.schedule_frame.bind("<Configure>", _on_frame_configure)
-
-        bottom = ttk.Frame(self.root, padding=6)
-        bottom.pack(fill="x")
-
-        ttk.Button(bottom, text="Cofnij",
-                command=self._undo).pack(side="left")
-        
-        ttk.Button(
-            bottom,
-            text="Wyczyść grafik",
-            command=self._clear_schedule
-        ).pack(side="left", padx=5)
-
-        ttk.Button(bottom, text="Zapisz",
-                command=self._save_project).pack(side="left", padx=5)
-
-        ttk.Button(bottom, text="Wczytaj",
-                command=self._load_project).pack(side="left")
-
-        ttk.Button(bottom, text="Eksport Excel",
-                command=self._export_excel).pack(side="left", padx=10)
-
-
-    # ==================================================
-    # DATE / CONFIG
-    # ==================================================
+    def _set_date_controls(self, year, month):
+        self._loading = True
+        self.year_spin.blockSignals(True)
+        self.month_spin.blockSignals(True)
+        self.year_spin.setValue(year)
+        self.month_spin.setValue(month)
+        self.year_spin.blockSignals(False)
+        self.month_spin.blockSignals(False)
+        self._loading = False
 
     def _on_date_change(self):
-        old_employees = self.schedule.employees if self.schedule else []
-
+        if self._loading:
+            return
+        self.year = self.year_spin.value()
+        self.month = self.month_spin.value()
         self._init_state()
+        self._sync_everything()
+        self.statusBar().showMessage("Utworzono nowy grafik dla wybranego miesiąca.", 2500)
 
-        for emp in old_employees:
-            self.schedule.add_employee(emp)
+    def _generate_schedule(self):
+        if not self.schedule.employees:
+            QMessageBox.information(self, "Generowanie", "Dodaj pracowników przed generowaniem grafiku.")
+            return
 
-        self.grid.schedule = self.schedule
-        self.grid.shop_config = self.shop_config
-        self.grid.build()
-        self.grid.refresh()
-        self._update_nominal_hours_label()
+        result = self.controller.generate_schedule()
+        self.schedule = self.controller.schedule
+        self._sync_everything()
 
-    def _open_config(self):
-        ConfigDialog(
-            self.root,
-            self.shop_config,
-            on_save=self._render_schedule
-        )
-
-    def _render_schedule(self):
-        self.grid.shop_config = self.shop_config
-        self.grid.build()
-        self.grid.refresh()
-
-    # ==================================================
-    # EMPLOYEE
-    # ==================================================
+        if result and result.get("success"):
+            self.statusBar().showMessage("Grafik wygenerowany.", 3000)
+            QMessageBox.information(self, "Sukces", "Grafik został wygenerowany.")
+        else:
+            QMessageBox.warning(self, "Brak rozwiązania", "Nie udało się znaleźć poprawnego grafiku.")
 
     def _open_add_employee(self):
-        EmployeeDialog(self.root, self._add_employee)
+        dialog = EmployeeDialog(self)
 
-    def _add_employee(self, emp):
-        def action():
-            self.controller.add_employee(emp)
+        if dialog.exec() != QDialog.Accepted:
+            return
 
-        action()
-        self.grid.build()
-        self.grid.refresh()
+        self.controller.add_employee(dialog.employee_result)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
+        self.statusBar().showMessage("Dodano pracownika.", 2500)
 
     def _edit_employee(self, emp):
-        EmployeeDialog(
-            self.root,
-            lambda new_emp: self._replace_employee(emp, new_emp),
-            employee=emp
-        )
+        dialog = EmployeeDialog(self, employee=emp)
+        if dialog.exec() != QDialog.Accepted:
+            return
 
-    def _replace_employee(self, old, new):
-        def action():
-            self.controller.replace_employee(old, new)
-
-        action()
-        self.grid.build()
-        self.grid.refresh()
-
-    # ==================================================
-    # DAY EDIT
-    # ==================================================
+        self.controller.replace_employee(emp, dialog.employee_result)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
+        self.statusBar().showMessage("Zapisano pracownika.", 2500)
 
     def _edit_day(self, emp, day):
         hours = self.shop_config.get_open_hours_for_day(day)
@@ -262,203 +327,193 @@ class MainWindow:
             return
 
         ds = self.controller.get_day(emp, day)
-
-        DayEditDialog(
-            self.root,
-            ds,
-            hours[0],
-            hours[1],
-            emp.daily_hours,
-            on_save=lambda: self.grid.refresh()
+        dialog = DayEditDialog(
+            self,
+            start=None if ds.is_leave else ds.start,
+            end=None if ds.is_leave else ds.end,
+            open_start=hours[0],
+            open_end=hours[1],
+            daily_hours=emp.daily_hours,
         )
 
-    # ==================================================
-    # INTERNAL ACTION WRAPPER
-    # ==================================================
-    def _apply_and_refresh(self, action):
-        action()
-        self.grid.refresh()
+        if dialog.exec() != QDialog.Accepted:
+            return
 
-    # ==================================================
-    # CONTEXT MENU
-    # ==================================================
+        if dialog.result_mode == "free":
+            self.controller.set_day_free(emp, day)
+        elif dialog.result_mode == "leave":
+            self.controller.set_day_leave(emp, day)
+        elif dialog.result_mode == "hours":
+            self.controller.set_day_hours(emp, day, dialog.result_start, dialog.result_end)
 
-    def _open_context_menu(self, event, emp, day):
+        self.schedule = self.controller.schedule
+        self._sync_everything()
+        self.statusBar().showMessage("Zmieniono dzień.", 2500)
+
+    def _open_day_context_menu(self, emp, day, global_pos):
         if not self.shop_config.is_trade_day(day):
             return
 
-        menu = tk.Menu(self.root, tearoff=0)
+        menu = QMenu(self)
+        menu.addAction("Rano", lambda: self._ctx_morning(emp, day))
+        menu.addAction("Zamknięcie", lambda: self._ctx_close(emp, day))
+        menu.addSeparator()
+        menu.addAction("Kopiuj dzień", lambda: self._ctx_copy(emp, day))
+        menu.addAction("Wklej dzień", lambda: self._ctx_paste(emp, day))
+        menu.addSeparator()
+        menu.addAction("Ustaw wolne", lambda: self._ctx_free(emp, day))
+        menu.addAction("Ustaw urlop", lambda: self._ctx_leave(emp, day))
+        menu.exec(global_pos)
 
-        menu.add_command(
-            label="🌅 Rano",
-            command=lambda: self._ctx_morning(emp, day)
-        )
+    def _ctx_copy(self, emp, day):
+        ds = self.controller.get_day(emp, day)
+        if ds.is_empty():
+            self._clipboard_day = None
+            self.grid.set_clipboard(None)
+            return
 
-        menu.add_command(
-            label="🌇 Zamknięcie",
-            command=lambda: self._ctx_close(emp, day)
-        )
+        self._clipboard_day = {
+            "start": ds.start,
+            "end": ds.end,
+            "is_leave": ds.is_leave,
+        }
+        self.grid.set_clipboard(self._clipboard_day)
+        self.statusBar().showMessage("Skopiowano dzień.", 1800)
 
-        menu.add_separator()
+    def _ctx_paste(self, emp, day):
+        clip = self.grid.clipboard() or self._clipboard_day
+        if not clip:
+            return
 
-        menu.add_command(
-            label="📋 Kopiuj dzień",
-            command=lambda: self._ctx_copy(emp, day)
-        )
+        if clip.get("is_leave"):
+            self.controller.set_day_leave(emp, day)
+        else:
+            self.controller.set_day_hours(emp, day, clip["start"], clip["end"])
 
-        menu.add_command(
-            label="📌 Wklej dzień",
-            command=lambda: self._ctx_paste(emp, day)
-        )
-
-        menu.add_separator()
-
-        menu.add_command(
-            label="❌ Ustaw wolne",
-            command=lambda: self._ctx_free(emp, day)
-        )
-
-        menu.add_command(
-            label="🌴 Urlop",
-            command=lambda: self._ctx_leave(emp, day)
-        )
-
-
-        menu.tk_popup(event.x_root, event.y_root)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
 
     def _ctx_free(self, emp, day):
-        self._apply_and_refresh(
-            lambda: self.controller.set_day_free(emp, day)
-        )
+        self.controller.set_day_free(emp, day)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
 
     def _ctx_leave(self, emp, day):
-        self._apply_and_refresh(
-            lambda: self.controller.set_day_leave(emp, day)
-        )
-
+        self.controller.set_day_leave(emp, day)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
 
     def _ctx_morning(self, emp, day):
         hours = self.shop_config.get_open_hours_for_day(day)
         if not hours:
             return
-
         start = hours[0]
         end = self._calc_end_from_daily(start, emp.daily_hours)
-
-        self._apply_and_refresh(
-            lambda: self.controller.set_day_hours(emp, day, start, end)
-        )
+        self.controller.set_day_hours(emp, day, start, end)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
 
     def _ctx_close(self, emp, day):
         hours = self.shop_config.get_open_hours_for_day(day)
         if not hours:
             return
-
         end = hours[1]
         start = self._calc_start_from_daily(end, emp.daily_hours)
+        self.controller.set_day_hours(emp, day, start, end)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
 
-        self._apply_and_refresh(
-            lambda: self.controller.set_day_hours(emp, day, start, end)
-        )
-
-    # ==================================================
-    # HEADER MENU
-    # ==================================================
-
-    def _open_header_menu(self, event, day):
-
-        # spróbuj pobrać godziny normalnie
+    def _open_header_menu(self, day, global_pos):
         hours = self.shop_config.get_open_hours_for_day(day)
-
-        # jeśli dzień niehandlowy → pobierz bazowe godziny z tygodnia
         if not hours:
             weekday = self.shop_config.weekday(day)
             hours = self.shop_config.get_open_hours_for_weekday(weekday)
 
-        def save_override(start, end):
-            self.controller.snapshot()
-            self.shop_config.day_overrides[day] = (start, end)
-            self._update_nominal_hours_label()
-            self.grid.build()
-            self.grid.refresh()
+        dialog = DayOverrideDialog(self, day, hours, self.shop_config)
+        result = dialog.exec()
 
-        DayOverrideDialog(
-            self.root,
-            day,
-            hours,
-            self.shop_config,
-            on_save=save_override
-        )
+        if result != QDialog.Accepted:
+            return
 
+        if dialog.result_mode == "reset":
+            self.shop_config.day_overrides.pop(day, None)
+            self.shop_config.public_holidays.discard(day)
+        elif dialog.result_mode == "save":
+            self.shop_config.day_overrides[day] = (dialog.result_start, dialog.result_end)
+            if dialog.result_holiday:
+                self.shop_config.public_holidays.add(day)
+            else:
+                self.shop_config.public_holidays.discard(day)
 
-    # ==================================================
-    # SAVE / LOAD / EXPORT
-    # ==================================================
+        self._update_nominal_hours_label()
+        self._sync_grid()
+        self.statusBar().showMessage("Zaktualizowano godziny dnia.", 2500)
+
+    def _open_config(self):
+        dialog = ConfigDialog(self, self.shop_config)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        self._update_nominal_hours_label()
+        self._sync_grid()
+        self.statusBar().showMessage("Zapisano konfigurację.", 2500)
 
     def _save_project(self):
-        path = filedialog.asksaveasfilename(
-            defaultextension=".json",
-            filetypes=[("Projekt grafiku", "*.json")]
-        )
+        path, _ = QFileDialog.getSaveFileName(self, "Zapisz projekt", "", "Projekt grafiku (*.json)")
         if not path:
             return
 
-        # normalny zapis
         save_project(path, self.schedule, self.shop_config)
-
-        # zapis jako ostatni projekt
         save_project("last_project.json", self.schedule, self.shop_config)
+        self.statusBar().showMessage("Zapisano projekt.", 2500)
 
     def _load_project(self):
-        path = filedialog.askopenfilename(
-            filetypes=[("Projekt grafiku", "*.json")]
-        )
+        path, _ = QFileDialog.getOpenFileName(self, "Wczytaj projekt", "", "Projekt grafiku (*.json)")
         if not path:
             return
 
         self.schedule, self.shop_config = load_project(path)
-
-        # 🔥 NOWY CONTROLLER DLA NOWEGO PROJEKTU
-        self.controller = ScheduleController(
-            self.schedule,
-            self.shop_config
-        )
-
-        self.year_var.set(self.schedule.year)
-        self.month_var.set(self.schedule.month)
-
-        self.grid.schedule = self.schedule
-        self.grid.shop_config = self.shop_config
-
-        self.grid.build()
-        self.grid.refresh()
+        self.controller = ScheduleController(self.schedule, self.shop_config)
+        self.year = self.schedule.year
+        self.month = self.schedule.month
+        self._set_date_controls(self.year, self.month)
         self._update_nominal_hours_label()
-
+        self._sync_everything()
+        self.statusBar().showMessage("Wczytano projekt.", 2500)
 
     def _export_excel(self):
-        if not self.schedule.employees:
-            messagebox.showinfo("Eksport", "Brak danych.")
+        path, _ = QFileDialog.getSaveFileName(self, "Eksport Excel", "", "Excel (*.xlsx)")
+        if not path:
             return
 
-        path = filedialog.asksaveasfilename(
-            defaultextension=".xlsx",
-            filetypes=[("Excel", "*.xlsx")]
-        )
+        export_schedule_to_excel(self.schedule, self.year, self.month, path)
+        self.statusBar().showMessage("Wyeksportowano do Excela.", 2500)
 
-        if path:
-            export_schedule_to_excel(
-                self.schedule,
-                self.year_var.get(),
-                self.month_var.get(),
-                path
-            )
+    def _undo(self):
+        self.schedule = self.controller.undo()
+        self._sync_everything()
+        self.statusBar().showMessage("Cofnięto ostatnią zmianę.", 2500)
 
-    # ==================================================
-    # TIME HELPERS
-    # ==================================================
+    def _about(self):
+        QMessageBox.information(self, "O programie", "Grafik Dino v2\nNowe UI w PySide6.")
+
+    def _try_load_last_project(self):
+        if not os.path.exists("last_project.json"):
+            return
+
+        try:
+            self.schedule, self.shop_config = load_project("last_project.json")
+            self.controller = ScheduleController(self.schedule, self.shop_config)
+            self.year = self.schedule.year
+            self.month = self.schedule.month
+            self._set_date_controls(self.year, self.month)
+            self._update_nominal_hours_label()
+            self._sync_everything()
+        except Exception:
+            pass
 
     def _calc_end_from_daily(self, start_str, hours):
         from datetime import datetime, timedelta
+
         fmt = "%H:%M"
         start = datetime.strptime(start_str, fmt)
         end = start + timedelta(hours=hours)
@@ -466,78 +521,8 @@ class MainWindow:
 
     def _calc_start_from_daily(self, end_str, hours):
         from datetime import datetime, timedelta
+
         fmt = "%H:%M"
         end = datetime.strptime(end_str, fmt)
         start = end - timedelta(hours=hours)
         return start.strftime(fmt)
-
-    def _ctx_copy(self, emp, day):
-        ds = self.controller.get_day(emp, day)
-        if ds.is_empty():
-            self._clipboard_day = None
-        else:
-            self._clipboard_day = (ds.start, ds.end)
-
-
-    def _ctx_paste(self, emp, day):
-        if not self._clipboard_day:
-            return
-
-        start, end = self._clipboard_day
-
-        self._apply_and_refresh(
-            lambda: self.controller.set_day_hours(emp, day, start, end)
-        )
-
-    def _try_load_last_project(self):
-        import os
-
-        if not os.path.exists("last_project.json"):
-            return
-
-        try:
-            self.schedule, self.shop_config = load_project("last_project.json")
-
-            # 🔥 NOWY CONTROLLER
-            self.controller = ScheduleController(self.schedule, self.shop_config)
-
-            self.year_var.set(self.schedule.year)
-            self.month_var.set(self.schedule.month)
-
-            self.grid.schedule = self.schedule
-            self.grid.shop_config = self.shop_config
-
-            self.grid.build()
-            self._update_nominal_hours_label()
-            self.grid.refresh()
-
-        except Exception:
-            pass
-
-    def _generate_schedule(self):
-        self.controller.generate_schedule()
-
-        # 🔥 zawsze zsynchronizuj referencję
-        self.schedule = self.controller.schedule
-        self.grid.schedule = self.schedule
-        self.grid.shop_config = self.shop_config
-
-        self.grid.build()
-        self.grid.refresh()
-
-    def _update_nominal_hours_label(self):
-        if not self.shop_config:
-            self.nominal_hours_var.set("")
-            return
-
-        hours = self.shop_config.get_full_time_nominal_hours()
-        self.nominal_hours_var.set(f"Nominalny etat: {hours} h")
-
-    def _clear_schedule(self):
-        self.controller.clear_schedule()
-
-        self.schedule = self.controller.schedule
-        self.grid.schedule = self.schedule
-
-        self.grid.build()
-        self.grid.refresh()

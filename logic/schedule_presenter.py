@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ui import theme
 
 
@@ -20,53 +21,44 @@ class SchedulePresenter:
         ds = self.schedule.get_day(emp, day)
         s, e, t = ds.as_rows()
 
+        if ds.is_leave:
+            return CellView(
+                text_start="🌴",
+                text_end="",
+                text_total="",
+                bg=theme.OK_GREEN,
+                tooltip="Urlop",
+            )
+
         if not self.shop_config.is_trade_day(day):
             return CellView(bg=theme.BG_DISABLED)
 
-        base_bg = theme.BG_MAIN
-
         if not s or not e:
-            return CellView(bg=base_bg)
+            return CellView(bg=theme.BG_MAIN)
 
         hours = self.shop_config.get_open_hours_for_day(day)
-
-        text_start = ""
-        text_end = ""
-        text_total = ""
-        bg = base_bg
+        text_start = s
+        text_end = e
+        bg = theme.BG_MAIN
 
         if hours:
             open_t, close_t = hours
-
-            # STANDARD OTW
             if s == open_t and emp.daily_hours == 8:
                 text_start = "OTW"
-
-            # STANDARD ZAM
+                text_end = ""
             elif e == close_t and emp.daily_hours == 8:
                 text_start = "ZAM"
-
-            else:
-                text_start = s
-                text_end = e
-        else:
-            text_start = s
-            text_end = e
-
-        # Kolor zmiany
-        if hours:
-            open_t, close_t = hours
+                text_end = ""
             if s == open_t:
                 bg = theme.SHIFT_MORNING
             elif e == close_t:
                 bg = theme.SHIFT_CLOSE
 
         tooltip = f"{s} - {e}\nSuma: {t}"
-
         return CellView(
             text_start=text_start,
             text_end=text_end,
-            text_total=text_total,
+            text_total=t,
             bg=bg,
-            tooltip=tooltip
+            tooltip=tooltip,
         )

@@ -56,10 +56,22 @@ def add_manual_shift_constraints(
 
             day_state = schedule.get_day(emp, d)
 
+            # 🔴 URLop
+            if day_state.is_leave:
+                for s in all_shifts:
+                    model.Add(x[e, d, s] == 0)
+                continue
+
+            if not day_state.is_locked:
+                continue
+
             start = getattr(day_state, "start", None)
             end = getattr(day_state, "end", None)
 
+            # 🔴 wolne
             if not start or not end:
+                for s in all_shifts:
+                    model.Add(x[e, d, s] == 0)
                 continue
 
             hours = shop.get_open_hours_for_day(d)
@@ -85,6 +97,7 @@ def add_manual_shift_constraints(
             if shift is None:
                 continue
 
+            # 🔥 HARD LOCK — solver MUSI to ustawić
             model.Add(x[e, d, shift] == 1)
 
             for s in all_shifts:

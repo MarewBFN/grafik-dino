@@ -1,512 +1,271 @@
-import tkinter as tk
 import calendar
-from logic.schedule_presenter import SchedulePresenter
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon
+from PySide6.QtWidgets import QAbstractItemView, QMenu, QTableWidget, QTableWidgetItem
+
 from logic.constraint_presenter import ConstraintPresenter
+from logic.schedule_presenter import SchedulePresenter
 from ui import theme
-from ui.tooltip import Tooltip
 
 
-class ScheduleGrid:
+class ScheduleGrid(QTableWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
-    def __init__(
+        self.schedule = None
+        self.shop_config = None
+        self.controller = None
+
+        self.on_edit_day = None
+        self.on_edit_employee = None
+        self.on_context_menu = None
+        self.on_header_menu = None
+
+        self._clipboard_day = None
+
+        # IKONY
+        self.icon_open = QIcon("assets/key.png")
+        self.icon_meat = QIcon("assets/meat.png")
+
+        self.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.setAlternatingRowColors(False)
+
+        self.cellDoubleClicked.connect(self._handle_double_click)
+        self.viewport().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.viewport().customContextMenuRequested.connect(self._open_cell_context_menu)
+        self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.horizontalHeader().customContextMenuRequested.connect(self._open_header_context_menu)
+
+    def set_data(
         self,
-        parent,
         schedule,
         shop_config,
-        on_edit_day,
-        on_edit_employee,
-        on_context_menu,
-        on_header_menu,
-        on_add_employee,
+        controller,
+        on_edit_day=None,
+        on_edit_employee=None,
+        on_context_menu=None,
+        on_header_menu=None,
     ):
-        self.parent = parent
         self.schedule = schedule
         self.shop_config = shop_config
-        self._row_widgets = {}
-
+        self.controller = controller
         self.on_edit_day = on_edit_day
         self.on_edit_employee = on_edit_employee
         self.on_context_menu = on_context_menu
         self.on_header_menu = on_header_menu
-        self.on_add_employee = on_add_employee
-
-        self.frame = tk.Frame(parent, bg=theme.BG_MAIN)
-
-        self._day_labels = {}
-        self._total_labels = {}
-        self._validation_cells = {}
-
-    # ==================================================
-    # PUBLIC API
-    # ==================================================
 
     def build(self):
-        self._build_grid()
+        self.clear()
+        self.setSortingEnabled(False)
+
+        if not self.schedule or not self.shop_config:
+            self.setRowCount(0)
+            self.setColumnCount(0)
+            return
+
+        days = self.schedule.days_in_month
+        weekday_names = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"]
+
+        headers = ["Pracownik"]
+        for day in range(1, days + 1):
+            wd = calendar.weekday(self.schedule.year, self.schedule.month, day)
+            headers.append(f"{weekday_names[wd]}\n{day}")
+        headers.extend(["Praca\n(h)", "Urlop\n(h)", "Razem\n(h)"])
+
+        self.setColumnCount(len(headers))
+        self.setHorizontalHeaderLabels(headers)
+        self.setRowCount(len(self.schedule.employees) + 3)
+
+        self.setColumnWidth(0, 180)
+        for col in range(1, days + 1):
+            self.setColumnWidth(col, 60)
+        for col in range(days + 1, days + 4):
+            self.setColumnWidth(col, 80)
+
+        self.verticalHeader().setVisible(False)
+        self.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
+        self.horizontalHeader().setStretchLastSection(False)
+
+        for row in range(self.rowCount()):
+            self.setRowHeight(row, 42)
 
     def refresh(self):
-        self._refresh_values()
-
-    # ==================================================
-    # GRID BUILD
-    # ==================================================
-
-    def _build_grid(self):
-
-        for w in self.frame.winfo_children():
-            w.destroy()
-
-        self._day_labels.clear()
-        self._total_labels.clear()
-        self._validation_cells.clear()
-
-        if not self.schedule:
+        if not self.schedule or not self.shop_config:
             return
 
-        y = self.schedule.year
-        m = self.schedule.month
-        days = calendar.monthrange(y, m)[1]
-
-        names = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"]
-
-        # ===== KOLUMNY DYNAMICZNE =====
-        self.frame.grid_columnconfigure(0, weight=0, minsize=180)
-
-        for col in range(1, days + 1):
-            self.frame.grid_columnconfigure(col, weight=0, minsize=50)
-
-        self.frame.grid_columnconfigure(days + 1, weight=0, minsize=70)
-
-        # ===== HEADER PLUS =====
-        plus = tk.Label(
-            self.frame,
-            text="+",
-            bg=theme.BG_HEADER,
-            cursor="hand2",
-            highlightbackground=theme.GRID_BORDER,
-            highlightthickness=1
-        )
-        plus.grid(row=0, column=0, rowspan=2, sticky="nsew")
-        plus.bind("<Button-1>", lambda e: self.on_add_employee())
-
-        # ===== HEADER DNI =====
-        for d in range(1, days + 1):
-
-            wd = calendar.weekday(y, m, d)
-
-            if d in self.shop_config.public_holidays:
-                bg = theme.BG_DISABLED
-            elif not self.shop_config.is_trade_day(d):
-                bg = theme.BG_DISABLED
-            else:
-                bg = theme.BG_WEEKEND if wd >= 5 else theme.BG_HEADER
-
-            header = tk.Frame(
-                self.frame,
-                bg=bg,
-                highlightbackground=theme.GRID_BORDER,
-                highlightthickness=1
-            )
-            header.grid(row=0, column=d, rowspan=2, sticky="nsew")
-
-            lbl_wd = tk.Label(header, text=names[wd], bg=bg)
-            lbl_day = tk.Label(header, text=str(d), bg=bg)
-
-            lbl_wd.pack(expand=True)
-            lbl_day.pack(expand=True)
-
-            if d in self.shop_config.day_overrides:
-                tk.Label(header, text="🕒", bg=bg).pack()
-
-            header.bind("<Button-3>", lambda ev, day=d: self.on_header_menu(ev, day))
-            lbl_wd.bind("<Button-3>", lambda ev, day=d: self.on_header_menu(ev, day))
-            lbl_day.bind("<Button-3>", lambda ev, day=d: self.on_header_menu(ev, day))
-
-        # ===== KOLUMNY SUM =====
-        headers = ["Praca", "Urlop", "Razem"]
-
-        for i, title in enumerate(headers):
-            col = days + 1 + i
-            self.frame.grid_columnconfigure(col, weight=0, minsize=70)
-
-            lbl = tk.Label(
-                self.frame,
-                text=title,
-                bg=theme.BG_HEADER,
-                highlightbackground=theme.GRID_BORDER,
-                highlightthickness=1
-            )
-            lbl.grid(row=0, column=col, rowspan=2, sticky="nsew")
-
-        start_row = 2
-
-        # ===== EMPLOYEES =====
-        for r, emp in enumerate(self.schedule.employees):
-
-            row = start_row + r
-
-            name_frame = tk.Frame(self.frame, bg=theme.BG_MAIN)
-            name_frame.grid(row=row, column=0, sticky="nsew")
-            self._row_widgets[emp] = [name_frame]
-
-            name_label = tk.Label(
-                name_frame,
-                text=emp.display_name(),
-                bg=theme.BG_MAIN,
-                anchor="w",
-                cursor="hand2"
-            )
-            name_label.pack(side="left", padx=(4, 2))
-
-            icons = ""
-            if emp.is_opener:
-                icons += "🕓 "
-            if emp.is_meat:
-                icons += "🥩"
-
-            icon_label = tk.Label(
-                name_frame,
-                text=icons,
-                bg=theme.BG_MAIN,
-                cursor="hand2"
-            )
-            icon_label.pack(side="left")
-
-            for widget in (name_frame, name_label, icon_label):
-                widget.bind(
-                    "<Double-Button-1>",
-                    lambda e, emp=emp: self.on_edit_employee(emp)
-                )
-
-            for d in range(1, days + 1):
-
-                if d in self.shop_config.public_holidays:
-                    cell_bg = theme.BG_DISABLED
-                elif not self.shop_config.is_trade_day(d):
-                    cell_bg = theme.BG_DISABLED
-                else:
-                    cell_bg = theme.BG_MAIN
-
-                height = 32 if self.shop_config.cell_display_mode == "compact" else 55
-
-                cell = tk.Frame(
-                    self.frame,
-                    bg=cell_bg,
-                    height=height,
-                    highlightbackground=theme.GRID_BORDER,
-                    highlightthickness=1
-                )
-                cell.grid(row=row, column=d, sticky="nsew")
-                cell.grid_propagate(False)
-
-                self._row_widgets[emp].append(cell)
-
-                lbl_start = tk.Label(cell, bg=cell_bg, anchor="center")
-                lbl_end = tk.Label(cell, bg=cell_bg, anchor="center")
-                lbl_total = tk.Label(
-                    cell,
-                    bg=cell_bg,
-                    font=("Arial", 8, "bold"),
-                    anchor="center"
-                )
-
-                cell.rowconfigure(0, weight=1)
-                cell.rowconfigure(1, weight=1)
-                cell.rowconfigure(2, weight=1)
-                cell.columnconfigure(0, weight=1)
-
-                lbl_start.grid(row=0, column=0, sticky="nsew")
-                lbl_end.grid(row=1, column=0, sticky="nsew")
-                lbl_total.grid(row=2, column=0, sticky="nsew")
-
-                self._day_labels[(emp, d)] = (lbl_start, lbl_end, lbl_total)
-
-                if self.shop_config.is_trade_day(d):
-
-                    def bind_all(widget):
-                        widget.bind(
-                            "<Button-1>",
-                            lambda ev, emp=emp, day=d:
-                            self.on_edit_day(emp, day)
-                        )
-                        widget.bind(
-                            "<Button-3>",
-                            lambda ev, emp=emp, day=d:
-                            self.on_context_menu(ev, emp, day)
-                        )
-
-                    bind_all(cell)
-                    bind_all(lbl_start)
-                    bind_all(lbl_end)
-                    bind_all(lbl_total)
-
-                    for widget in (cell, lbl_start, lbl_end, lbl_total):
-                        widget.bind(
-                            "<Enter>",
-                            lambda e, emp=emp, day=d:
-                            self._hover_enter(emp, day)
-                        )
-                        widget.bind(
-                            "<Leave>",
-                            lambda e, emp=emp, day=d:
-                            self._hover_leave(emp, day)
-                        )
-
-            # ===== 3 KOLUMNY SUM =====
-            work_lbl = tk.Label(
-                self.frame,
-                text="",
-                anchor="center",
-                bg=theme.BG_MAIN,
-                highlightbackground=theme.GRID_BORDER,
-                highlightthickness=1
-            )
-            work_lbl.grid(row=row, column=days + 1, sticky="nsew")
-
-            leave_lbl = tk.Label(
-                self.frame,
-                text="",
-                anchor="center",
-                bg=theme.BG_MAIN,
-                highlightbackground=theme.GRID_BORDER,
-                highlightthickness=1
-            )
-            leave_lbl.grid(row=row, column=days + 2, sticky="nsew")
-
-            total_lbl = tk.Label(
-                self.frame,
-                text="",
-                anchor="center",
-                bg=theme.BG_MAIN,
-                highlightbackground=theme.GRID_BORDER,
-                highlightthickness=1
-            )
-            total_lbl.grid(row=row, column=days + 3, sticky="nsew")
-
-            self._total_labels[emp] = (work_lbl, leave_lbl, total_lbl)
-
-
-        # ===== VALIDATION ROWS =====
-        val_row = start_row + len(self.schedule.employees)
-
-        for label, key in [("Otwarcie", "open"),
-                        ("Zamknięcie", "close"),
-                        ("Mięso", "meat")]:
-
-            lbl = tk.Label(
-                self.frame,
-                text=label,
-                anchor="w",
-                bg=theme.BG_HEADER,
-                highlightbackground=theme.GRID_BORDER,
-                highlightthickness=1
-            )
-            lbl.grid(row=val_row, column=0, sticky="nsew")
-
-            for d in range(1, days + 1):
-                cell = tk.Label(
-                    self.frame,
-                    bg=theme.BG_MAIN,
-                    highlightbackground=theme.GRID_BORDER,
-                    highlightthickness=1
-                )
-                cell.grid(row=val_row, column=d, sticky="nsew")
-                self._validation_cells[(key, d)] = cell
-
-            val_row += 1
-
-        self._refresh_values()
-
-    # ==================================================
-    # REFRESH
-    # ==================================================
-
-    def _refresh_values(self):
-
-        if not self.schedule:
-            return
-
+        self.build()
         presenter = SchedulePresenter(self.schedule, self.shop_config)
-        constraint_presenter = ConstraintPresenter(
-            self.schedule,
-            self.shop_config
-        )
+        constraint_presenter = ConstraintPresenter(self.schedule, self.shop_config)
 
-        y = self.schedule.year
-        m = self.schedule.month
-        days = calendar.monthrange(y, m)[1]
+        days = self.schedule.days_in_month
+        emp_count = len(self.schedule.employees)
 
-        for emp in self.schedule.employees:
+        for row, emp in enumerate(self.schedule.employees):
+            self._fill_employee_name(row, emp)
+            self._fill_day_cells(row, emp, days, presenter, constraint_presenter)
+            self._fill_summary_cells(row, emp, days)
 
-            for d in range(1, days + 1):
+        self._fill_validation_rows(emp_count, days, constraint_presenter)
+        self.viewport().update()
 
-                lbl_start, lbl_end, lbl_total = self._day_labels[(emp, d)]
-                ds = self.schedule.get_day(emp, d)
+    def _fill_employee_name(self, row, emp):
+        item = QTableWidgetItem(emp.display_name())
+        item.setData(Qt.UserRole, emp)
+        item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
 
-                # ===== URLOP =====
-                if ds.is_leave:
-                    lbl_start.config(text="🌴", anchor="center", justify="center")
-                    lbl_end.config(text="")
-                    lbl_total.config(text="")
+        # IKONY ZAMIAST TEKSTU OTW / MIĘSO
+        if emp.is_opener:
+            item.setIcon(self.icon_open)
+        elif emp.is_meat:
+            item.setIcon(self.icon_meat)
 
-                    for lbl in (lbl_start, lbl_end, lbl_total):
-                        lbl.config(bg=theme.BG_MAIN)
+        font = QFont()
+        font.setBold(True)
+        item.setFont(font)
+        item.setBackground(QBrush(QColor(theme.BG_PANEL)))
+        self.setItem(row, 0, item)
 
-                    continue
+    def _fill_day_cells(self, row, emp, days, presenter, constraint_presenter):
+        for day in range(1, days + 1):
+            ds = self.schedule.get_day(emp, day)
+            item = QTableWidgetItem()
+            item.setTextAlignment(Qt.AlignCenter)
+            item.setData(Qt.UserRole, (emp, day))
 
-                # ===== STANDARDOWE WYŚWIETLANIE =====
-                cell_view = presenter.get_cell_view(emp, d)
+            if ds.is_leave:
+                item.setText("🌴")
+                item.setBackground(QBrush(QColor(theme.OK_GREEN)))
+                item.setToolTip("Urlop")
+                self.setItem(row, day, item)
+                continue
 
-                lbl_start.config(text=cell_view.text_start, anchor="center", justify="center")
-                lbl_end.config(text=cell_view.text_end, anchor="center", justify="center")
-                lbl_total.config(text=cell_view.text_total)
+            if not self.shop_config.is_trade_day(day):
+                item.setBackground(QBrush(QColor(theme.BG_DISABLED)))
+                self.setItem(row, day, item)
+                continue
 
-                if ds.is_locked:
-                    bg = "#afa9a9"  # czerwony = LOCKED
-                elif ds.is_leave:
-                    bg = "#9999ff"  # opcjonalnie urlop
-                else:
-                    bg = cell_view.bg
+            cell_view = presenter.get_cell_view(emp, day)
+            lines = [line for line in [cell_view.text_start, cell_view.text_end, cell_view.text_total] if line]
+            item.setText("\n".join(lines))
+            item.setBackground(QBrush(QColor(cell_view.bg)))
 
-                for lbl in (lbl_start, lbl_end, lbl_total):
-                    lbl.config(bg=bg)
+            if cell_view.tooltip:
+                item.setToolTip(cell_view.tooltip)
 
-                for lbl in (lbl_start, lbl_end, lbl_total):
-                    if hasattr(lbl, "_tooltip") and lbl._tooltip:
-                        lbl._tooltip.destroy()
-                        lbl._tooltip = None
+            if constraint_presenter.get_cell_error(emp, day):
+                item.setBackground(QBrush(QColor(theme.ERR_RED)))
 
-                if cell_view.tooltip:
-                    for lbl in (lbl_start, lbl_end, lbl_total):
-                        lbl._tooltip = Tooltip(lbl, cell_view.tooltip)
+            self.setItem(row, day, item)
 
-                # BŁĄD KOMÓRKI PRACOWNIKA
-                if constraint_presenter.get_cell_error(emp, d):
-                    for lbl in (lbl_start, lbl_end, lbl_total):
-                        lbl.config(bg=theme.ERR_RED)
+    def _fill_summary_cells(self, row, emp, days):
+        items = [
+            QTableWidgetItem(self.schedule.total_hours_for_employee(emp)),
+            QTableWidgetItem(self.schedule.leave_hours_for_employee(emp)),
+            QTableWidgetItem(self.schedule.total_with_leave_for_employee(emp)),
+        ]
 
-            work_lbl, leave_lbl, total_lbl = self._total_labels[emp]
+        for idx, item in enumerate(items, start=days + 1):
+            item.setTextAlignment(Qt.AlignCenter)
+            item.setBackground(QBrush(QColor(theme.BG_PANEL)))
+            self.setItem(row, idx, item)
 
-            work_lbl.config(
-                text=self.schedule.total_hours_for_employee(emp)
-            )
+    def _fill_validation_rows(self, emp_count, days, constraint_presenter):
+        rows = [("Otwarcie", "open"), ("Zamknięcie", "close"), ("Mięso", "meat")]
 
-            leave_lbl.config(
-                text=self.schedule.leave_hours_for_employee(emp)
-            )
+        for offset, (label, key) in enumerate(rows):
+            row = emp_count + offset
 
-            total_lbl.config(
-                text=self.schedule.total_with_leave_for_employee(emp)
-            )
+            name_item = QTableWidgetItem(label)
+            name_item.setBackground(QBrush(QColor(theme.BG_HEADER)))
+            name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+            self.setItem(row, 0, name_item)
 
+            for day in range(1, days + 1):
+                count = 0
 
+                for emp in self.schedule.employees:
+                    ds = self.schedule.get_day(emp, day)
 
-        # ===== RESET VALIDATION CELLS =====
-        for cell in self._validation_cells.values():
-            cell.config(bg=theme.BG_MAIN, text="")
-            if hasattr(cell, "_tooltip") and cell._tooltip:
-                cell._tooltip.destroy()
-                cell._tooltip = None
+                    hours = self.shop_config.get_open_hours_for_day(day)
 
-        # ===== VALIDATION ROWS Z PRESENTERA =====
-        for key in ("open", "close", "meat"):
-            for d in range(1, days + 1):
+                    if not hours:
+                        continue
 
-                cell = self._validation_cells.get((key, d))
-                if not cell:
-                    continue
+                    open_start, open_end = hours
 
-                # 🔹 dzień niehandlowy → wyszarz i pomiń walidację
-                if d in self.shop_config.public_holidays or not self.shop_config.is_trade_day(d):
-                    cell.config(bg=theme.BG_DISABLED)
+                    if key == "open" and ds.start == open_start:
+                        count += 1
+                    elif key == "close" and ds.end == open_end:
+                        count += 1
+                    elif key == "meat" and emp.is_meat and not ds.is_leave and ds.start:
+                        count += 1
 
-                    if hasattr(cell, "_tooltip") and cell._tooltip:
-                        cell._tooltip.destroy()
-                        cell._tooltip = None
+                item = QTableWidgetItem(str(count))
+                item.setTextAlignment(Qt.AlignCenter)
 
-                    continue
-
-                view = constraint_presenter.get_validation_cell_view(key, d)
-
-                cell.config(bg=view.bg)
-
-                if hasattr(cell, "_tooltip") and cell._tooltip:
-                    cell._tooltip.destroy()
-                    cell._tooltip = None
-
+                view = constraint_presenter.get_validation_cell_view(key, day)
+                item.setBackground(QBrush(QColor(view.bg)))
                 if view.tooltip:
-                    cell._tooltip = Tooltip(cell, view.tooltip)
+                    item.setToolTip(view.tooltip)
+                self.setItem(row, day, item)
 
-    # ==================================================
-    # HOVER
-    # ==================================================
+            for col in range(days + 1, days + 4):
+                filler = QTableWidgetItem("")
+                filler.setBackground(QBrush(QColor(theme.BG_PANEL)))
+                self.setItem(row, col, filler)
 
-    def _hover_enter(self, emp, day):
-
-        if not self.shop_config.is_trade_day(day):
+    def _handle_double_click(self, row, col):
+        if not self.schedule:
             return
 
-        lbls = self._day_labels.get((emp, day))
-        if not lbls:
+        emp_count = len(self.schedule.employees)
+        days = self.schedule.days_in_month
+
+        if row < emp_count and col == 0 and self.on_edit_employee:
+            self.on_edit_employee(self.schedule.employees[row])
             return
 
-        # podświetlenie komórki
-        for lbl in lbls:
-            if lbl.cget("bg") != theme.ERR_RED:
-                lbl.config(bg="#e2e8f0")
+        if row < emp_count and 1 <= col <= days and self.on_edit_day:
+            self.on_edit_day(self.schedule.employees[row], col)
 
-        # czarna obramówka całego wiersza
-        row_widgets = self._row_widgets.get(emp, [])
-
-        if not row_widgets:
+    def _open_cell_context_menu(self, pos):
+        if not self.schedule or not self.on_context_menu:
             return
 
-        first = row_widgets[0]
-        last = row_widgets[-1]
-
-        for widget in row_widgets:
-            widget.config(highlightthickness=0)
-
-        # lewa krawędź
-        first.config(highlightbackground="black", highlightthickness=2)
-
-        # prawa krawędź
-        last.config(highlightbackground="black", highlightthickness=2)
-
-        # góra i dół – wszystkie
-        for widget in row_widgets:
-            widget.config(highlightbackground="black", highlightthickness=1)
-
-    def _hover_leave(self, emp, day):
-
-        lbls = self._day_labels.get((emp, day))
-        if not lbls:
+        item = self.itemAt(pos)
+        if not item:
             return
 
-        ds = self.schedule.get_day(emp, day)
-        hours = self.shop_config.get_open_hours_for_day(day)
+        row = item.row()
+        col = item.column()
+        emp_count = len(self.schedule.employees)
+        days = self.schedule.days_in_month
 
-        if not self.shop_config.is_trade_day(day):
-            base = theme.BG_DISABLED
-        else:
-            base = theme.BG_MAIN
+        if row >= emp_count or not (1 <= col <= days):
+            return
 
-        if ds.is_locked:
-            base = "#afa9a9"
-        elif hours and not ds.is_empty():
-            open_t, close_t = hours
+        emp = self.schedule.employees[row]
+        day = col
+        global_pos = self.viewport().mapToGlobal(pos)
+        self.on_context_menu(emp, day, global_pos)
 
-            if ds.start == open_t:
-                base = theme.SHIFT_MORNING
-            elif ds.end == close_t:
-                base = theme.SHIFT_CLOSE
+    def _open_header_context_menu(self, pos):
+        if not self.schedule or not self.on_header_menu:
+            return
 
-        for lbl in lbls:
-            if lbl.cget("bg") != theme.ERR_RED:
-                lbl.config(bg=base)
+        col = self.horizontalHeader().logicalIndexAt(pos)
+        days = self.schedule.days_in_month
+        if not (1 <= col <= days):
+            return
 
-        # reset obramówki wiersza
-        for widget in self._row_widgets.get(emp, []):
-            widget.config(
-                highlightbackground=theme.GRID_BORDER,
-                highlightthickness=1
-            )
+        global_pos = self.horizontalHeader().mapToGlobal(pos)
+        self.on_header_menu(col, global_pos)
+
+    def set_clipboard(self, value):
+        self._clipboard_day = value
+
+    def clipboard(self):
+        return self._clipboard_day

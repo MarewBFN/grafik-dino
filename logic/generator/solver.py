@@ -9,7 +9,8 @@ def build_objective(model, weighted_soft_terms):
 
 def solve_model(model):
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 20
+    solver.parameters.max_time_in_seconds = 60
+    solver.parameters.num_search_workers = 10
 
     status = solver.Solve(model)
 
@@ -17,5 +18,6 @@ def solve_model(model):
     print("Czas:", solver.WallTime(), "s")
     print("Conflicts:", solver.NumConflicts())
     print("Branches:", solver.NumBranches())
+
 
     return solver, status

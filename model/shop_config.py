@@ -18,13 +18,13 @@ class ShopConfig:
         self.constraint_policies = {
             "rest_11h": ConstraintPolicy.MANDATORY,
             "meat": ConstraintPolicy.PREFERRED,
-            "balance": ConstraintPolicy.PREFERRED,
+            "balance": ConstraintPolicy.MANDATORY,
             "max_consecutive": ConstraintPolicy.PREFERRED,
             "open": ConstraintPolicy.MANDATORY,
             "close": ConstraintPolicy.MANDATORY,
             "monthly_hours": ConstraintPolicy.PREFERRED,
             "meat_coverage": ConstraintPolicy.PREFERRED,
-            "availability": ConstraintPolicy.PREFERRED,
+            "availability": ConstraintPolicy.MANDATORY,
         }
         # -----------------------------
         # Override godzin dla konkretnego dnia

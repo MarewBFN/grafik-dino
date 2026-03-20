@@ -1,245 +1,96 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+)
+
 from model.employee import Employee
 
 
-class EmployeeDialog(tk.Toplevel):
-    def __init__(self, parent, on_save, employee=None, schedule=None, shop=None):
+class EmployeeDialog(QDialog):
+    def __init__(self, parent=None, employee=None):
         super().__init__(parent)
-        self.title("Dodaj pracownika")
-        self.resizable(False, False)
-        self.on_save = on_save
         self.employee = employee
-        self.schedule = schedule
-        self.shop = shop
+        self.setWindowTitle("Edytuj pracownika" if employee else "Dodaj pracownika")
+        self.setModal(True)
+        self.setMinimumWidth(420)
 
-        self.last_name = tk.StringVar()
-        self.first_name = tk.StringVar()
-        self.is_opener = tk.BooleanVar()
-        self.is_meat = tk.BooleanVar()
-        self.daily_hours = tk.IntVar(value=8)
+        self._build_ui()
+        self._fill_from_employee()
 
-        if self.employee:
-            self.last_name.set(self.employee.last_name)
-            self.first_name.set(self.employee.first_name)
-            self.is_opener.set(self.employee.is_opener)
-            self.is_meat.set(self.employee.is_meat)
-            self.daily_hours.set(self.employee.daily_hours)
+    def _build_ui(self):
+        root = QVBoxLayout(self)
 
-        self._build()
+        title = QLabel("Dane pracownika")
+        title.setObjectName("sectionLabel")
+        root.addWidget(title)
 
-    def _build(self):
-        pad = {"padx": 10, "pady": 6}
+        form = QFormLayout()
 
-        ttk.Label(self, text="Nazwisko").grid(row=0, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.last_name).grid(row=0, column=1, **pad)
+        self.last_name = QLineEdit()
+        self.first_name = QLineEdit()
+        self.monthly_target_hours = QSpinBox()
+        self.monthly_target_hours.setRange(0, 400)
+        self.monthly_target_hours.setValue(160)
+        self.daily_hours = QSpinBox()
+        self.daily_hours.setRange(6, 8)
+        self.daily_hours.setValue(8)
 
-        ttk.Label(self, text="Imię").grid(row=1, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.first_name).grid(row=1, column=1, **pad)
+        self.is_opener = QCheckBox("Pracownik otwarcia")
+        self.is_meat = QCheckBox("Pracownik mięsa")
 
-        ttk.Checkbutton(self, text="Otwarcie", variable=self.is_opener)\
-            .grid(row=2, column=0, columnspan=2, sticky="w", **pad)
+        form.addRow("Nazwisko", self.last_name)
+        form.addRow("Imię", self.first_name)
+        form.addRow("Cel miesięczny", self.monthly_target_hours)
+        form.addRow("Godzin dziennie", self.daily_hours)
 
-        ttk.Checkbutton(self, text="Mięso", variable=self.is_meat)\
-            .grid(row=3, column=0, columnspan=2, sticky="w", **pad)
+        root.addLayout(form)
+        root.addWidget(self.is_opener)
+        root.addWidget(self.is_meat)
 
-        ttk.Label(self, text="Praca przez x godzin dziennie")\
-            .grid(row=4, column=0, sticky="w", **pad)
+        buttons = QDialogButtonBox()
+        cancel_btn = QPushButton("Anuluj")
+        save_btn = QPushButton("Zapisz")
+        save_btn.setObjectName("primaryButton")
+        buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
+        buttons.addButton(save_btn, QDialogButtonBox.AcceptRole)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self._save)
 
-        ttk.Combobox(
-            self,
-            values=[6, 7, 8],
-            width=5,
-            state="readonly",
-            textvariable=self.daily_hours
-        ).grid(row=4, column=1, sticky="w", **pad)
+        root.addWidget(buttons)
 
-        btns = ttk.Frame(self)
-        btns.grid(row=5, column=0, columnspan=2, pady=10)
-
-        ttk.Button(btns, text="Anuluj", command=self.destroy).pack(side="right", padx=5)
-        ttk.Button(btns, text="Dodaj", command=self._save).pack(side="right")
-
-        # ===== ADVANCED =====
-        self.adv_visible = False
-
-        self.adv_btn = tk.Label(
-            self,
-            text="⚙️ Zaawansowane",
-            fg="blue",
-            cursor="hand2"
-        )
-        self.adv_btn.grid(row=6, column=0, columnspan=2, sticky="w", padx=10, pady=(5, 0))
-        self.adv_btn.bind("<Button-1>", self._toggle_advanced)
-
-        self.adv_frame = tk.Frame(self)
-        self.adv_frame.grid(row=7, column=0, columnspan=2, sticky="w", padx=10, pady=5)
-        self.adv_frame.grid_remove()
-
-        # ===== AVAILABILITY UI =====
-
-        self._availability = {}
-
-        days = [
-            ("mon", "Pon"),
-            ("tue", "Wt"),
-            ("wed", "Śr"),
-            ("thu", "Czw"),
-            ("fri", "Pt"),
-            ("sat", "Sob"),
-            ("sun", "Nd"),
-        ]
-
-        self.day_rows = {}
-
-        for key, label in days:
-            row = tk.Frame(self.adv_frame)
-            row.pack(anchor="w", pady=2)
-
-            tk.Label(row, text=label, width=5).pack(side="left")
-
-            free_var = tk.BooleanVar()
-
-            start_var = tk.StringVar(value="08:00")
-            end_var = tk.StringVar(value="16:00")
-
-            start_entry = tk.Entry(row, textvariable=start_var, width=6)
-            end_entry = tk.Entry(row, textvariable=end_var, width=6)
-
-            start_entry.pack(side="left", padx=2)
-            tk.Label(row, text="-").pack(side="left")
-            end_entry.pack(side="left", padx=2)
-
-            def toggle(free_var=free_var, s=start_entry, e=end_entry):
-                if free_var.get():
-                    s.config(state="disabled")
-                    e.config(state="disabled")
-                else:
-                    s.config(state="normal")
-                    e.config(state="normal")
-
-            tk.Checkbutton(
-                row,
-                text="Wolne",
-                variable=free_var,
-                command=toggle
-            ).pack(side="left", padx=5)
-
-            self.day_rows[key] = {
-                "free": free_var,
-                "start": start_var,
-                "end": end_var
-            }
-
-        self.availability_type = tk.StringVar(value="soft")
-
-        tk.Radiobutton(
-            self.adv_frame,
-            text="Preferowane",
-            variable=self.availability_type,
-            value="soft"
-        ).pack(anchor="w")
-
-        tk.Radiobutton(
-            self.adv_frame,
-            text="Twarde",
-            variable=self.availability_type,
-            value="hard"
-        ).pack(anchor="w")
-
-        tk.Button(
-            self.adv_frame,
-            text="Nanieś na grafik",
-            command=self._apply_to_schedule
-        ).pack(anchor="w", pady=5)
-        
-    def _apply_to_schedule(self):
-        if not self.schedule or not self.shop:
+    def _fill_from_employee(self):
+        if not self.employee:
             return
-
-        emp = self.employee
-
-        if not emp:
-            print("Brak istniejącego pracownika – najpierw zapisz")
-            return
-
-        for day in range(1, self.schedule.days_in_month + 1):
-
-            if not self.shop.is_trade_day(day):
-                continue
-
-            weekday = self.shop.weekday(day)
-
-            row = self.day_rows.get(weekday)
-            if not row:
-                continue
-
-            ds = self.schedule.get_day(emp, day)
-
-            # 🔴 WOLNE
-            if row["free"].get():
-                ds.set_free()
-                ds.is_locked = True
-                continue
-
-            start = row["start"].get()
-            end = row["end"].get()
-
-            ds.set_hours(start, end)
-
-            if self.availability_type.get() == "hard":
-                ds.is_locked = True
-            else:
-                ds.is_locked = False
-
-        print("Naniesiono godziny na grafik")
-
-    def _toggle_advanced(self, event=None):
-        self.adv_visible = not self.adv_visible
-
-        if self.adv_visible:
-            self.adv_frame.grid()
-        else:
-            self.adv_frame.grid_remove()
-
-    def _apply_availability(self):
-        typ = self.availability_type.get()
-        self._availability = {}
-
-        for day, data in self.day_rows.items():
-
-            if data["free"].get():
-                self._availability[day] = [{
-                    "type": typ,
-                    "free": True
-                }]
-                continue
-
-            start = data["start"].get()
-            end = data["end"].get()
-
-            self._availability[day] = [{
-                "start": start,
-                "end": end,
-                "type": typ
-            }]
-
-        print("AVAILABILITY:", self._availability)
+        self.last_name.setText(self.employee.last_name)
+        self.first_name.setText(self.employee.first_name)
+        self.is_opener.setChecked(self.employee.is_opener)
+        self.is_meat.setChecked(self.employee.is_meat)
+        self.monthly_target_hours.setValue(self.employee.monthly_target_hours)
+        self.daily_hours.setValue(self.employee.daily_hours)
 
     def _save(self):
         try:
             emp = Employee(
-                last_name=self.last_name.get().strip(),
-                first_name=self.first_name.get().strip(),
-                is_opener=self.is_opener.get(),
-                is_meat=self.is_meat.get(),
-                daily_hours=self.daily_hours.get(),
-                availability=getattr(self, "_availability", {})
+                last_name=self.last_name.text().strip(),
+                first_name=self.first_name.text().strip(),
+                is_opener=self.is_opener.isChecked(),
+                is_meat=self.is_meat.isChecked(),
+                monthly_target_hours=self.monthly_target_hours.value(),
+                daily_hours=self.daily_hours.value(),
             )
             emp.validate()
-        except Exception as e:
-            messagebox.showerror("Błąd", str(e))
+        except Exception as exc:
+            QMessageBox.critical(self, "Błąd", str(exc))
             return
 
-        self.on_save(emp)
-        self.destroy()
+        self.employee_result = emp
+        self.accept()

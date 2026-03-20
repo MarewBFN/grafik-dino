@@ -1,104 +1,167 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
 import calendar
 
+from PySide6.QtCore import QTime
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QGridLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QTabWidget,
+    QTimeEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
-class ConfigDialog(tk.Toplevel):
-    def __init__(self, parent, shop_config, on_save):
+
+def _parse_time(value: str) -> QTime:
+    hour, minute = value.split(":")
+    return QTime(int(hour), int(minute))
+
+
+class ConfigDialog(QDialog):
+    def __init__(self, parent, shop_config):
         super().__init__(parent)
-        self.title("Konfiguracja")
-        self.geometry("420x360")
-        self.resizable(False, False)
-
         self.shop_config = shop_config
-        self.on_save = on_save
+        self.setWindowTitle("Konfiguracja")
+        self.setModal(True)
+        self.resize(620, 520)
 
         self._build_ui()
 
-    # ==================================================
     def _build_ui(self):
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        root = QVBoxLayout(self)
 
-        self._build_open_hours_tab(notebook)
-        self._build_trade_sundays_tab(notebook)
+        title = QLabel("Konfiguracja sklepu")
+        title.setObjectName("sectionLabel")
+        root.addWidget(title)
 
-        bottom = ttk.Frame(self)
-        bottom.pack(fill="x", padx=10, pady=5)
+        tabs = QTabWidget()
+        root.addWidget(tabs, 1)
 
-        ttk.Button(bottom, text="Zamknij", command=self._close).pack(side="right")
+        tabs.addTab(self._build_hours_tab(), "Godziny otwarcia")
+        tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
+        tabs.addTab(self._build_constraints_tab(), "Limity")
 
-    # ==================================================
-    # GODZINY OTWARCIA
-    # ==================================================
-    def _build_open_hours_tab(self, notebook):
-        tab = ttk.Frame(notebook)
-        notebook.add(tab, text="Godziny otwarcia")
+        buttons = QDialogButtonBox()
+        cancel_btn = QPushButton("Anuluj")
+        save_btn = QPushButton("Zapisz")
+        save_btn.setObjectName("primaryButton")
+        buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
+        buttons.addButton(save_btn, QDialogButtonBox.AcceptRole)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self._save)
+        root.addWidget(buttons)
 
-        self.open_vars = {}
+    def _build_hours_tab(self):
+        page = QWidget()
+        layout = QGridLayout(page)
+        layout.setColumnStretch(1, 1)
+        layout.setColumnStretch(3, 1)
 
+        self.open_edits = {}
         days = ["Pon", "Wt", "Śr", "Cz", "Pt", "So", "Nd"]
 
-        for wd, name in enumerate(days):
-            ttk.Label(tab, text=name).grid(row=wd, column=0, padx=10, pady=5, sticky="w")
+        for row, name in enumerate(days):
+            layout.addWidget(QLabel(name), row, 0)
 
-            start, end = self.shop_config.open_hours[wd]
+            start, end = self.shop_config.open_hours[row]
+            start_edit = QTimeEdit()
+            start_edit.setDisplayFormat("HH:mm")
+            start_edit.setTime(_parse_time(start))
 
-            sv = tk.StringVar(value=start)
-            ev = tk.StringVar(value=end)
+            end_edit = QTimeEdit()
+            end_edit.setDisplayFormat("HH:mm")
+            end_edit.setTime(_parse_time(end))
 
-            ttk.Entry(tab, width=6, textvariable=sv).grid(row=wd, column=1, padx=5)
-            ttk.Label(tab, text="–").grid(row=wd, column=2)
-            ttk.Entry(tab, width=6, textvariable=ev).grid(row=wd, column=3, padx=5)
+            layout.addWidget(start_edit, row, 1)
+            layout.addWidget(QLabel("—"), row, 2)
+            layout.addWidget(end_edit, row, 3)
 
-            self.open_vars[wd] = (sv, ev)
+            self.open_edits[row] = (start_edit, end_edit)
 
-    # ==================================================
-    # NIEDZIELE HANDLOWE
-    # ==================================================
-    def _build_trade_sundays_tab(self, notebook):
-        tab = ttk.Frame(notebook)
-        notebook.add(tab, text="Niedziele handlowe")
+        return page
 
-        self.sunday_vars = {}
+    def _build_sundays_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
 
+        self.sunday_checks = {}
         cal = calendar.Calendar()
+
         sundays = [
-            d for d, wd in cal.itermonthdays2(
-                self.shop_config.year,
-                self.shop_config.month
-            )
-            if d != 0 and wd == 6
+            d for d, wd in cal.itermonthdays2(self.shop_config.year, self.shop_config.month)
+            if d and wd == 6
         ]
 
+        if not sundays:
+            layout.addWidget(QLabel("W tym miesiącu nie ma niedziel."))
+            return page
+
         for day in sundays:
-            var = tk.BooleanVar(value=day in self.shop_config.trade_sundays)
-            self.sunday_vars[day] = var
+            box = QCheckBox(f"{day:02d}.{self.shop_config.month:02d}.{self.shop_config.year}")
+            box.setChecked(day in self.shop_config.trade_sundays)
+            self.sunday_checks[day] = box
+            layout.addWidget(box)
 
-            ttk.Checkbutton(
-                tab,
-                text=f"{day}.{self.shop_config.month}.{self.shop_config.year}",
-                variable=var
-            ).pack(anchor="w", padx=10, pady=4)
+        layout.addStretch()
+        return page
 
-    # ==================================================
-    def _close(self):
-        # zapis godzin
+    def _build_constraints_tab(self):
+        page = QWidget()
+        form = QFormLayout(page)
+
+        self.max_consecutive = QSpinBox()
+        self.max_consecutive.setRange(1, 14)
+        self.max_consecutive.setValue(self.shop_config.constraints.get("max_consecutive_days", 4))
+
+        self.min_open = QSpinBox()
+        self.min_open.setRange(0, 20)
+        self.min_open.setValue(self.shop_config.constraints.get("min_open_staff", 3))
+
+        self.min_close = QSpinBox()
+        self.min_close.setRange(0, 20)
+        self.min_close.setValue(self.shop_config.constraints.get("min_close_staff", 3))
+
+        self.rest_11h = QCheckBox("Wymuszaj 11h odpoczynku")
+        self.rest_11h.setChecked(self.shop_config.constraints.get("enforce_11h_rest", True))
+
+        self.meat_coverage = QCheckBox("Wymuszaj pokrycie mięsa")
+        self.meat_coverage.setChecked(self.shop_config.constraints.get("enforce_meat_coverage", True))
+
+        form.addRow("Max dni pod rząd", self.max_consecutive)
+        form.addRow("Min. osób na otwarciu", self.min_open)
+        form.addRow("Min. osób na zamknięciu", self.min_close)
+        form.addRow(self.rest_11h)
+        form.addRow(self.meat_coverage)
+
+        return page
+
+    def _save(self):
         try:
-            for wd, (sv, ev) in self.open_vars.items():
-                s = sv.get().strip()
-                e = ev.get().strip()
-                if not s or not e:
-                    raise ValueError("Godziny nie mogą być puste")
-                self.shop_config.open_hours[wd] = (s, e)
-        except Exception as ex:
-            messagebox.showerror("Błąd", str(ex))
+            for wd, (start_edit, end_edit) in self.open_edits.items():
+                start = start_edit.time().toString("HH:mm")
+                end = end_edit.time().toString("HH:mm")
+                if end_edit.time() <= start_edit.time():
+                    raise ValueError(f"Zamknięcie musi być później niż otwarcie w dniu {wd}.")
+                self.shop_config.open_hours[wd] = (start, end)
+
+            self.shop_config.trade_sundays = {
+                day for day, box in self.sunday_checks.items() if box.isChecked()
+            }
+
+            self.shop_config.constraints["max_consecutive_days"] = self.max_consecutive.value()
+            self.shop_config.constraints["min_open_staff"] = self.min_open.value()
+            self.shop_config.constraints["min_close_staff"] = self.min_close.value()
+            self.shop_config.constraints["enforce_11h_rest"] = self.rest_11h.isChecked()
+            self.shop_config.constraints["enforce_meat_coverage"] = self.meat_coverage.isChecked()
+
+        except Exception as exc:
+            QMessageBox.critical(self, "Błąd", str(exc))
             return
 
-        # zapis niedziel
-        self.shop_config.trade_sundays = {
-            day for day, var in self.sunday_vars.items() if var.get()
-        }
-
-        self.on_save()
-        self.destroy()
+        self.accept()

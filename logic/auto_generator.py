@@ -71,11 +71,12 @@ class AutoScheduleGenerator:
             self.SHIFT_WORK_END_75: 75,
             self.SHIFT_WORK_END_90: 90,
         }
-
+        self.SHIFT_MANUAL = 14
         # wszystkie zmiany (tu można dodawać kolejne typy zmian)
         self.ALL_SHIFTS = (
             self.SHIFT_OPEN,
             self.SHIFT_CLOSE,
+            self.SHIFT_MANUAL,
 
             self.SHIFT_WORK_START_15,
             self.SHIFT_WORK_START_30,
@@ -97,11 +98,11 @@ class AutoScheduleGenerator:
             "meat": 10000,
             "meat_coverage": 15000,
             "rest_11h": 5000,
-            "balance": 1,
+            "balance": 10000,
             "max_consecutive": 1000,
-            "open": 20000,
-            "close": 20000,
-            "monthly_hours": 2000,
+            "open": 200,
+            "close": 200,
+            "monthly_hours": 25000,
             "availability": 5000,
         }
     # ==================================================
@@ -366,7 +367,7 @@ class AutoScheduleGenerator:
             self.SHIFT_OPEN,
             self.SHIFT_CLOSE,
             self.START_SHIFT_MAP,
-            self.END_SHIFT_MAP,
+            self.END_SHIFT_MAP
         )
 
         return {
