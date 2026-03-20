@@ -81,3 +81,6 @@ class ScheduleController:
         start = datetime.strptime(start_str, fmt)
         end = start + timedelta(hours=hours)
         return end.strftime(fmt)
+    
+    def remove_employee(self, employee):
+        self.schedule.remove_employee(employee)

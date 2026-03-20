@@ -56,6 +56,13 @@ class EmployeeDialog(QDialog):
         root.addWidget(self.is_opener)
         root.addWidget(self.is_meat)
 
+        # 🔥 przycisk usuwania (tylko przy edycji)
+        if self.employee:
+            self.delete_btn = QPushButton("Usuń pracownika")
+            self.delete_btn.setStyleSheet("background-color: #b00020; color: white;")
+            self.delete_btn.clicked.connect(self._delete_employee)
+            root.addWidget(self.delete_btn)
+
         buttons = QDialogButtonBox()
         cancel_btn = QPushButton("Anuluj")
         save_btn = QPushButton("Zapisz")
@@ -94,3 +101,15 @@ class EmployeeDialog(QDialog):
 
         self.employee_result = emp
         self.accept()
+
+    def _delete_employee(self):
+        reply = QMessageBox.question(
+            self,
+            "Usuń pracownika",
+            "Czy na pewno chcesz usunąć tego pracownika?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+
+        if reply == QMessageBox.Yes:
+            self.employee_result = None
+            self.accept()

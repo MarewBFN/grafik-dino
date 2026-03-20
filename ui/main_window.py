@@ -2,9 +2,10 @@ import calendar
 import os
 from datetime import date
 
-from PySide6.QtCore import Qt, QTime
-from PySide6.QtGui import QAction
+from PySide6.QtCore import Qt, QTime, QThread, Signal, QObject
+from PySide6.QtGui import QAction, QPainter, QColor
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -33,6 +34,16 @@ from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import ScheduleGrid
 
+class GeneratorWorker(QObject):
+    finished = Signal(object)
+
+    def __init__(self, controller):
+        super().__init__()
+        self.controller = controller
+
+    def run(self):
+        result = self.controller.generate_schedule()
+        self.finished.emit(result)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -60,6 +71,7 @@ class MainWindow(QMainWindow):
         self._init_state()
         self._sync_everything()
         self._try_load_last_project()
+        self._build_loading_overlay()
 
         self.statusBar().showMessage("Gotowe")
 
@@ -236,12 +248,14 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("Plik")
         edit_menu = self.menuBar().addMenu("Edycja")
         config_menu = self.menuBar().addMenu("Konfiguracja")
+        help_menu = self.menuBar().addMenu("Pomoc")
 
         self.act_compact = QAction("Tryb kompaktowy", self)
         self.act_compact.setCheckable(True)
         self.act_compact.triggered.connect(self._toggle_compact_mode)
         config_menu.addAction(self.act_compact)
-        help_menu = self.menuBar().addMenu("Pomoc")
+
+        help_menu.addAction("Samouczek", self._open_tutorial)
 
         file_menu.addAction("Zapisz", self._save_project)
         file_menu.addAction("Wczytaj", self._load_project)
@@ -289,10 +303,14 @@ class MainWindow(QMainWindow):
         toolbar.addAction(act_undo)
 
     def _init_state(self):
-        self.schedule = MonthSchedule(self.year, self.month)
+        old_employees = []
+
+        if self.schedule:
+            old_employees = self.schedule.employees
+
+        self.schedule = MonthSchedule(self.year, self.month, employees=old_employees)
         self.shop_config = ShopConfig(self.year, self.month)
         self.controller = ScheduleController(self.schedule, self.shop_config)
-        self._update_nominal_hours_label()
 
     def _sync_everything(self):
         self._sync_grid()
@@ -345,6 +363,7 @@ class MainWindow(QMainWindow):
         self.year = self.year_spin.value()
         self.month = self.month_spin.value()
         self._init_state()
+        self._update_nominal_hours_label()
         self._sync_everything()
         self.statusBar().showMessage("Utworzono nowy grafik dla wybranego miesiąca.", 2500)
 
@@ -353,7 +372,25 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Generowanie", "Dodaj pracowników przed generowaniem grafiku.")
             return
 
-        result = self.controller.generate_schedule()
+        self._show_loading()
+
+        self.thread = QThread()
+        self.worker = GeneratorWorker(self.controller)
+
+        self.worker.moveToThread(self.thread)
+
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self._on_generation_finished)
+
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        self.thread.start()
+
+    def _on_generation_finished(self, result):
+        self._hide_loading()
+
         self.schedule = self.controller.schedule
         self._sync_everything()
 
@@ -379,6 +416,15 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.Accepted:
             return
 
+        # 🔥 usuwanie pracownika
+        if dialog.employee_result is None:
+            self.controller.remove_employee(emp)
+            self.schedule = self.controller.schedule
+            self._sync_everything()
+            self.statusBar().showMessage("Usunięto pracownika.", 2500)
+            return
+
+        # 🔥 edycja
         self.controller.replace_employee(emp, dialog.employee_result)
         self.schedule = self.controller.schedule
         self._sync_everything()
@@ -630,3 +676,68 @@ class MainWindow(QMainWindow):
         end = datetime.strptime(end_str, fmt)
         start = end - timedelta(hours=hours)
         return start.strftime(fmt)
+    
+    def _open_tutorial(self):
+        from ui.tutorial_dialog import TutorialDialog
+
+        dialog = TutorialDialog(self)
+        dialog.exec()
+
+    def _build_loading_overlay(self):
+        self.loading_overlay = QWidget(self)
+        self.loading_overlay.setStyleSheet("background-color: rgba(0, 0, 0, 120);")
+        self.loading_overlay.hide()
+
+        layout = QVBoxLayout(self.loading_overlay)
+        layout.setAlignment(Qt.AlignCenter)
+
+        self.spinner = LoadingSpinner(self)
+        layout.addWidget(self.spinner, alignment=Qt.AlignCenter)
+
+        self.loading_label = QLabel("Generowanie grafiku...")
+        self.loading_label.setStyleSheet("color: white; font-size: 18px;")
+        self.loading_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.loading_label)
+        self.loading_label.setStyleSheet("color: white; font-size: 20px;")
+
+    def _show_loading(self):
+        self.loading_overlay.setGeometry(self.rect())
+        self.loading_overlay.show()
+        QApplication.processEvents()
+
+    def _hide_loading(self):
+        self.loading_overlay.hide()
+
+from PySide6.QtCore import QTimer
+
+class LoadingSpinner(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._rotate)
+        self._timer.start(16)  # ~60 FPS
+
+        self.setFixedSize(80, 80)
+
+    def _rotate(self):
+        self._angle = (self._angle + 5) % 360
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        rect = self.rect().adjusted(10, 10, -10, -10)
+
+        # tło (szare kółko)
+        painter.setPen(QColor(255, 255, 255, 40))
+        painter.drawEllipse(rect)
+
+        # aktywny łuk
+        pen = painter.pen()
+        pen.setWidth(4)
+        pen.setColor(QColor(255, 255, 255))
+        painter.setPen(pen)
+
+        painter.drawArc(rect, int(self._angle * 16), int(120 * 16))

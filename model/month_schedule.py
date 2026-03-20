@@ -7,13 +7,17 @@ from model.employee import Employee
 
 
 class MonthSchedule:
-    def __init__(self, year: int, month: int):
+    def __init__(self, year: int, month: int, employees=None):
         self.year = year
         self.month = month
         self.days_in_month = calendar.monthrange(year, month)[1]
+
         self.employees: list[Employee] = []
         self._data: Dict[Employee, Dict[int, DaySchedule]] = {}
-        self._clipboard: DaySchedule | None = None
+
+        if employees:
+            for emp in employees:
+                self.add_employee(emp)
 
     def add_employee(self, employee: Employee) -> None:
         employee.validate()
