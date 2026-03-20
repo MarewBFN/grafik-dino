@@ -2,7 +2,7 @@ import calendar
 import os
 from datetime import date
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTime
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QDialog,
     QToolBar,
+    QTimeEdit,
 )
 
 from export.excel_exporter import export_schedule_to_excel
@@ -51,6 +52,10 @@ class MainWindow(QMainWindow):
         self._clipboard_day = None
         self._loading = False
 
+        self.quick_mode_enabled = False
+        self.quick_selected_shift = None
+
+        self._build_quick_panel()
         self._build_ui()
         self._init_state()
         self._sync_everything()
@@ -136,20 +141,72 @@ class MainWindow(QMainWindow):
         self.btn_add_employee.setMinimumHeight(44)
         self.btn_add_employee.clicked.connect(self._open_add_employee)
 
-        # ❌ usunięty przycisk konfiguracji
-
         self.btn_undo = QPushButton("Cofnij")
         self.btn_undo.setMinimumHeight(40)
         self.btn_undo.clicked.connect(self._undo)
 
+        self.btn_quick_mode = QPushButton("Tryb szybki")
+        self.btn_quick_mode.setObjectName("secondaryButton")
+        self.btn_quick_mode.setMinimumHeight(44)
+        self.btn_quick_mode.clicked.connect(self._toggle_quick_mode)
+
         layout.addWidget(self.btn_generate)
         layout.addWidget(self.btn_add_employee)
         layout.addWidget(self.btn_undo)
-
-        # ❌ usunięty footer
+        layout.addWidget(self.btn_quick_mode)
+        layout.addWidget(self.quick_panel)
 
         layout.addStretch(1)
         return panel
+
+    def _build_quick_panel(self):
+        self.quick_panel = QWidget(self)
+
+        layout = QVBoxLayout(self.quick_panel)
+
+        # --- przyciski ---
+        btn_row = QHBoxLayout()
+
+        self.btn_work = QPushButton("Praca")
+        self.btn_work.setCheckable(True)
+        self.btn_work.clicked.connect(lambda: self._set_quick_shift("WORK"))
+
+        self.btn_off = QPushButton("Wolne")
+        self.btn_off.setCheckable(True)
+        self.btn_off.clicked.connect(lambda: self._set_quick_shift("OFF"))
+
+        self.btn_leave = QPushButton("Urlop")
+        self.btn_leave.setCheckable(True)
+        self.btn_leave.clicked.connect(lambda: self._set_quick_shift("LEAVE"))
+
+        btn_row.addWidget(self.btn_work)
+        btn_row.addWidget(self.btn_off)
+        btn_row.addWidget(self.btn_leave)
+
+        layout.addLayout(btn_row)
+
+        # --- panel godzin ---
+        self.time_panel = QWidget(self)
+        time_layout = QHBoxLayout(self.time_panel)
+
+        self.start_input = QTimeEdit()
+        self.start_input.setDisplayFormat("HH:mm")
+        self.start_input.setTime(QTime(6, 0))
+
+        self.end_input = QTimeEdit()
+        self.end_input.setDisplayFormat("HH:mm")
+        self.end_input.setTime(QTime(14, 0))
+
+        time_layout.addWidget(self.start_input)
+        time_layout.addWidget(self.end_input)
+
+        self.time_panel.setLayout(time_layout)
+        self.time_panel.hide()
+
+        layout.addWidget(self.time_panel)
+
+        self.quick_panel.setLayout(layout)
+        self.quick_panel.hide()
 
     def _build_right_panel(self):
         panel = QFrame()
@@ -178,7 +235,12 @@ class MainWindow(QMainWindow):
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("Plik")
         edit_menu = self.menuBar().addMenu("Edycja")
-        config_menu = self.menuBar().addMenu("Konfiguracja")  # 🔁 zmiana nazwy
+        config_menu = self.menuBar().addMenu("Konfiguracja")
+
+        self.act_compact = QAction("Tryb kompaktowy", self)
+        self.act_compact.setCheckable(True)
+        self.act_compact.triggered.connect(self._toggle_compact_mode)
+        config_menu.addAction(self.act_compact)
         help_menu = self.menuBar().addMenu("Pomoc")
 
         file_menu.addAction("Zapisz", self._save_project)
@@ -194,7 +256,7 @@ class MainWindow(QMainWindow):
 
         edit_menu.addAction("Cofnij", self._undo)
 
-        config_menu.addAction("Konfiguracja", self._open_config)
+        config_menu.addAction("Generator", self._open_config)
 
         help_menu.addAction("O programie", self._about)
 
@@ -242,6 +304,7 @@ class MainWindow(QMainWindow):
             self.schedule,
             self.shop_config,
             self.controller,
+            main_window=self,
             on_edit_day=self._edit_day,
             on_edit_employee=self._edit_employee,
             on_context_menu=self._open_day_context_menu,
@@ -510,6 +573,47 @@ class MainWindow(QMainWindow):
             self._sync_everything()
         except Exception:
             pass
+
+    def _toggle_compact_mode(self, checked):
+        self.grid.set_compact_mode(checked)
+        self.statusBar().showMessage(
+            "Tryb kompaktowy włączony." if checked else "Tryb kompaktowy wyłączony.",
+            2000
+        )
+
+########### QUICK MODE CONTEXT MENU ACTIONS ###########
+
+    def _toggle_quick_mode(self):
+        self.quick_mode_enabled = not self.quick_mode_enabled
+        self._update_quick_mode_ui()
+
+    def _update_quick_mode_ui(self):
+        if self.quick_mode_enabled:
+            self.quick_panel.show()
+        else:
+            self.quick_panel.hide()
+
+    def _set_quick_shift(self, shift_type):
+        self.quick_selected_shift = shift_type
+
+        # reset
+        self.btn_work.setChecked(False)
+        self.btn_off.setChecked(False)
+        self.btn_leave.setChecked(False)
+
+        # aktywny
+        if shift_type == "WORK":
+            self.btn_work.setChecked(True)
+            self.time_panel.show()
+
+        elif shift_type == "OFF":
+            self.btn_off.setChecked(True)
+            self.time_panel.hide()
+
+        elif shift_type == "LEAVE":
+            self.btn_leave.setChecked(True)
+            self.time_panel.hide()
+########################################################
 
     def _calc_end_from_daily(self, start_str, hours):
         from datetime import datetime, timedelta

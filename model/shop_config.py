@@ -18,7 +18,7 @@ class ShopConfig:
         self.constraint_policies = {
             "rest_11h": ConstraintPolicy.MANDATORY,
             "meat": ConstraintPolicy.PREFERRED,
-            "balance": ConstraintPolicy.MANDATORY,
+            "balance": ConstraintPolicy.PREFERRED,
             "max_consecutive": ConstraintPolicy.PREFERRED,
             "open": ConstraintPolicy.MANDATORY,
             "close": ConstraintPolicy.MANDATORY,

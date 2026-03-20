@@ -1,5 +1,5 @@
 ===== PROJECT DUMP ===== 
-Generated: 20.03.2026 14:55:47,12 
+Generated: 20.03.2026 18:17:50,58 
  
 ================================================== 
 FILE: C:\Users\kewi1\Desktop\Grafik dino V2\main.py 
@@ -218,7 +218,7 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\project_dump.txt
 ================================================== 
  
 1: ===== PROJECT DUMP =====  
-2: Generated: 20.03.2026 14:55:47,12  
+2: Generated: 20.03.2026 18:17:50,58  
 3:   
 4: ==================================================  
 5: FILE: C:\Users\kewi1\Desktop\Grafik dino V2\main.py  
@@ -1283,52 +1283,87 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\hours_constraint.py
 3:     x, 
 4:     employees, 
 5:     days, 
-6:     schedule=None, 
-7:     shop=None, 
-8:     all_shifts=None, 
+6:     schedule, 
+7:     shop, 
+8:     all_shifts, 
 9:     soft=False 
 10: ): 
 11:     violations = [] 
-12:      
-13:     # Naprawa: Pobieramy wszystkie dostępne indeksy zmian z kluczy x 
-14:     # To gwarantuje, że zmiany WORK (indeks 2) też będą liczone 
-15:     try: 
-16:         all_shift_indices = sorted(list(set(k[2] for k in x.keys()))) 
-17:     except: 
-18:         all_shift_indices = [0, 1, 2] # fallback 
-19:     for e, emp in enumerate(employees): 
-20:         print(f"DEBUG: Pracownik {emp.last_name} cel: {emp.monthly_target_hours}h") 
-21:         base_target = getattr(emp, 'monthly_target_hours', 0) 
-22:         if base_target <= 0: 
-23:             base_target = 160 # Awaryjne przypisanie pełnego etatu, jeśli w danych jest 0 
-24:              
-25:         target_minutes = int(base_target * 60) 
-26:          
-27:         # 2. Odejmujemy urlopy 
-28:         if schedule: 
-29:             leave_days = sum(1 for d in days if schedule.get_day(emp, d).is_leave) 
-30:             target_minutes -= (leave_days * 480) 
-31:         # 3. Sumujemy absolutnie WSZYSTKIE zmiany przypisane pracownikowi 
-32:         total_minutes = model.NewIntVar(0, 60000, f"total_mins_e{e}") 
-33:          
-34:         # Zmieniamy sumowanie: patrzymy na każdy dzień i każdy dostępny indeks zmiany 
-35:         model.Add(total_minutes == sum( 
-36:             x[e, d, s_idx] * int(emp.daily_hours * 60) 
-37:             for d in days 
-38:             for s_idx in all_shift_indices 
-39:             if (e, d, s_idx) in x 
-40:         )) 
-41:         # 4. Warunek twardy (MANDATORY) 
-42:         # Jeśli status to OPTIMAL, a WORK=1, to znaczy, że total_minutes >= target_minutes. 
-43:         # Jeśli target_minutes byłoby 160h, solver musiałby dać WORK=7-8. 
-44:         model.Add(total_minutes >= target_minutes - 15) 
-45:         model.Add(total_minutes <= target_minutes + 480) 
-46:     return violations 
-47: def add_balance_constraint(model, x, employees, days, shop=None, schedule=None, all_shifts=None, soft=True): 
-48:     # Skoro hours_constraint jest MANDATORY, balance może być tylko pomocniczy 
-49:     # Upraszczamy go, żeby nie generował konfliktów 
-50:     violations = [] 
-51:     return violations 
+12:     nominal_hours = shop.get_full_time_nominal_hours() 
+13:     nominal_minutes = nominal_hours * 60 
+14:     all_totals = [] 
+15:     for e in range(len(employees)): 
+16:         emp = employees[e] 
+17:         shift_minutes = int(emp.daily_hours * 60) 
+18:         leave_days = sum( 
+19:             1 for d in days 
+20:             if schedule.get_day(emp, d).is_leave 
+21:         ) 
+22:         leave_minutes = int(leave_days * emp.daily_hours * 60) 
+23:         total_minutes = model.NewIntVar(0, 50000, f"month_total_e{e}") 
+24:         model.Add( 
+25:             total_minutes == 
+26:             sum( 
+27:                 x[e, d, s] * shift_minutes 
+28:                 for d in days 
+29:                 for s in all_shifts 
+30:                 if s = 14 
+31:             ) 
+32:         ) 
+33:         all_totals.append(total_minutes) 
+34:         target_minutes = int(nominal_minutes * (emp.daily_hours / 8) - leave_minutes) 
+35:         if not soft: 
+36:             model.Add(total_minutes >= target_minutes) 
+37:             model.Add(total_minutes <= target_minutes + (emp.daily_hours * 60)) 
+38:         else: 
+39:             under = model.NewIntVar(0, 50000, f"under_e{e}") 
+40:             model.Add(total_minutes + under >= target_minutes) 
+41:             over = model.NewIntVar(0, 50000, f"over_e{e}") 
+42:             model.Add(total_minutes <= target_minutes + over) 
+43:             violations.append(under) 
+44:             violations.append(over) 
+45:     if soft and len(all_totals) > 1: 
+46:         max_total = model.NewIntVar(0, 50000, "month_max_total") 
+47:         min_total = model.NewIntVar(0, 50000, "month_min_total") 
+48:         model.AddMaxEquality(max_total, all_totals) 
+49:         model.AddMinEquality(min_total, all_totals) 
+50:         spread = model.NewIntVar(0, 50000, "month_spread") 
+51:         model.Add(spread == max_total - min_total) 
+52:         violations.append(spread) 
+53:     return violations 
+54: def add_balance_constraint( 
+55:     model, 
+56:     x, 
+57:     employees, 
+58:     days, 
+59:     shop, 
+60:     all_shifts, 
+61:     soft=True 
+62: ): 
+63:     nominal = shop.get_full_time_nominal_hours() 
+64:     if not nominal: 
+65:         return [] 
+66:     nominal_minutes = int(nominal * 60) 
+67:     violations = [] 
+68:     for e in range(len(employees)): 
+69:         shift_minutes = int(employees[e].daily_hours * 60) 
+70:         total_minutes = model.NewIntVar(0, 20000, f"total_minutes_e{e}") 
+71:         model.Add( 
+72:             total_minutes == 
+73:             sum( 
+74:                 sum(x[e, d, s] for s in all_shifts) * shift_minutes 
+75:                 for d in days 
+76:             ) 
+77:         ) 
+78:         if not soft: 
+79:             model.Add(total_minutes == nominal_minutes) 
+80:         else: 
+81:             diff = model.NewIntVar(-20000, 20000, f"diff_e{e}") 
+82:             model.Add(diff == total_minutes - nominal_minutes) 
+83:             abs_diff = model.NewIntVar(0, 20000, f"abs_diff_e{e}") 
+84:             model.AddAbsEquality(abs_diff, diff) 
+85:             violations.append(abs_diff) 
+86:     return violations 
  
  
 ================================================== 
@@ -1377,12 +1412,12 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\logic\generator\manual_constraint.py
 40:         emp = employees[e] 
 41:         for d in days: 
 42:             day_state = schedule.get_day(emp, d) 
-43:             if not day_state.is_locked: 
-44:                 continue 
-45:             # 🔴 URLop 
-46:             if day_state.is_leave: 
-47:                 for s in all_shifts: 
-48:                     model.Add(x[e, d, s] == 0) 
+43:             # 🔴 URLop 
+44:             if day_state.is_leave: 
+45:                 for s in all_shifts: 
+46:                     model.Add(x[e, d, s] == 0) 
+47:                 continue 
+48:             if not day_state.is_locked: 
 49:                 continue 
 50:             start = getattr(day_state, "start", None) 
 51:             end = getattr(day_state, "end", None) 
@@ -2356,9 +2391,8 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\model\month_schedule.py
 151:                 if not day_data.is_locked: 
 152:                     day_data.start = None 
 153:                     day_data.end = None 
-154:                     day_data.is_leave = False 
-155:                     if hasattr(day_data, "is_day_off"): 
-156:                         day_data.is_day_off = False 
+154:                     if hasattr(day_data, "is_day_off"): 
+155:                         day_data.is_day_off = False 
  
  
 ================================================== 
@@ -2386,7 +2420,7 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\model\shop_config.py
 19:             "max_consecutive": ConstraintPolicy.PREFERRED, 
 20:             "open": ConstraintPolicy.MANDATORY, 
 21:             "close": ConstraintPolicy.MANDATORY, 
-22:             "monthly_hours": ConstraintPolicy.MANDATORY, 
+22:             "monthly_hours": ConstraintPolicy.PREFERRED, 
 23:             "meat_coverage": ConstraintPolicy.PREFERRED, 
 24:             "availability": ConstraintPolicy.MANDATORY, 
 25:         } 
@@ -3141,7 +3175,7 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\grid_view.py
  
 1: import calendar 
 2: from PySide6.QtCore import Qt 
-3: from PySide6.QtGui import QBrush, QColor, QFont, QIcon 
+3: from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPixmap 
 4: from PySide6.QtWidgets import QAbstractItemView, QMenu, QTableWidget, QTableWidgetItem 
 5: from logic.constraint_presenter import ConstraintPresenter 
 6: from logic.schedule_presenter import SchedulePresenter 
@@ -3157,197 +3191,230 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\grid_view.py
 16:         self.on_context_menu = None 
 17:         self.on_header_menu = None 
 18:         self._clipboard_day = None 
-19:         # IKONY 
-20:         self.icon_open = QIcon("assets/key.png") 
-21:         self.icon_meat = QIcon("assets/meat.png") 
-22:         self.setEditTriggers(QAbstractItemView.NoEditTriggers) 
-23:         self.setSelectionMode(QAbstractItemView.SingleSelection) 
-24:         self.setSelectionBehavior(QAbstractItemView.SelectItems) 
-25:         self.setAlternatingRowColors(False) 
-26:         self.cellDoubleClicked.connect(self._handle_double_click) 
-27:         self.viewport().setContextMenuPolicy(Qt.CustomContextMenu) 
-28:         self.viewport().customContextMenuRequested.connect(self._open_cell_context_menu) 
-29:         self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu) 
-30:         self.horizontalHeader().customContextMenuRequested.connect(self._open_header_context_menu) 
-31:     def set_data( 
-32:         self, 
-33:         schedule, 
-34:         shop_config, 
-35:         controller, 
-36:         on_edit_day=None, 
-37:         on_edit_employee=None, 
-38:         on_context_menu=None, 
-39:         on_header_menu=None, 
-40:     ): 
-41:         self.schedule = schedule 
-42:         self.shop_config = shop_config 
-43:         self.controller = controller 
-44:         self.on_edit_day = on_edit_day 
-45:         self.on_edit_employee = on_edit_employee 
-46:         self.on_context_menu = on_context_menu 
-47:         self.on_header_menu = on_header_menu 
-48:     def build(self): 
-49:         self.clear() 
-50:         self.setSortingEnabled(False) 
-51:         if not self.schedule or not self.shop_config: 
-52:             self.setRowCount(0) 
-53:             self.setColumnCount(0) 
-54:             return 
-55:         days = self.schedule.days_in_month 
-56:         weekday_names = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"] 
-57:         headers = ["Pracownik"] 
-58:         for day in range(1, days + 1): 
-59:             wd = calendar.weekday(self.schedule.year, self.schedule.month, day) 
-60:             headers.append(f"{weekday_names[wd]}\n{day}") 
-61:         headers.extend(["Praca\n(h)", "Urlop\n(h)", "Razem\n(h)"]) 
-62:         self.setColumnCount(len(headers)) 
-63:         self.setHorizontalHeaderLabels(headers) 
-64:         self.setRowCount(len(self.schedule.employees) + 3) 
-65:         self.setColumnWidth(0, 180) 
-66:         for col in range(1, days + 1): 
-67:             self.setColumnWidth(col, 60) 
-68:         for col in range(days + 1, days + 4): 
-69:             self.setColumnWidth(col, 80) 
-70:         self.verticalHeader().setVisible(False) 
-71:         self.horizontalHeader().setDefaultAlignment(Qt.AlignCenter) 
-72:         self.horizontalHeader().setStretchLastSection(False) 
-73:         for row in range(self.rowCount()): 
-74:             self.setRowHeight(row, 42) 
-75:     def refresh(self): 
-76:         if not self.schedule or not self.shop_config: 
-77:             return 
-78:         self.build() 
-79:         presenter = SchedulePresenter(self.schedule, self.shop_config) 
-80:         constraint_presenter = ConstraintPresenter(self.schedule, self.shop_config) 
-81:         days = self.schedule.days_in_month 
-82:         emp_count = len(self.schedule.employees) 
-83:         for row, emp in enumerate(self.schedule.employees): 
-84:             self._fill_employee_name(row, emp) 
-85:             self._fill_day_cells(row, emp, days, presenter, constraint_presenter) 
-86:             self._fill_summary_cells(row, emp, days) 
-87:         self._fill_validation_rows(emp_count, days, constraint_presenter) 
-88:         self.viewport().update() 
-89:     def _fill_employee_name(self, row, emp): 
-90:         item = QTableWidgetItem(emp.display_name()) 
-91:         item.setData(Qt.UserRole, emp) 
-92:         item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft) 
-93:         # IKONY ZAMIAST TEKSTU OTW / MIĘSO 
-94:         if emp.is_opener: 
-95:             item.setIcon(self.icon_open) 
-96:         elif emp.is_meat: 
-97:             item.setIcon(self.icon_meat) 
-98:         font = QFont() 
-99:         font.setBold(True) 
-100:         item.setFont(font) 
-101:         item.setBackground(QBrush(QColor(theme.BG_PANEL))) 
-102:         self.setItem(row, 0, item) 
-103:     def _fill_day_cells(self, row, emp, days, presenter, constraint_presenter): 
-104:         for day in range(1, days + 1): 
-105:             ds = self.schedule.get_day(emp, day) 
-106:             item = QTableWidgetItem() 
-107:             item.setTextAlignment(Qt.AlignCenter) 
-108:             item.setData(Qt.UserRole, (emp, day)) 
-109:             if ds.is_leave: 
-110:                 item.setText("🌴") 
-111:                 item.setBackground(QBrush(QColor(theme.OK_GREEN))) 
-112:                 item.setToolTip("Urlop") 
-113:                 self.setItem(row, day, item) 
-114:                 continue 
-115:             if not self.shop_config.is_trade_day(day): 
-116:                 item.setBackground(QBrush(QColor(theme.BG_DISABLED))) 
-117:                 self.setItem(row, day, item) 
-118:                 continue 
-119:             cell_view = presenter.get_cell_view(emp, day) 
-120:             lines = [line for line in [cell_view.text_start, cell_view.text_end, cell_view.text_total] if line] 
-121:             item.setText("\n".join(lines)) 
-122:             item.setBackground(QBrush(QColor(cell_view.bg))) 
-123:             if cell_view.tooltip: 
-124:                 item.setToolTip(cell_view.tooltip) 
-125:             if constraint_presenter.get_cell_error(emp, day): 
-126:                 item.setBackground(QBrush(QColor(theme.ERR_RED))) 
-127:             self.setItem(row, day, item) 
-128:     def _fill_summary_cells(self, row, emp, days): 
-129:         items = [ 
-130:             QTableWidgetItem(self.schedule.total_hours_for_employee(emp)), 
-131:             QTableWidgetItem(self.schedule.leave_hours_for_employee(emp)), 
-132:             QTableWidgetItem(self.schedule.total_with_leave_for_employee(emp)), 
-133:         ] 
-134:         for idx, item in enumerate(items, start=days + 1): 
-135:             item.setTextAlignment(Qt.AlignCenter) 
-136:             item.setBackground(QBrush(QColor(theme.BG_PANEL))) 
-137:             self.setItem(row, idx, item) 
-138:     def _fill_validation_rows(self, emp_count, days, constraint_presenter): 
-139:         rows = [("Otwarcie", "open"), ("Zamknięcie", "close"), ("Mięso", "meat")] 
-140:         for offset, (label, key) in enumerate(rows): 
-141:             row = emp_count + offset 
-142:             name_item = QTableWidgetItem(label) 
-143:             name_item.setBackground(QBrush(QColor(theme.BG_HEADER))) 
-144:             name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft) 
-145:             self.setItem(row, 0, name_item) 
-146:             for day in range(1, days + 1): 
-147:                 count = 0 
-148:                 for emp in self.schedule.employees: 
-149:                     ds = self.schedule.get_day(emp, day) 
-150:                     hours = self.shop_config.get_open_hours_for_day(day) 
-151:                     if not hours: 
-152:                         continue 
-153:                     open_start, open_end = hours 
-154:                     if key == "open" and ds.start == open_start: 
-155:                         count += 1 
-156:                     elif key == "close" and ds.end == open_end: 
-157:                         count += 1 
-158:                     elif key == "meat" and emp.is_meat and not ds.is_leave and ds.start: 
-159:                         count += 1 
-160:                 item = QTableWidgetItem(str(count)) 
-161:                 item.setTextAlignment(Qt.AlignCenter) 
-162:                 view = constraint_presenter.get_validation_cell_view(key, day) 
-163:                 item.setBackground(QBrush(QColor(view.bg))) 
-164:                 if view.tooltip: 
-165:                     item.setToolTip(view.tooltip) 
-166:                 self.setItem(row, day, item) 
-167:             for col in range(days + 1, days + 4): 
-168:                 filler = QTableWidgetItem("") 
-169:                 filler.setBackground(QBrush(QColor(theme.BG_PANEL))) 
-170:                 self.setItem(row, col, filler) 
-171:     def _handle_double_click(self, row, col): 
-172:         if not self.schedule: 
-173:             return 
-174:         emp_count = len(self.schedule.employees) 
-175:         days = self.schedule.days_in_month 
-176:         if row < emp_count and col == 0 and self.on_edit_employee: 
-177:             self.on_edit_employee(self.schedule.employees[row]) 
-178:             return 
-179:         if row < emp_count and 1 <= col <= days and self.on_edit_day: 
-180:             self.on_edit_day(self.schedule.employees[row], col) 
-181:     def _open_cell_context_menu(self, pos): 
-182:         if not self.schedule or not self.on_context_menu: 
-183:             return 
-184:         item = self.itemAt(pos) 
-185:         if not item: 
-186:             return 
-187:         row = item.row() 
-188:         col = item.column() 
-189:         emp_count = len(self.schedule.employees) 
-190:         days = self.schedule.days_in_month 
-191:         if row >= emp_count or not (1 <= col <= days): 
-192:             return 
-193:         emp = self.schedule.employees[row] 
-194:         day = col 
-195:         global_pos = self.viewport().mapToGlobal(pos) 
-196:         self.on_context_menu(emp, day, global_pos) 
-197:     def _open_header_context_menu(self, pos): 
-198:         if not self.schedule or not self.on_header_menu: 
-199:             return 
-200:         col = self.horizontalHeader().logicalIndexAt(pos) 
-201:         days = self.schedule.days_in_month 
-202:         if not (1 <= col <= days): 
-203:             return 
-204:         global_pos = self.horizontalHeader().mapToGlobal(pos) 
-205:         self.on_header_menu(col, global_pos) 
-206:     def set_clipboard(self, value): 
-207:         self._clipboard_day = value 
-208:     def clipboard(self): 
-209:         return self._clipboard_day 
+19:         self.compact_mode = False 
+20:         # IKONY 
+21:         self.icon_open = QIcon("assets/key.png") 
+22:         self.icon_meat = QIcon("assets/meat.png") 
+23:         self.icon_open_meat = QIcon("assets/keymeat.png") 
+24:         self.setEditTriggers(QAbstractItemView.NoEditTriggers) 
+25:         self.setSelectionMode(QAbstractItemView.SingleSelection) 
+26:         self.setSelectionBehavior(QAbstractItemView.SelectItems) 
+27:         self.setAlternatingRowColors(False) 
+28:         self.cellDoubleClicked.connect(self._handle_double_click) 
+29:         self.viewport().setContextMenuPolicy(Qt.CustomContextMenu) 
+30:         self.viewport().customContextMenuRequested.connect(self._open_cell_context_menu) 
+31:         self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu) 
+32:         self.horizontalHeader().customContextMenuRequested.connect(self._open_header_context_menu) 
+33:     def set_data( 
+34:         self, 
+35:         schedule, 
+36:         shop_config, 
+37:         controller, 
+38:         on_edit_day=None, 
+39:         on_edit_employee=None, 
+40:         on_context_menu=None, 
+41:         on_header_menu=None, 
+42:     ): 
+43:         self.schedule = schedule 
+44:         self.shop_config = shop_config 
+45:         self.controller = controller 
+46:         self.on_edit_day = on_edit_day 
+47:         self.on_edit_employee = on_edit_employee 
+48:         self.on_context_menu = on_context_menu 
+49:         self.on_header_menu = on_header_menu 
+50:     def build(self): 
+51:         self.clear() 
+52:         self.setSortingEnabled(False) 
+53:         if not self.schedule or not self.shop_config: 
+54:             self.setRowCount(0) 
+55:             self.setColumnCount(0) 
+56:             return 
+57:         days = self.schedule.days_in_month 
+58:         weekday_names = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"] 
+59:         headers = ["Pracownik"] 
+60:         for day in range(1, days + 1): 
+61:             wd = calendar.weekday(self.schedule.year, self.schedule.month, day) 
+62:             headers.append(f"{weekday_names[wd]}\n{day}") 
+63:         headers.extend(["Praca\n(h)", "Urlop\n(h)", "Razem\n(h)"]) 
+64:         self.setColumnCount(len(headers)) 
+65:         self.setHorizontalHeaderLabels(headers) 
+66:         self.setRowCount(len(self.schedule.employees) + 3) 
+67:         self.setColumnWidth(0, 180) 
+68:         for col in range(1, days + 1): 
+69:             if self.compact_mode: 
+70:                 self.setColumnWidth(col, 30) 
+71:             else: 
+72:                 self.setColumnWidth(col, 60) 
+73:         for col in range(days + 1, days + 4): 
+74:             self.setColumnWidth(col, 60) 
+75:         self.verticalHeader().setVisible(False) 
+76:         self.horizontalHeader().setDefaultAlignment(Qt.AlignCenter) 
+77:         self.horizontalHeader().setStretchLastSection(False) 
+78:         for row in range(self.rowCount()): 
+79:             self.setRowHeight(row, 42) 
+80:     def refresh(self): 
+81:         if not self.schedule or not self.shop_config: 
+82:             return 
+83:         self.build() 
+84:         presenter = SchedulePresenter(self.schedule, self.shop_config) 
+85:         constraint_presenter = ConstraintPresenter(self.schedule, self.shop_config) 
+86:         days = self.schedule.days_in_month 
+87:         emp_count = len(self.schedule.employees) 
+88:         for row, emp in enumerate(self.schedule.employees): 
+89:             self._fill_employee_name(row, emp) 
+90:             self._fill_day_cells(row, emp, days, presenter, constraint_presenter) 
+91:             self._fill_summary_cells(row, emp, days) 
+92:         self._fill_validation_rows(emp_count, days, constraint_presenter) 
+93:         self.viewport().update() 
+94:     def _fill_employee_name(self, row, emp): 
+95:         item = QTableWidgetItem(emp.display_name()) 
+96:         item.setData(Qt.UserRole, emp) 
+97:         item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft) 
+98:         if emp.is_opener and emp.is_meat: 
+99:             size = 32 
+100:             pixmap = QPixmap(size * 2, size) 
+101:             pixmap.fill(Qt.transparent) 
+102:             painter = QPainter(pixmap) 
+103:             painter.drawPixmap(0, 0, self.icon_open.pixmap(size, size)) 
+104:             painter.drawPixmap(size, 0, self.icon_meat.pixmap(size, size)) 
+105:             painter.end() 
+106:             item.setIcon(QIcon(pixmap)) 
+107:             item.setIcon(self.icon_open_meat) 
+108:         elif emp.is_opener: 
+109:             item.setIcon(self.icon_open) 
+110:         elif emp.is_meat: 
+111:             item.setIcon(self.icon_meat) 
+112:         font = QFont() 
+113:         font.setBold(True) 
+114:         item.setFont(font) 
+115:         item.setBackground(QBrush(QColor(theme.BG_PANEL))) 
+116:         self.setItem(row, 0, item) 
+117:     def _fill_day_cells(self, row, emp, days, presenter, constraint_presenter): 
+118:         for day in range(1, days + 1): 
+119:             ds = self.schedule.get_day(emp, day) 
+120:             item = QTableWidgetItem() 
+121:             item.setTextAlignment(Qt.AlignCenter) 
+122:             item.setData(Qt.UserRole, (emp, day)) 
+123:             if ds.is_leave: 
+124:                 item.setText("🌴") 
+125:                 item.setBackground(QBrush(QColor(theme.OK_GREEN))) 
+126:                 item.setToolTip("Urlop") 
+127:                 self.setItem(row, day, item) 
+128:                 continue 
+129:             if not self.shop_config.is_trade_day(day): 
+130:                 item.setBackground(QBrush(QColor(theme.BG_DISABLED))) 
+131:                 self.setItem(row, day, item) 
+132:                 continue 
+133:             cell_view = presenter.get_cell_view(emp, day) 
+134:             if self.compact_mode: 
+135:                 ds = self.schedule.get_day(emp, day) 
+136:                 text = "" 
+137:                 hours = self.shop_config.get_open_hours_for_day(day) 
+138:                 if hours: 
+139:                     open_start, open_end = hours 
+140:                     if ds.start == open_start: 
+141:                         text = "1" 
+142:                     elif ds.end == open_end: 
+143:                         text = "2" 
+144:                     elif ds.start: 
+145:                         # wszystkie WORK od otwarcia → 1 
+146:                         text = "1" 
+147:                 item.setText(text) 
+148:             else: 
+149:                 lines = [line for line in [cell_view.text_start, cell_view.text_end, cell_view.text_total] if line] 
+150:                 item.setText("\n".join(lines)) 
+151:             item.setBackground(QBrush(QColor(cell_view.bg))) 
+152:             if cell_view.tooltip: 
+153:                 item.setToolTip(cell_view.tooltip) 
+154:             if constraint_presenter.get_cell_error(emp, day): 
+155:                 item.setBackground(QBrush(QColor(theme.ERR_RED))) 
+156:             self.setItem(row, day, item) 
+157:     def _fill_summary_cells(self, row, emp, days): 
+158:         items = [ 
+159:             QTableWidgetItem(self.schedule.total_hours_for_employee(emp)), 
+160:             QTableWidgetItem(self.schedule.leave_hours_for_employee(emp)), 
+161:             QTableWidgetItem(self.schedule.total_with_leave_for_employee(emp)), 
+162:         ] 
+163:         for idx, item in enumerate(items, start=days + 1): 
+164:             item.setTextAlignment(Qt.AlignCenter) 
+165:             item.setBackground(QBrush(QColor(theme.BG_PANEL))) 
+166:             self.setItem(row, idx, item) 
+167:     def _fill_validation_rows(self, emp_count, days, constraint_presenter): 
+168:         rows = [("Otwarcie", "open"), ("Zamknięcie", "close"), ("Mięso", "meat")] 
+169:         for offset, (label, key) in enumerate(rows): 
+170:             row = emp_count + offset 
+171:             name_item = QTableWidgetItem(label) 
+172:             name_item.setBackground(QBrush(QColor(theme.BG_HEADER))) 
+173:             name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft) 
+174:             self.setItem(row, 0, name_item) 
+175:             for day in range(1, days + 1): 
+176:                 count = 0 
+177:                 for emp in self.schedule.employees: 
+178:                     ds = self.schedule.get_day(emp, day) 
+179:                     hours = self.shop_config.get_open_hours_for_day(day) 
+180:                     if not hours: 
+181:                         continue 
+182:                     open_start, open_end = hours 
+183:                     if key == "open" and ds.start == open_start: 
+184:                         count += 1 
+185:                     elif key == "close" and ds.end == open_end: 
+186:                         count += 1 
+187:                     elif key == "meat" and emp.is_meat and not ds.is_leave and ds.start: 
+188:                         count += 1 
+189:                 item = QTableWidgetItem(str(count)) 
+190:                 item.setTextAlignment(Qt.AlignCenter) 
+191:                 view = constraint_presenter.get_validation_cell_view(key, day) 
+192:                 item.setBackground(QBrush(QColor(view.bg))) 
+193:                 if view.tooltip: 
+194:                     item.setToolTip(view.tooltip) 
+195:                 self.setItem(row, day, item) 
+196:             for col in range(days + 1, days + 4): 
+197:                 filler = QTableWidgetItem("") 
+198:                 filler.setBackground(QBrush(QColor(theme.BG_PANEL))) 
+199:                 self.setItem(row, col, filler) 
+200:     def _handle_double_click(self, row, col): 
+201:         if not self.schedule: 
+202:             return 
+203:         emp_count = len(self.schedule.employees) 
+204:         days = self.schedule.days_in_month 
+205:         if row < emp_count and col == 0 and self.on_edit_employee: 
+206:             self.on_edit_employee(self.schedule.employees[row]) 
+207:             return 
+208:         if row < emp_count and 1 <= col <= days and self.on_edit_day: 
+209:             self.on_edit_day(self.schedule.employees[row], col) 
+210:     def _open_cell_context_menu(self, pos): 
+211:         if not self.schedule or not self.on_context_menu: 
+212:             return 
+213:         item = self.itemAt(pos) 
+214:         if not item: 
+215:             return 
+216:         row = item.row() 
+217:         col = item.column() 
+218:         emp_count = len(self.schedule.employees) 
+219:         days = self.schedule.days_in_month 
+220:         if row >= emp_count or not (1 <= col <= days): 
+221:             return 
+222:         emp = self.schedule.employees[row] 
+223:         day = col 
+224:         global_pos = self.viewport().mapToGlobal(pos) 
+225:         self.on_context_menu(emp, day, global_pos) 
+226:     def _open_header_context_menu(self, pos): 
+227:         if not self.schedule or not self.on_header_menu: 
+228:             return 
+229:         col = self.horizontalHeader().logicalIndexAt(pos) 
+230:         days = self.schedule.days_in_month 
+231:         if not (1 <= col <= days): 
+232:             return 
+233:         global_pos = self.horizontalHeader().mapToGlobal(pos) 
+234:         self.on_header_menu(col, global_pos) 
+235:     def set_clipboard(self, value): 
+236:         self._clipboard_day = value 
+237:     def clipboard(self): 
+238:         return self._clipboard_day 
+239:      
+240:     def set_compact_mode(self, enabled: bool): 
+241:         self.compact_mode = enabled 
+242:         self.refresh() 
  
  
 ================================================== 
@@ -3463,320 +3530,329 @@ FILE: C:\Users\kewi1\Desktop\Grafik dino V2\ui\main_window.py
 107:         self.btn_add_employee.setObjectName("secondaryButton") 
 108:         self.btn_add_employee.setMinimumHeight(44) 
 109:         self.btn_add_employee.clicked.connect(self._open_add_employee) 
-110:         # ❌ usunięty przycisk konfiguracji 
-111:         self.btn_undo = QPushButton("Cofnij") 
-112:         self.btn_undo.setMinimumHeight(40) 
-113:         self.btn_undo.clicked.connect(self._undo) 
-114:         layout.addWidget(self.btn_generate) 
-115:         layout.addWidget(self.btn_add_employee) 
-116:         layout.addWidget(self.btn_undo) 
-117:         # ❌ usunięty footer 
-118:         layout.addStretch(1) 
-119:         return panel 
-120:     def _build_right_panel(self): 
-121:         panel = QFrame() 
-122:         panel.setObjectName("contentCard") 
-123:         layout = QVBoxLayout(panel) 
-124:         layout.setContentsMargins(12, 12, 12, 12) 
-125:         layout.setSpacing(10) 
-126:         top = QHBoxLayout() 
-127:         self.grid_title = QLabel("Widok grafiku") 
-128:         self.grid_title.setObjectName("sectionLabel") 
-129:         top.addWidget(self.grid_title) 
-130:         top.addStretch(1) 
-131:         self.state_label = QLabel("") 
-132:         self.state_label.setObjectName("subtitleLabel") 
-133:         top.addWidget(self.state_label) 
-134:         layout.addLayout(top) 
-135:         self.grid = ScheduleGrid() 
-136:         layout.addWidget(self.grid, 1) 
-137:         return panel 
-138:     def _build_menu(self): 
-139:         file_menu = self.menuBar().addMenu("Plik") 
-140:         edit_menu = self.menuBar().addMenu("Edycja") 
-141:         config_menu = self.menuBar().addMenu("Konfiguracja")  # 🔁 zmiana nazwy 
-142:         help_menu = self.menuBar().addMenu("Pomoc") 
-143:         file_menu.addAction("Zapisz", self._save_project) 
-144:         file_menu.addAction("Wczytaj", self._load_project) 
-145:         # 🔽 submenu eksport 
-146:         export_menu = QMenu("Eksport", self) 
-147:         export_menu.addAction("Excel", self._export_excel) 
-148:         file_menu.addMenu(export_menu) 
-149:         file_menu.addSeparator() 
-150:         file_menu.addAction("Zamknij", self.close) 
-151:         edit_menu.addAction("Cofnij", self._undo) 
-152:         config_menu.addAction("Konfiguracja", self._open_config) 
-153:         help_menu.addAction("O programie", self._about) 
-154:     def _build_toolbar(self): 
-155:         toolbar = QToolBar("Szybkie akcje", self) 
-156:         toolbar.setMovable(False) 
-157:         toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly) 
-158:         self.addToolBar(toolbar) 
-159:         act_save = QAction("Zapisz", self) 
-160:         act_save.triggered.connect(self._save_project) 
-161:         toolbar.addAction(act_save) 
-162:         act_load = QAction("Wczytaj", self) 
-163:         act_load.triggered.connect(self._load_project) 
-164:         toolbar.addAction(act_load) 
-165:         act_excel = QAction("Excel", self) 
-166:         act_excel.triggered.connect(self._export_excel) 
-167:         toolbar.addAction(act_excel) 
-168:         toolbar.addSeparator() 
-169:         act_config = QAction("Konfiguracja", self) 
-170:         act_config.triggered.connect(self._open_config) 
-171:         toolbar.addAction(act_config) 
-172:         act_undo = QAction("Cofnij", self) 
-173:         act_undo.triggered.connect(self._undo) 
-174:         toolbar.addAction(act_undo) 
-175:     def _init_state(self): 
-176:         self.schedule = MonthSchedule(self.year, self.month) 
-177:         self.shop_config = ShopConfig(self.year, self.month) 
-178:         self.controller = ScheduleController(self.schedule, self.shop_config) 
-179:         self._update_nominal_hours_label() 
-180:     def _sync_everything(self): 
-181:         self._sync_grid() 
-182:         self._update_window_title() 
-183:         self._update_state_label() 
-184:     def _sync_grid(self): 
-185:         self.grid.set_data( 
-186:             self.schedule, 
-187:             self.shop_config, 
-188:             self.controller, 
-189:             on_edit_day=self._edit_day, 
-190:             on_edit_employee=self._edit_employee, 
-191:             on_context_menu=self._open_day_context_menu, 
-192:             on_header_menu=self._open_header_menu, 
-193:         ) 
-194:         self.grid.build() 
-195:         self.grid.refresh() 
-196:     def _update_window_title(self): 
-197:         self.setWindowTitle(f"Grafik Dino v2 — {self.month:02d}.{self.year}") 
-198:     def _update_nominal_hours_label(self): 
-199:         if not self.shop_config: 
-200:             self.nominal_hours_label.setText("-") 
-201:             return 
-202:         hours = self.shop_config.get_full_time_nominal_hours() 
-203:         self.nominal_hours_label.setText(f"{hours} h") 
-204:     def _update_state_label(self): 
-205:         if not self.schedule: 
-206:             self.state_label.setText("") 
-207:             return 
-208:         self.state_label.setText(f"{self.month:02d}.{self.year}") 
-209:     def _set_date_controls(self, year, month): 
-210:         self._loading = True 
-211:         self.year_spin.blockSignals(True) 
-212:         self.month_spin.blockSignals(True) 
-213:         self.year_spin.setValue(year) 
-214:         self.month_spin.setValue(month) 
-215:         self.year_spin.blockSignals(False) 
-216:         self.month_spin.blockSignals(False) 
-217:         self._loading = False 
-218:     def _on_date_change(self): 
-219:         if self._loading: 
-220:             return 
-221:         self.year = self.year_spin.value() 
-222:         self.month = self.month_spin.value() 
-223:         self._init_state() 
-224:         self._sync_everything() 
-225:         self.statusBar().showMessage("Utworzono nowy grafik dla wybranego miesiąca.", 2500) 
-226:     def _generate_schedule(self): 
-227:         if not self.schedule.employees: 
-228:             QMessageBox.information(self, "Generowanie", "Dodaj pracowników przed generowaniem grafiku.") 
-229:             return 
-230:         result = self.controller.generate_schedule() 
-231:         self.schedule = self.controller.schedule 
-232:         self._sync_everything() 
-233:         if result and result.get("success"): 
-234:             self.statusBar().showMessage("Grafik wygenerowany.", 3000) 
-235:             QMessageBox.information(self, "Sukces", "Grafik został wygenerowany.") 
-236:         else: 
-237:             QMessageBox.warning(self, "Brak rozwiązania", "Nie udało się znaleźć poprawnego grafiku.") 
-238:     def _open_add_employee(self): 
-239:         dialog = EmployeeDialog(self) 
-240:         if dialog.exec()  
-241:             return 
-242:         self.controller.add_employee(dialog.employee_result) 
-243:         self.schedule = self.controller.schedule 
-244:         self._sync_everything() 
-245:         self.statusBar().showMessage("Dodano pracownika.", 2500) 
-246:     def _edit_employee(self, emp): 
-247:         dialog = EmployeeDialog(self, employee=emp) 
-248:         if dialog.exec()  
-249:             return 
-250:         self.controller.replace_employee(emp, dialog.employee_result) 
-251:         self.schedule = self.controller.schedule 
-252:         self._sync_everything() 
-253:         self.statusBar().showMessage("Zapisano pracownika.", 2500) 
-254:     def _edit_day(self, emp, day): 
-255:         hours = self.shop_config.get_open_hours_for_day(day) 
-256:         if not hours: 
-257:             return 
-258:         ds = self.controller.get_day(emp, day) 
-259:         dialog = DayEditDialog( 
-260:             self, 
-261:             start=None if ds.is_leave else ds.start, 
-262:             end=None if ds.is_leave else ds.end, 
-263:             open_start=hours[0], 
-264:             open_end=hours[1], 
-265:             daily_hours=emp.daily_hours, 
-266:         ) 
-267:         if dialog.exec()  
-268:             return 
-269:         if dialog.result_mode == "free": 
-270:             self.controller.set_day_free(emp, day) 
-271:         elif dialog.result_mode == "leave": 
-272:             self.controller.set_day_leave(emp, day) 
-273:         elif dialog.result_mode == "hours": 
-274:             self.controller.set_day_hours(emp, day, dialog.result_start, dialog.result_end) 
-275:         self.schedule = self.controller.schedule 
-276:         self._sync_everything() 
-277:         self.statusBar().showMessage("Zmieniono dzień.", 2500) 
-278:     def _open_day_context_menu(self, emp, day, global_pos): 
-279:         if not self.shop_config.is_trade_day(day): 
-280:             return 
-281:         menu = QMenu(self) 
-282:         menu.addAction("Rano", lambda: self._ctx_morning(emp, day)) 
-283:         menu.addAction("Zamknięcie", lambda: self._ctx_close(emp, day)) 
-284:         menu.addSeparator() 
-285:         menu.addAction("Kopiuj dzień", lambda: self._ctx_copy(emp, day)) 
-286:         menu.addAction("Wklej dzień", lambda: self._ctx_paste(emp, day)) 
+110:         self.btn_undo = QPushButton("Cofnij") 
+111:         self.btn_undo.setMinimumHeight(40) 
+112:         self.btn_undo.clicked.connect(self._undo) 
+113:         layout.addWidget(self.btn_generate) 
+114:         layout.addWidget(self.btn_add_employee) 
+115:         layout.addWidget(self.btn_undo) 
+116:         # ❌ usunięty footer 
+117:         layout.addStretch(1) 
+118:         return panel 
+119:     def _build_right_panel(self): 
+120:         panel = QFrame() 
+121:         panel.setObjectName("contentCard") 
+122:         layout = QVBoxLayout(panel) 
+123:         layout.setContentsMargins(12, 12, 12, 12) 
+124:         layout.setSpacing(10) 
+125:         top = QHBoxLayout() 
+126:         self.grid_title = QLabel("Widok grafiku") 
+127:         self.grid_title.setObjectName("sectionLabel") 
+128:         top.addWidget(self.grid_title) 
+129:         top.addStretch(1) 
+130:         self.state_label = QLabel("") 
+131:         self.state_label.setObjectName("subtitleLabel") 
+132:         top.addWidget(self.state_label) 
+133:         layout.addLayout(top) 
+134:         self.grid = ScheduleGrid() 
+135:         layout.addWidget(self.grid, 1) 
+136:         return panel 
+137:     def _build_menu(self): 
+138:         file_menu = self.menuBar().addMenu("Plik") 
+139:         edit_menu = self.menuBar().addMenu("Edycja") 
+140:         config_menu = self.menuBar().addMenu("Konfiguracja") 
+141:         self.act_compact = QAction("Tryb kompaktowy", self) 
+142:         self.act_compact.setCheckable(True) 
+143:         self.act_compact.triggered.connect(self._toggle_compact_mode) 
+144:         config_menu.addAction(self.act_compact) 
+145:         help_menu = self.menuBar().addMenu("Pomoc") 
+146:         file_menu.addAction("Zapisz", self._save_project) 
+147:         file_menu.addAction("Wczytaj", self._load_project) 
+148:         # 🔽 submenu eksport 
+149:         export_menu = QMenu("Eksport", self) 
+150:         export_menu.addAction("Excel", self._export_excel) 
+151:         file_menu.addMenu(export_menu) 
+152:         file_menu.addSeparator() 
+153:         file_menu.addAction("Zamknij", self.close) 
+154:         edit_menu.addAction("Cofnij", self._undo) 
+155:         config_menu.addAction("Generator", self._open_config) 
+156:         help_menu.addAction("O programie", self._about) 
+157:     def _build_toolbar(self): 
+158:         toolbar = QToolBar("Szybkie akcje", self) 
+159:         toolbar.setMovable(False) 
+160:         toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly) 
+161:         self.addToolBar(toolbar) 
+162:         act_save = QAction("Zapisz", self) 
+163:         act_save.triggered.connect(self._save_project) 
+164:         toolbar.addAction(act_save) 
+165:         act_load = QAction("Wczytaj", self) 
+166:         act_load.triggered.connect(self._load_project) 
+167:         toolbar.addAction(act_load) 
+168:         act_excel = QAction("Excel", self) 
+169:         act_excel.triggered.connect(self._export_excel) 
+170:         toolbar.addAction(act_excel) 
+171:         toolbar.addSeparator() 
+172:         act_config = QAction("Konfiguracja", self) 
+173:         act_config.triggered.connect(self._open_config) 
+174:         toolbar.addAction(act_config) 
+175:         act_undo = QAction("Cofnij", self) 
+176:         act_undo.triggered.connect(self._undo) 
+177:         toolbar.addAction(act_undo) 
+178:     def _init_state(self): 
+179:         self.schedule = MonthSchedule(self.year, self.month) 
+180:         self.shop_config = ShopConfig(self.year, self.month) 
+181:         self.controller = ScheduleController(self.schedule, self.shop_config) 
+182:         self._update_nominal_hours_label() 
+183:     def _sync_everything(self): 
+184:         self._sync_grid() 
+185:         self._update_window_title() 
+186:         self._update_state_label() 
+187:     def _sync_grid(self): 
+188:         self.grid.set_data( 
+189:             self.schedule, 
+190:             self.shop_config, 
+191:             self.controller, 
+192:             on_edit_day=self._edit_day, 
+193:             on_edit_employee=self._edit_employee, 
+194:             on_context_menu=self._open_day_context_menu, 
+195:             on_header_menu=self._open_header_menu, 
+196:         ) 
+197:         self.grid.build() 
+198:         self.grid.refresh() 
+199:     def _update_window_title(self): 
+200:         self.setWindowTitle(f"Grafik Dino v2 — {self.month:02d}.{self.year}") 
+201:     def _update_nominal_hours_label(self): 
+202:         if not self.shop_config: 
+203:             self.nominal_hours_label.setText("-") 
+204:             return 
+205:         hours = self.shop_config.get_full_time_nominal_hours() 
+206:         self.nominal_hours_label.setText(f"{hours} h") 
+207:     def _update_state_label(self): 
+208:         if not self.schedule: 
+209:             self.state_label.setText("") 
+210:             return 
+211:         self.state_label.setText(f"{self.month:02d}.{self.year}") 
+212:     def _set_date_controls(self, year, month): 
+213:         self._loading = True 
+214:         self.year_spin.blockSignals(True) 
+215:         self.month_spin.blockSignals(True) 
+216:         self.year_spin.setValue(year) 
+217:         self.month_spin.setValue(month) 
+218:         self.year_spin.blockSignals(False) 
+219:         self.month_spin.blockSignals(False) 
+220:         self._loading = False 
+221:     def _on_date_change(self): 
+222:         if self._loading: 
+223:             return 
+224:         self.year = self.year_spin.value() 
+225:         self.month = self.month_spin.value() 
+226:         self._init_state() 
+227:         self._sync_everything() 
+228:         self.statusBar().showMessage("Utworzono nowy grafik dla wybranego miesiąca.", 2500) 
+229:     def _generate_schedule(self): 
+230:         if not self.schedule.employees: 
+231:             QMessageBox.information(self, "Generowanie", "Dodaj pracowników przed generowaniem grafiku.") 
+232:             return 
+233:         result = self.controller.generate_schedule() 
+234:         self.schedule = self.controller.schedule 
+235:         self._sync_everything() 
+236:         if result and result.get("success"): 
+237:             self.statusBar().showMessage("Grafik wygenerowany.", 3000) 
+238:             QMessageBox.information(self, "Sukces", "Grafik został wygenerowany.") 
+239:         else: 
+240:             QMessageBox.warning(self, "Brak rozwiązania", "Nie udało się znaleźć poprawnego grafiku.") 
+241:     def _open_add_employee(self): 
+242:         dialog = EmployeeDialog(self) 
+243:         if dialog.exec()  
+244:             return 
+245:         self.controller.add_employee(dialog.employee_result) 
+246:         self.schedule = self.controller.schedule 
+247:         self._sync_everything() 
+248:         self.statusBar().showMessage("Dodano pracownika.", 2500) 
+249:     def _edit_employee(self, emp): 
+250:         dialog = EmployeeDialog(self, employee=emp) 
+251:         if dialog.exec()  
+252:             return 
+253:         self.controller.replace_employee(emp, dialog.employee_result) 
+254:         self.schedule = self.controller.schedule 
+255:         self._sync_everything() 
+256:         self.statusBar().showMessage("Zapisano pracownika.", 2500) 
+257:     def _edit_day(self, emp, day): 
+258:         hours = self.shop_config.get_open_hours_for_day(day) 
+259:         if not hours: 
+260:             return 
+261:         ds = self.controller.get_day(emp, day) 
+262:         dialog = DayEditDialog( 
+263:             self, 
+264:             start=None if ds.is_leave else ds.start, 
+265:             end=None if ds.is_leave else ds.end, 
+266:             open_start=hours[0], 
+267:             open_end=hours[1], 
+268:             daily_hours=emp.daily_hours, 
+269:         ) 
+270:         if dialog.exec()  
+271:             return 
+272:         if dialog.result_mode == "free": 
+273:             self.controller.set_day_free(emp, day) 
+274:         elif dialog.result_mode == "leave": 
+275:             self.controller.set_day_leave(emp, day) 
+276:         elif dialog.result_mode == "hours": 
+277:             self.controller.set_day_hours(emp, day, dialog.result_start, dialog.result_end) 
+278:         self.schedule = self.controller.schedule 
+279:         self._sync_everything() 
+280:         self.statusBar().showMessage("Zmieniono dzień.", 2500) 
+281:     def _open_day_context_menu(self, emp, day, global_pos): 
+282:         if not self.shop_config.is_trade_day(day): 
+283:             return 
+284:         menu = QMenu(self) 
+285:         menu.addAction("Rano", lambda: self._ctx_morning(emp, day)) 
+286:         menu.addAction("Zamknięcie", lambda: self._ctx_close(emp, day)) 
 287:         menu.addSeparator() 
-288:         menu.addAction("Ustaw wolne", lambda: self._ctx_free(emp, day)) 
-289:         menu.addAction("Ustaw urlop", lambda: self._ctx_leave(emp, day)) 
-290:         menu.exec(global_pos) 
-291:     def _ctx_copy(self, emp, day): 
-292:         ds = self.controller.get_day(emp, day) 
-293:         if ds.is_empty(): 
-294:             self._clipboard_day = None 
-295:             self.grid.set_clipboard(None) 
-296:             return 
-297:         self._clipboard_day = { 
-298:             "start": ds.start, 
-299:             "end": ds.end, 
-300:             "is_leave": ds.is_leave, 
-301:         } 
-302:         self.grid.set_clipboard(self._clipboard_day) 
-303:         self.statusBar().showMessage("Skopiowano dzień.", 1800) 
-304:     def _ctx_paste(self, emp, day): 
-305:         clip = self.grid.clipboard() or self._clipboard_day 
-306:         if not clip: 
-307:             return 
-308:         if clip.get("is_leave"): 
-309:             self.controller.set_day_leave(emp, day) 
-310:         else: 
-311:             self.controller.set_day_hours(emp, day, clip["start"], clip["end"]) 
-312:         self.schedule = self.controller.schedule 
-313:         self._sync_everything() 
-314:     def _ctx_free(self, emp, day): 
-315:         self.controller.set_day_free(emp, day) 
-316:         self.schedule = self.controller.schedule 
-317:         self._sync_everything() 
-318:     def _ctx_leave(self, emp, day): 
-319:         self.controller.set_day_leave(emp, day) 
-320:         self.schedule = self.controller.schedule 
-321:         self._sync_everything() 
-322:     def _ctx_morning(self, emp, day): 
-323:         hours = self.shop_config.get_open_hours_for_day(day) 
-324:         if not hours: 
-325:             return 
-326:         start = hours[0] 
-327:         end = self._calc_end_from_daily(start, emp.daily_hours) 
-328:         self.controller.set_day_hours(emp, day, start, end) 
-329:         self.schedule = self.controller.schedule 
-330:         self._sync_everything() 
-331:     def _ctx_close(self, emp, day): 
-332:         hours = self.shop_config.get_open_hours_for_day(day) 
-333:         if not hours: 
-334:             return 
-335:         end = hours[1] 
-336:         start = self._calc_start_from_daily(end, emp.daily_hours) 
-337:         self.controller.set_day_hours(emp, day, start, end) 
-338:         self.schedule = self.controller.schedule 
-339:         self._sync_everything() 
-340:     def _open_header_menu(self, day, global_pos): 
-341:         hours = self.shop_config.get_open_hours_for_day(day) 
-342:         if not hours: 
-343:             weekday = self.shop_config.weekday(day) 
-344:             hours = self.shop_config.get_open_hours_for_weekday(weekday) 
-345:         dialog = DayOverrideDialog(self, day, hours, self.shop_config) 
-346:         result = dialog.exec() 
-347:         if result  
-348:             return 
-349:         if dialog.result_mode == "reset": 
-350:             self.shop_config.day_overrides.pop(day, None) 
-351:             self.shop_config.public_holidays.discard(day) 
-352:         elif dialog.result_mode == "save": 
-353:             self.shop_config.day_overrides[day] = (dialog.result_start, dialog.result_end) 
-354:             if dialog.result_holiday: 
-355:                 self.shop_config.public_holidays.add(day) 
-356:             else: 
-357:                 self.shop_config.public_holidays.discard(day) 
-358:         self._update_nominal_hours_label() 
-359:         self._sync_grid() 
-360:         self.statusBar().showMessage("Zaktualizowano godziny dnia.", 2500) 
-361:     def _open_config(self): 
-362:         dialog = ConfigDialog(self, self.shop_config) 
-363:         if dialog.exec()  
-364:             return 
-365:         self._update_nominal_hours_label() 
-366:         self._sync_grid() 
-367:         self.statusBar().showMessage("Zapisano konfigurację.", 2500) 
-368:     def _save_project(self): 
-369:         path, _ = QFileDialog.getSaveFileName(self, "Zapisz projekt", "", "Projekt grafiku (*.json)") 
-370:         if not path: 
-371:             return 
-372:         save_project(path, self.schedule, self.shop_config) 
-373:         save_project("last_project.json", self.schedule, self.shop_config) 
-374:         self.statusBar().showMessage("Zapisano projekt.", 2500) 
-375:     def _load_project(self): 
-376:         path, _ = QFileDialog.getOpenFileName(self, "Wczytaj projekt", "", "Projekt grafiku (*.json)") 
-377:         if not path: 
-378:             return 
-379:         self.schedule, self.shop_config = load_project(path) 
-380:         self.controller = ScheduleController(self.schedule, self.shop_config) 
-381:         self.year = self.schedule.year 
-382:         self.month = self.schedule.month 
-383:         self._set_date_controls(self.year, self.month) 
-384:         self._update_nominal_hours_label() 
-385:         self._sync_everything() 
-386:         self.statusBar().showMessage("Wczytano projekt.", 2500) 
-387:     def _export_excel(self): 
-388:         path, _ = QFileDialog.getSaveFileName(self, "Eksport Excel", "", "Excel (*.xlsx)") 
-389:         if not path: 
-390:             return 
-391:         export_schedule_to_excel(self.schedule, self.year, self.month, path) 
-392:         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500) 
-393:     def _undo(self): 
-394:         self.schedule = self.controller.undo() 
-395:         self._sync_everything() 
-396:         self.statusBar().showMessage("Cofnięto ostatnią zmianę.", 2500) 
-397:     def _about(self): 
-398:         QMessageBox.information(self, "O programie", "Grafik Dino v2\nNowe UI w PySide6.") 
-399:     def _try_load_last_project(self): 
-400:         if not os.path.exists("last_project.json"): 
-401:             return 
-402:         try: 
-403:             self.schedule, self.shop_config = load_project("last_project.json") 
-404:             self.controller = ScheduleController(self.schedule, self.shop_config) 
-405:             self.year = self.schedule.year 
-406:             self.month = self.schedule.month 
-407:             self._set_date_controls(self.year, self.month) 
-408:             self._update_nominal_hours_label() 
-409:             self._sync_everything() 
-410:         except Exception: 
-411:             pass 
-412:     def _calc_end_from_daily(self, start_str, hours): 
-413:         from datetime import datetime, timedelta 
-414:         fmt = "%H:%M" 
-415:         start = datetime.strptime(start_str, fmt) 
-416:         end = start + timedelta(hours=hours) 
-417:         return end.strftime(fmt) 
-418:     def _calc_start_from_daily(self, end_str, hours): 
-419:         from datetime import datetime, timedelta 
-420:         fmt = "%H:%M" 
-421:         end = datetime.strptime(end_str, fmt) 
-422:         start = end - timedelta(hours=hours) 
-423:         return start.strftime(fmt) 
+288:         menu.addAction("Kopiuj dzień", lambda: self._ctx_copy(emp, day)) 
+289:         menu.addAction("Wklej dzień", lambda: self._ctx_paste(emp, day)) 
+290:         menu.addSeparator() 
+291:         menu.addAction("Ustaw wolne", lambda: self._ctx_free(emp, day)) 
+292:         menu.addAction("Ustaw urlop", lambda: self._ctx_leave(emp, day)) 
+293:         menu.exec(global_pos) 
+294:     def _ctx_copy(self, emp, day): 
+295:         ds = self.controller.get_day(emp, day) 
+296:         if ds.is_empty(): 
+297:             self._clipboard_day = None 
+298:             self.grid.set_clipboard(None) 
+299:             return 
+300:         self._clipboard_day = { 
+301:             "start": ds.start, 
+302:             "end": ds.end, 
+303:             "is_leave": ds.is_leave, 
+304:         } 
+305:         self.grid.set_clipboard(self._clipboard_day) 
+306:         self.statusBar().showMessage("Skopiowano dzień.", 1800) 
+307:     def _ctx_paste(self, emp, day): 
+308:         clip = self.grid.clipboard() or self._clipboard_day 
+309:         if not clip: 
+310:             return 
+311:         if clip.get("is_leave"): 
+312:             self.controller.set_day_leave(emp, day) 
+313:         else: 
+314:             self.controller.set_day_hours(emp, day, clip["start"], clip["end"]) 
+315:         self.schedule = self.controller.schedule 
+316:         self._sync_everything() 
+317:     def _ctx_free(self, emp, day): 
+318:         self.controller.set_day_free(emp, day) 
+319:         self.schedule = self.controller.schedule 
+320:         self._sync_everything() 
+321:     def _ctx_leave(self, emp, day): 
+322:         self.controller.set_day_leave(emp, day) 
+323:         self.schedule = self.controller.schedule 
+324:         self._sync_everything() 
+325:     def _ctx_morning(self, emp, day): 
+326:         hours = self.shop_config.get_open_hours_for_day(day) 
+327:         if not hours: 
+328:             return 
+329:         start = hours[0] 
+330:         end = self._calc_end_from_daily(start, emp.daily_hours) 
+331:         self.controller.set_day_hours(emp, day, start, end) 
+332:         self.schedule = self.controller.schedule 
+333:         self._sync_everything() 
+334:     def _ctx_close(self, emp, day): 
+335:         hours = self.shop_config.get_open_hours_for_day(day) 
+336:         if not hours: 
+337:             return 
+338:         end = hours[1] 
+339:         start = self._calc_start_from_daily(end, emp.daily_hours) 
+340:         self.controller.set_day_hours(emp, day, start, end) 
+341:         self.schedule = self.controller.schedule 
+342:         self._sync_everything() 
+343:     def _open_header_menu(self, day, global_pos): 
+344:         hours = self.shop_config.get_open_hours_for_day(day) 
+345:         if not hours: 
+346:             weekday = self.shop_config.weekday(day) 
+347:             hours = self.shop_config.get_open_hours_for_weekday(weekday) 
+348:         dialog = DayOverrideDialog(self, day, hours, self.shop_config) 
+349:         result = dialog.exec() 
+350:         if result  
+351:             return 
+352:         if dialog.result_mode == "reset": 
+353:             self.shop_config.day_overrides.pop(day, None) 
+354:             self.shop_config.public_holidays.discard(day) 
+355:         elif dialog.result_mode == "save": 
+356:             self.shop_config.day_overrides[day] = (dialog.result_start, dialog.result_end) 
+357:             if dialog.result_holiday: 
+358:                 self.shop_config.public_holidays.add(day) 
+359:             else: 
+360:                 self.shop_config.public_holidays.discard(day) 
+361:         self._update_nominal_hours_label() 
+362:         self._sync_grid() 
+363:         self.statusBar().showMessage("Zaktualizowano godziny dnia.", 2500) 
+364:     def _open_config(self): 
+365:         dialog = ConfigDialog(self, self.shop_config) 
+366:         if dialog.exec()  
+367:             return 
+368:         self._update_nominal_hours_label() 
+369:         self._sync_grid() 
+370:         self.statusBar().showMessage("Zapisano konfigurację.", 2500) 
+371:     def _save_project(self): 
+372:         path, _ = QFileDialog.getSaveFileName(self, "Zapisz projekt", "", "Projekt grafiku (*.json)") 
+373:         if not path: 
+374:             return 
+375:         save_project(path, self.schedule, self.shop_config) 
+376:         save_project("last_project.json", self.schedule, self.shop_config) 
+377:         self.statusBar().showMessage("Zapisano projekt.", 2500) 
+378:     def _load_project(self): 
+379:         path, _ = QFileDialog.getOpenFileName(self, "Wczytaj projekt", "", "Projekt grafiku (*.json)") 
+380:         if not path: 
+381:             return 
+382:         self.schedule, self.shop_config = load_project(path) 
+383:         self.controller = ScheduleController(self.schedule, self.shop_config) 
+384:         self.year = self.schedule.year 
+385:         self.month = self.schedule.month 
+386:         self._set_date_controls(self.year, self.month) 
+387:         self._update_nominal_hours_label() 
+388:         self._sync_everything() 
+389:         self.statusBar().showMessage("Wczytano projekt.", 2500) 
+390:     def _export_excel(self): 
+391:         path, _ = QFileDialog.getSaveFileName(self, "Eksport Excel", "", "Excel (*.xlsx)") 
+392:         if not path: 
+393:             return 
+394:         export_schedule_to_excel(self.schedule, self.year, self.month, path) 
+395:         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500) 
+396:     def _undo(self): 
+397:         self.schedule = self.controller.undo() 
+398:         self._sync_everything() 
+399:         self.statusBar().showMessage("Cofnięto ostatnią zmianę.", 2500) 
+400:     def _about(self): 
+401:         QMessageBox.information(self, "O programie", "Grafik Dino v2\nNowe UI w PySide6.") 
+402:     def _try_load_last_project(self): 
+403:         if not os.path.exists("last_project.json"): 
+404:             return 
+405:         try: 
+406:             self.schedule, self.shop_config = load_project("last_project.json") 
+407:             self.controller = ScheduleController(self.schedule, self.shop_config) 
+408:             self.year = self.schedule.year 
+409:             self.month = self.schedule.month 
+410:             self._set_date_controls(self.year, self.month) 
+411:             self._update_nominal_hours_label() 
+412:             self._sync_everything() 
+413:         except Exception: 
+414:             pass 
+415:     def _toggle_compact_mode(self, checked): 
+416:         self.grid.set_compact_mode(checked) 
+417:         self.statusBar().showMessage( 
+418:             "Tryb kompaktowy włączony." if checked else "Tryb kompaktowy wyłączony.", 
+419:             2000 
+420:         ) 
+421:     def _calc_end_from_daily(self, start_str, hours): 
+422:         from datetime import datetime, timedelta 
+423:         fmt = "%H:%M" 
+424:         start = datetime.strptime(start_str, fmt) 
+425:         end = start + timedelta(hours=hours) 
+426:         return end.strftime(fmt) 
+427:     def _calc_start_from_daily(self, end_str, hours): 
+428:         from datetime import datetime, timedelta 
+429:         fmt = "%H:%M" 
+430:         end = datetime.strptime(end_str, fmt) 
+431:         start = end - timedelta(hours=hours) 
+432:         return start.strftime(fmt) 
  
  
 ================================================== 

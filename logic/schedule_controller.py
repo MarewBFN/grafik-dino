@@ -45,3 +45,39 @@ class ScheduleController:
         from logic.auto_generator import AutoScheduleGenerator
         generator = AutoScheduleGenerator(self.schedule, self.shop_config)
         return generator.generate()
+
+    def set_shift(self, emp, day, shift_type, start=None, end=None):
+        self.snapshot()
+
+        ds = self.schedule.get_day(emp, day)
+
+        if shift_type == "OFF":
+            ds.start = None
+            ds.end = None
+            ds.is_leave = False
+
+        elif shift_type == "LEAVE":
+            ds.start = None
+            ds.end = None
+            ds.is_leave = True
+
+        elif shift_type == "WORK":
+            if start is not None and end is not None:
+                ds.start = start
+                ds.end = end
+            else:
+                hours = self.shop_config.get_open_hours_for_day(day)
+                if hours:
+                    ds.start, ds.end = hours
+
+            ds.is_leave = False
+
+        ds.is_locked = True
+
+    def _calc_end_from_daily(self, start_str, hours):
+        from datetime import datetime, timedelta
+
+        fmt = "%H:%M"
+        start = datetime.strptime(start_str, fmt)
+        end = start + timedelta(hours=hours)
+        return end.strftime(fmt)

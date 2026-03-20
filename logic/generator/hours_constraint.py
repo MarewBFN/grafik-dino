@@ -19,11 +19,14 @@ def add_monthly_hours_constraint(
 
         emp = employees[e]
         shift_minutes = int(emp.daily_hours * 60)
+
         leave_days = sum(
             1 for d in days
             if schedule.get_day(emp, d).is_leave
         )
+
         leave_minutes = int(leave_days * emp.daily_hours * 60)
+
         total_minutes = model.NewIntVar(0, 50000, f"month_total_e{e}")
 
         model.Add(
@@ -34,14 +37,11 @@ def add_monthly_hours_constraint(
                 for s in all_shifts
                 if s != 14
             )
-            + 
-            leave_minutes
         )
 
         all_totals.append(total_minutes)
 
         target_minutes = int(nominal_minutes * (emp.daily_hours / 8) - leave_minutes)
-        max_minutes = target_minutes + (8 * 60)
 
         if not soft:
             model.Add(total_minutes >= target_minutes)
@@ -49,7 +49,7 @@ def add_monthly_hours_constraint(
 
         else:
             under = model.NewIntVar(0, 50000, f"under_e{e}")
-            model.Add(total_minutes + under >= max_minutes)
+            model.Add(total_minutes + under >= target_minutes)
 
             over = model.NewIntVar(0, 50000, f"over_e{e}")
             model.Add(total_minutes <= target_minutes + over)
@@ -71,7 +71,6 @@ def add_monthly_hours_constraint(
         violations.append(spread)
 
     return violations
-
 
 def add_balance_constraint(
     model,
