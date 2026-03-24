@@ -29,6 +29,7 @@ class ScheduleController:
         self.snapshot()
         ds = self.schedule.get_day(emp, day)
         ds.set_leave()
+        ds.is_locked = True
 
     def add_employee(self, emp):
         self.snapshot()
@@ -55,11 +56,13 @@ class ScheduleController:
             ds.start = None
             ds.end = None
             ds.is_leave = False
+            ds.is_sick = False
 
         elif shift_type == "LEAVE":
             ds.start = None
             ds.end = None
             ds.is_leave = True
+            ds.is_sick = False
 
         elif shift_type == "WORK":
             if start is not None and end is not None:
@@ -71,6 +74,7 @@ class ScheduleController:
                     ds.start, ds.end = hours
 
             ds.is_leave = False
+            ds.is_sick = False
 
         ds.is_locked = True
 
@@ -84,3 +88,9 @@ class ScheduleController:
     
     def remove_employee(self, employee):
         self.schedule.remove_employee(employee)
+
+    def set_day_sick(self, emp, day):
+        self.snapshot()
+        ds = self.schedule.get_day(emp, day)
+        ds.set_sick()
+        ds.is_locked = True

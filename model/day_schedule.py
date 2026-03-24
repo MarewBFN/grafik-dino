@@ -24,6 +24,7 @@ class DaySchedule:
     end: str | None = None
     is_leave: bool = False   # ← DODANE
     is_locked: bool = False
+    is_sick: bool = False
 
 
     def is_empty(self) -> bool:
@@ -34,13 +35,15 @@ class DaySchedule:
         """Ustawia dzień jako wolny."""
         self.start = None
         self.end = None
-        self.is_leave = False   # ← DODANE
+        self.is_leave = False
+        self.is_sick = False
 
     def set_leave(self) -> None:
         """Ustawia dzień jako urlop."""
         self.start = None
         self.end = None
         self.is_leave = True
+        self.is_sick = False  
 
     def set_hours(self, start: str, end: str) -> None:
         """
@@ -55,13 +58,14 @@ class DaySchedule:
 
         self.start = start
         self.end = end
-        self.is_leave = False   # ← DODANE (godziny kasują urlop)
+        self.is_leave = False
+        self.is_sick = False
 
     def total_duration(self) -> timedelta | None:
         """
         Zwraca czas pracy jako timedelta.
         """
-        if self.is_empty() or self.is_leave:
+        if self.is_empty() or self.is_leave or self.is_sick:
             return None
 
         start_dt = _parse_time(self.start)
@@ -94,6 +98,9 @@ class DaySchedule:
         if self.is_leave:
             return "🌴", "", ""
 
+        if self.is_sick:
+            return "🤒", "", ""
+
         if self.is_empty():
             return "", "", ""
 
@@ -103,13 +110,30 @@ class DaySchedule:
             self.total_as_str() or "",
         )
 
-def calc_end(start_str: str, hours: int) -> str:
+    def set_sick(self):
+        self.start = None
+        self.end = None
+        self.is_leave = False
+        self.is_sick = True
+
+    def total_minutes(self) -> int:
+        """
+        Zwraca czas pracy w minutach (int).
+        Jeśli brak pracy → 0.
+        """
+        duration = self.total_duration()
+        if duration is None:
+            return 0
+
+        return int(duration.total_seconds() // 60)
+
+def calc_end(start_str: str, hours: float) -> str:
     fmt = "%H:%M"
     start = datetime.strptime(start_str, fmt)
     end = start + timedelta(hours=hours)
     return end.strftime(fmt)
 
-def calc_start(end_str: str, hours: int) -> str:
+def calc_start(end_str: str, hours: float) -> str:
     fmt = "%H:%M"
     end = datetime.strptime(end_str, fmt)
     start = end - timedelta(hours=hours)

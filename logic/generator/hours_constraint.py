@@ -1,3 +1,6 @@
+from logic.utils.time_utils import get_effective_daily_hours
+
+
 def add_monthly_hours_constraint(
     model,
     x,
@@ -18,14 +21,20 @@ def add_monthly_hours_constraint(
     for e in range(len(employees)):
 
         emp = employees[e]
-        shift_minutes = int(emp.daily_hours * 60)
+        shift_minutes = int(get_effective_daily_hours(emp, shop) * 60)
 
-        leave_days = sum(
-            1 for d in days
-            if schedule.get_day(emp, d).is_leave
-        )
+        leave_days = 0
+        sick_days = 0
+
+        for d in days:
+            ds = schedule.get_day(emp, d)
+            if ds.is_leave:
+                leave_days += 1
+            if getattr(ds, "is_sick", False):
+                sick_days += 1
 
         leave_minutes = int(leave_days * emp.daily_hours * 60)
+        sick_minutes = int(sick_days * emp.daily_hours * 60)
 
         total_minutes = model.NewIntVar(0, 50000, f"month_total_e{e}")
 
@@ -40,8 +49,7 @@ def add_monthly_hours_constraint(
         )
 
         all_totals.append(total_minutes)
-
-        target_minutes = int(nominal_minutes * (emp.daily_hours / 8) - leave_minutes)
+        target_minutes = int(nominal_minutes * emp.employment_fraction - leave_minutes - sick_minutes)
 
         if not soft:
             model.Add(total_minutes >= target_minutes)
@@ -86,12 +94,14 @@ def add_balance_constraint(
     if not nominal:
         return []
 
-    nominal_minutes = int(nominal * 60)
     violations = []
 
     for e in range(len(employees)):
 
-        shift_minutes = int(employees[e].daily_hours * 60)
+        emp = employees[e]
+
+        nominal_minutes = int(nominal * 60 * emp.employment_fraction)
+        shift_minutes = int(get_effective_daily_hours(emp, shop) * 60)
 
         total_minutes = model.NewIntVar(0, 20000, f"total_minutes_e{e}")
 

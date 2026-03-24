@@ -19,7 +19,7 @@ def add_leave_constraints(model, x, employees, days, schedule, all_shifts):
         for d in days:
             day_state = schedule.get_day(emp, d)
 
-            if day_state.is_leave:
+            if day_state.is_leave or day_state.is_sick:
                 for s in all_shifts:
                     model.Add(x[e, d, s] == 0)
 

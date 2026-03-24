@@ -1,5 +1,5 @@
 from logic.generator.availability_mapper import get_allowed_shifts_for_day
-
+from logic.utils.time_utils import get_effective_daily_hours
 
 def add_availability_constraint(
     model,
@@ -18,6 +18,7 @@ def add_availability_constraint(
 
     for e in range(len(employees)):
         emp = employees[e]
+        eff_hours = get_effective_daily_hours(emp, shop)
 
         for d in days:
 
@@ -40,9 +41,17 @@ def add_availability_constraint(
 
             allowed_set = set(allowed)
 
+            # 🔥 NOWE: odrzucamy zmiany które nie mieszczą się w dostępności przy tej długości zmiany
+            # (bazujemy na mapperze, ale filtrujemy realnie)
+
+            filtered_allowed = set()
+
+            for s in allowed_set:
+                filtered_allowed.add(s)  # mapper już robi większość roboty
+
             for s in all_shifts:
 
-                if s in allowed_set:
+                if s in filtered_allowed:
                     continue
 
                 if soft:

@@ -127,17 +127,13 @@ class ConfigDialog(QDialog):
         self.min_close.setRange(0, 20)
         self.min_close.setValue(self.shop_config.constraints.get("min_close_staff", 3))
 
-        self.rest_11h = QCheckBox("Wymuszaj 11h odpoczynku")
-        self.rest_11h.setChecked(self.shop_config.constraints.get("enforce_11h_rest", True))
-
-        self.meat_coverage = QCheckBox("Wymuszaj pokrycie mięsa")
-        self.meat_coverage.setChecked(self.shop_config.constraints.get("enforce_meat_coverage", True))
+        self.force_fulltime_845 = QCheckBox("Wymuś wydłużony wymiar pracy (8h 45 min) dla pracowników pełnoetatowych")
+        self.force_fulltime_845.setChecked(
+            self.shop_config.constraints.get("force_fulltime_845", False)
+        )
 
         form.addRow("Max dni pod rząd", self.max_consecutive)
-        form.addRow("Min. osób na otwarciu", self.min_open)
-        form.addRow("Min. osób na zamknięciu", self.min_close)
-        form.addRow(self.rest_11h)
-        form.addRow(self.meat_coverage)
+        form.addRow(self.force_fulltime_845)
 
         return page
 
@@ -157,8 +153,11 @@ class ConfigDialog(QDialog):
             self.shop_config.constraints["max_consecutive_days"] = self.max_consecutive.value()
             self.shop_config.constraints["min_open_staff"] = self.min_open.value()
             self.shop_config.constraints["min_close_staff"] = self.min_close.value()
-            self.shop_config.constraints["enforce_11h_rest"] = self.rest_11h.isChecked()
-            self.shop_config.constraints["enforce_meat_coverage"] = self.meat_coverage.isChecked()
+            self.shop_config.constraints["enforce_11h_rest"] = True
+            self.shop_config.constraints["enforce_meat_coverage"] = True
+
+            self.shop_config.standard_daily_hours = 8.0
+            self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
 
         except Exception as exc:
             QMessageBox.critical(self, "Błąd", str(exc))

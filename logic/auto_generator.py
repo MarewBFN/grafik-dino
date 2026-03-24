@@ -1,3 +1,5 @@
+from pyexpat import model
+
 from ortools.sat.python import cp_model
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -25,7 +27,9 @@ from logic.generator.manual_constraint import add_manual_shift_constraints
 from logic.generator.constraints_logic import add_work_dependency_constraint
 from logic.generator.objective import (
     add_open_close_penalty,
-    add_work_balance_penalty
+    add_work_balance_penalty,
+    add_morning_afternoon_balance_penalty,
+    add_edge_shift_bonus,
 )
 from logic.generator.availability_constraint import add_availability_constraint
 
@@ -69,7 +73,6 @@ class AutoScheduleGenerator:
             self.SHIFT_WORK_END_45: 45,
             self.SHIFT_WORK_END_60: 60,
             self.SHIFT_WORK_END_75: 75,
-            self.SHIFT_WORK_END_90: 90,
         }
         self.SHIFT_MANUAL = 14
         # wszystkie zmiany (tu można dodawać kolejne typy zmian)
@@ -90,7 +93,6 @@ class AutoScheduleGenerator:
             self.SHIFT_WORK_END_45,
             self.SHIFT_WORK_END_60,
             self.SHIFT_WORK_END_75,
-            self.SHIFT_WORK_END_90,
         )
 
         # Wagi dla soft constraintów (im wyższa, tym ważniejszy constraint)    
@@ -104,6 +106,8 @@ class AutoScheduleGenerator:
             "close": 200,
             "monthly_hours": 25000,
             "availability": 5000,
+            "morning_afternoon_balance": 10000,
+            "add_edge_shift_bonus": 10000,
         }
     # ==================================================
     # PUBLIC
@@ -114,6 +118,9 @@ class AutoScheduleGenerator:
         print("=== START CP-SAT GENERATOR ===")
 
         self.schedule.clear_unlocked_days()
+
+        for emp in self.schedule.employees:
+            object.__setattr__(emp, '_orig_daily_hours', emp.daily_hours)
 
         model = cp_model.CpModel()
 
@@ -141,6 +148,7 @@ class AutoScheduleGenerator:
                 if not (
                     ds.is_leave
                     or ds.is_locked
+                    or getattr(ds, "is_sick", False)
                     or getattr(ds, "is_day_off", False)
                 ):
                     available += 1
@@ -333,6 +341,29 @@ class AutoScheduleGenerator:
         all_soft_violations.extend(open_violations)
         all_soft_violations.extend(close_violations)
         all_soft_violations.extend(monthly_hours_violations)
+        all_soft_violations.extend(
+            add_edge_shift_bonus(
+                model,
+                x,
+                employees,
+                trade_days,
+                self.SHIFT_WORK_START_15,
+                self.SHIFT_WORK_END_15
+            )
+        )        
+        all_soft_violations.extend(
+            add_morning_afternoon_balance_penalty(
+                model,
+                x,
+                employees,
+                days,
+                self.shop,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP
+            )
+        )
         all_soft_violations.extend(availability_violations)
         all_soft_violations.extend(
             add_work_balance_penalty(
@@ -369,6 +400,11 @@ class AutoScheduleGenerator:
             self.START_SHIFT_MAP,
             self.END_SHIFT_MAP
         )
+
+        # SPRZĄTANIE: Przywracamy oryginalne daily_hours, żeby UI i zapisy nie świrowały
+        for emp in employees:
+            if hasattr(emp, '_orig_daily_hours'):
+                object.__setattr__(emp, 'daily_hours', emp._orig_daily_hours)
 
         return {
             "status": status,

@@ -8,136 +8,2414 @@
         "last_name": "Adamkiewicz",
         "is_opener": true,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Izabela",
         "last_name": "Borys",
         "is_opener": false,
         "is_meat": true,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "17": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Joanna",
         "last_name": "Cieszkowska",
         "is_opener": false,
         "is_meat": true,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Marlena",
         "last_name": "Dąbrowska",
         "is_opener": true,
         "is_meat": true,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Dorota",
         "last_name": "Gaweł",
         "is_opener": false,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Małgorzata",
         "last_name": "Graefling",
         "is_opener": false,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "17": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Żaneta",
         "last_name": "Hajka",
         "is_opener": false,
         "is_meat": true,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "17": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Ilona",
         "last_name": "Jankiewicz",
         "is_opener": false,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Justyna",
         "last_name": "Konkol",
         "is_opener": false,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "17": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Aleksandra",
         "last_name": "Madej",
         "is_opener": true,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "17": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Sylwia",
         "last_name": "Mejer",
         "is_opener": true,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "17": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Marcin",
         "last_name": "Pająk",
         "is_opener": false,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "17": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Małgorzata",
         "last_name": "Pasierb",
         "is_opener": false,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Iwona",
         "last_name": "Ptaszek",
         "is_opener": false,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "17": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Agnieszka",
         "last_name": "Roszczyk",
         "is_opener": false,
         "is_meat": true,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "17": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Joanna",
         "last_name": "Siekierka",
         "is_opener": false,
         "is_meat": true,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "2": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "11": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "18": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "24": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       },
       {
         "first_name": "Agnieszka",
         "last_name": "Zasadna",
         "is_opener": false,
         "is_meat": false,
+        "monthly_target_hours": 160,
         "daily_hours": 8,
-        "days": {}
+        "days": {
+          "1": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "3": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "4": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "5": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "6": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "8": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "9": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "10": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "12": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "13": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "15": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "16": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "17": {
+            "start": "14:00",
+            "end": "22:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "19": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "20": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "22": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "23": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "25": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "26": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "27": {
+            "start": "12:30",
+            "end": "21:15",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "29": {
+            "start": "07:00",
+            "end": "15:45",
+            "is_leave": false,
+            "is_locked": false
+          },
+          "30": {
+            "start": "05:30",
+            "end": "14:15",
+            "is_leave": false,
+            "is_locked": false
+          }
+        }
       }
     ]
   },
@@ -179,9 +2457,12 @@
     "constraints": {
       "max_consecutive_days": 4,
       "min_open_staff": 3,
-      "min_close_staff": 3
+      "min_close_staff": 3,
+      "enforce_11h_rest": true,
+      "enforce_meat_coverage": true
     },
     "cell_display_mode": "compact",
-    "public_holidays": []
+    "public_holidays": [],
+    "standard_daily_hours": 8.75
   }
 }

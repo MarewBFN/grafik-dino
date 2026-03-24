@@ -53,6 +53,7 @@ class ShopConfig:
 
         # dni ustawowo wolne
         self.public_holidays: set[int] = set()
+        self.standard_daily_hours = 8.0
 
         # -----------------------------
         # Godziny otwarcia per weekday
@@ -139,6 +140,7 @@ class ShopConfig:
             "constraints": self.constraints,
             "cell_display_mode": self.cell_display_mode,
             "public_holidays": list(self.public_holidays),
+            "standard_daily_hours": self.standard_daily_hours,
         }
 
     @classmethod
@@ -170,6 +172,7 @@ class ShopConfig:
 
         # UI
         cfg.cell_display_mode = data.get("cell_display_mode", "compact")
+        cfg.standard_daily_hours = data.get("standard_daily_hours", 8.0)
 
         return cfg
 

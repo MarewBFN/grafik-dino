@@ -73,10 +73,15 @@ class DayEditDialog(QDialog):
         row = QHBoxLayout()
         self.free_btn = QPushButton("Wolne")
         self.leave_btn = QPushButton("Urlop")
+        self.sick_btn = QPushButton("Chorobowe")
+
         self.free_btn.clicked.connect(self._set_free)
         self.leave_btn.clicked.connect(self._set_leave)
+        self.sick_btn.clicked.connect(self._set_sick)
+
         row.addWidget(self.free_btn)
         row.addWidget(self.leave_btn)
+        row.addWidget(self.sick_btn)
         row.addStretch()
         root.addLayout(row)
 
@@ -142,6 +147,10 @@ class DayEditDialog(QDialog):
 
     def _set_leave(self):
         self.result_mode = "leave"
+        self.accept()
+
+    def _set_sick(self):
+        self.result_mode = "sick"
         self.accept()
 
     def _save(self):

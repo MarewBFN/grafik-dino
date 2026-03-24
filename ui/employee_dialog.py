@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QVBoxLayout,
+    QComboBox,
 )
 
 from model.employee import Employee
@@ -40,9 +41,15 @@ class EmployeeDialog(QDialog):
         self.monthly_target_hours = QSpinBox()
         self.monthly_target_hours.setRange(0, 400)
         self.monthly_target_hours.setValue(160)
-        self.daily_hours = QSpinBox()
-        self.daily_hours.setRange(6, 8)
-        self.daily_hours.setValue(8)
+        self.employment_fraction = QComboBox()
+
+        self.employment_fraction.addItem("1/1 (pełny etat)", 1.0)
+        self.employment_fraction.addItem("7/8", 0.875)
+        self.employment_fraction.addItem("3/4", 0.75)
+        self.employment_fraction.addItem("5/8", 0.625)
+        self.employment_fraction.addItem("1/2 (pół etatu)", 0.5)
+        self.employment_fraction.addItem("3/8", 0.375)
+        self.employment_fraction.addItem("1/4", 0.25)
 
         self.is_opener = QCheckBox("Pracownik otwarcia")
         self.is_meat = QCheckBox("Pracownik mięsa")
@@ -50,7 +57,7 @@ class EmployeeDialog(QDialog):
         form.addRow("Nazwisko", self.last_name)
         form.addRow("Imię", self.first_name)
         form.addRow("Cel miesięczny", self.monthly_target_hours)
-        form.addRow("Godzin dziennie", self.daily_hours)
+        form.addRow("Wymiar etatu", self.employment_fraction)
 
         root.addLayout(form)
         root.addWidget(self.is_opener)
@@ -82,7 +89,9 @@ class EmployeeDialog(QDialog):
         self.is_opener.setChecked(self.employee.is_opener)
         self.is_meat.setChecked(self.employee.is_meat)
         self.monthly_target_hours.setValue(self.employee.monthly_target_hours)
-        self.daily_hours.setValue(self.employee.daily_hours)
+        idx = self.employment_fraction.findData(self.employee.employment_fraction)
+        if idx >= 0:
+            self.employment_fraction.setCurrentIndex(idx)
 
     def _save(self):
         try:
@@ -92,7 +101,7 @@ class EmployeeDialog(QDialog):
                 is_opener=self.is_opener.isChecked(),
                 is_meat=self.is_meat.isChecked(),
                 monthly_target_hours=self.monthly_target_hours.value(),
-                daily_hours=self.daily_hours.value(),
+                employment_fraction=self.employment_fraction.currentData(),
             )
             emp.validate()
         except Exception as exc:

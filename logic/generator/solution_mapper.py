@@ -1,7 +1,7 @@
 from ortools.sat.python import cp_model
 from datetime import datetime, timedelta
 from model.day_schedule import calc_start, calc_end
-
+from logic.utils.time_utils import get_effective_daily_hours
 
 def save_solution(
     schedule,
@@ -64,15 +64,19 @@ def save_solution(
             open_time, close_time = hours
             fmt = "%H:%M"
 
+            eff_hours = get_effective_daily_hours(emp, shop)
+
             if solver.Value(x[e, d, SHIFT_OPEN]) == 1:
-                end = calc_end(open_time, emp.daily_hours)
+                end = calc_end(open_time, eff_hours)
                 schedule.set_day_hours(emp, d, open_time, end)
                 continue
 
             if solver.Value(x[e, d, SHIFT_CLOSE]) == 1:
-                start = calc_start(close_time, emp.daily_hours)
+                start = calc_start(close_time, eff_hours)
                 schedule.set_day_hours(emp, d, start, close_time)
                 continue
+
+            assigned = False
 
             for shift, offset in START_SHIFTS.items():
 
@@ -81,22 +85,24 @@ def save_solution(
                     start_dt = datetime.strptime(open_time, fmt) + timedelta(minutes=offset)
                     start = start_dt.strftime(fmt)
 
-                    end = calc_end(start, emp.daily_hours)
+                    end = calc_end(start, eff_hours)
 
                     schedule.set_day_hours(emp, d, start, end)
+                    assigned = True
                     break
 
-            for shift, offset in END_SHIFTS.items():
+            if not assigned:
+                for shift, offset in END_SHIFTS.items():
 
-                if solver.Value(x[e, d, shift]) == 1:
+                    if solver.Value(x[e, d, shift]) == 1:
 
-                    end_dt = datetime.strptime(close_time, fmt) - timedelta(minutes=offset)
-                    end = end_dt.strftime(fmt)
+                        end_dt = datetime.strptime(close_time, fmt) - timedelta(minutes=offset)
+                        end = end_dt.strftime(fmt)
 
-                    start = calc_start(end, emp.daily_hours)
+                        start = calc_start(end, eff_hours)
 
-                    schedule.set_day_hours(emp, d, start, end)
-                    break
+                        schedule.set_day_hours(emp, d, start, end)
+                        break
 
     print("=== KONIEC GENERATORA ===")
     return True

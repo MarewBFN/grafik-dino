@@ -1,5 +1,7 @@
+from ortools.sat.python import cp_model
 from datetime import datetime, timedelta
 from model.day_schedule import calc_start, calc_end
+from logic.utils.time_utils import get_effective_daily_hours
 
 
 def add_rest_11h_constraint(
@@ -22,6 +24,9 @@ def add_rest_11h_constraint(
 
     for e in range(len(employees)):
 
+        emp = employees[e]
+        eff_hours = get_effective_daily_hours(emp, shop)
+
         for i in range(len(days) - 1):
 
             d = days[i]
@@ -43,11 +48,11 @@ def add_rest_11h_constraint(
 
             shifts_today[SHIFT_OPEN] = (
                 open_d,
-                calc_end(open_d, employees[e].daily_hours)
+                calc_end(open_d, eff_hours)
             )
 
             shifts_today[SHIFT_CLOSE] = (
-                calc_start(close_d, employees[e].daily_hours),
+                calc_start(close_d, eff_hours),
                 close_d
             )
 
@@ -59,7 +64,7 @@ def add_rest_11h_constraint(
 
                 shifts_today[shift] = (
                     start,
-                    calc_end(start, employees[e].daily_hours)
+                    calc_end(start, eff_hours)
                 )
 
             for shift, off in END_SHIFTS.items():
@@ -69,7 +74,7 @@ def add_rest_11h_constraint(
                 ).strftime(fmt)
 
                 shifts_today[shift] = (
-                    calc_start(end, employees[e].daily_hours),
+                    calc_start(end, eff_hours),
                     end
                 )
 
@@ -77,11 +82,11 @@ def add_rest_11h_constraint(
 
             shifts_next[SHIFT_OPEN] = (
                 open_next,
-                calc_end(open_next, employees[e].daily_hours)
+                calc_end(open_next, eff_hours)
             )
 
             shifts_next[SHIFT_CLOSE] = (
-                calc_start(close_next, employees[e].daily_hours),
+                calc_start(close_next, eff_hours),
                 close_next
             )
 
@@ -93,7 +98,7 @@ def add_rest_11h_constraint(
 
                 shifts_next[shift] = (
                     start,
-                    calc_end(start, employees[e].daily_hours)
+                    calc_end(start, eff_hours)
                 )
 
             for shift, off in END_SHIFTS.items():
@@ -103,7 +108,7 @@ def add_rest_11h_constraint(
                 ).strftime(fmt)
 
                 shifts_next[shift] = (
-                    calc_start(end, employees[e].daily_hours),
+                    calc_start(end, eff_hours),
                     end
                 )
 

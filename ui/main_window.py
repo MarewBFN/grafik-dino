@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from export.excel_exporter import export_schedule_to_excel
+from export.image_exporter import export_schedule_to_image
 from logic.schedule_controller import ScheduleController
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -191,9 +192,14 @@ class MainWindow(QMainWindow):
         self.btn_leave.setCheckable(True)
         self.btn_leave.clicked.connect(lambda: self._set_quick_shift("LEAVE"))
 
+        self.btn_sick = QPushButton("L4")
+        self.btn_sick.setCheckable(True)
+        self.btn_sick.clicked.connect(lambda: self._set_quick_shift("SICK"))
+
         btn_row.addWidget(self.btn_work)
         btn_row.addWidget(self.btn_off)
         btn_row.addWidget(self.btn_leave)
+        btn_row.addWidget(self.btn_sick)
 
         layout.addLayout(btn_row)
 
@@ -263,6 +269,7 @@ class MainWindow(QMainWindow):
         # 🔽 submenu eksport
         export_menu = QMenu("Eksport", self)
         export_menu.addAction("Excel", self._export_excel)
+        export_menu.addAction("JPG", self._export_image)
         file_menu.addMenu(export_menu)
 
         file_menu.addSeparator()
@@ -452,6 +459,8 @@ class MainWindow(QMainWindow):
             self.controller.set_day_free(emp, day)
         elif dialog.result_mode == "leave":
             self.controller.set_day_leave(emp, day)
+        elif dialog.result_mode == "sick":
+            self.controller.set_day_sick(emp, day)
         elif dialog.result_mode == "hours":
             self.controller.set_day_hours(emp, day, dialog.result_start, dialog.result_end)
 
@@ -597,6 +606,23 @@ class MainWindow(QMainWindow):
         export_schedule_to_excel(self.schedule, self.year, self.month, path)
         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500)
 
+    def _export_image(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Eksport JPG",
+            "",
+            "Obraz JPG (*.jpg)"
+        )
+        if not path:
+            return
+
+        if not path.lower().endswith(".jpg"):
+            path += ".jpg"
+
+        export_schedule_to_image(self.schedule, self.year, self.month, path)
+
+        self.statusBar().showMessage("Wyeksportowano do JPG.", 2500)
+
     def _undo(self):
         self.schedule = self.controller.undo()
         self._sync_everything()
@@ -646,6 +672,7 @@ class MainWindow(QMainWindow):
         self.btn_work.setChecked(False)
         self.btn_off.setChecked(False)
         self.btn_leave.setChecked(False)
+        self.btn_sick.setChecked(False)
 
         # aktywny
         if shift_type == "WORK":
@@ -658,6 +685,10 @@ class MainWindow(QMainWindow):
 
         elif shift_type == "LEAVE":
             self.btn_leave.setChecked(True)
+            self.time_panel.hide()
+
+        elif shift_type == "SICK":
+            self.btn_sick.setChecked(True)
             self.time_panel.hide()
 ########################################################
 
@@ -707,6 +738,11 @@ class MainWindow(QMainWindow):
 
     def _hide_loading(self):
         self.loading_overlay.hide()
+
+    def _ctx_sick(self, emp, day):
+        self.controller.set_day_sick(emp, day)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
 
 from PySide6.QtCore import QTimer
 

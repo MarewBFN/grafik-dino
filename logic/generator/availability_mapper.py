@@ -1,6 +1,18 @@
 from datetime import datetime, timedelta
 
 
+def get_effective_daily_hours(emp, shop):
+    if emp.employment_fraction == 1.0:
+        hours = shop.standard_daily_hours
+    else:
+        hours = 8.0
+
+    minutes = int(hours * 60)
+    minutes = (minutes // 15) * 15
+
+    return minutes / 60
+
+
 def get_allowed_shifts_for_day(
     emp,
     day,
@@ -17,7 +29,7 @@ def get_allowed_shifts_for_day(
 
     # brak preferencji → wszystko dozwolone
     if not rules:
-        return None  # ważne: None = brak ograniczeń
+        return None
 
     hours = shop.get_open_hours_for_day(day)
     if not hours:
@@ -29,6 +41,9 @@ def get_allowed_shifts_for_day(
     open_dt = datetime.strptime(open_time, fmt)
     close_dt = datetime.strptime(close_time, fmt)
 
+    eff_hours = get_effective_daily_hours(emp, shop)
+    shift_delta = timedelta(hours=eff_hours)
+
     allowed = []
 
     for rule in rules:
@@ -39,23 +54,31 @@ def get_allowed_shifts_for_day(
         pref_end = datetime.strptime(end_pref, fmt)
 
         # ===== OPEN =====
-        if pref_start <= open_dt:
+        start = open_dt
+        end = start + shift_delta
+        if pref_start <= start and end <= pref_end:
             allowed.append(SHIFT_OPEN)
 
         # ===== CLOSE =====
-        if pref_end >= close_dt:
+        end = close_dt
+        start = end - shift_delta
+        if pref_start <= start and end <= pref_end:
             allowed.append(SHIFT_CLOSE)
 
         # ===== START SHIFTS =====
         for shift, offset in START_SHIFT_MAP.items():
-            start_dt = open_dt + timedelta(minutes=offset)
-            if pref_start <= start_dt <= pref_end:
+            start = open_dt + timedelta(minutes=offset)
+            end = start + shift_delta
+
+            if pref_start <= start and end <= pref_end:
                 allowed.append(shift)
 
         # ===== END SHIFTS =====
         for shift, offset in END_SHIFT_MAP.items():
-            end_dt = close_dt - timedelta(minutes=offset)
-            if pref_start <= end_dt <= pref_end:
+            end = close_dt - timedelta(minutes=offset)
+            start = end - shift_delta
+
+            if pref_start <= start and end <= pref_end:
                 allowed.append(shift)
 
     return list(set(allowed))

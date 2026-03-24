@@ -22,6 +22,9 @@ class Employee:
     monthly_target_hours: int = field(default=160, compare=False)
     daily_hours: int = field(default=8, compare=False)
 
+    # 🔥 NOWE POLE
+    employment_fraction: float = field(default=1.0, compare=False)
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()), compare=False)
     availability: Dict[int, dict] = field(default_factory=dict, compare=False)
 
@@ -35,9 +38,14 @@ class Employee:
         if not self.first_name.strip():
             raise ValueError("Imię nie może być puste")
 
-        if self.daily_hours < 6 or self.daily_hours > 8:
-            raise ValueError("Dzienna liczba godzin musi być w zakresie 6–8")
-        
+        # 🔧 ZMIANA – luzujemy ograniczenie
+        if self.daily_hours <= 0:
+            raise ValueError("Dzienna liczba godzin musi być większa od 0")
+
+        # 🔥 NOWA WALIDACJA
+        if self.employment_fraction <= 0 or self.employment_fraction > 1:
+            raise ValueError("Wymiar etatu musi być w zakresie (0, 1]")
+
         for wd, cfg in self.availability.items():
             if wd < 0 or wd > 6:
                 raise ValueError("Nieprawidłowy dzień tygodnia")

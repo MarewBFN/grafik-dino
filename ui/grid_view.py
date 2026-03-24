@@ -1,7 +1,7 @@
 import calendar
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtCore import Qt, QRect
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPixmap, QPen
 from PySide6.QtWidgets import QAbstractItemView, QMenu, QTableWidget, QTableWidgetItem
 from logic.constraint_presenter import ConstraintPresenter
 from logic.schedule_presenter import SchedulePresenter
@@ -24,7 +24,10 @@ class ScheduleGrid(QTableWidget):
         self._clipboard_day = None
         self.compact_mode = False
 
-        # IKONY
+        self.hovered_row = None
+        self.active_row = None
+        self.setMouseTracking(True)
+
         self.icon_open = QIcon("assets/key.png")
         self.icon_meat = QIcon("assets/meat.png")
         self.icon_open_meat = QIcon("assets/keymeat.png")
@@ -40,6 +43,20 @@ class ScheduleGrid(QTableWidget):
         self.viewport().customContextMenuRequested.connect(self._open_cell_context_menu)
         self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         self.horizontalHeader().customContextMenuRequested.connect(self._open_header_context_menu)
+
+    def mouseMoveEvent(self, event):
+        item = self.itemAt(event.pos())
+        if item:
+            row = item.row()
+            if row != self.hovered_row:
+                self.hovered_row = row
+                self.viewport().update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self.hovered_row = None
+        self.viewport().update()
+        super().leaveEvent(event)
 
     def set_data(
         self,
@@ -77,7 +94,7 @@ class ScheduleGrid(QTableWidget):
         for day in range(1, days + 1):
             wd = calendar.weekday(self.schedule.year, self.schedule.month, day)
             headers.append(f"{weekday_names[wd]}\n{day}")
-        headers.extend(["Praca\n(h)", "Urlop\n(h)", "Razem\n(h)"])
+        headers.extend(["Praca\n(h)", "Urlop\n(h)", "L4\n(h)", "Razem\n(h)"])
 
         self.setColumnCount(len(headers))
         self.setHorizontalHeaderLabels(headers)
@@ -89,7 +106,7 @@ class ScheduleGrid(QTableWidget):
                 self.setColumnWidth(col, 30)
             else:
                 self.setColumnWidth(col, 60)
-        for col in range(days + 1, days + 4):
+        for col in range(days + 1, days + 5):
             self.setColumnWidth(col, 60)
 
         self.verticalHeader().setVisible(False)
@@ -124,7 +141,6 @@ class ScheduleGrid(QTableWidget):
         item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
 
         if emp.is_opener and emp.is_meat:
-
             size = 32
             pixmap = QPixmap(size * 2, size)
             pixmap.fill(Qt.transparent)
@@ -153,8 +169,22 @@ class ScheduleGrid(QTableWidget):
         for day in range(1, days + 1):
             ds = self.schedule.get_day(emp, day)
             item = QTableWidgetItem()
-            item.setTextAlignment(Qt.AlignCenter)
+            item.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
             item.setData(Qt.UserRole, (emp, day))
+
+            # 🔥 ręczne wolne (locked)
+            if getattr(ds, "is_locked", False) and not ds.is_leave and not getattr(ds, "is_sick", False):
+                item.setText("Wolne")
+                item.setToolTip("Dzień wolny (ręcznie ustawione dla generatora)")
+                self.setItem(row, day, item)
+                continue
+
+            if hasattr(ds, "is_sick") and ds.is_sick:
+                item.setText("🤒")
+                item.setBackground(QBrush(QColor("#FFA07A")))
+                item.setToolTip("Chorobowe")
+                self.setItem(row, day, item)
+                continue
 
             if ds.is_leave:
                 item.setText("🌴")
@@ -171,13 +201,11 @@ class ScheduleGrid(QTableWidget):
             cell_view = presenter.get_cell_view(emp, day)
 
             if self.compact_mode:
-                ds = self.schedule.get_day(emp, day)
                 text = ""
-
                 hours = self.shop_config.get_open_hours_for_day(day)
+
                 if hours and ds.start:
                     open_start, open_end = hours
-
                     from datetime import datetime
 
                     fmt = "%H:%M"
@@ -185,12 +213,7 @@ class ScheduleGrid(QTableWidget):
                     shop_start = datetime.strptime(open_start, fmt)
 
                     diff = (start - shop_start).total_seconds() / 60
-
-                    # 🔥 jeśli zaczyna się późno → "2" (popo)
-                    if diff >= 120:  # 2h po otwarciu = popo
-                        text = "2"
-                    else:
-                        text = "1"
+                    text = "2" if diff >= 120 else "1"
 
                 item.setText(text)
             else:
@@ -211,7 +234,8 @@ class ScheduleGrid(QTableWidget):
         items = [
             QTableWidgetItem(self.schedule.total_hours_for_employee(emp)),
             QTableWidgetItem(self.schedule.leave_hours_for_employee(emp)),
-            QTableWidgetItem(self.schedule.total_with_leave_for_employee(emp)),
+            QTableWidgetItem(self.schedule.sick_hours_for_employee(emp)),
+            QTableWidgetItem(self.schedule.total_with_leave_and_sick_for_employee(emp)),
         ]
 
         for idx, item in enumerate(items, start=days + 1):
@@ -237,7 +261,6 @@ class ScheduleGrid(QTableWidget):
                     ds = self.schedule.get_day(emp, day)
 
                     hours = self.shop_config.get_open_hours_for_day(day)
-
                     if not hours:
                         continue
 
@@ -257,12 +280,54 @@ class ScheduleGrid(QTableWidget):
                 item.setBackground(QBrush(QColor(view.bg)))
                 if view.tooltip:
                     item.setToolTip(view.tooltip)
+
                 self.setItem(row, day, item)
 
-            for col in range(days + 1, days + 4):
+            for col in range(days + 1, days + 5):
                 filler = QTableWidgetItem("")
                 filler.setBackground(QBrush(QColor(theme.BG_PANEL)))
                 self.setItem(row, col, filler)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+
+        painter = QPainter(self.viewport())
+
+        if self.active_row is not None:
+            color = QColor(60, 120, 200, 60)
+            for col in range(self.columnCount()):
+                rect = self.visualRect(self.model().index(self.active_row, col))
+                painter.fillRect(rect, color)
+
+        if self.hovered_row is not None:
+            pen = QPen(QColor(100, 150, 255), 2)
+            painter.setPen(pen)
+
+            rect = self.visualRect(self.model().index(self.hovered_row, 0))
+            full_rect = QRect(rect)
+
+            for col in range(1, self.columnCount()):
+                r = self.visualRect(self.model().index(self.hovered_row, col))
+                full_rect = full_rect.united(r)
+
+            painter.drawRect(full_rect)
+
+    def _handle_click(self, row, col):
+        self.active_row = row
+        self.viewport().update()
+
+        if not self.schedule or not self.main_window:
+            return
+
+        emp_count = len(self.schedule.employees)
+        days = self.schedule.days_in_month
+
+        if row < emp_count and 1 <= col <= days:
+            if (
+                self.main_window.quick_mode_enabled
+                and self.main_window.quick_selected_shift
+            ):
+                self._apply_quick_shift(row, col)
 
     def _handle_double_click(self, row, col):
         if not self.schedule or not self.main_window:
@@ -299,22 +364,47 @@ class ScheduleGrid(QTableWidget):
             start = self.main_window.start_input.time().toString("HH:mm")
             end = self.main_window.end_input.time().toString("HH:mm")
 
-        self.controller.set_shift(emp, day, shift, start, end)
-        self.refresh()
-
-    def _handle_click(self, row, col):
-        if not self.schedule or not self.main_window:
+        elif shift == "SICK":
+            self.controller.set_day_sick(emp, day)
+            self.refresh()
             return
 
-        emp_count = len(self.schedule.employees)
-        days = self.schedule.days_in_month
+        elif shift == "OFF":
+            ds = self.schedule.get_day(emp, day)
 
-        if row < emp_count and 1 <= col <= days:
-            if (
-                self.main_window.quick_mode_enabled
-                and self.main_window.quick_selected_shift
-            ):
-                self._apply_quick_shift(row, col)
+            # 🔥 jeśli już jest wolne → nic nie rób
+            if getattr(ds, "is_locked", False) and not ds.start and not ds.end:
+                return
+
+            # 🔥 ustaw wolne ręczne
+            ds.start = None
+            ds.end = None
+            ds.is_leave = False
+            ds.is_sick = False
+            ds.is_locked = True
+
+            self.refresh()
+            return
+
+        ds = self.schedule.get_day(emp, day)
+
+        if getattr(ds, "is_locked", False):
+            return
+
+        current = (
+            ds.start,
+            ds.end,
+            ds.is_leave,
+            getattr(ds, "is_sick", False)
+        )
+
+        new = (start, end, shift == "LEAVE", shift == "SICK")
+
+        if current == new:
+            return
+
+        self.controller.set_shift(emp, day, shift, start, end)
+        self.refresh()
 
     def _open_cell_context_menu(self, pos):
         if not self.schedule or not self.on_context_menu:
@@ -354,7 +444,7 @@ class ScheduleGrid(QTableWidget):
 
     def clipboard(self):
         return self._clipboard_day
-    
+
     def set_compact_mode(self, enabled: bool):
         self.compact_mode = enabled
         self.refresh()

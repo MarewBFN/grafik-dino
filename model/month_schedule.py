@@ -62,9 +62,15 @@ class MonthSchedule:
     def total_hours_for_employee(self, employee: Employee) -> str:
         total_minutes = 0
         for day in range(1, self.days_in_month + 1):
-            duration = self._data[employee][day].total_duration()
+            ds = self._data[employee][day]
+
+            if ds.is_leave or getattr(ds, "is_sick", False):
+                continue
+
+            duration = ds.total_duration()
             if duration:
                 total_minutes += int(duration.total_seconds() // 60)
+
         hours = total_minutes // 60
         minutes = total_minutes % 60
         return f"{hours}:{minutes:02d}"
@@ -79,18 +85,48 @@ class MonthSchedule:
         minutes = total_minutes % 60
         return f"{hours}:{minutes:02d}"
 
+    def sick_hours_for_employee(self, employee):
+        total_minutes = 0
+        for day in range(1, self.days_in_month + 1):
+            ds = self._data[employee][day]
+            if getattr(ds, "is_sick", False):
+                total_minutes += employee.daily_hours * 60
+        return f"{total_minutes // 60}:{total_minutes % 60:02d}"
+
     def total_with_leave_for_employee(self, employee: Employee) -> str:
         total_minutes = 0
         for day in range(1, self.days_in_month + 1):
             ds = self._data[employee][day]
-            duration = ds.total_duration()
-            if duration:
-                total_minutes += int(duration.total_seconds() // 60)
+
+            if not getattr(ds, "is_sick", False):
+                duration = ds.total_duration()
+                if duration:
+                    total_minutes += int(duration.total_seconds() // 60)
+
             if ds.is_leave:
                 total_minutes += employee.daily_hours * 60
+
         hours = total_minutes // 60
         minutes = total_minutes % 60
         return f"{hours}:{minutes:02d}"
+
+    def total_with_leave_and_sick_for_employee(self, employee):
+        total_minutes = 0
+        for day in range(1, self.days_in_month + 1):
+            ds = self._data[employee][day]
+
+            if not getattr(ds, "is_sick", False):
+                duration = ds.total_duration()
+                if duration:
+                    total_minutes += int(duration.total_seconds() // 60)
+
+            if ds.is_leave:
+                total_minutes += employee.daily_hours * 60
+
+            if getattr(ds, "is_sick", False):
+                total_minutes += employee.daily_hours * 60
+
+        return f"{total_minutes // 60}:{total_minutes % 60:02d}"
 
     def total_hours_for_day(self, day: int) -> int:
         self._validate_day(day)
@@ -119,6 +155,7 @@ class MonthSchedule:
                     "is_meat": e.is_meat,
                     "monthly_target_hours": e.monthly_target_hours,
                     "daily_hours": e.daily_hours,
+                    "employment_fraction": e.employment_fraction,
                     "days": {
                         day: {
                             "start": self.get_day(e, day).start,
@@ -146,6 +183,7 @@ class MonthSchedule:
                 is_meat=ed.get("is_meat", False),
                 monthly_target_hours=ed.get("monthly_target_hours", 160),
                 daily_hours=ed.get("daily_hours", 8),
+                employment_fraction=ed.get("employment_fraction", 1.0),
             )
             sched.add_employee(emp)
 

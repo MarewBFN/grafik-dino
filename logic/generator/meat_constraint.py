@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from logic.utils.time_utils import get_effective_daily_hours
 
 
 def add_meat_constraint(
@@ -103,7 +104,7 @@ def add_meat_coverage_constraint(
                     continue
 
                 emp = employees[e]
-                shift_len = timedelta(hours=emp.daily_hours)
+                shift_len = timedelta(hours=get_effective_daily_hours(emp, shop))
 
                 # OPEN
                 start = open_dt
