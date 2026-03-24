@@ -173,7 +173,7 @@ class ScheduleGrid(QTableWidget):
             item.setData(Qt.UserRole, (emp, day))
 
             # 🔥 ręczne wolne (locked)
-            if getattr(ds, "is_locked", False) and not ds.is_leave and not getattr(ds, "is_sick", False):
+            if getattr(ds, "is_locked", False) and not ds.start and not ds.end and not ds.is_leave and not getattr(ds, "is_sick", False):
                 item.setText("Wolne")
                 item.setToolTip("Dzień wolny (ręcznie ustawione dla generatora)")
                 self.setItem(row, day, item)
@@ -365,6 +365,9 @@ class ScheduleGrid(QTableWidget):
             end = self.main_window.end_input.time().toString("HH:mm")
 
         elif shift == "SICK":
+            ds = self.schedule.get_day(emp, day)
+            ds.is_locked = False
+
             self.controller.set_day_sick(emp, day)
             self.refresh()
             return
@@ -373,7 +376,7 @@ class ScheduleGrid(QTableWidget):
             ds = self.schedule.get_day(emp, day)
 
             # 🔥 jeśli już jest wolne → nic nie rób
-            if getattr(ds, "is_locked", False) and not ds.start and not ds.end:
+            if getattr(ds, "is_locked", False) and not ds.start and not ds.end and not ds.is_leave and not getattr(ds, "is_sick", False):
                 return
 
             # 🔥 ustaw wolne ręczne
@@ -388,9 +391,6 @@ class ScheduleGrid(QTableWidget):
 
         ds = self.schedule.get_day(emp, day)
 
-        if getattr(ds, "is_locked", False):
-            return
-
         current = (
             ds.start,
             ds.end,
@@ -402,6 +402,8 @@ class ScheduleGrid(QTableWidget):
 
         if current == new:
             return
+
+        ds.is_locked = False
 
         self.controller.set_shift(emp, day, shift, start, end)
         self.refresh()
