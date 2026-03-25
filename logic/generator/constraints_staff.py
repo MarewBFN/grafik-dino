@@ -11,8 +11,6 @@ def add_fixed_staff_shift_constraints(
     violations = []
 
     for d in trade_days:
-        print(f"  day={d}")
-
         total_staff = sum(
             x[e, d, shift_type] for e in range(len(employees))
         )
@@ -30,11 +28,14 @@ def add_fixed_staff_shift_constraints(
                 if employees[e].is_meat
             )
 
+            # Twarde ograniczenia: suma osób musi się zgadzać, 
+            # ale składy specjalistyczne mogą się nakładać.
             model.Add(total_staff == min_staff)
-            model.Add(opener_staff == 1)
-            model.Add(meat_staff == 1)
+            model.Add(opener_staff >= 1)
+            model.Add(meat_staff >= 1)
 
         else:
+            # Logika soft (kary) jest już poprawnie oparta na >= 1
             total_violation = model.NewIntVar(
                 0, min_staff,
                 f"staff_v_d{d}_{shift_type}"
@@ -48,8 +49,17 @@ def add_fixed_staff_shift_constraints(
             model.Add(opener_staff + opener_violation >= 1)
             violations.append(opener_violation)
 
-    return violations
+            # Dodajmy mięso do wersji soft, skoro go brakowało
+            meat_staff = sum(
+                x[e, d, shift_type]
+                for e in range(len(employees))
+                if employees[e].is_meat
+            )
+            meat_violation = model.NewBoolVar(f"meat_v_d{d}_{shift_type}")
+            model.Add(meat_staff + meat_violation >= 1)
+            violations.append(meat_violation)
 
+    return violations
 
 def add_max_consecutive_constraint(
     model,

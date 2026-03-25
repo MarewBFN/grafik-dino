@@ -36,13 +36,16 @@ class ScheduleGrid(QTableWidget):
         self.setSelectionMode(QAbstractItemView.SingleSelection)
         self.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.setAlternatingRowColors(False)
+        
+        # 1. Wyłączenie domyślnego niebieskiego tła zaznaczenia QTableWidget
+        self.setStyleSheet("selection-background-color: transparent; selection-color: inherit;")
+        self.setFocusPolicy(Qt.NoFocus)
 
         self.cellClicked.connect(self._handle_click)
         self.cellDoubleClicked.connect(self._handle_double_click)
-        self.viewport().setContextMenuPolicy(Qt.CustomContextMenu)
-        self.viewport().customContextMenuRequested.connect(self._open_cell_context_menu)
-        self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
-        self.horizontalHeader().customContextMenuRequested.connect(self._open_header_context_menu)
+        
+        # 4. Podwójny klik na nagłówku (zamiast PPM)
+        self.horizontalHeader().sectionDoubleClicked.connect(self._handle_header_double_click)
 
     def mouseMoveEvent(self, event):
         item = self.itemAt(event.pos())
@@ -98,7 +101,7 @@ class ScheduleGrid(QTableWidget):
 
         self.setColumnCount(len(headers))
         self.setHorizontalHeaderLabels(headers)
-        self.setRowCount(len(self.schedule.employees) + 3)
+        self.setRowCount(len(self.schedule.employees) + 4)
 
         self.setColumnWidth(0, 180)
         for col in range(1, days + 1):
@@ -124,12 +127,15 @@ class ScheduleGrid(QTableWidget):
         presenter = SchedulePresenter(self.schedule, self.shop_config)
         constraint_presenter = ConstraintPresenter(self.schedule, self.shop_config)
 
+        # 3. Flaga sprawdzania limitu dni pod rząd z konfiguracji (domyślnie False)
+        hl_consecutive = self.shop_config.constraints.get("highlight_max_consecutive", False)
+
         days = self.schedule.days_in_month
         emp_count = len(self.schedule.employees)
 
         for row, emp in enumerate(self.schedule.employees):
             self._fill_employee_name(row, emp)
-            self._fill_day_cells(row, emp, days, presenter, constraint_presenter)
+            self._fill_day_cells(row, emp, days, presenter, constraint_presenter, hl_consecutive)
             self._fill_summary_cells(row, emp, days)
 
         self._fill_validation_rows(emp_count, days, constraint_presenter)
@@ -165,17 +171,22 @@ class ScheduleGrid(QTableWidget):
         item.setBackground(QBrush(QColor(theme.BG_PANEL)))
         self.setItem(row, 0, item)
 
-    def _fill_day_cells(self, row, emp, days, presenter, constraint_presenter):
+    def _fill_day_cells(self, row, emp, days, presenter, constraint_presenter, hl_consecutive):
         for day in range(1, days + 1):
             ds = self.schedule.get_day(emp, day)
             item = QTableWidgetItem()
             item.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
             item.setData(Qt.UserRole, (emp, day))
 
-            # 🔥 ręczne wolne (locked)
             if getattr(ds, "is_locked", False) and not ds.start and not ds.end and not ds.is_leave and not getattr(ds, "is_sick", False):
-                item.setText("Wolne")
-                item.setToolTip("Dzień wolny (ręcznie ustawione dla generatora)")
+                item.setText("")  # Czyścimy tekst, żeby nie śmiecił
+                
+                # Tworzymy profesjonalne szrafowanie (ukośne linie)
+                brush = QBrush(QColor(205, 205, 205)) # Bardzo jasny szary
+                brush.setStyle(Qt.BDiagPattern)       # Wzór: ukośne linie (Back Diagonal)
+                
+                item.setBackground(brush)
+                item.setToolTip("Dzień wolny (Zablokowany: Generator nie zmieni tego ustawienia)")
                 self.setItem(row, day, item)
                 continue
 
@@ -225,8 +236,17 @@ class ScheduleGrid(QTableWidget):
             if cell_view.tooltip:
                 item.setToolTip(cell_view.tooltip)
 
-            if constraint_presenter.get_cell_error(emp, day):
-                item.setBackground(QBrush(QColor(theme.ERR_RED)))
+            # 3. Sprawdzanie błędów z flagą highlight_max_consecutive oraz zabezpieczenie przed błędem typu
+            error = constraint_presenter.get_cell_error(emp, day)
+            if error:
+                is_cons_err = False
+                if isinstance(error, str):
+                    is_cons_err = "dni pod rząd" in error.lower()
+                
+                if not is_cons_err or hl_consecutive:
+                    item.setBackground(QBrush(QColor(theme.ERR_RED)))
+                    if isinstance(error, str):
+                        item.setToolTip(error)
 
             self.setItem(row, day, item)
 
@@ -244,45 +264,105 @@ class ScheduleGrid(QTableWidget):
             self.setItem(row, idx, item)
 
     def _fill_validation_rows(self, emp_count, days, constraint_presenter):
-        rows = [("Otwarcie", "open"), ("Zamknięcie", "close"), ("Mięso", "meat")]
+        # Definiujemy wiersze podsumowania
+        rows = [
+            ("Otwarcie", "open"), 
+            ("Zamknięcie", "close"), 
+            ("Rano/Popo", "morning_afternoon"), 
+            ("Mięso", "meat")
+        ]
 
         for offset, (label, key) in enumerate(rows):
             row = emp_count + offset
 
+            # Etykieta wiersza (lewa kolumna)
             name_item = QTableWidgetItem(label)
             name_item.setBackground(QBrush(QColor(theme.BG_HEADER)))
             name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
             self.setItem(row, 0, name_item)
 
             for day in range(1, days + 1):
-                count = 0
+                # Liczniki dla danego dnia
+                at_opening = 0
+                at_closing = 0
+                total_morning = 0
+                total_afternoon = 0
+                count_meat = 0
+
+                # Pobieramy godziny pracy sklepu z konfiguracji
+                hours = self.shop_config.get_open_hours_for_day(day)
+                if not hours:
+                    continue
+                shop_open_str, shop_close_str = hours
+                
+                try:
+                    shop_open_h = int(shop_open_str.split(":")[0])
+                    shop_close_h = int(shop_close_str.split(":")[0])
+                except:
+                    continue
 
                 for emp in self.schedule.employees:
                     ds = self.schedule.get_day(emp, day)
-
-                    hours = self.shop_config.get_open_hours_for_day(day)
-                    if not hours:
+                    
+                    # Ignorujemy osoby, które nie pracują, są na urlopie lub L4
+                    if not ds.start or ds.is_leave or getattr(ds, "is_sick", False):
                         continue
 
-                    open_start, open_end = hours
+                    try:
+                        emp_start_h = int(ds.start.split(":")[0])
+                        emp_end_h = int(ds.end.split(":")[0])
 
-                    if key == "open" and ds.start == open_start:
-                        count += 1
-                    elif key == "close" and ds.end == open_end:
-                        count += 1
-                    elif key == "meat" and emp.is_meat and not ds.is_leave and ds.start:
-                        count += 1
+                        # --- LOGIKA ZGODNA Z GENERATOREM ---
+                        
+                        # 1. Dokładne Otwarcie/Zamknięcie (walidacja)
+                        if ds.start == shop_open_str:
+                            at_opening += 1
+                        if ds.end == shop_close_str:
+                            at_closing += 1
 
-                item = QTableWidgetItem(str(count))
+                        # 2. Rano / Popołudnie (wszystkie zmiany rano i po południu)
+                        # Rano: Zaczyna tak jak sklep LUB przed 12:00
+                        if emp_start_h <= shop_open_h or emp_start_h < 12:
+                            total_morning += 1
+                        
+                        # Popołudnie: Kończy tak jak sklep LUB zaczyna od 12:00 wzwyż
+                        if emp_end_h >= shop_close_h or emp_start_h >= 12:
+                            total_afternoon += 1
+
+                        # 3. Mięso
+                        if emp.is_meat:
+                            count_meat += 1
+                    except:
+                        continue
+
+                # Budowanie tekstu do wyświetlenia
+                if key == "open":
+                    display_text = str(at_opening)
+                elif key == "close":
+                    display_text = str(at_closing)
+                elif key == "morning_afternoon":
+                    # Wyświetlamy w formacie Rano / Popo
+                    display_text = f"{total_morning}  /  {total_afternoon}"
+                elif key == "meat":
+                    display_text = "✅" if count_meat > 0 else "❌"
+
+                item = QTableWidgetItem(display_text)
                 item.setTextAlignment(Qt.AlignCenter)
 
-                view = constraint_presenter.get_validation_cell_view(key, day)
-                item.setBackground(QBrush(QColor(view.bg)))
-                if view.tooltip:
-                    item.setToolTip(view.tooltip)
+                # Kolorowanie tła
+                if key == "morning_afternoon":
+                    # Wiersz informacyjny ma stały kolor panelu (taki jak prawidłowe otw/zam)
+                    item.setBackground(QBrush(QColor(theme.BG_PANEL)))
+                else:
+                    # Reszta wierszy używa walidatora błędów
+                    view = constraint_presenter.get_validation_cell_view(key, day)
+                    item.setBackground(QBrush(QColor(view.bg)))
+                    if view.tooltip:
+                        item.setToolTip(view.tooltip)
 
                 self.setItem(row, day, item)
 
+            # Wypełnienie komórek sumarycznych (ostatnie 4 kolumny) szarym kolorem
             for col in range(days + 1, days + 5):
                 filler = QTableWidgetItem("")
                 filler.setBackground(QBrush(QColor(theme.BG_PANEL)))
@@ -292,25 +372,27 @@ class ScheduleGrid(QTableWidget):
         super().paintEvent(event)
 
         painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.Antialiasing)
 
+        # 1. Obramówka aktywnego wiersza (grubsza)
         if self.active_row is not None:
-            color = QColor(60, 120, 200, 60)
-            for col in range(self.columnCount()):
-                rect = self.visualRect(self.model().index(self.active_row, col))
-                painter.fillRect(rect, color)
-
-        if self.hovered_row is not None:
-            pen = QPen(QColor(100, 150, 255), 2)
+            pen = QPen(QColor(0, 120, 215), 2)
             painter.setPen(pen)
+            rect = self._get_full_row_rect(self.active_row)
+            painter.drawRect(rect.adjusted(1, 1, -1, -1))
 
-            rect = self.visualRect(self.model().index(self.hovered_row, 0))
-            full_rect = QRect(rect)
+        # 1. Obramówka najechanego wiersza (cieńsza, subtelniejsza)
+        if self.hovered_row is not None and self.hovered_row != self.active_row:
+            pen = QPen(QColor(0, 120, 215, 80), 1)
+            painter.setPen(pen)
+            rect = self._get_full_row_rect(self.hovered_row)
+            painter.drawRect(rect.adjusted(1, 1, -1, -1))
 
-            for col in range(1, self.columnCount()):
-                r = self.visualRect(self.model().index(self.hovered_row, col))
-                full_rect = full_rect.united(r)
-
-            painter.drawRect(full_rect)
+    def _get_full_row_rect(self, row):
+        rect = self.visualRect(self.model().index(row, 0))
+        for col in range(1, self.columnCount()):
+            rect = rect.united(self.visualRect(self.model().index(row, col)))
+        return rect
 
     def _handle_click(self, row, col):
         self.active_row = row
@@ -349,6 +431,66 @@ class ScheduleGrid(QTableWidget):
             elif self.on_edit_day:
                 self.on_edit_day(self.schedule.employees[row], col)
 
+    def _handle_header_double_click(self, col):
+        # 4. Dwuklik na nagłówku
+        if 1 <= col <= self.schedule.days_in_month:
+            if self.on_header_menu:
+                self.on_header_menu(col, None)
+
+    def contextMenuEvent(self, event):
+        # 100% pewna metoda na wyłapanie prawego przycisku myszy w Qt
+        global_pos = event.globalPos()
+        
+        # Mapujemy globalną pozycję myszy na obszar viewportu tabeli
+        vp_pos = self.viewport().mapFromGlobal(global_pos)
+        row = self.rowAt(vp_pos.y())
+        col = self.columnAt(vp_pos.x())
+        
+        if row == -1 or col == -1:
+            return
+            
+        emp_count = len(self.schedule.employees)
+        days = self.schedule.days_in_month
+
+        if row >= emp_count or not (1 <= col <= days):
+            return
+
+        emp = self.schedule.employees[row]
+        day = col
+        ds = self.schedule.get_day(emp, day)
+        
+        menu = QMenu(self)
+        
+        act_copy = menu.addAction("Kopiuj dzień")
+        act_paste = menu.addAction("Wklej dzień")
+        act_paste.setEnabled(self._clipboard_day is not None)
+        
+        menu.addSeparator()
+        
+        act_unlock = menu.addAction("Odblokuj")
+        act_unlock.setEnabled(getattr(ds, "is_locked", False))
+
+        action = menu.exec(global_pos)
+        
+        if action == act_copy:
+            self._clipboard_day = {
+                "start": ds.start, "end": ds.end, 
+                "is_leave": ds.is_leave, "is_sick": getattr(ds, "is_sick", False)
+            }
+            if self.main_window:
+                self.main_window.statusBar().showMessage("Skopiowano dzień.", 2000)
+        elif action == act_paste:
+            self.controller.set_day_hours(emp, day, self._clipboard_day["start"], self._clipboard_day["end"])
+            self.refresh()
+        elif action == act_unlock:
+            self.controller.snapshot() # Ręczny zapis przed manipulacją obiektem
+            ds.is_locked = False
+            self.refresh()
+
+    def _open_header_context_menu(self, pos):
+        # Zachowuję sygnaturę z Twojego oryginalnego kodu (teraz zastąpione przez double_click)
+        pass
+
     def _apply_quick_shift(self, row, col):
         if not self.main_window:
             return
@@ -361,10 +503,12 @@ class ScheduleGrid(QTableWidget):
         end = None
 
         if shift == "WORK":
-            start = self.main_window.start_input.time().toString("HH:mm")
-            end = self.main_window.end_input.time().toString("HH:mm")
+            # 🔥 Poprawione odwołanie do nowej metody w TimeInputWidget
+            start = self.main_window.start_input.get_time_str()
+            end = self.main_window.end_input.get_time_str()
 
         elif shift == "SICK":
+            self.controller.snapshot() # Zabezpieczenie undo
             ds = self.schedule.get_day(emp, day)
             ds.is_locked = False
 
@@ -379,6 +523,7 @@ class ScheduleGrid(QTableWidget):
             if getattr(ds, "is_locked", False) and not ds.start and not ds.end and not ds.is_leave and not getattr(ds, "is_sick", False):
                 return
 
+            self.controller.snapshot() # Zabezpieczenie undo
             # 🔥 ustaw wolne ręczne
             ds.start = None
             ds.end = None
@@ -403,43 +548,11 @@ class ScheduleGrid(QTableWidget):
         if current == new:
             return
 
+        self.controller.snapshot() # Zabezpieczenie undo
         ds.is_locked = False
 
         self.controller.set_shift(emp, day, shift, start, end)
         self.refresh()
-
-    def _open_cell_context_menu(self, pos):
-        if not self.schedule or not self.on_context_menu:
-            return
-
-        item = self.itemAt(pos)
-        if not item:
-            return
-
-        row = item.row()
-        col = item.column()
-        emp_count = len(self.schedule.employees)
-        days = self.schedule.days_in_month
-
-        if row >= emp_count or not (1 <= col <= days):
-            return
-
-        emp = self.schedule.employees[row]
-        day = col
-        global_pos = self.viewport().mapToGlobal(pos)
-        self.on_context_menu(emp, day, global_pos)
-
-    def _open_header_context_menu(self, pos):
-        if not self.schedule or not self.on_header_menu:
-            return
-
-        col = self.horizontalHeader().logicalIndexAt(pos)
-        days = self.schedule.days_in_month
-        if not (1 <= col <= days):
-            return
-
-        global_pos = self.horizontalHeader().mapToGlobal(pos)
-        self.on_header_menu(col, global_pos)
 
     def set_clipboard(self, value):
         self._clipboard_day = value

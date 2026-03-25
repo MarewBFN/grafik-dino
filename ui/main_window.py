@@ -2,7 +2,7 @@ import calendar
 import os
 from datetime import date
 
-from PySide6.QtCore import Qt, QTime, QThread, Signal, QObject
+from PySide6.QtCore import Qt, QTime, QThread, Signal, QObject, QTimer
 from PySide6.QtGui import QAction, QPainter, QColor
 from PySide6.QtWidgets import (
     QApplication,
@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QDialog,
     QToolBar,
-    QTimeEdit,
 )
 
 from export.excel_exporter import export_schedule_to_excel
@@ -34,6 +33,7 @@ from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import ScheduleGrid
+from ui.time_input import TimeInputWidget
 
 class GeneratorWorker(QObject):
     finished = Signal(object)
@@ -45,6 +45,38 @@ class GeneratorWorker(QObject):
     def run(self):
         result = self.controller.generate_schedule()
         self.finished.emit(result)
+
+class LoadingSpinner(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._rotate)
+        self._timer.start(16)  # ~60 FPS
+
+        self.setFixedSize(80, 80)
+
+    def _rotate(self):
+        self._angle = (self._angle + 5) % 360
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        rect = self.rect().adjusted(10, 10, -10, -10)
+
+        # tło (szare kółko)
+        painter.setPen(QColor(255, 255, 255, 40))
+        painter.drawEllipse(rect)
+
+        # aktywny łuk
+        pen = painter.pen()
+        pen.setWidth(4)
+        pen.setColor(QColor(255, 255, 255))
+        painter.setPen(pen)
+
+        painter.drawArc(rect, int(self._angle * 16), int(120 * 16))
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -77,7 +109,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Gotowe")
 
     def _build_ui(self):
-        self._build_menu()  # ❌ toolbar usunięty
+        self._build_menu()
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -113,8 +145,6 @@ class MainWindow(QMainWindow):
         title = QLabel("Grafik Dino v2")
         title.setObjectName("titleLabel")
         layout.addWidget(title)
-
-        # ❌ usunięty subtitle
 
         section = QLabel("Miesiąc i rok")
         section.setObjectName("sectionLabel")
@@ -161,6 +191,15 @@ class MainWindow(QMainWindow):
         self.btn_quick_mode = QPushButton("Tryb szybki")
         self.btn_quick_mode.setObjectName("secondaryButton")
         self.btn_quick_mode.setMinimumHeight(44)
+        self.btn_quick_mode.setCheckable(True)
+        self.btn_quick_mode.setStyleSheet("""
+            QPushButton:checked {
+                background-color: #0078d4;
+                color: white;
+                font-weight: bold;
+                border: none;
+            }
+        """)
         self.btn_quick_mode.clicked.connect(self._toggle_quick_mode)
 
         layout.addWidget(self.btn_generate)
@@ -176,24 +215,43 @@ class MainWindow(QMainWindow):
         self.quick_panel = QWidget(self)
 
         layout = QVBoxLayout(self.quick_panel)
+        layout.setContentsMargins(0, 5, 0, 0)
+
+        self.quick_info_label = QLabel("Tryb szybki włączony. Ustaw preferowany typ zmiany i nanieś na grafik jednym kliknięciem.")
+        self.quick_info_label.setWordWrap(True)
+        self.quick_info_label.setStyleSheet("color: #555; font-size: 11px; margin-bottom: 5px; font-style: italic;")
+        layout.addWidget(self.quick_info_label)
 
         # --- przyciski ---
         btn_row = QHBoxLayout()
 
+        button_style = """
+            QPushButton:checked {
+                background-color: #0078d4;
+                color: white;
+                font-weight: bold;
+                border: 1px solid #005a9e;
+            }
+        """
+
         self.btn_work = QPushButton("Praca")
         self.btn_work.setCheckable(True)
+        self.btn_work.setStyleSheet(button_style)
         self.btn_work.clicked.connect(lambda: self._set_quick_shift("WORK"))
 
         self.btn_off = QPushButton("Wolne")
         self.btn_off.setCheckable(True)
+        self.btn_off.setStyleSheet(button_style)
         self.btn_off.clicked.connect(lambda: self._set_quick_shift("OFF"))
 
         self.btn_leave = QPushButton("Urlop")
         self.btn_leave.setCheckable(True)
+        self.btn_leave.setStyleSheet(button_style)
         self.btn_leave.clicked.connect(lambda: self._set_quick_shift("LEAVE"))
 
         self.btn_sick = QPushButton("L4")
         self.btn_sick.setCheckable(True)
+        self.btn_sick.setStyleSheet(button_style)
         self.btn_sick.clicked.connect(lambda: self._set_quick_shift("SICK"))
 
         btn_row.addWidget(self.btn_work)
@@ -206,16 +264,16 @@ class MainWindow(QMainWindow):
         # --- panel godzin ---
         self.time_panel = QWidget(self)
         time_layout = QHBoxLayout(self.time_panel)
+        time_layout.setContentsMargins(0, 5, 0, 0)
 
-        self.start_input = QTimeEdit()
-        self.start_input.setDisplayFormat("HH:mm")
-        self.start_input.setTime(QTime(6, 0))
+        self.start_input = TimeInputWidget()
+        self.start_input.set_time_str("06:00")
 
-        self.end_input = QTimeEdit()
-        self.end_input.setDisplayFormat("HH:mm")
-        self.end_input.setTime(QTime(14, 0))
+        self.end_input = TimeInputWidget()
+        self.end_input.set_time_str("14:00")
 
         time_layout.addWidget(self.start_input)
+        time_layout.addWidget(QLabel(" do "))
         time_layout.addWidget(self.end_input)
 
         self.time_panel.setLayout(time_layout)
@@ -266,7 +324,6 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Zapisz", self._save_project)
         file_menu.addAction("Wczytaj", self._load_project)
 
-        # 🔽 submenu eksport
         export_menu = QMenu("Eksport", self)
         export_menu.addAction("Excel", self._export_excel)
         export_menu.addAction("JPG", self._export_image)
@@ -423,7 +480,6 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.Accepted:
             return
 
-        # 🔥 usuwanie pracownika
         if dialog.employee_result is None:
             self.controller.remove_employee(emp)
             self.schedule = self.controller.schedule
@@ -431,7 +487,6 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Usunięto pracownika.", 2500)
             return
 
-        # 🔥 edycja
         self.controller.replace_employee(emp, dialog.employee_result)
         self.schedule = self.controller.schedule
         self._sync_everything()
@@ -521,6 +576,11 @@ class MainWindow(QMainWindow):
         self.schedule = self.controller.schedule
         self._sync_everything()
 
+    def _ctx_sick(self, emp, day):
+        self.controller.set_day_sick(emp, day)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
+
     def _ctx_morning(self, emp, day):
         hours = self.shop_config.get_open_hours_for_day(day)
         if not hours:
@@ -607,12 +667,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500)
 
     def _export_image(self):
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Eksport JPG",
-            "",
-            "Obraz JPG (*.jpg)"
-        )
+        path, _ = QFileDialog.getSaveFileName(self, "Eksport JPG", "", "Obraz JPG (*.jpg)")
         if not path:
             return
 
@@ -620,7 +675,6 @@ class MainWindow(QMainWindow):
             path += ".jpg"
 
         export_schedule_to_image(self.schedule, self.year, self.month, path)
-
         self.statusBar().showMessage("Wyeksportowano do JPG.", 2500)
 
     def _undo(self):
@@ -653,10 +707,8 @@ class MainWindow(QMainWindow):
             2000
         )
 
-########### QUICK MODE CONTEXT MENU ACTIONS ###########
-
     def _toggle_quick_mode(self):
-        self.quick_mode_enabled = not self.quick_mode_enabled
+        self.quick_mode_enabled = self.btn_quick_mode.isChecked()
         self._update_quick_mode_ui()
 
     def _update_quick_mode_ui(self):
@@ -678,23 +730,18 @@ class MainWindow(QMainWindow):
         if shift_type == "WORK":
             self.btn_work.setChecked(True)
             self.time_panel.show()
-
         elif shift_type == "OFF":
             self.btn_off.setChecked(True)
             self.time_panel.hide()
-
         elif shift_type == "LEAVE":
             self.btn_leave.setChecked(True)
             self.time_panel.hide()
-
         elif shift_type == "SICK":
             self.btn_sick.setChecked(True)
             self.time_panel.hide()
-########################################################
 
     def _calc_end_from_daily(self, start_str, hours):
         from datetime import datetime, timedelta
-
         fmt = "%H:%M"
         start = datetime.strptime(start_str, fmt)
         end = start + timedelta(hours=hours)
@@ -702,15 +749,13 @@ class MainWindow(QMainWindow):
 
     def _calc_start_from_daily(self, end_str, hours):
         from datetime import datetime, timedelta
-
         fmt = "%H:%M"
         end = datetime.strptime(end_str, fmt)
         start = end - timedelta(hours=hours)
         return start.strftime(fmt)
-    
+
     def _open_tutorial(self):
         from ui.tutorial_dialog import TutorialDialog
-
         dialog = TutorialDialog(self)
         dialog.exec()
 
@@ -726,10 +771,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.spinner, alignment=Qt.AlignCenter)
 
         self.loading_label = QLabel("Generowanie grafiku...")
-        self.loading_label.setStyleSheet("color: white; font-size: 18px;")
+        self.loading_label.setStyleSheet("color: white; font-size: 20px;")
         self.loading_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.loading_label)
-        self.loading_label.setStyleSheet("color: white; font-size: 20px;")
 
     def _show_loading(self):
         self.loading_overlay.setGeometry(self.rect())

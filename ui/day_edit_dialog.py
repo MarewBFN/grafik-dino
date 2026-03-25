@@ -7,12 +7,14 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
-    QTimeEdit,
     QVBoxLayout,
 )
+from ui.time_input import TimeInputWidget
 
 
 def _parse_time(value: str) -> QTime:
+    if not value:
+        return QTime(0, 0)
     hour, minute = value.split(":")
     return QTime(int(hour), int(minute))
 
@@ -27,14 +29,14 @@ class DayEditDialog(QDialog):
         self.daily_hours = daily_hours
         self._manual_end = False
         self._updating = False
-        self._open_start = _parse_time(open_start)
-        self._open_end = _parse_time(open_end)
+        self._open_start_qt = _parse_time(open_start)
+        self._open_end_qt = _parse_time(open_end)
 
         self._build_ui()
         self._fill_values(start, end)
 
         if start is None:
-            self.start_edit.setTime(self._open_start)
+            self.start_edit.set_time_str(open_start)
 
         self._update_duration()
         if end is None:
@@ -49,17 +51,13 @@ class DayEditDialog(QDialog):
 
         form = QFormLayout()
 
-        self.start_edit = QTimeEdit()
-        self.start_edit.setDisplayFormat("HH:mm")
-        self.start_edit.setMinimumTime(self._open_start)
-        self.start_edit.setMaximumTime(self._open_end)
-        self.start_edit.timeChanged.connect(self._on_start_changed)
+        self.start_edit = TimeInputWidget()
+        self.start_edit.hour_box.valueChanged.connect(self._on_start_changed)
+        self.start_edit.minute_box.valueChanged.connect(self._on_start_changed)
 
-        self.end_edit = QTimeEdit()
-        self.end_edit.setDisplayFormat("HH:mm")
-        self.end_edit.setMinimumTime(self._open_start)
-        self.end_edit.setMaximumTime(self._open_end)
-        self.end_edit.timeChanged.connect(self._on_end_changed)
+        self.end_edit = TimeInputWidget()
+        self.end_edit.hour_box.valueChanged.connect(self._on_end_changed)
+        self.end_edit.minute_box.valueChanged.connect(self._on_end_changed)
 
         form.addRow("Start", self.start_edit)
         form.addRow("Koniec", self.end_edit)
@@ -97,23 +95,24 @@ class DayEditDialog(QDialog):
 
     def _fill_values(self, start, end):
         if start:
-            self.start_edit.setTime(_parse_time(start))
+            self.start_edit.set_time_str(start)
         if end:
             self._manual_end = True
-            self.end_edit.setTime(_parse_time(end))
+            self.end_edit.set_time_str(end)
 
     def _suggest_end(self):
         if self._manual_end:
             self._update_duration()
             return
 
-        start = self.start_edit.time()
-        suggested = start.addSecs(self.daily_hours * 3600)
-        if suggested > self._open_end:
-            suggested = self._open_end
+        start_qt = _parse_time(self.start_edit.get_time_str())
+        suggested = start_qt.addSecs(self.daily_hours * 3600)
+        
+        if suggested > self._open_end_qt:
+            suggested = self._open_end_qt
 
         self._updating = True
-        self.end_edit.setTime(suggested)
+        self.end_edit.set_time_str(suggested.toString("HH:mm"))
         self._updating = False
         self._update_duration()
 
@@ -132,9 +131,10 @@ class DayEditDialog(QDialog):
         self._update_duration()
 
     def _update_duration(self):
-        start = self.start_edit.time()
-        end = self.end_edit.time()
-        minutes = start.secsTo(end) // 60
+        start_qt = _parse_time(self.start_edit.get_time_str())
+        end_qt = _parse_time(self.end_edit.get_time_str())
+        
+        minutes = start_qt.secsTo(end_qt) // 60
         if minutes < 0:
             minutes = 0
         hours = minutes // 60
@@ -154,18 +154,21 @@ class DayEditDialog(QDialog):
         self.accept()
 
     def _save(self):
-        start = self.start_edit.time()
-        end = self.end_edit.time()
+        start_str = self.start_edit.get_time_str()
+        end_str = self.end_edit.get_time_str()
+        
+        start_qt = _parse_time(start_str)
+        end_qt = _parse_time(end_str)
 
-        if end <= start:
+        if end_qt <= start_qt:
             QMessageBox.critical(self, "Błąd", "Koniec musi być później niż start.")
             return
 
-        if start < self._open_start or end > self._open_end:
+        if start_qt < self._open_start_qt or end_qt > self._open_end_qt:
             QMessageBox.critical(self, "Błąd", "Godziny muszą mieścić się w czasie otwarcia sklepu.")
             return
 
         self.result_mode = "hours"
-        self.result_start = start.toString("HH:mm")
-        self.result_end = end.toString("HH:mm")
+        self.result_start = start_str
+        self.result_end = end_str
         self.accept()

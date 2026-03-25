@@ -8,12 +8,14 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
-    QTimeEdit,
     QVBoxLayout,
 )
+from ui.time_input import TimeInputWidget
 
 
 def _parse_time(value: str) -> QTime:
+    if not value:
+        return QTime(0, 0)
     hour, minute = value.split(":")
     return QTime(int(hour), int(minute))
 
@@ -40,13 +42,11 @@ class DayOverrideDialog(QDialog):
 
         form = QFormLayout()
 
-        self.start_edit = QTimeEdit()
-        self.start_edit.setDisplayFormat("HH:mm")
-        self.start_edit.setTime(_parse_time(self.current_hours[0]))
+        self.start_edit = TimeInputWidget()
+        self.start_edit.set_time_str(self.current_hours[0])
 
-        self.end_edit = QTimeEdit()
-        self.end_edit.setDisplayFormat("HH:mm")
-        self.end_edit.setTime(_parse_time(self.current_hours[1]))
+        self.end_edit = TimeInputWidget()
+        self.end_edit.set_time_str(self.current_hours[1])
 
         self.holiday_box = QCheckBox("Dzień wolny ustawowo")
         self.holiday_box.setChecked(self.day in self.shop_config.public_holidays)
@@ -79,19 +79,22 @@ class DayOverrideDialog(QDialog):
         self.accept()
 
     def _save(self):
-        start = self.start_edit.time().toString("HH:mm")
-        end = self.end_edit.time().toString("HH:mm")
+        start_str = self.start_edit.get_time_str()
+        end_str = self.end_edit.get_time_str()
 
-        if not start or not end:
+        if not start_str or not end_str:
             QMessageBox.critical(self, "Błąd", "Godziny nie mogą być puste.")
             return
 
-        if self.end_edit.time() <= self.start_edit.time():
+        start_qt = _parse_time(start_str)
+        end_qt = _parse_time(end_str)
+
+        if end_qt <= start_qt:
             QMessageBox.critical(self, "Błąd", "Zamknięcie musi być później niż otwarcie.")
             return
 
         self.result_mode = "save"
-        self.result_start = start
-        self.result_end = end
+        self.result_start = start_str
+        self.result_end = end_str
         self.result_holiday = self.holiday_box.isChecked()
         self.accept()

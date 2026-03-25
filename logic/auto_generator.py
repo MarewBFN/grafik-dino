@@ -97,17 +97,17 @@ class AutoScheduleGenerator:
 
         # Wagi dla soft constraintów (im wyższa, tym ważniejszy constraint)    
         self.constraint_weights = {
-            "meat": 10000,
-            "meat_coverage": 15000,
+            "meat": 1000,
+            "meat_coverage": 1500,
             "rest_11h": 5000,
-            "balance": 10000,
-            "max_consecutive": 1000,
+            "balance": 1000,
+            "max_consecutive": 100,
             "open": 200,
             "close": 200,
-            "monthly_hours": 25000,
+            "monthly_hours": 250,
             "availability": 5000,
             "morning_afternoon_balance": 10000,
-            "add_edge_shift_bonus": 10000,
+            "add_edge_shift_bonus": 1000,
         }
     # ==================================================
     # PUBLIC

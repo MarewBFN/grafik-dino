@@ -51,43 +51,41 @@ def add_morning_afternoon_balance_penalty(
     x,
     employees,
     days,
-    shop,
+    shop, # Zostawiam dla zachowania sygnatury, choć w tej logice nie jest używane
     SHIFT_OPEN,
     SHIFT_CLOSE,
     START_SHIFT_MAP,
     END_SHIFT_MAP
 ):
+    print("[OBJECTIVE] balance daily Morning vs Afternoon staff")
     penalties = []
 
-    for e in range(len(employees)):
-        emp = employees[e]
-
-        shift_minutes = int(get_effective_daily_hours(emp, shop) * 60)
-
-        morning = sum(
-            x[e, d, SHIFT_OPEN] * shift_minutes
-            for d in days
-        ) + sum(
-            x[e, d, s] * shift_minutes
-            for d in days
-            for s in START_SHIFT_MAP.keys()
+    # Iterujemy po dniach, a nie po pracownikach!
+    for d in days:
+        
+        # Sumujemy wszystkie poranne zmiany (Otwarcie + przesunięcia od otwarcia) w danym dniu
+        morning_shifts = sum(
+            x[e, d, s]
+            for e in range(len(employees))
+            for s in [SHIFT_OPEN] + list(START_SHIFT_MAP.keys())
         )
 
-        afternoon = sum(
-            x[e, d, SHIFT_CLOSE] * shift_minutes
-            for d in days
-        ) + sum(
-            x[e, d, s] * shift_minutes
-            for d in days
-            for s in END_SHIFT_MAP.keys()
+        # Sumujemy wszystkie popołudniowe zmiany (Zamknięcie + przesunięcia do zamknięcia) w danym dniu
+        afternoon_shifts = sum(
+            x[e, d, s]
+            for e in range(len(employees))
+            for s in [SHIFT_CLOSE] + list(END_SHIFT_MAP.keys())
         )
 
-        diff = model.NewIntVar(-50000, 50000, f"morning_afternoon_diff_e{e}")
-        model.Add(diff == morning - afternoon)
+        # Obliczamy różnicę między rano a popo
+        diff = model.NewIntVar(-50, 50, f"daily_balance_diff_d{d}")
+        model.Add(diff == morning_shifts - afternoon_shifts)
 
-        abs_diff = model.NewIntVar(0, 50000, f"morning_afternoon_abs_e{e}")
+        # Pobieramy wartość absolutną różnicy (aby karać za odchylenia w obie strony)
+        abs_diff = model.NewIntVar(0, 50, f"daily_balance_abs_d{d}")
         model.AddAbsEquality(abs_diff, diff)
 
+        # Dodajemy różnicę do ogólnej puli kar (im większa różnica, tym gorzej)
         penalties.append(abs_diff)
 
     return penalties

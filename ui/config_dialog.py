@@ -1,6 +1,6 @@
 import calendar
 
-from PySide6.QtCore import QTime
+from PySide6.QtCore import Qt, QTime
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -12,13 +12,16 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QTabWidget,
-    QTimeEdit,
     QVBoxLayout,
+    QHBoxLayout,
     QWidget,
+    QFrame,
 )
-
+from ui.time_input import TimeInputWidget
 
 def _parse_time(value: str) -> QTime:
+    if not value:
+        return QTime(0, 0)
     hour, minute = value.split(":")
     return QTime(int(hour), int(minute))
 
@@ -29,7 +32,38 @@ class ConfigDialog(QDialog):
         self.shop_config = shop_config
         self.setWindowTitle("Konfiguracja")
         self.setModal(True)
-        self.resize(620, 520)
+        self.resize(580, 500)
+
+        # Wspólny styl dla wszystkich kart i elementów w dialogu
+        self.setStyleSheet("""
+            QFrame#configCard {
+                background-color: #f9f9f9;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 10px;
+                margin-bottom: 2px;
+            }
+            QFrame#configCard:hover {
+                background-color: #f0f7ff;
+                border-color: #0078d4;
+            }
+            QCheckBox {
+                font-size: 14px;
+                font-weight: bold;
+                spacing: 12px;
+            }
+            QCheckBox::indicator {
+                width: 22px;
+                height: 22px;
+            }
+            QLabel#groupLabel {
+                font-weight: bold;
+                color: #0078d4;
+                font-size: 13px;
+                margin-top: 10px;
+                border-bottom: 1px solid #eee;
+            }
+        """)
 
         self._build_ui()
 
@@ -60,26 +94,27 @@ class ConfigDialog(QDialog):
     def _build_hours_tab(self):
         page = QWidget()
         layout = QGridLayout(page)
-        layout.setColumnStretch(1, 1)
-        layout.setColumnStretch(3, 1)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
 
         self.open_edits = {}
-        days = ["Pon", "Wt", "Śr", "Cz", "Pt", "So", "Nd"]
+        days = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
 
         for row, name in enumerate(days):
-            layout.addWidget(QLabel(name), row, 0)
+            label = QLabel(name)
+            label.setStyleSheet("font-weight: bold;")
+            layout.addWidget(label, row, 0)
 
             start, end = self.shop_config.open_hours[row]
-            start_edit = QTimeEdit()
-            start_edit.setDisplayFormat("HH:mm")
-            start_edit.setTime(_parse_time(start))
+            
+            start_edit = TimeInputWidget()
+            start_edit.set_time_str(start)
 
-            end_edit = QTimeEdit()
-            end_edit.setDisplayFormat("HH:mm")
-            end_edit.setTime(_parse_time(end))
+            end_edit = TimeInputWidget()
+            end_edit.set_time_str(end)
 
             layout.addWidget(start_edit, row, 1)
-            layout.addWidget(QLabel("—"), row, 2)
+            layout.addWidget(QLabel("—"), row, 2, Qt.AlignCenter)
             layout.addWidget(end_edit, row, 3)
 
             self.open_edits[row] = (start_edit, end_edit)
@@ -89,6 +124,12 @@ class ConfigDialog(QDialog):
     def _build_sundays_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
+
+        info = QLabel("Zaznacz niedziele handlowe w tym miesiącu:")
+        info.setStyleSheet("color: #666; margin-bottom: 5px;")
+        layout.addWidget(info)
 
         self.sunday_checks = {}
         cal = calendar.Calendar()
@@ -103,48 +144,102 @@ class ConfigDialog(QDialog):
             return page
 
         for day in sundays:
-            box = QCheckBox(f"{day:02d}.{self.shop_config.month:02d}.{self.shop_config.year}")
+            card = QFrame()
+            card.setObjectName("configCard")
+            card_layout = QHBoxLayout(card)
+            
+            date_str = f"{day:02d}.{self.shop_config.month:02d}.{self.shop_config.year}"
+            box = QCheckBox(f"Niedziela {date_str}")
+            box.setCursor(Qt.PointingHandCursor)
             box.setChecked(day in self.shop_config.trade_sundays)
+            
             self.sunday_checks[day] = box
-            layout.addWidget(box)
+            card_layout.addWidget(box)
+            layout.addWidget(card)
 
         layout.addStretch()
         return page
 
     def _build_constraints_tab(self):
         page = QWidget()
-        form = QFormLayout(page)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
 
+        # --- Sekcja: Ogólne ---
+        gen_label = QLabel("LIMITY CZASU PRACY")
+        gen_label.setObjectName("groupLabel")
+        layout.addWidget(gen_label)
+
+        form_gen = QFormLayout()
         self.max_consecutive = QSpinBox()
         self.max_consecutive.setRange(1, 14)
+        self.max_consecutive.setFixedWidth(70)
         self.max_consecutive.setValue(self.shop_config.constraints.get("max_consecutive_days", 4))
+        form_gen.addRow("Maksymalna liczba dni pod rząd:", self.max_consecutive)
+        layout.addLayout(form_gen)
 
-        self.min_open = QSpinBox()
-        self.min_open.setRange(0, 20)
-        self.min_open.setValue(self.shop_config.constraints.get("min_open_staff", 3))
-
-        self.min_close = QSpinBox()
-        self.min_close.setRange(0, 20)
-        self.min_close.setValue(self.shop_config.constraints.get("min_close_staff", 3))
-
-        self.force_fulltime_845 = QCheckBox("Wymuś wydłużony wymiar pracy (8h 45 min) dla pracowników pełnoetatowych")
+        # Karta Checkboxa (ten sam styl co niedziele)
+        fulltime_card = QFrame()
+        fulltime_card.setObjectName("configCard")
+        fulltime_layout = QHBoxLayout(fulltime_card)
+        self.force_fulltime_845 = QCheckBox("Wymuś 8h 45 min dla pracowników pełnoetatowych")
+        self.force_fulltime_845.setCursor(Qt.PointingHandCursor)
         self.force_fulltime_845.setChecked(
             self.shop_config.constraints.get("force_fulltime_845", False)
         )
+        fulltime_layout.addWidget(self.force_fulltime_845)
+        layout.addWidget(fulltime_card)
 
-        form.addRow("Max dni pod rząd", self.max_consecutive)
-        form.addRow(self.force_fulltime_845)
+        # Karta dla podświetlania limitu dni pod rząd
+        hl_card = QFrame()
+        hl_card.setObjectName("configCard")
+        hl_layout = QHBoxLayout(hl_card)
+        self.hl_consecutive = QCheckBox("Podświetlaj przekroczenie limitu dni pod rząd (Grid)")
+        self.hl_consecutive.setCursor(Qt.PointingHandCursor)
+        self.hl_consecutive.setChecked(
+            self.shop_config.constraints.get("highlight_max_consecutive", False)
+        )
+        hl_layout.addWidget(self.hl_consecutive)
+        layout.addWidget(hl_card)
 
+        # --- Sekcja: Obsada ---
+        staff_label = QLabel("MINIMALNA OBSADA PRACOWNIKÓW")
+        staff_label.setObjectName("groupLabel")
+        layout.addWidget(staff_label)
+
+        form_staff = QFormLayout()
+        self.min_open = QSpinBox()
+        self.min_open.setRange(1, 10)
+        self.min_open.setFixedWidth(70)
+        self.min_open.setValue(self.shop_config.constraints.get("min_open_staff", 3))
+
+        self.min_close = QSpinBox()
+        self.min_close.setRange(1, 10)
+        self.min_close.setFixedWidth(70)
+        self.min_close.setValue(self.shop_config.constraints.get("min_close_staff", 3))
+
+        form_staff.addRow("Pracowników na otwarciu (rano):", self.min_open)
+        form_staff.addRow("Pracowników na zamknięciu (wieczór):", self.min_close)
+        layout.addLayout(form_staff)
+
+        layout.addStretch()
         return page
 
     def _save(self):
         try:
-            for wd, (start_edit, end_edit) in self.open_edits.items():
-                start = start_edit.time().toString("HH:mm")
-                end = end_edit.time().toString("HH:mm")
-                if end_edit.time() <= start_edit.time():
-                    raise ValueError(f"Zamknięcie musi być później niż otwarcie w dniu {wd}.")
-                self.shop_config.open_hours[wd] = (start, end)
+            for wd, (start_input, end_input) in self.open_edits.items():
+                start_str = start_input.get_time_str()
+                end_str = end_input.get_time_str()
+                
+                start_qt = _parse_time(start_str)
+                end_qt = _parse_time(end_str)
+
+                if end_qt <= start_qt:
+                    day_names = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
+                    raise ValueError(f"Zamknięcie musi być później niż otwarcie w dniu: {day_names[wd]}.")
+                
+                self.shop_config.open_hours[wd] = (start_str, end_str)
 
             self.shop_config.trade_sundays = {
                 day for day, box in self.sunday_checks.items() if box.isChecked()
@@ -155,12 +250,10 @@ class ConfigDialog(QDialog):
             self.shop_config.constraints["min_close_staff"] = self.min_close.value()
             self.shop_config.constraints["enforce_11h_rest"] = True
             self.shop_config.constraints["enforce_meat_coverage"] = True
-
-            self.shop_config.standard_daily_hours = 8.0
             self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
 
         except Exception as exc:
-            QMessageBox.critical(self, "Błąd", str(exc))
+            QMessageBox.critical(self, "Błąd konfiguracji", str(exc))
             return
 
         self.accept()
