@@ -183,11 +183,12 @@ class ConfigDialog(QDialog):
         fulltime_card = QFrame()
         fulltime_card.setObjectName("configCard")
         fulltime_layout = QHBoxLayout(fulltime_card)
-        self.force_fulltime_845 = QCheckBox("Wymuś 8h 45 min dla pracowników pełnoetatowych")
+        self.force_fulltime_845 = QCheckBox("Wymuś 8h 30 min dla pracowników pełnoetatowych")
         self.force_fulltime_845.setCursor(Qt.PointingHandCursor)
         self.force_fulltime_845.setChecked(
-            self.shop_config.constraints.get("force_fulltime_845", False)
+            self.shop_config.constraints.get("force_fulltime_845", True)
         )
+        self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
         fulltime_layout.addWidget(self.force_fulltime_845)
         layout.addWidget(fulltime_card)
 

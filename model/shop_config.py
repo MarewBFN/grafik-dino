@@ -38,6 +38,7 @@ class ShopConfig:
             "max_consecutive_days": 4,
             "min_open_staff": 3,
             "min_close_staff": 3,
+            "force_fulltime_845": True,
         }
 
         # -----------------------------
@@ -60,7 +61,7 @@ class ShopConfig:
         # (0=Pn ... 6=Nd)
         # -----------------------------
         self.open_hours: dict[int, tuple[str, str]] = {
-            0: ("05:30", "22:45"),
+            0: ("05:30", "23:00"),
             1: ("05:30", "22:45"),
             2: ("05:30", "22:45"),
             3: ("05:30", "22:45"),
