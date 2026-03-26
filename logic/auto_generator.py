@@ -113,11 +113,12 @@ class AutoScheduleGenerator:
     # PUBLIC
     # ==================================================
 
-    def generate(self):
+    def generate(self, is_fix=False):
 
         print("=== START CP-SAT GENERATOR ===")
 
-        self.schedule.clear_unlocked_days()
+        if not is_fix:
+            self.schedule.clear_unlocked_days()
 
         for emp in self.schedule.employees:
             object.__setattr__(emp, '_orig_daily_hours', emp.daily_hours)
@@ -384,7 +385,23 @@ class AutoScheduleGenerator:
                 self.SHIFT_CLOSE
             )
         )
-        
+        if is_fix:
+            from logic.generator.fix import setup_fix_hints_and_penalties
+            fix_penalties = setup_fix_hints_and_penalties(
+                model,
+                x,
+                employees,
+                days,
+                self.schedule,
+                self.shop,
+                self.ALL_SHIFTS,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP
+            )
+            all_soft_violations.extend(fix_penalties)
+
         build_objective(model, all_soft_violations)
         solver, status = solve_model(model)
         success = save_solution(

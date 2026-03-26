@@ -42,10 +42,17 @@ class ScheduleController:
     def get_day(self, emp, day):
         return self.schedule.get_day(emp, day)
 
-    def generate_schedule(self):
+    def generate_schedule(self, force=False):
         from logic.auto_generator import AutoScheduleGenerator
         generator = AutoScheduleGenerator(self.schedule, self.shop_config)
-        return generator.generate()
+        
+        is_fix = getattr(self.schedule, "is_generated", False) and not force
+        result = generator.generate(is_fix=is_fix)
+        
+        if result and result.get("success"):
+            self.schedule.is_generated = True
+            
+        return result
 
     def set_shift(self, emp, day, shift_type, start=None, end=None):
         self.snapshot()

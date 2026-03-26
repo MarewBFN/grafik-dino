@@ -11,6 +11,7 @@ class MonthSchedule:
         self.year = year
         self.month = month
         self.days_in_month = calendar.monthrange(year, month)[1]
+        self.is_generated = False
 
         self.employees: list[Employee] = []
         self._data: Dict[Employee, Dict[int, DaySchedule]] = {}
@@ -147,6 +148,7 @@ class MonthSchedule:
         return {
             "year": self.year,
             "month": self.month,
+            "is_generated": getattr(self, "is_generated", False),
             "employees": [
                 {
                     "first_name": e.first_name,
@@ -174,6 +176,7 @@ class MonthSchedule:
     @classmethod
     def from_dict(cls, data):
         sched = cls(data["year"], data["month"])
+        sched.is_generated = data.get("is_generated", False)
 
         for ed in data["employees"]:
             emp = Employee(

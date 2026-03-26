@@ -38,12 +38,13 @@ from ui.time_input import TimeInputWidget
 class GeneratorWorker(QObject):
     finished = Signal(object)
 
-    def __init__(self, controller):
+    def __init__(self, controller, force=False):
         super().__init__()
         self.controller = controller
+        self.force = force
 
     def run(self):
-        result = self.controller.generate_schedule()
+        result = self.controller.generate_schedule(force=self.force)
         self.finished.emit(result)
 
 class LoadingSpinner(QWidget):
@@ -177,7 +178,13 @@ class MainWindow(QMainWindow):
         self.btn_generate = QPushButton("Generuj grafik")
         self.btn_generate.setObjectName("primaryButton")
         self.btn_generate.setMinimumHeight(44)
-        self.btn_generate.clicked.connect(self._generate_schedule)
+        self.btn_generate.clicked.connect(self._on_generate_clicked)
+        
+        self.btn_regenerate = QPushButton("Generuj ponownie")
+        self.btn_regenerate.setObjectName("secondaryButton")
+        self.btn_regenerate.setMinimumHeight(44)
+        self.btn_regenerate.clicked.connect(self._on_force_generate_clicked)
+        self.btn_regenerate.hide()
 
         self.btn_add_employee = QPushButton("Dodaj pracownika")
         self.btn_add_employee.setObjectName("secondaryButton")
@@ -203,6 +210,7 @@ class MainWindow(QMainWindow):
         self.btn_quick_mode.clicked.connect(self._toggle_quick_mode)
 
         layout.addWidget(self.btn_generate)
+        layout.addWidget(self.btn_regenerate)
         layout.addWidget(self.btn_add_employee)
         layout.addWidget(self.btn_undo)
         layout.addWidget(self.btn_quick_mode)
@@ -381,6 +389,14 @@ class MainWindow(QMainWindow):
         self._update_window_title()
         self._update_state_label()
 
+        if hasattr(self, "btn_generate") and hasattr(self, "btn_regenerate"):
+            if getattr(self.schedule, "is_generated", False):
+                self.btn_generate.setText("Napraw")
+                self.btn_regenerate.show()
+            else:
+                self.btn_generate.setText("Generuj grafik")
+                self.btn_regenerate.hide()
+
     def _sync_grid(self):
         self.grid.set_data(
             self.schedule,
@@ -431,7 +447,13 @@ class MainWindow(QMainWindow):
         self._sync_everything()
         self.statusBar().showMessage("Utworzono nowy grafik dla wybranego miesiąca.", 2500)
 
-    def _generate_schedule(self):
+    def _on_generate_clicked(self):
+        self._generate_schedule(force=False)
+        
+    def _on_force_generate_clicked(self):
+        self._generate_schedule(force=True)
+
+    def _generate_schedule(self, force=False):
         if not self.schedule.employees:
             QMessageBox.information(self, "Generowanie", "Dodaj pracowników przed generowaniem grafiku.")
             return
@@ -439,7 +461,7 @@ class MainWindow(QMainWindow):
         self._show_loading()
 
         self.thread = QThread()
-        self.worker = GeneratorWorker(self.controller)
+        self.worker = GeneratorWorker(self.controller, force=force)
 
         self.worker.moveToThread(self.thread)
 
