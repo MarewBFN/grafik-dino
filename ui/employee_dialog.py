@@ -92,7 +92,6 @@ class EmployeeDialog(QDialog):
 
         form.addRow("Nazwisko:", self.last_name)
         form.addRow("Imię:", self.first_name)
-        form.addRow("Cel miesięczny:", self.monthly_target_hours)
         form.addRow("Wymiar etatu:", self.employment_fraction)
 
         root.addLayout(form)

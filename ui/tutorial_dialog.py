@@ -1,4 +1,9 @@
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+from PySide6.QtWidgets import (
+    QDialog, QVBoxLayout, QLabel, QPushButton,
+    QHBoxLayout, QWidget
+)
+from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt
 
 
 class TutorialDialog(QDialog):
@@ -6,8 +11,9 @@ class TutorialDialog(QDialog):
         super().__init__(parent)
 
         self.setWindowTitle("Samouczek")
-        self.resize(460, 260)
+        self.resize(520, 420)
 
+        # === TEKSTY ===
         self.steps = [
             "Witaj w Grafik Dino v2!\n\n"
             "Program służy do tworzenia grafików pracy dla sklepów.\n"
@@ -22,8 +28,8 @@ class TutorialDialog(QDialog):
 
             "Krok 2 — Generowanie grafiku\n\n"
             "Kliknij 'Generuj grafik', aby program ułożył grafik automatycznie.\n"
-            "Uwzględniane są ograniczenia (np. godziny pracy, role).\n"
-            "Jeśli nie znajdzie rozwiązania — trzeba poprawić dane.",
+            "Uwzględniane są ograniczenia.\n"
+            "Jeśli nie znajdzie rozwiązania — popraw dane.",
 
             "Krok 3 — Edycja ręczna\n\n"
             "Kliknij dwukrotnie komórkę, aby edytować dzień.\n"
@@ -33,40 +39,56 @@ class TutorialDialog(QDialog):
             "- urlop",
 
             "Krok 4 — Tryb szybki\n\n"
-            "Włącz 'Tryb szybki', aby szybko wypełniać grafik.\n"
-            "Działa tak:\n"
-            "1. Wybierasz typ (Praca / Wolne / Urlop)\n"
-            "2. (dla pracy) ustawiasz godziny\n"
-            "3. Klikasz w komórki → wpisuje się automatycznie\n\n"
-            "To najszybszy sposób ręcznego układania grafiku.",
+            "1. Wybierasz typ\n"
+            "2. Ustawiasz godziny\n"
+            "3. Klikasz komórki\n\n"
+            "Najszybsza metoda.",
 
             "Krok 5 — Menu kontekstowe\n\n"
-            "Kliknij prawym przyciskiem na komórkę:\n"
-            "- ustaw poranną zmianę\n"
-            "- ustaw zamknięcie\n"
-            "- kopiuj / wklej dzień\n\n"
-            "To przyspiesza poprawki grafiku.",
+            "Prawy klik:\n"
+            "- zmiana poranna\n"
+            "- zamknięcie\n"
+            "- kopiuj / wklej",
 
             "Krok 6 — Eksport i zapis\n\n"
-            "Możesz zapisać projekt do pliku i wrócić do niego później.\n"
-            "Dostępny jest też eksport do Excela.",
+            "Zapisz projekt i wróć później.\n"
+            "Eksport do Excela.",
 
             "Gotowe!\n\n"
-            "Najprostszy workflow:\n"
             "1. Dodaj pracowników\n"
-            "2. Kliknij 'Generuj grafik'\n"
-            "3. Popraw ręcznie lub trybem szybkim\n\n"
-            "I masz gotowy grafik."
+            "2. Generuj\n"
+            "3. Popraw\n\n"
+            "Koniec."
+        ]
+
+        # === OBRAZY (ścieżki do plików) ===
+        # Podmienisz sobie później np. na: "assets/tutorial/step1.png"
+        self.images = [
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None
         ]
 
         self.current_step = 0
 
         self.layout = QVBoxLayout(self)
 
+        # === TEKST ===
         self.label = QLabel(self.steps[self.current_step])
         self.label.setWordWrap(True)
         self.layout.addWidget(self.label)
 
+        # === OBRAZ ===
+        self.image_label = QLabel()
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.layout.addWidget(self.image_label)
+
+        # === PRZYCISKI ===
         btn_row = QHBoxLayout()
 
         self.btn_prev = QPushButton("Wstecz")
@@ -80,7 +102,7 @@ class TutorialDialog(QDialog):
 
         self.layout.addLayout(btn_row)
 
-        self._update_buttons()
+        self._update_view()
 
     def next_step(self):
         if self.current_step < len(self.steps) - 1:
@@ -96,10 +118,26 @@ class TutorialDialog(QDialog):
 
     def _update_view(self):
         self.label.setText(self.steps[self.current_step])
+        self._update_image()
         self._update_buttons()
+
+    def _update_image(self):
+        path = self.images[self.current_step]
+
+        if path:
+            pixmap = QPixmap(path)
+            if not pixmap.isNull():
+                self.image_label.setPixmap(
+                    pixmap.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                )
+                self.image_label.show()
+                return
+
+        self.image_label.hide()
 
     def _update_buttons(self):
         self.btn_prev.setEnabled(self.current_step > 0)
+
         if self.current_step == len(self.steps) - 1:
             self.btn_next.setText("Zamknij")
         else:
