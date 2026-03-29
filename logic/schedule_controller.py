@@ -14,20 +14,32 @@ class ScheduleController:
         return self.schedule
 
     def set_day_free(self, emp, day):
+        ds = self.schedule.get_day(emp, day)
+
+        if ds.start is None and ds.end is None and not ds.is_leave and not ds.is_sick:
+            return
+
         self.snapshot()
         self.schedule.set_day_free(emp, day)
-        ds = self.schedule.get_day(emp, day)
         ds.is_locked = True
 
     def set_day_hours(self, emp, day, start, end):
+        ds = self.schedule.get_day(emp, day)
+
+        if ds.start == start and ds.end == end and not ds.is_leave and not ds.is_sick:
+            return
+
         self.snapshot()
         self.schedule.set_day_hours(emp, day, start, end)
-        ds = self.schedule.get_day(emp, day)
         ds.is_locked = True
 
     def set_day_leave(self, emp, day):
-        self.snapshot()
         ds = self.schedule.get_day(emp, day)
+
+        if ds.is_leave:
+            return
+
+        self.snapshot()
         ds.set_leave()
         ds.is_locked = True
 
@@ -55,9 +67,23 @@ class ScheduleController:
         return result
 
     def set_shift(self, emp, day, shift_type, start=None, end=None):
-        self.snapshot()
-
         ds = self.schedule.get_day(emp, day)
+
+        # --- BLOKADA DUPLIKATÓW ---
+        if shift_type == "OFF":
+            if ds.start is None and ds.end is None and not ds.is_leave and not ds.is_sick:
+                return
+
+        elif shift_type == "LEAVE":
+            if ds.is_leave:
+                return
+
+        elif shift_type == "WORK":
+            if start is not None and end is not None:
+                if ds.start == start and ds.end == end and not ds.is_leave and not ds.is_sick:
+                    return
+
+        self.snapshot()
 
         if shift_type == "OFF":
             ds.start = None
@@ -97,7 +123,11 @@ class ScheduleController:
         self.schedule.remove_employee(employee)
 
     def set_day_sick(self, emp, day):
-        self.snapshot()
         ds = self.schedule.get_day(emp, day)
+
+        if ds.is_sick:
+            return
+
+        self.snapshot()
         ds.set_sick()
         ds.is_locked = True
