@@ -163,7 +163,7 @@ class MainWindow(QMainWindow):
         self.btn_change_date = QPushButton("Zmień datę")
         self.btn_change_date.setStyleSheet("color: #0078d4; text-align: left; background: transparent; border: none; text-decoration: underline;")
         self.btn_change_date.setCursor(Qt.PointingHandCursor)
-        self.btn_change_date.setFixedWidth(80)
+        self.btn_change_date.setFixedWidth(120)
         self.btn_change_date.clicked.connect(self._enter_edit_date_mode)
         
         layout.addWidget(self.btn_change_date)
@@ -208,11 +208,13 @@ class MainWindow(QMainWindow):
         self.btn_generate.setObjectName("primaryButton")
         self.btn_generate.setMinimumHeight(44)
         self.btn_generate.clicked.connect(self._on_generate_clicked)
+        self.btn_generate.setToolTip("Tworzy nowy grafik od zera. Nie nadpisuje ręcznie wprowadzonych zmian")
         
         self.btn_regenerate = QPushButton("Generuj ponownie")
         self.btn_regenerate.setObjectName("secondaryButton")
         self.btn_regenerate.setMinimumHeight(44)
         self.btn_regenerate.clicked.connect(self._on_force_generate_clicked)
+        self.btn_generate.setToolTip("Tworzy nowy grafik od zera. Nie nadpisuje ręcznie wprowadzonych zmian")
         self.btn_regenerate.hide()
 
         self.btn_add_employee = QPushButton("Dodaj pracownika")
@@ -225,6 +227,7 @@ class MainWindow(QMainWindow):
         self.btn_undo.clicked.connect(self._undo)
 
         self.btn_quick_mode = QPushButton("Tryb szybki")
+        self.btn_quick_mode.setToolTip("Tryb szybkiego wprowadzania zmian ręcznie.")
         self.btn_quick_mode.setObjectName("secondaryButton")
         self.btn_quick_mode.setMinimumHeight(44)
         self.btn_quick_mode.setCheckable(True)
@@ -422,6 +425,7 @@ class MainWindow(QMainWindow):
             if getattr(self.schedule, "is_generated", False):
                 self.btn_generate.setText("Napraw grafik")
                 self.btn_regenerate.show()
+                self.btn_regenerate.setToolTip("Szybka naprawa po ręcznych zmianach.")
             else:
                 self.btn_generate.setText("Generuj grafik")
                 self.btn_regenerate.hide()
@@ -441,7 +445,7 @@ class MainWindow(QMainWindow):
         self.grid.refresh()
 
     def _update_window_title(self):
-        self.setWindowTitle(f"Grafik Dino v2 — {self.month:02d}.{self.year}")
+        self.setWindowTitle(f"Grafik Dino — {self.month:02d}.{self.year}")
 
     def _update_nominal_hours_label(self):
         if not self.shop_config:
