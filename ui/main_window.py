@@ -34,6 +34,7 @@ from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import ScheduleGrid
 from ui.time_input import TimeInputWidget
 from ui.tutorial_dialog import TutorialDialog
+from ui.loading_overlay import LoadingOverlay
 
 class GeneratorWorker(QObject):
     finished = Signal(object)
@@ -46,38 +47,6 @@ class GeneratorWorker(QObject):
     def run(self):
         result = self.controller.generate_schedule(force=self.force)
         self.finished.emit(result)
-
-class LoadingSpinner(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._angle = 0
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._rotate)
-        self._timer.start(16)  # ~60 FPS
-
-        self.setFixedSize(80, 80)
-
-    def _rotate(self):
-        self._angle = (self._angle + 5) % 360
-        self.update()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        rect = self.rect().adjusted(10, 10, -10, -10)
-
-        # tło (szare kółko)
-        painter.setPen(QColor(255, 255, 255, 40))
-        painter.drawEllipse(rect)
-
-        # aktywny łuk
-        pen = painter.pen()
-        pen.setWidth(4)
-        pen.setColor(QColor(255, 255, 255))
-        painter.setPen(pen)
-
-        painter.drawArc(rect, int(self._angle * 16), int(120 * 16))
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -105,7 +74,7 @@ class MainWindow(QMainWindow):
         self._init_state()
         self._sync_everything()
         self._try_load_last_project()
-        self._build_loading_overlay()
+        self.loading_overlay = LoadingOverlay(self)
 
         self.statusBar().showMessage("Gotowe")
         QTimer.singleShot(0, self._check_first_run)
@@ -890,51 +859,13 @@ class MainWindow(QMainWindow):
         dialog = TutorialDialog(self)
         dialog.exec()
 
-    def _build_loading_overlay(self):
-        self.loading_overlay = QWidget(self)
-        self.loading_overlay.setStyleSheet("background-color: rgba(0, 0, 0, 120);")
-        self.loading_overlay.hide()
-
-        layout = QVBoxLayout(self.loading_overlay)
-        layout.setAlignment(Qt.AlignCenter)
-
-        self.spinner = LoadingSpinner(self)
-        layout.addWidget(self.spinner, alignment=Qt.AlignCenter)
-
-        self.loading_label = QLabel("Generowanie grafiku...")
-        self._loading_messages = [
-            "Analizowanie dostępności pracowników...",
-            "Układanie zmian porannych i popołudniowych...",
-            "Sprawdzanie ograniczeń...",
-            "Balansowanie godzin pracy...",
-            "Dopasowywanie otwarcia i zamknięcia...",
-        ]
-
-        self._loading_msg_index = 0
-
-        self._loading_timer = QTimer(self)
-        self._loading_timer.timeout.connect(self._update_loading_text)
-        self.loading_label.setStyleSheet("color: white; font-size: 20px;")
-        self.loading_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.loading_label)
-
-    def _update_loading_text(self):
-        if not self._loading_messages:
-            return
-
-        self.loading_label.setText(self._loading_messages[self._loading_msg_index])
-        self._loading_msg_index = (self._loading_msg_index + 1) % len(self._loading_messages)
-
     def _show_loading(self):
-        self.loading_overlay.setGeometry(self.rect())
-        self.loading_overlay.show()
-        self._loading_msg_index = 0
-        self._loading_timer.start(3000)
+        self.loading_overlay.show_overlay()
         QApplication.processEvents()
 
     def _hide_loading(self):
-        self._loading_timer.stop()
-        self.loading_overlay.hide()
+        self.loading_overlay.hide_overlay()
+
 
     def _ctx_sick(self, emp, day):
         self.controller.set_day_sick(emp, day)
@@ -1024,7 +955,6 @@ class MainWindow(QMainWindow):
         flag_path = "first_run.flag"
 
         if not os.path.exists(flag_path):
-            from ui.tutorial_dialog import TutorialDialog
 
             dialog = TutorialDialog(self)
             dialog.setWindowModality(Qt.ApplicationModal)
@@ -1036,36 +966,3 @@ class MainWindow(QMainWindow):
                 except:
                     pass
 
-from PySide6.QtCore import QTimer
-
-class LoadingSpinner(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._angle = 0
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._rotate)
-        self._timer.start(16)  # ~60 FPS
-
-        self.setFixedSize(80, 80)
-
-    def _rotate(self):
-        self._angle = (self._angle + 5) % 360
-        self.update()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        rect = self.rect().adjusted(10, 10, -10, -10)
-
-        # tło (szare kółko)
-        painter.setPen(QColor(255, 255, 255, 40))
-        painter.drawEllipse(rect)
-
-        # aktywny łuk
-        pen = painter.pen()
-        pen.setWidth(4)
-        pen.setColor(QColor(255, 255, 255))
-        painter.setPen(pen)
-
-        painter.drawArc(rect, int(self._angle * 16), int(120 * 16))
