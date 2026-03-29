@@ -846,6 +846,7 @@ class MainWindow(QMainWindow):
             self.quick_panel.hide()
 
     def _set_quick_shift(self, shift_type):
+        self.quick_duration_label.setText("Czas pracy: 0:00")
         self._quick_manual_end = False
         self.quick_selected_shift = shift_type
 
@@ -966,7 +967,7 @@ class MainWindow(QMainWindow):
         h = minutes // 60
         m = minutes % 60
 
-        self.quick_duration_label.setText(f"{h}:{m:02d}")
+        self.quick_duration_label.setText(f"Czas pracy: {h}:{m:02d}")
 
 from PySide6.QtCore import QTimer
 
