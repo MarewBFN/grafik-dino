@@ -901,16 +901,38 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.spinner, alignment=Qt.AlignCenter)
 
         self.loading_label = QLabel("Generowanie grafiku...")
+        self._loading_messages = [
+            "Analizowanie dostępności pracowników...",
+            "Układanie zmian porannych i popołudniowych...",
+            "Sprawdzanie ograniczeń...",
+            "Balansowanie godzin pracy...",
+            "Dopasowywanie otwarcia i zamknięcia...",
+        ]
+
+        self._loading_msg_index = 0
+
+        self._loading_timer = QTimer(self)
+        self._loading_timer.timeout.connect(self._update_loading_text)
         self.loading_label.setStyleSheet("color: white; font-size: 20px;")
         self.loading_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.loading_label)
 
+    def _update_loading_text(self):
+        if not self._loading_messages:
+            return
+
+        self.loading_label.setText(self._loading_messages[self._loading_msg_index])
+        self._loading_msg_index = (self._loading_msg_index + 1) % len(self._loading_messages)
+
     def _show_loading(self):
         self.loading_overlay.setGeometry(self.rect())
         self.loading_overlay.show()
+        self._loading_msg_index = 0
+        self._loading_timer.start(3000)
         QApplication.processEvents()
 
     def _hide_loading(self):
+        self._loading_timer.stop()
         self.loading_overlay.hide()
 
     def _ctx_sick(self, emp, day):
@@ -979,10 +1001,7 @@ class MainWindow(QMainWindow):
         )
 
         if reply == QMessageBox.Yes:
-            try:
-                save_project("last_project.json", self.schedule, self.shop_config)
-            except:
-                pass
+            self._save_project()
             event.accept()
 
         elif reply == QMessageBox.No:
