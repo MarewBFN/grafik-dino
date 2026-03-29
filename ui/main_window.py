@@ -35,6 +35,8 @@ from ui.grid_view import ScheduleGrid
 from ui.time_input import TimeInputWidget
 from ui.tutorial_dialog import TutorialDialog
 from ui.loading_overlay import LoadingOverlay
+from ui.demo_manager import DemoManager
+from ui.license_manager import get_user_id, show_license_dialog
 
 class GeneratorWorker(QObject):
     finished = Signal(object)
@@ -52,9 +54,18 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        from ui.license_manager import load_license, validate_license
+
+        self.user_id = get_user_id()
+        self.demo = DemoManager()
+
+        saved_key = load_license()
+        if saved_key and validate_license(self.user_id, saved_key):
+            self.demo.is_demo = False
+
         self.setWindowTitle("Grafik Dino v2")
         self.resize(1540, 920)
-
+        self.user_id = get_user_id()
         today = date.today()
         self.year = today.year
         self.month = today.month
@@ -78,6 +89,9 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage("Gotowe")
         QTimer.singleShot(0, self._check_first_run)
+
+    def _open_license_dialog(self):
+        show_license_dialog(self)
 
     def _build_ui(self):
         self._build_menu()
@@ -222,8 +236,18 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.btn_redo)
         layout.addWidget(self.btn_quick_mode)
         layout.addWidget(self.quick_panel)
-
         layout.addStretch(1)
+
+        if self.demo.is_demo:
+            self.demo_label = QLabel("Wersja demonstracyjna")
+            self.demo_label.setStyleSheet("color: #d9534f; font-size: 11px; font-weight: bold;")
+            layout.addWidget(self.demo_label)
+
+        self.user_id_label = QLabel(f"ID użytkownika: {self.user_id}")
+        self.user_id_label.setStyleSheet("color: #777; font-size: 11px;")
+        layout.addWidget(self.user_id_label)
+
+
         return panel
 
     def _build_quick_panel(self):
@@ -365,6 +389,7 @@ class MainWindow(QMainWindow):
 
         config_menu.addAction("Generator", self._open_config)
 
+        help_menu.addAction("Klucz produktu", self._open_license_dialog)
         help_menu.addAction("O programie", self._about)
 
     def _build_toolbar(self):
@@ -538,8 +563,10 @@ class MainWindow(QMainWindow):
         self._sync_everything()
 
         if result and result.get("success"):
-            self.statusBar().showMessage("Grafik wygenerowany.", 3000)
-            QMessageBox.information(self, "Sukces", "Grafik został wygenerowany.")
+            if self.demo.is_demo:
+                self.demo.show_after_generate(self)
+            else:
+                QMessageBox.information(self, "Sukces", "Grafik został wygenerowany.")
         else:
             QMessageBox.warning(self, "Brak rozwiązania", "Nie udało się znaleźć poprawnego grafiku.")
 
@@ -729,6 +756,10 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Zapisano konfigurację.", 2500)
 
     def _save_project(self):
+
+        if self.demo.block_save(self):
+            return
+        
         path, _ = QFileDialog.getSaveFileName(self, "Zapisz projekt", "", "Projekt grafiku (*.json)")
         if not path:
             return
@@ -752,6 +783,8 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Wczytano projekt.", 2500)
 
     def _export_excel(self):
+        if self.demo.block_export(self):
+            return
         path, _ = QFileDialog.getSaveFileName(self, "Eksport Excel", "", "Excel (*.xlsx)")
         if not path:
             return
@@ -760,6 +793,8 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500)
 
     def _export_image(self):
+        if self.demo.block_export(self):
+            return
         path, _ = QFileDialog.getSaveFileName(self, "Eksport JPG", "", "Obraz JPG (*.jpg)")
         if not path:
             return
@@ -939,10 +974,15 @@ class MainWindow(QMainWindow):
         clicked = msg.clickedButton()
 
         if clicked == btn_yes:
+            if self.demo.block_save(self):
+                event.ignore()
+                return
+
             try:
                 save_project("last_project.json", self.schedule, self.shop_config)
             except:
                 pass
+
             event.accept()
 
         elif clicked == btn_no:

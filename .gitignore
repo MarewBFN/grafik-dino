@@ -12,3 +12,8 @@ build/
 project_dump.py
 wyciągarka.bat
 last_project.json
+license.json
+ui/demo_manager.py
+ui/license_manager.py
+*.gitignore
+last_project.json

@@ -20,10 +20,10 @@
             "is_locked": false
           },
           "2": {
-            "start": "14:00",
-            "end": "22:45",
+            "start": "05:30",
+            "end": "13:30",
             "is_leave": false,
-            "is_locked": false
+            "is_locked": true
           },
           "4": {
             "start": "05:30",
