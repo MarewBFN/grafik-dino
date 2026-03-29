@@ -46,7 +46,7 @@ class ScheduleGrid(QTableWidget):
         
         # 4. Podwójny klik na nagłówku (zamiast PPM)
         self.horizontalHeader().sectionDoubleClicked.connect(self._handle_header_double_click)
-
+        self.horizontalHeader().setToolTip("Kliknij dwukrotnie, aby zmienić godziny pracy")
     def mouseMoveEvent(self, event):
         item = self.itemAt(event.pos())
         if item:
