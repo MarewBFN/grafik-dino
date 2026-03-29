@@ -52,12 +52,10 @@ class DayEditDialog(QDialog):
         form = QFormLayout()
 
         self.start_edit = TimeInputWidget()
-        self.start_edit.hour_box.valueChanged.connect(self._on_start_changed)
-        self.start_edit.minute_box.valueChanged.connect(self._on_start_changed)
+        self.start_edit.input.textChanged.connect(self._on_start_changed)
 
         self.end_edit = TimeInputWidget()
-        self.end_edit.hour_box.valueChanged.connect(self._on_end_changed)
-        self.end_edit.minute_box.valueChanged.connect(self._on_end_changed)
+        self.end_edit.input.textChanged.connect(self._on_end_changed)
 
         form.addRow("Start", self.start_edit)
         form.addRow("Koniec", self.end_edit)
@@ -92,6 +90,7 @@ class DayEditDialog(QDialog):
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self._save)
         root.addWidget(buttons)
+        self.start_edit.input.setFocus()
 
     def _fill_values(self, start, end):
         if start:
