@@ -1,6 +1,6 @@
 import calendar
 
-from PySide6.QtCore import Qt, QRect
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPixmap, QPen
 from PySide6.QtWidgets import QAbstractItemView, QMenu, QTableWidget, QTableWidgetItem
 from logic.constraint_presenter import ConstraintPresenter
@@ -23,6 +23,7 @@ class ScheduleGrid(QTableWidget):
 
         self._clipboard_day = None
         self.compact_mode = False
+        self.setIconSize(QSize(20, 20))
 
         self.hovered_row = None
         self.active_row = None
@@ -148,16 +149,19 @@ class ScheduleGrid(QTableWidget):
 
         if emp.is_opener and emp.is_meat:
             size = 32
+
             pixmap = QPixmap(size * 2, size)
             pixmap.fill(Qt.transparent)
 
             painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.Antialiasing)
+
             painter.drawPixmap(0, 0, self.icon_open.pixmap(size, size))
             painter.drawPixmap(size, 0, self.icon_meat.pixmap(size, size))
+
             painter.end()
 
             item.setIcon(QIcon(pixmap))
-            item.setIcon(self.icon_open_meat)
 
         elif emp.is_opener:
             item.setIcon(self.icon_open)
