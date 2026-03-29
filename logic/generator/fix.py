@@ -67,24 +67,29 @@ def setup_fix_hints_and_penalties(
             if s != 14
         )
         
-        # TWARDYK MIĘKKI LIMIT: absolutny priorytet zachowania nominalnego czasu.
-        # Ogromna kara za przekroczenie target_minutes (większa niż kara za zmianę dni)
-        over_target = model.NewIntVar(0, 50000, f"fix_over_e{e}")
-        model.Add(total_worked - target_minutes <= over_target)
-        penalties.append(over_target * 100000)
+        # TWARDY LIMIT: absolutny priorytet zachowania nominalnego czasu.
+        # Nie pozwól solverowi wyjść poza nominał ani o minutę
+        model.Add(total_worked <= target_minutes)
         
-        # Opcjonalnie karzemy również za niedobór godzin, by wolał zbalansować innych
+        # MIĘKKI LIMIT: Kara za niedobór godzin (under_target)
         under_target = model.NewIntVar(0, 50000, f"fix_under_e{e}")
-        model.Add(target_minutes - total_worked <= under_target)
-        penalties.append(under_target * 50000)
+        model.Add(target_minutes - total_worked == under_target)
+        penalties.append(under_target * 1000)
         
         for d in days:
+            day_state = schedule.get_day(emp, d)
+            
+            # TWARDY BLOK DLA URLOPÓW I L4: zerujemy pracujące zmiany
+            if day_state.is_leave or getattr(day_state, "is_sick", False):
+                for s in all_shifts:
+                    if s != 14:
+                        model.Add(x[e, d, s] == 0)
+                continue
+            
             week_num = get_iso_week(schedule.year, schedule.month, d)
             is_edited_week = week_num in edited_weeks
             
             weight = 500 if is_edited_week else 50000
-            
-            day_state = schedule.get_day(emp, d)
             
             if day_state.is_locked:
                 continue

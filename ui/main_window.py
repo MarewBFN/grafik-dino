@@ -143,29 +143,58 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(14)
 
-        title = QLabel("Grafik Dino v2")
-        title.setObjectName("titleLabel")
-        layout.addWidget(title)
+        # Widget dla "Grafik na:" i Daty
+        self.title_row_widget = QWidget()
+        title_row_layout = QHBoxLayout(self.title_row_widget)
+        title_row_layout.setContentsMargins(0, 0, 0, 0)
+        title_row_layout.setSpacing(6)
+        
+        self.title_label = QLabel("Grafik na:")
+        self.title_label.setObjectName("titleLabel")
+        title_row_layout.addWidget(self.title_label)
 
-        section = QLabel("Miesiąc i rok")
-        section.setObjectName("sectionLabel")
-        layout.addWidget(section)
+        self.date_display_label = QLabel(f"{self.month:02d}.{self.year}")
+        self.date_display_label.setObjectName("titleLabel")
+        title_row_layout.addWidget(self.date_display_label)
+        title_row_layout.addStretch(1)
+        
+        layout.addWidget(self.title_row_widget)
+
+        self.btn_change_date = QPushButton("Zmień datę")
+        self.btn_change_date.setStyleSheet("color: #0078d4; text-align: left; background: transparent; border: none; text-decoration: underline;")
+        self.btn_change_date.setCursor(Qt.PointingHandCursor)
+        self.btn_change_date.setFixedWidth(80)
+        self.btn_change_date.clicked.connect(self._enter_edit_date_mode)
+        
+        layout.addWidget(self.btn_change_date)
+
+        # Widget dla trybu edycji daty
+        self.date_edit_widget = QWidget()
+        self.date_edit_widget.hide()
+        date_edit_layout = QVBoxLayout(self.date_edit_widget)
+        date_edit_layout.setContentsMargins(0, 0, 0, 0)
 
         date_row = QHBoxLayout()
         date_row.addWidget(QLabel("Miesiąc"))
         self.month_spin = QSpinBox()
         self.month_spin.setRange(1, 12)
         self.month_spin.setValue(self.month)
-        self.month_spin.valueChanged.connect(self._on_date_change)
         date_row.addWidget(self.month_spin)
 
         date_row.addWidget(QLabel("Rok"))
         self.year_spin = QSpinBox()
         self.year_spin.setRange(2024, 2035)
         self.year_spin.setValue(self.year)
-        self.year_spin.valueChanged.connect(self._on_date_change)
         date_row.addWidget(self.year_spin)
-        layout.addLayout(date_row)
+        
+        self.btn_save_date = QPushButton("Zapisz")
+        self.btn_save_date.setObjectName("primaryButton")
+        self.btn_save_date.clicked.connect(self._save_date_clicked)
+        self.btn_save_date.setMinimumHeight(30)
+        date_row.addWidget(self.btn_save_date)
+
+        date_edit_layout.addLayout(date_row)
+        layout.addWidget(self.date_edit_widget)
 
         metric_hint = QLabel("Nominalny etat")
         metric_hint.setObjectName("metricHint")
@@ -391,7 +420,7 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "btn_generate") and hasattr(self, "btn_regenerate"):
             if getattr(self.schedule, "is_generated", False):
-                self.btn_generate.setText("Napraw")
+                self.btn_generate.setText("Napraw grafik")
                 self.btn_regenerate.show()
             else:
                 self.btn_generate.setText("Generuj grafik")
@@ -433,19 +462,54 @@ class MainWindow(QMainWindow):
         self.month_spin.blockSignals(True)
         self.year_spin.setValue(year)
         self.month_spin.setValue(month)
+        if hasattr(self, 'date_display_label'):
+            self.date_display_label.setText(f"{month:02d}.{year}")
         self.year_spin.blockSignals(False)
         self.month_spin.blockSignals(False)
         self._loading = False
 
-    def _on_date_change(self):
-        if self._loading:
+    def _enter_edit_date_mode(self):
+        self.date_display_label.hide()
+        self.btn_change_date.hide()
+        self.date_edit_widget.show()
+
+    def _save_date_clicked(self):
+        new_year = self.year_spin.value()
+        new_month = self.month_spin.value()
+        
+        if new_year == self.year and new_month == self.month:
+            self.date_edit_widget.hide()
+            self.date_display_label.show()
+            self.btn_change_date.show()
             return
-        self.year = self.year_spin.value()
-        self.month = self.month_spin.value()
-        self._init_state()
-        self._update_nominal_hours_label()
-        self._sync_everything()
-        self.statusBar().showMessage("Utworzono nowy grafik dla wybranego miesiąca.", 2500)
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Zmiana miesiąca")
+        msg_box.setText("Zmiana miesiąca spowoduje usunięcie wszystkich zmian wprowadzonych na grafiku. Kontynuować?")
+        btn_yes = msg_box.addButton("Tak", QMessageBox.YesRole)
+        btn_cancel = msg_box.addButton("Anuluj", QMessageBox.RejectRole)
+        msg_box.exec()
+
+        if msg_box.clickedButton() == btn_yes:
+            self._loading = True
+            self.year = new_year
+            self.month = new_month
+            self.date_display_label.setText(f"{self.month:02d}.{self.year}")
+            
+            self._init_state()
+            self._update_nominal_hours_label()
+            self._sync_everything()
+            self.statusBar().showMessage("Utworzono nowy grafik dla wybranego miesiąca.", 2500)
+            
+            self.date_edit_widget.hide()
+            self.date_display_label.show()
+            self.btn_change_date.show()
+            self._loading = False
+        else:
+            self._set_date_controls(self.year, self.month)
+            self.date_edit_widget.hide()
+            self.date_display_label.show()
+            self.btn_change_date.show()
 
     def _on_generate_clicked(self):
         self._generate_schedule(force=False)
