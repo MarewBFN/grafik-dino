@@ -1,8 +1,7 @@
-import calendar
 import os
 from datetime import date
 
-from PySide6.QtCore import Qt, QTime, QThread, Signal, QObject, QTimer
+from PySide6.QtCore import Qt, QThread, Signal, QObject, QTimer
 from PySide6.QtGui import QAction, QPainter, QColor
 from PySide6.QtWidgets import (
     QApplication,
@@ -34,6 +33,7 @@ from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import ScheduleGrid
 from ui.time_input import TimeInputWidget
+from ui.tutorial_dialog import TutorialDialog
 
 class GeneratorWorker(QObject):
     finished = Signal(object)
@@ -108,6 +108,7 @@ class MainWindow(QMainWindow):
         self._build_loading_overlay()
 
         self.statusBar().showMessage("Gotowe")
+        QTimer.singleShot(0, self._check_first_run)
 
     def _build_ui(self):
         self._build_menu()
@@ -1018,6 +1019,22 @@ class MainWindow(QMainWindow):
 
         else:
             event.ignore()
+
+    def _check_first_run(self):
+        flag_path = "first_run.flag"
+
+        if not os.path.exists(flag_path):
+            from ui.tutorial_dialog import TutorialDialog
+
+            dialog = TutorialDialog(self)
+            dialog.setWindowModality(Qt.ApplicationModal)
+
+            if dialog.exec() == QDialog.Accepted:
+                try:
+                    with open(flag_path, "w") as f:
+                        f.write("seen")
+                except:
+                    pass
 
 from PySide6.QtCore import QTimer
 
