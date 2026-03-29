@@ -28,7 +28,7 @@ class TutorialDialog(QDialog):
 
             "Krok 2 — Generowanie grafiku\n\n"
             "Kliknij 'Generuj grafik', aby program ułożył grafik automatycznie.\n"
-            "Uwzględniane są ograniczenia.\n"
+            "Uwzględniane są ograniczenia, a generator nigdy nie poprawia rodzin pracy wprowadzonych ręcznie\n"
             "Jeśli nie znajdzie rozwiązania — popraw dane.",
 
             "Krok 3 — Edycja ręczna\n\n"
@@ -44,15 +44,15 @@ class TutorialDialog(QDialog):
             "3. Klikasz komórki\n\n"
             "Najszybsza metoda.",
 
-            "Krok 5 — Menu kontekstowe\n\n"
-            "Prawy klik:\n"
-            "- zmiana poranna\n"
-            "- zamknięcie\n"
-            "- kopiuj / wklej",
+            "Krok 5 — Napraw grafik\n\n"
+            "Po zmianach ręcznych może wystąpić sytuacja, gdy brakuje nam osób na odpowiednie stanowiska.\n"
+            "Klikając w Napraw Grafik program odpowiednio obłoży zmiany wokół godzin wprowadzonych ręcznie.\n"
+            "Jest to szybka naprawa, więc może powodować błędy, zalecam przejrzeć grafik lub cofnąć zmiany.\n"
+            "- Generuj ponownie zajmie więcej czasu, wygeneruje poprawny grafik, ale namiesza bardziej w całym miesiącu.",
 
-            "Krok 6 — Eksport i zapis\n\n"
-            "Zapisz projekt i wróć później.\n"
-            "Eksport do Excela.",
+            "Tryb kompaktowy\n\n"
+            "Możesz łatwo przełączyć się między pełnym grafikiem, a czytelnymi jedynkami i dwójkami, jak na kartce papieru!\n"
+            "Widok zmieniamy w Konfiguracja -> Tryb kompaktowy",
 
             "Gotowe!\n\n"
             "1. Dodaj pracowników\n"
@@ -65,12 +65,12 @@ class TutorialDialog(QDialog):
         # Podmienisz sobie później np. na: "assets/tutorial/step1.png"
         self.images = [
             None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
+            "assets/tutorial/step1.png",
+            "assets/tutorial/step2.png",
+            "assets/tutorial/step3.png",
+            "assets/tutorial/step4.png",
+            "assets/tutorial/step5.png",
+            "assets/tutorial/step6.png",
             None
         ]
 

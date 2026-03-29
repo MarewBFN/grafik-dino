@@ -64,7 +64,6 @@ class MainWindow(QMainWindow):
             self.demo.is_demo = False
 
         self.setWindowTitle("Grafik Dino v2")
-        self.resize(1540, 920)
         self.user_id = get_user_id()
         today = date.today()
         self.year = today.year
@@ -89,6 +88,7 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage("Gotowe")
         QTimer.singleShot(0, self._check_first_run)
+        QTimer.singleShot(0, self.showMaximized)
 
     def _open_license_dialog(self):
         show_license_dialog(self)
@@ -198,7 +198,7 @@ class MainWindow(QMainWindow):
         self.btn_regenerate.setObjectName("secondaryButton")
         self.btn_regenerate.setMinimumHeight(44)
         self.btn_regenerate.clicked.connect(self._on_force_generate_clicked)
-        self.btn_generate.setToolTip("Tworzy nowy grafik od zera. Nie nadpisuje ręcznie wprowadzonych zmian")
+        self.btn_regenerate.setToolTip("Wymusza pełne generowanie od zera. Nadpisuje istniejący grafik")
         self.btn_regenerate.hide()
 
         self.btn_add_employee = QPushButton("Dodaj pracownika")
@@ -246,7 +246,6 @@ class MainWindow(QMainWindow):
         self.user_id_label = QLabel(f"ID użytkownika: {self.user_id}")
         self.user_id_label.setStyleSheet("color: #777; font-size: 11px;")
         layout.addWidget(self.user_id_label)
-
 
         return panel
 
@@ -435,14 +434,17 @@ class MainWindow(QMainWindow):
         self._update_window_title()
         self._update_state_label()
 
-        if hasattr(self, "btn_generate") and hasattr(self, "btn_regenerate"):
-            if getattr(self.schedule, "is_generated", False):
-                self.btn_generate.setText("Napraw grafik")
-                self.btn_regenerate.show()
-                self.btn_regenerate.setToolTip("Szybka naprawa po ręcznych zmianach. Może popełniać błędy w odrębie tygodnia")
-            else:
-                self.btn_generate.setText("Generuj grafik")
-                self.btn_regenerate.hide()
+        if getattr(self.schedule, "is_generated", False):
+            self.btn_generate.setText("Napraw grafik")
+            self.btn_generate.setToolTip("Naprawia istniejący grafik bez pełnej regeneracji")
+
+            self.btn_regenerate.show()
+            self.btn_regenerate.setToolTip("Wymusza pełne generowanie od zera. Nadpisuje cały grafik")
+        else:
+            self.btn_generate.setText("Generuj grafik")
+            self.btn_generate.setToolTip("Tworzy nowy grafik od zera. Nie nadpisuje ręcznie wprowadzonych zmian")
+
+            self.btn_regenerate.hide()
 
     def _sync_grid(self):
         self.grid.set_data(
