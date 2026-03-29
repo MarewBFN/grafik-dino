@@ -28,6 +28,20 @@ class ScheduleController:
         ds.is_locked = True
 
     def set_day_hours(self, emp, day, start, end):
+        from datetime import datetime
+
+        fmt = "%H:%M"
+
+        try:
+            start_dt = datetime.strptime(start, fmt)
+            end_dt = datetime.strptime(end, fmt)
+        except:
+            return  # nieprawidłowy format → ignoruj
+
+        # ❌ BLOKADA: koniec <= start
+        if end_dt <= start_dt:
+            return
+
         ds = self.schedule.get_day(emp, day)
 
         if ds.start == start and ds.end == end and not ds.is_leave and not ds.is_sick:
@@ -102,7 +116,20 @@ class ScheduleController:
             ds.is_sick = False
 
         elif shift_type == "WORK":
+            from datetime import datetime
+
+            fmt = "%H:%M"
+
             if start is not None and end is not None:
+                try:
+                    start_dt = datetime.strptime(start, fmt)
+                    end_dt = datetime.strptime(end, fmt)
+                except:
+                    return
+
+                if end_dt <= start_dt:
+                    return
+
                 ds.start = start
                 ds.end = end
             else:

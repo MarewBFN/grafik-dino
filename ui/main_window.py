@@ -613,6 +613,20 @@ class MainWindow(QMainWindow):
         elif dialog.result_mode == "sick":
             self.controller.set_day_sick(emp, day)
         elif dialog.result_mode == "hours":
+            from datetime import datetime
+
+            fmt = "%H:%M"
+            try:
+                start_dt = datetime.strptime(dialog.result_start, fmt)
+                end_dt = datetime.strptime(dialog.result_end, fmt)
+            except:
+                QMessageBox.warning(self, "Błąd", "Niepoprawny format godziny.")
+                return
+
+            if end_dt <= start_dt:
+                QMessageBox.warning(self, "Błąd", "Godzina zakończenia musi być późniejsza niż rozpoczęcia.")
+                return
+
             self.controller.set_day_hours(emp, day, dialog.result_start, dialog.result_end)
 
         self.schedule = self.controller.schedule

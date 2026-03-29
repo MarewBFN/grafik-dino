@@ -504,9 +504,22 @@ class ScheduleGrid(QTableWidget):
         end = None
 
         if shift == "WORK":
-            # 🔥 Poprawione odwołanie do nowej metody w TimeInputWidget
             start = self.main_window.start_input.get_time_str()
             end = self.main_window.end_input.get_time_str()
+
+            from datetime import datetime
+            fmt = "%H:%M"
+
+            try:
+                start_dt = datetime.strptime(start, fmt)
+                end_dt = datetime.strptime(end, fmt)
+            except:
+                return
+
+            if end_dt <= start_dt:
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Błąd", "Godzina zakończenia musi być późniejsza niż rozpoczęcia.")
+                return
 
         elif shift == "SICK":
             self.controller.snapshot() # Zabezpieczenie undo
