@@ -330,7 +330,7 @@ class ScheduleGrid(QTableWidget):
                             total_afternoon += 1
 
                         # 3. Mięso
-                        if emp.is_meat:
+                        if emp.is_meat and ds.start and not ds.is_leave and not getattr(ds, "is_sick", False):
                             count_meat += 1
                     except:
                         continue
@@ -344,7 +344,8 @@ class ScheduleGrid(QTableWidget):
                     # Wyświetlamy w formacie Rano / Popo
                     display_text = f"{total_morning}  /  {total_afternoon}"
                 elif key == "meat":
-                    display_text = "✅" if count_meat > 0 else "❌"
+                    view = constraint_presenter.get_validation_cell_view("meat", day)
+                    display_text = "❌" if view.bg == theme.ERR_RED else "✅"
 
                 item = QTableWidgetItem(display_text)
                 item.setTextAlignment(Qt.AlignCenter)
