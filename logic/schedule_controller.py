@@ -3,13 +3,17 @@ class ScheduleController:
         self.schedule = schedule
         self.shop_config = shop_config
         self.history = []
+        self.future = []
 
     def snapshot(self):
         self.history.append(self.schedule.snapshot())
+        self.future.clear()
 
     def undo(self):
         if not self.history:
             return self.schedule
+
+        self.future.append(self.schedule.snapshot())
         self.schedule = self.history.pop()
         return self.schedule
 
@@ -131,3 +135,11 @@ class ScheduleController:
         self.snapshot()
         ds.set_sick()
         ds.is_locked = True
+
+    def redo(self):
+        if not self.future:
+            return self.schedule
+
+        self.history.append(self.schedule.snapshot())
+        self.schedule = self.future.pop()
+        return self.schedule

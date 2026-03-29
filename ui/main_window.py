@@ -226,6 +226,10 @@ class MainWindow(QMainWindow):
         self.btn_undo.setMinimumHeight(40)
         self.btn_undo.clicked.connect(self._undo)
 
+        self.btn_redo = QPushButton("Ponów")
+        self.btn_redo.setMinimumHeight(40)
+        self.btn_redo.clicked.connect(self._redo)
+
         self.btn_quick_mode = QPushButton("Tryb szybki")
         self.btn_quick_mode.setToolTip("Tryb szybkiego wprowadzania zmian ręcznie.")
         self.btn_quick_mode.setObjectName("secondaryButton")
@@ -245,6 +249,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.btn_regenerate)
         layout.addWidget(self.btn_add_employee)
         layout.addWidget(self.btn_undo)
+        layout.addWidget(self.btn_redo)
         layout.addWidget(self.btn_quick_mode)
         layout.addWidget(self.quick_panel)
 
@@ -373,6 +378,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Zamknij", self.close)
 
         edit_menu.addAction("Cofnij", self._undo)
+        edit_menu.addAction("Ponów", self._redo)
 
         config_menu.addAction("Generator", self._open_config)
 
@@ -771,6 +777,11 @@ class MainWindow(QMainWindow):
         self.schedule = self.controller.undo()
         self._sync_everything()
         self.statusBar().showMessage("Cofnięto ostatnią zmianę.", 2500)
+
+    def _redo(self):
+        self.schedule = self.controller.redo()
+        self._sync_everything()
+        self.statusBar().showMessage("Ponowiono zmianę.", 2500)
 
     def _about(self):
         QMessageBox.information(self, "O programie", "Grafik Dino v2\nNowe UI w PySide6.")
