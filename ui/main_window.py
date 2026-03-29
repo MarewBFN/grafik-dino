@@ -992,19 +992,28 @@ class MainWindow(QMainWindow):
         self.quick_duration_label.setText(f"Czas pracy: {h}:{m:02d}")
 
     def closeEvent(self, event):
-        reply = QMessageBox.question(
-            self,
-            "Zamknij program",
-            "Czy chcesz zapisać projekt przed wyjściem?",
-            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-            QMessageBox.Yes
-        )
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Zamknij program")
+        msg.setText("Czy chcesz zapisać projekt przed wyjściem?")
 
-        if reply == QMessageBox.Yes:
-            self._save_project()
+        btn_yes = msg.addButton("Zapisz", QMessageBox.AcceptRole)
+        btn_no = msg.addButton("Nie zapisuj", QMessageBox.DestructiveRole)
+        btn_cancel = msg.addButton("Anuluj", QMessageBox.RejectRole)
+
+        msg.setDefaultButton(btn_yes)
+
+        msg.exec()
+
+        clicked = msg.clickedButton()
+
+        if clicked == btn_yes:
+            try:
+                save_project("last_project.json", self.schedule, self.shop_config)
+            except:
+                pass
             event.accept()
 
-        elif reply == QMessageBox.No:
+        elif clicked == btn_no:
             event.accept()
 
         else:
