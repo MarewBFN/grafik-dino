@@ -431,7 +431,7 @@ class MainWindow(QMainWindow):
             if getattr(self.schedule, "is_generated", False):
                 self.btn_generate.setText("Napraw grafik")
                 self.btn_regenerate.show()
-                self.btn_regenerate.setToolTip("Szybka naprawa po ręcznych zmianach.")
+                self.btn_regenerate.setToolTip("Szybka naprawa po ręcznych zmianach. Może popełniać błędy w odrębie tygodnia")
             else:
                 self.btn_generate.setText("Generuj grafik")
                 self.btn_regenerate.hide()
