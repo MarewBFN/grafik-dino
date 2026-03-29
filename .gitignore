@@ -11,3 +11,4 @@ dist/
 build/
 project_dump.py
 wyciągarka.bat
+last_project.json

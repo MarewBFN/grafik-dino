@@ -969,6 +969,28 @@ class MainWindow(QMainWindow):
 
         self.quick_duration_label.setText(f"Czas pracy: {h}:{m:02d}")
 
+    def closeEvent(self, event):
+        reply = QMessageBox.question(
+            self,
+            "Zamknij program",
+            "Czy chcesz zapisać projekt przed wyjściem?",
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+            QMessageBox.Yes
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                save_project("last_project.json", self.schedule, self.shop_config)
+            except:
+                pass
+            event.accept()
+
+        elif reply == QMessageBox.No:
+            event.accept()
+
+        else:
+            event.ignore()
+
 from PySide6.QtCore import QTimer
 
 class LoadingSpinner(QWidget):

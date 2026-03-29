@@ -2,6 +2,7 @@
   "schedule": {
     "year": 2026,
     "month": 6,
+    "is_generated": false,
     "employees": [
       {
         "first_name": "Danuta",
@@ -10,6 +11,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "14:00",
@@ -152,6 +154,7 @@
         "is_meat": true,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "12:30",
@@ -294,6 +297,7 @@
         "is_meat": true,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "07:00",
@@ -436,6 +440,7 @@
         "is_meat": true,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "07:00",
@@ -578,6 +583,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "14:00",
@@ -720,6 +726,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "12:30",
@@ -862,6 +869,7 @@
         "is_meat": true,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "14:00",
@@ -1004,6 +1012,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "05:30",
@@ -1146,6 +1155,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "07:00",
@@ -1288,6 +1298,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "05:30",
@@ -1430,6 +1441,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "07:00",
@@ -1572,6 +1584,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "12:30",
@@ -1714,6 +1727,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "12:30",
@@ -1856,6 +1870,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "12:30",
@@ -1998,6 +2013,7 @@
         "is_meat": true,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "05:30",
@@ -2140,6 +2156,7 @@
         "is_meat": true,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "12:30",
@@ -2282,6 +2299,7 @@
         "is_meat": false,
         "monthly_target_hours": 160,
         "daily_hours": 8,
+        "employment_fraction": 1.0,
         "days": {
           "1": {
             "start": "07:00",
@@ -2458,6 +2476,7 @@
       "max_consecutive_days": 4,
       "min_open_staff": 3,
       "min_close_staff": 3,
+      "force_fulltime_845": true,
       "enforce_11h_rest": true,
       "enforce_meat_coverage": true
     },
