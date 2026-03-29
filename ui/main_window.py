@@ -317,17 +317,30 @@ class MainWindow(QMainWindow):
         self.end_input = TimeInputWidget()
         self.end_input.set_time_str("14:00")
 
+        time_layout.addWidget(QLabel(" Od "))
         time_layout.addWidget(self.start_input)
-        time_layout.addWidget(QLabel(" do "))
+        time_layout.addWidget(QLabel(" Do "))
         time_layout.addWidget(self.end_input)
+
+        self.quick_duration_label = QLabel("0:00")
+        self.quick_duration_label.setStyleSheet("color: #555; font-size: 11px;")
 
         self.time_panel.setLayout(time_layout)
         self.time_panel.hide()
 
         layout.addWidget(self.time_panel)
 
+        self.quick_duration_label = QLabel("Czas pracy: 0:00")
+        self.quick_duration_label.setObjectName("metricValue")
+        layout.addWidget(self.quick_duration_label)
+
         self.quick_panel.setLayout(layout)
         self.quick_panel.hide()
+
+        self._quick_manual_end = False
+
+        self.start_input.input.textChanged.connect(self._quick_on_start_changed)
+        self.end_input.input.textChanged.connect(self._quick_on_end_changed)
 
     def _build_right_panel(self):
         panel = QFrame()
@@ -833,6 +846,7 @@ class MainWindow(QMainWindow):
             self.quick_panel.hide()
 
     def _set_quick_shift(self, shift_type):
+        self._quick_manual_end = False
         self.quick_selected_shift = shift_type
 
         # reset
@@ -902,6 +916,57 @@ class MainWindow(QMainWindow):
         self.controller.set_day_sick(emp, day)
         self.schedule = self.controller.schedule
         self._sync_everything()
+
+    def _quick_on_start_changed(self, _):
+        if not self._quick_manual_end:
+            self._quick_suggest_end()
+        self._quick_update_duration()
+
+
+    def _quick_on_end_changed(self, _):
+        self._quick_manual_end = True
+        self._quick_update_duration()
+
+
+    def _quick_suggest_end(self):
+        from datetime import datetime, timedelta
+
+        fmt = "%H:%M"
+
+        try:
+            start = datetime.strptime(self.start_input.get_time_str(), fmt)
+        except:
+            return
+
+        hours = 8  # możesz potem podpiąć pod pracownika
+
+        end = start + timedelta(hours=hours)
+
+        self.end_input.input.blockSignals(True)
+        self.end_input.set_time_str(end.strftime(fmt))
+        self.end_input.input.blockSignals(False)
+
+
+    def _quick_update_duration(self):
+        from datetime import datetime
+
+        fmt = "%H:%M"
+
+        try:
+            start = datetime.strptime(self.start_input.get_time_str(), fmt)
+            end = datetime.strptime(self.end_input.get_time_str(), fmt)
+        except:
+            self.quick_duration_label.setText(f"Czas pracy: {h}:{m:02d}")
+            return
+
+        minutes = int((end - start).total_seconds() / 60)
+        if minutes < 0:
+            minutes = 0
+
+        h = minutes // 60
+        m = minutes % 60
+
+        self.quick_duration_label.setText(f"{h}:{m:02d}")
 
 from PySide6.QtCore import QTimer
 
