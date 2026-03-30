@@ -188,7 +188,6 @@ class ConfigDialog(QDialog):
         self.force_fulltime_845.setChecked(
             self.shop_config.constraints.get("force_fulltime_845", True)
         )
-        self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
         fulltime_layout.addWidget(self.force_fulltime_845)
         layout.addWidget(fulltime_card)
 
@@ -196,7 +195,7 @@ class ConfigDialog(QDialog):
         hl_card = QFrame()
         hl_card.setObjectName("configCard")
         hl_layout = QHBoxLayout(hl_card)
-        self.hl_consecutive = QCheckBox("Podświetlaj przekroczenie limitu dni pod rząd (Grid)")
+        self.hl_consecutive = QCheckBox("Podświetlaj przekroczenie limitu dni pod rząd")
         self.hl_consecutive.setCursor(Qt.PointingHandCursor)
         self.hl_consecutive.setChecked(
             self.shop_config.constraints.get("highlight_max_consecutive", False)
@@ -252,7 +251,7 @@ class ConfigDialog(QDialog):
             self.shop_config.constraints["enforce_11h_rest"] = True
             self.shop_config.constraints["enforce_meat_coverage"] = True
             self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
-
+            self.shop_config.constraints["highlight_max_consecutive"] = self.hl_consecutive.isChecked()
         except Exception as exc:
             QMessageBox.critical(self, "Błąd konfiguracji", str(exc))
             return

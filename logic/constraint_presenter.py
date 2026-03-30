@@ -18,10 +18,11 @@ class ConstraintPresenter:
         self.violations = ConstraintEngine.evaluate(schedule, shop_config)
 
     def get_cell_error(self, emp, day):
+        errors = []
         for v in self.violations:
             if v.employee == emp and v.day == day:
-                return True
-        return False
+                errors.append(v)
+        return errors
 
     def get_validation_cell_view(self, key, day):
         view = ValidationCellView()

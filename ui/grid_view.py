@@ -242,15 +242,13 @@ class ScheduleGrid(QTableWidget):
 
             # 3. Sprawdzanie błędów z flagą highlight_max_consecutive oraz zabezpieczenie przed błędem typu
             error = constraint_presenter.get_cell_error(emp, day)
+
             if error:
-                is_cons_err = False
-                if isinstance(error, str):
-                    is_cons_err = "dni pod rząd" in error.lower()
-                
-                if not is_cons_err or hl_consecutive:
+                has_consecutive = any(v.type == "max_consecutive_days" for v in error)
+
+                if not has_consecutive or hl_consecutive:
                     item.setBackground(QBrush(QColor(theme.ERR_RED)))
-                    if isinstance(error, str):
-                        item.setToolTip(error)
+                    item.setToolTip("\n".join(v.message for v in error if v.message))
 
             self.setItem(row, day, item)
 
