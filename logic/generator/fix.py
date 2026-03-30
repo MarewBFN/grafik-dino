@@ -23,6 +23,23 @@ def setup_fix_hints_and_penalties(
     from the current generated schedule.
     Heavily penalizes changes outside the weeks where manual edits were made.
     """
+
+    # 🔥 BLOKADA: popo → brak open następnego dnia
+    afternoon_shifts = [SHIFT_CLOSE] + list(END_SHIFT_MAP.keys())
+    for e in range(len(employees)):
+        for d in days[:-1]:
+            worked_afternoon = model.NewBoolVar(f"aft_e{e}_d{d}")
+
+            model.Add(
+                sum(x[e, d, s] for s in afternoon_shifts) >= 1
+            ).OnlyEnforceIf(worked_afternoon)
+
+            model.Add(
+                sum(x[e, d, s] for s in afternoon_shifts) == 0
+            ).OnlyEnforceIf(worked_afternoon.Not())
+
+            model.Add(x[e, d + 1, SHIFT_OPEN] == 0).OnlyEnforceIf(worked_afternoon)
+
     edited_weeks = set()
     
     for emp in employees:
@@ -67,19 +84,23 @@ def setup_fix_hints_and_penalties(
             if s != 14
         )
         
-        # TWARDY LIMIT: absolutny priorytet zachowania nominalnego czasu.
-        # Nie pozwól solverowi wyjść poza nominał ani o minutę
-        model.Add(total_worked <= target_minutes)
-        
-        # MIĘKKI LIMIT: Kara za niedobór godzin (under_target)
-        under_target = model.NewIntVar(0, 50000, f"fix_under_e{e}")
-        model.Add(target_minutes - total_worked == under_target)
-        penalties.append(under_target * 1000)
+        # ✅ SOFT LIMIT
+        under = model.NewIntVar(0, 50000, f"fix_under_e{e}")
+        model.Add(total_worked + under >= target_minutes)
+
+        over = model.NewIntVar(0, 50000, f"fix_over_e{e}")
+        model.Add(total_worked <= target_minutes + over)
+
+        penalties.append(under * 2000)
+        penalties.append(over * 2000)
+
+        # 🔥 TWARDY CAP (max +30 min)
+        model.Add(total_worked <= target_minutes + 30)
         
         for d in days:
             day_state = schedule.get_day(emp, d)
             
-            # TWARDY BLOK DLA URLOPÓW I L4: zerujemy pracujące zmiany
+            # TWARDY BLOK DLA URLOPÓW I L4
             if day_state.is_leave or getattr(day_state, "is_sick", False):
                 for s in all_shifts:
                     if s != 14:
@@ -89,7 +110,7 @@ def setup_fix_hints_and_penalties(
             week_num = get_iso_week(schedule.year, schedule.month, d)
             is_edited_week = week_num in edited_weeks
             
-            weight = 500 if is_edited_week else 50000
+            weight = 200 if is_edited_week else 2000
             
             if day_state.is_locked:
                 continue
@@ -118,6 +139,12 @@ def setup_fix_hints_and_penalties(
                 
                 if val == 1:
                     penalties.append(weight * (1 - x[e, d, s]))
+                    
+                    if s in (SHIFT_OPEN, SHIFT_CLOSE):
+                        penalties.append(3000 * (1 - x[e, d, s]))
+                    
+                    if emp.is_meat:
+                        penalties.append(2000 * (1 - x[e, d, s]))
                 else:
                     penalties.append(weight * x[e, d, s])
                     
