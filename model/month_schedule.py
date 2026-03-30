@@ -160,13 +160,19 @@ class MonthSchedule:
                     "employment_fraction": e.employment_fraction,
                     "days": {
                         day: {
-                            "start": self.get_day(e, day).start,
-                            "end": self.get_day(e, day).end,
-                            "is_leave": self.get_day(e, day).is_leave,
-                            "is_locked": self.get_day(e, day).is_locked,
+                            "start": ds.start,
+                            "end": ds.end,
+                            "is_leave": ds.is_leave,
+                            "is_locked": ds.is_locked,
+                            "is_sick": ds.is_sick,
                         }
                         for day in range(1, self.days_in_month + 1)
-                        if not self.get_day(e, day).is_empty()
+                        if (
+                            not (ds := self.get_day(e, day)).is_empty()
+                            or ds.is_leave
+                            or getattr(ds, "is_sick", False)
+                            or getattr(ds, "is_locked", False)
+                        )
                     },
                 }
                 for e in self.employees
@@ -201,6 +207,7 @@ class MonthSchedule:
                 ds.start = dd.get("start")
                 ds.end = dd.get("end")
                 ds.is_leave = dd.get("is_leave", False)
+                ds.is_sick = dd.get("is_sick", False)
                 ds.is_locked = dd.get("is_locked", False)
 
         sched.employees.sort(key=lambda e: e.last_name.lower())

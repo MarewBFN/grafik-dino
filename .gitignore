@@ -17,3 +17,4 @@ ui/demo_manager.py
 ui/license_manager.py
 *.gitignore
 last_project.json
+last_project1.json
