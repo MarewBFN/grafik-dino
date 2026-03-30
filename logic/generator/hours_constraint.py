@@ -33,8 +33,10 @@ def add_monthly_hours_constraint(
             if getattr(ds, "is_sick", False):
                 sick_days += 1
 
-        leave_minutes = int(leave_days * emp.daily_hours * 60)
-        sick_minutes = int(sick_days * emp.daily_hours * 60)
+        daily_hours = get_effective_daily_hours(emp, shop)
+
+        leave_minutes = int(leave_days * daily_hours * 60)
+        sick_minutes = int(sick_days * daily_hours * 60)
 
         total_minutes = model.NewIntVar(0, 50000, f"month_total_e{e}")
 

@@ -2,10 +2,7 @@ from datetime import datetime, timedelta
 
 
 def get_effective_daily_hours(emp, shop):
-    if emp.employment_fraction == 1.0:
-        hours = shop.standard_daily_hours
-    else:
-        hours = 8.0
+    hours = shop.standard_daily_hours * emp.employment_fraction
 
     minutes = int(hours * 60)
     minutes = (minutes // 15) * 15

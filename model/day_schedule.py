@@ -116,11 +116,14 @@ class DaySchedule:
         self.is_leave = False
         self.is_sick = True
 
-    def total_minutes(self) -> int:
-        """
-        Zwraca czas pracy w minutach (int).
-        Jeśli brak pracy → 0.
-        """
+    def total_minutes(self, employee=None, shop=None) -> int:
+        # urlop / chorobowe
+        if self.is_leave or self.is_sick:
+            if employee and shop:
+                from logic.generator.rest_constraint import get_effective_daily_hours
+                return int(get_effective_daily_hours(employee, shop) * 60)
+            return 0
+
         duration = self.total_duration()
         if duration is None:
             return 0
