@@ -112,6 +112,13 @@ class EmployeeDialog(QDialog):
         meat_layout.addWidget(self.is_meat)
         root.addWidget(meat_card)
 
+        self.no_night = QCheckBox("Nie pracuje w godzinach nocnych (22:00+)")
+        night_card = QFrame()
+        night_card.setObjectName("configCard")
+        night_layout = QHBoxLayout(night_card)
+        night_layout.addWidget(self.no_night)
+        root.addWidget(night_card)
+
         root.addStretch()
 
         # --- Dolny pasek przycisków ---
@@ -164,6 +171,7 @@ class EmployeeDialog(QDialog):
         self.first_name.setText(self.employee.first_name)
         self.is_opener.setChecked(self.employee.is_opener)
         self.is_meat.setChecked(self.employee.is_meat)
+        self.no_night.setChecked(getattr(self.employee, "no_night", False))
         self.monthly_target_hours.setValue(self.employee.monthly_target_hours)
         idx = self.employment_fraction.findData(self.employee.employment_fraction)
         if idx >= 0:
@@ -183,6 +191,7 @@ class EmployeeDialog(QDialog):
                 first_name=fn,
                 is_opener=self.is_opener.isChecked(),
                 is_meat=self.is_meat.isChecked(),
+                no_night=self.no_night.isChecked(),
                 monthly_target_hours=self.monthly_target_hours.value(),
                 employment_fraction=self.employment_fraction.currentData(),
             )
