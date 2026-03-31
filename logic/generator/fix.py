@@ -94,17 +94,13 @@ def setup_fix_hints_and_penalties(
         penalties.append(under * 2000)
         penalties.append(over * 2000)
 
-        # 🔥 TWARDY CAP (max +30 min)
-        model.Add(total_worked <= target_minutes + 30)
-        
         for d in days:
             day_state = schedule.get_day(emp, d)
             
-            # TWARDY BLOK DLA URLOPÓW I L4
+            # 🔧 POPRAWKA — usunięty warunek s != 14
             if day_state.is_leave or getattr(day_state, "is_sick", False):
                 for s in all_shifts:
-                    if s != 14:
-                        model.Add(x[e, d, s] == 0)
+                    model.Add(x[e, d, s] == 0)
                 continue
             
             week_num = get_iso_week(schedule.year, schedule.month, d)

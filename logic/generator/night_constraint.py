@@ -45,12 +45,12 @@ def add_no_night_constraint(
             # ===== OPEN =====
             start = open_dt
             end = start + shift_delta
-            if end.hour >= 22:
+            if end.hour >= 22 or start.hour <= 6:
                 forbidden_shifts.add(SHIFT_OPEN)
 
             # ===== CLOSE =====
             end = close_dt
-            if end.hour >= 22:
+            if end.hour >= 22 or start.hour <= 6:
                 forbidden_shifts.add(SHIFT_CLOSE)
 
             # ===== START SHIFTS =====
@@ -58,14 +58,14 @@ def add_no_night_constraint(
                 start = open_dt + timedelta(minutes=offset)
                 end = start + shift_delta
 
-                if end.hour >= 22:
+                if end.hour >= 22 or start.hour <= 6:
                     forbidden_shifts.add(shift)
 
             # ===== END SHIFTS =====
             for shift, offset in END_SHIFT_MAP.items():
                 end = close_dt - timedelta(minutes=offset)
 
-                if end.hour >= 22:
+                if end.hour >= 22 or start.hour <= 6:
                     forbidden_shifts.add(shift)
 
             # ===== nakładamy constraint =====

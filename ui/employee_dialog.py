@@ -112,7 +112,7 @@ class EmployeeDialog(QDialog):
         meat_layout.addWidget(self.is_meat)
         root.addWidget(meat_card)
 
-        self.no_night = QCheckBox("Nie pracuje w godzinach nocnych (22:00+)")
+        self.no_night = QCheckBox("Nie pracuje w godzinach nocnych (przed 6:00 i po 22:00)")
         night_card = QFrame()
         night_card.setObjectName("configCard")
         night_layout = QHBoxLayout(night_card)
