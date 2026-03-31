@@ -81,7 +81,11 @@ class MonthSchedule:
         for day in range(1, self.days_in_month + 1):
             ds = self._data[employee][day]
             if ds.is_leave:
-                total_minutes += int(employee.daily_hours * employee.employment_fraction * 60)
+                total_minutes += int(
+                    employee.daily_hours *
+                    (1.0 if employee.employment_fraction >= 1.0 else employee.employment_fraction)
+                    * 60
+                )
         hours = total_minutes // 60
         minutes = total_minutes % 60
         return f"{hours}:{minutes:02d}"
@@ -91,7 +95,11 @@ class MonthSchedule:
         for day in range(1, self.days_in_month + 1):
             ds = self._data[employee][day]
             if getattr(ds, "is_sick", False):
-                total_minutes += int(employee.daily_hours * employee.employment_fraction * 60)
+                total_minutes += int(
+                    employee.daily_hours *
+                    (1.0 if employee.employment_fraction >= 1.0 else employee.employment_fraction)
+                    * 60
+                )
         return f"{total_minutes // 60}:{total_minutes % 60:02d}"
 
     def total_with_leave_for_employee(self, employee: Employee) -> str:
@@ -105,7 +113,11 @@ class MonthSchedule:
                     total_minutes += int(duration.total_seconds() // 60)
 
             if ds.is_leave:
-                total_minutes += int(employee.daily_hours * employee.employment_fraction * 60)
+                total_minutes += int(
+                    employee.daily_hours *
+                    (1.0 if employee.employment_fraction >= 1.0 else employee.employment_fraction)
+                    * 60
+                )
 
         hours = total_minutes // 60
         minutes = total_minutes % 60
@@ -122,10 +134,18 @@ class MonthSchedule:
                     total_minutes += int(duration.total_seconds() // 60)
 
             if ds.is_leave:
-                total_minutes += int(employee.daily_hours * employee.employment_fraction * 60)
+                total_minutes += int(
+                    employee.daily_hours *
+                    (1.0 if employee.employment_fraction >= 1.0 else employee.employment_fraction)
+                    * 60
+                )
 
             if getattr(ds, "is_sick", False):
-                total_minutes += int(employee.daily_hours * employee.employment_fraction * 60)
+                total_minutes += int(
+                    employee.daily_hours *
+                    (1.0 if employee.employment_fraction >= 1.0 else employee.employment_fraction)
+                    * 60
+                )
 
         return f"{total_minutes // 60}:{total_minutes % 60:02d}"
 

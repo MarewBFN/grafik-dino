@@ -83,6 +83,7 @@ class EmployeeDialog(QDialog):
 
         self.employment_fraction = QComboBox()
         self.employment_fraction.addItem("1/1 (pełny etat)", 1.0)
+        self.employment_fraction.addItem("1/1 (pełny etat) max 8:00", 1.01)
         self.employment_fraction.addItem("7/8", 0.875)
         self.employment_fraction.addItem("3/4", 0.75)
         self.employment_fraction.addItem("5/8", 0.625)

@@ -43,7 +43,7 @@ class Employee:
             raise ValueError("Dzienna liczba godzin musi być większa od 0")
 
         # 🔥 NOWA WALIDACJA
-        if self.employment_fraction <= 0 or self.employment_fraction > 1:
+        if self.employment_fraction <= 0 or self.employment_fraction > 1.01:
             raise ValueError("Wymiar etatu musi być w zakresie (0, 1]")
 
         for wd, cfg in self.availability.items():
