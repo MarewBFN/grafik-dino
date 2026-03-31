@@ -32,6 +32,7 @@ from logic.generator.objective import (
     add_edge_shift_bonus,
 )
 from logic.generator.availability_constraint import add_availability_constraint
+from logic.generator.night_constraint import add_no_night_constraint
 
 class AutoScheduleGenerator:
 
@@ -287,6 +288,36 @@ class AutoScheduleGenerator:
             )
         )
 
+        night_violations = self._apply_policy(
+            "availability",  # używamy tej samej polityki co availability
+            hard_fn=lambda: add_no_night_constraint(
+                model,
+                x,
+                employees,
+                days,
+                self.shop,
+                self.ALL_SHIFTS,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP,
+                soft=False
+            ),
+            soft_fn=lambda: add_no_night_constraint(
+                model,
+                x,
+                employees,
+                days,
+                self.shop,
+                self.ALL_SHIFTS,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP,
+                soft=True
+            )
+        )
+
         meat_violations = self._apply_policy(
             "meat",
             hard_fn=lambda: add_meat_constraint(
@@ -366,6 +397,7 @@ class AutoScheduleGenerator:
             )
         )
         all_soft_violations.extend(availability_violations)
+        all_soft_violations.extend(night_violations)
         all_soft_violations.extend(
             add_work_balance_penalty(
                 model,
