@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QLineEdit
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QEvent
 
 
 class TimeInputWidget(QWidget):
@@ -34,12 +34,28 @@ class TimeInputWidget(QWidget):
 
         self.input.textChanged.connect(self._format_time)
 
+        # 🔥 focus czyści pole
+        self.input.installEventFilter(self)
+
         layout.addWidget(self.input)
 
         self.set_time_str("00:00")
 
+    def eventFilter(self, obj, event):
+        if obj == self.input and event.type() == QEvent.FocusIn:
+            self.input.blockSignals(True)
+            self.input.clear()
+            self.input.blockSignals(False)
+        return super().eventFilter(obj, event)
+
     def _format_time(self, text):
-        digits = "".join(filter(str.isdigit, text))[:4]
+        digits = "".join(filter(str.isdigit, text))
+
+        # 🔥 auto 0 jeśli pierwsza cyfra > 2
+        if len(digits) == 1 and int(digits[0]) > 2:
+            digits = "0" + digits
+
+        digits = digits[:4]
 
         if len(digits) >= 3:
             formatted = f"{digits[:2]}:{digits[2:]}"

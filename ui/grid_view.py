@@ -473,6 +473,8 @@ class ScheduleGrid(QTableWidget):
         act_unlock = menu.addAction("Odblokuj")
         act_unlock.setEnabled(getattr(ds, "is_locked", False))
 
+        act_clear = menu.addAction("Wyczyść komórkę")
+
         action = menu.exec(global_pos)
         
         if action == act_copy:
@@ -487,6 +489,15 @@ class ScheduleGrid(QTableWidget):
             self.refresh()
         elif action == act_unlock:
             self.controller.snapshot() # Ręczny zapis przed manipulacją obiektem
+            ds.is_locked = False
+            self.refresh()
+
+        elif action == act_clear:
+            self.controller.snapshot()
+            ds.start = None
+            ds.end = None
+            ds.is_leave = False
+            ds.is_sick = False
             ds.is_locked = False
             self.refresh()
 
