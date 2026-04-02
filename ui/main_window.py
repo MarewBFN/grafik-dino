@@ -386,6 +386,9 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Cofnij", self._undo)
         edit_menu.addAction("Ponów", self._redo)
 
+        edit_menu.addSeparator()
+        edit_menu.addAction("Wyczyść grafik", self._clear_schedule)
+
         config_menu.addAction("Generator", self._open_config)
 
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
@@ -816,6 +819,36 @@ class MainWindow(QMainWindow):
         self.schedule = self.controller.redo()
         self._sync_everything()
         self.statusBar().showMessage("Ponowiono zmianę.", 2500)
+
+    def _clear_schedule(self):
+        if not self.schedule or not self.controller:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Potwierdzenie",
+            "Czy na pewno chcesz skasować wszystkie dane na grafiku?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        self.controller.snapshot()
+
+        for emp in self.schedule.employees:
+            for day in range(1, self.schedule.days_in_month + 1):
+                ds = self.schedule.get_day(emp, day)
+
+                ds.start = None
+                ds.end = None
+                ds.is_leave = False
+                ds.is_sick = False
+                ds.is_locked = False
+
+        self._sync_everything()
+        self.statusBar().showMessage("Wyczyszczono grafik.", 2500)
 
     def _about(self):
         QMessageBox.information(self, "O programie", "Grafik Dino v2\nNowe UI w PySide6.")

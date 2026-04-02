@@ -590,3 +590,34 @@ class ScheduleGrid(QTableWidget):
     def set_compact_mode(self, enabled: bool):
         self.compact_mode = enabled
         self.refresh()
+
+    def clear_schedule(self):
+        if not self.schedule or not self.controller:
+            return
+
+        from PySide6.QtWidgets import QMessageBox
+
+        reply = QMessageBox.question(
+            self,
+            "Potwierdzenie",
+            "Czy na pewno chcesz skasować wszystkie dane na grafiku?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        self.controller.snapshot()
+
+        for emp in self.schedule.employees:
+            for day in range(1, self.schedule.days_in_month + 1):
+                ds = self.schedule.get_day(emp, day)
+
+                ds.start = None
+                ds.end = None
+                ds.is_leave = False
+                ds.is_sick = False
+                ds.is_locked = False
+
+        self.refresh()
