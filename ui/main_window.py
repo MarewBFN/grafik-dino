@@ -2,7 +2,9 @@ import os
 from datetime import date
 
 from PySide6.QtCore import Qt, QThread, Signal, QObject, QTimer
-from PySide6.QtGui import QAction, QPainter, QColor
+from PySide6.QtGui import QAction, QPainter, QColor, QImage
+from PySide6.QtPrintSupport import QPrinter, QPrintDialog, QPrintPreviewDialog
+import tempfile
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -379,6 +381,9 @@ class MainWindow(QMainWindow):
         export_menu.addAction("Excel", self._export_excel)
         export_menu.addAction("JPG", self._export_image)
         file_menu.addMenu(export_menu)
+
+        file_menu.addSeparator()
+        file_menu.addAction("Drukuj...", self._print_schedule)
 
         file_menu.addSeparator()
         file_menu.addAction("Zamknij", self.close)
@@ -809,6 +814,57 @@ class MainWindow(QMainWindow):
 
         export_schedule_to_image(self.schedule, self.year, self.month, path)
         self.statusBar().showMessage("Wyeksportowano do JPG.", 2500)
+
+    def _print_schedule(self):
+        if not self.schedule:
+            QMessageBox.warning(self, "Drukowanie", "Brak grafiku do wydruku.")
+            return
+
+        try:
+            import tempfile
+            from PySide6.QtGui import QPageLayout
+
+            # 1. generujemy obraz
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+            temp_path = temp_file.name
+            temp_file.close()
+
+            export_schedule_to_image(self.schedule, self.year, self.month, temp_path)
+
+            # 2. printer
+            printer = QPrinter(QPrinter.HighResolution)
+            printer.setPageOrientation(QPageLayout.Landscape)
+
+            # 3. preview (czysty — bez styli)
+            preview = QPrintPreviewDialog(printer, self)
+            preview.setStyleSheet("")
+
+            # 4. render
+            def render(printer):
+                painter = QPainter(printer)
+
+                image = QImage(temp_path)
+                if image.isNull():
+                    painter.end()
+                    return
+
+                rect = painter.viewport()
+                size = image.size()
+                size.scale(rect.size(), Qt.KeepAspectRatio)
+
+                painter.setViewport(rect.x(), rect.y(), size.width(), size.height())
+                painter.setWindow(image.rect())
+
+                painter.drawImage(0, 0, image)
+                painter.end()
+
+            preview.paintRequested.connect(render)
+
+            # 5. odpal preview
+            preview.exec()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Błąd drukowania", str(e))
 
     def _undo(self):
         self.schedule = self.controller.undo()
