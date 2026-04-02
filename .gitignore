@@ -18,3 +18,5 @@ ui/license_manager.py
 *.gitignore
 last_project.json
 last_project1.json
+*.jpg
+*.jpeg
