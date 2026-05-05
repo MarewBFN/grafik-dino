@@ -1,8 +1,8 @@
 import os
 from datetime import date
 
-from PySide6.QtCore import Qt, QThread, Signal, QObject, QTimer
-from PySide6.QtGui import QAction, QPainter, QColor, QImage
+from PySide6.QtCore import Qt, QThread, Signal, QObject, QTimer, QUrl
+from PySide6.QtGui import QAction, QPainter, QColor, QImage, QDesktopServices
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog, QPrintPreviewDialog
 import tempfile
 from PySide6.QtWidgets import (
@@ -233,6 +233,9 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self.btn_generate)
         layout.addWidget(self.btn_regenerate)
+        self.generate_limit_label = QLabel("")
+        self.generate_limit_label.setStyleSheet("color: #777; font-size: 11px;")
+        layout.addWidget(self.generate_limit_label)
         layout.addWidget(self.btn_add_employee)
         layout.addWidget(self.btn_undo)
         layout.addWidget(self.btn_redo)
@@ -245,11 +248,31 @@ class MainWindow(QMainWindow):
             self.demo_label.setStyleSheet("color: #d9534f; font-size: 11px; font-weight: bold;")
             layout.addWidget(self.demo_label)
 
+            self.btn_buy = QPushButton("Zakup pełną wersję")
+            self.btn_buy.setStyleSheet("""
+                QPushButton {
+                    background-color: #28a745;
+                    color: white;
+                    font-weight: bold;
+                    border: none;
+                    padding: 6px;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #218838;
+                }
+            """)
+            self.btn_buy.clicked.connect(self._open_buy_page)
+            layout.addWidget(self.btn_buy)
+
         self.user_id_label = QLabel(f"ID użytkownika: {self.user_id}")
         self.user_id_label.setStyleSheet("color: #777; font-size: 11px;")
         layout.addWidget(self.user_id_label)
 
         return panel
+
+    def _open_buy_page(self):
+        QDesktopServices.openUrl(QUrl("https://madebykewin.pl"))
 
     def _build_quick_panel(self):
         self.quick_panel = QWidget(self)
@@ -441,6 +464,7 @@ class MainWindow(QMainWindow):
         self._sync_grid()
         self._update_window_title()
         self._update_state_label()
+        self._update_generate_label()
 
         if getattr(self.schedule, "is_generated", False):
             self.btn_generate.setText("Napraw grafik")
@@ -546,6 +570,9 @@ class MainWindow(QMainWindow):
         self._generate_schedule(force=True)
 
     def _generate_schedule(self, force=False):
+        if not self.demo.can_generate(self):
+            return
+
         if not self.schedule.employees:
             QMessageBox.information(self, "Generowanie", "Dodaj pracowników przed generowaniem grafiku.")
             return
@@ -573,6 +600,9 @@ class MainWindow(QMainWindow):
         self._sync_everything()
 
         if result and result.get("success"):
+            self.demo.register_generation()
+            self._update_generate_label()
+
             if self.demo.is_demo:
                 self.demo.show_after_generate(self)
             else:
@@ -815,7 +845,19 @@ class MainWindow(QMainWindow):
         export_schedule_to_image(self.schedule, self.year, self.month, path)
         self.statusBar().showMessage("Wyeksportowano do JPG.", 2500)
 
+    def _update_generate_label(self):
+        remaining = self.demo.get_remaining_generations()
+
+        if remaining is None:
+            self.generate_limit_label.setText("")
+            return
+
+        self.generate_limit_label.setText(f"Pozostało generacji: {remaining}")
+
     def _print_schedule(self):
+        if self.demo.block_export(self):
+            return
+
         if not self.schedule:
             QMessageBox.warning(self, "Drukowanie", "Brak grafiku do wydruku.")
             return
@@ -907,7 +949,37 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Wyczyszczono grafik.", 2500)
 
     def _about(self):
-        QMessageBox.information(self, "O programie", "Grafik Dino v2\nNowe UI w PySide6.")
+        from PySide6.QtWidgets import QMessageBox
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl, Qt
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("O programie")
+
+        msg.setText(
+            "<b>Dingo!</b><br><br>"
+            "Nowoczesne narzędzie do tworzenia grafików pracy.<br><br>"
+            "Z dedykacją dla Mamy ❤️<br>"
+            "Dzięki za wsparcie i motywację.<br><br>"
+            "<b>Wersja:</b> 1.0<br><br>"
+            "Strona: madebykewin.pl"
+        )
+
+        msg.setTextFormat(Qt.RichText)
+        msg.setTextInteractionFlags(Qt.TextBrowserInteraction)
+
+        btn_open = msg.addButton("Kontakt", QMessageBox.ActionRole)
+        msg.addButton("Zamknij", QMessageBox.RejectRole)
+
+        msg.exec()
+
+        if msg.clickedButton() == btn_open:
+            QDesktopServices.openUrl(QUrl("https://madebykewin.pl"))
+
+        def open_link():
+            QDesktopServices.openUrl(QUrl("https://madebykewin.pl"))
+
+        msg.exec()
 
     def _try_load_last_project(self):
         if not os.path.exists("last_project.json"):

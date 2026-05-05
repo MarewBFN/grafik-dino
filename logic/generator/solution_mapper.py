@@ -23,6 +23,10 @@ def save_solution(
     print("✅ ROZWIĄZANIE ZNALEZIONE")
     print("=== PODSUMOWANIE ZMIAN ===")
 
+    # 🔥 zapis solverowych wyników do porównania
+    solver_open_per_day = {}
+    solver_close_per_day = {}
+
     for d in trade_days:
 
         open_count = sum(
@@ -41,6 +45,9 @@ def save_solution(
             for s in list(START_SHIFTS.keys()) + list(END_SHIFTS.keys())
         )
 
+        solver_open_per_day[d] = open_count
+        solver_close_per_day[d] = close_count
+
         print(f"Dzień {d}: OPEN={open_count} CLOSE={close_count} WORK={work_count}")
 
     for e in range(len(employees)):
@@ -50,11 +57,20 @@ def save_solution(
 
             day_state = schedule.get_day(emp, d)
 
+            # 🔥 DEBUG — czy solver chciał coś przypisać, a my skipujemy
+            if solver.Value(x[e, d, SHIFT_OPEN]) == 1:
+                print(f"[CHECK] OPEN solver: emp={e} day={d} locked={day_state.is_locked}")
+
+            if solver.Value(x[e, d, SHIFT_CLOSE]) == 1:
+                print(f"[CHECK] CLOSE solver: emp={e} day={d} locked={day_state.is_locked}")
+
             if (
                 day_state.is_leave
                 or day_state.is_locked
                 or getattr(day_state, "is_day_off", False)
             ):
+                if day_state.is_locked:
+                    print(f"[SKIP LOCKED] emp={e} day={d}")
                 continue
 
             hours = shop.get_open_hours_for_day(d)
@@ -103,6 +119,37 @@ def save_solution(
 
                         schedule.set_day_hours(emp, d, start, end)
                         break
+
+    # 🔥 WERYFIKACJA PO ZAPISIE (TO CI WSZYSTKO POWIE)
+    print("\n=== VERIFY AFTER SAVE ===")
+
+    for d in trade_days:
+        saved_open = 0
+        saved_close = 0
+
+        hours = shop.get_open_hours_for_day(d)
+        if not hours:
+            continue
+
+        open_t, close_t = hours
+
+        for emp in employees:
+            ds = schedule.get_day(emp, d)
+
+            if not ds.start or not ds.end:
+                continue
+
+            if ds.start == open_t:
+                saved_open += 1
+
+            if ds.end == close_t:
+                saved_close += 1
+
+        print(
+            f"[COMPARE] Day {d}: "
+            f"solver OPEN={solver_open_per_day[d]} vs saved OPEN={saved_open} | "
+            f"solver CLOSE={solver_close_per_day[d]} vs saved CLOSE={saved_close}"
+        )
 
     print("=== KONIEC GENERATORA ===")
     return True

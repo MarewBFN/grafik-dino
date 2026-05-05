@@ -22,6 +22,9 @@ def add_rest_11h_constraint(
     violations = []
     rest_constraints = 0
 
+    # DEBUG
+    blocked_pairs_per_day = {}
+
     for e in range(len(employees)):
 
         emp = employees[e]
@@ -112,8 +115,14 @@ def add_rest_11h_constraint(
                     end
                 )
 
+            # DEBUG: sprawdź czy pracownik ma jakąkolwiek opcję
+            possible_next = 0
+            total_pairs = 0
+
             for s1 in shifts_today:
                 for s2 in shifts_next:
+
+                    total_pairs += 1
 
                     end_today = datetime.strptime(shifts_today[s1][1], fmt)
                     start_next = datetime.strptime(shifts_next[s2][0], fmt)
@@ -123,6 +132,17 @@ def add_rest_11h_constraint(
                         rest += timedelta(days=1)
 
                     if rest < timedelta(hours=11):
+
+                        # DEBUG: licz blokady per dzień
+                        blocked_pairs_per_day.setdefault(d, 0)
+                        blocked_pairs_per_day[d] += 1
+
+                        # DEBUG: tylko krytyczne przypadki OPEN/CLOSE
+                        if s1 in (SHIFT_OPEN, SHIFT_CLOSE) and s2 in (SHIFT_OPEN, SHIFT_CLOSE):
+                            print(
+                                f"[REST BLOCK] emp={e} day={d}->{d_next} "
+                                f"{s1}->{s2} rest={rest}"
+                            )
 
                         if not soft:
                             model.Add(
@@ -138,6 +158,21 @@ def add_rest_11h_constraint(
                             violations.append(violation)
 
                         rest_constraints += 1
+                    else:
+                        possible_next += 1
+
+            # DEBUG: pracownik całkowicie zablokowany
+            if possible_next == 0:
+                print(
+                    f"[FULL BLOCK] emp={e} day={d}->{d_next} "
+                    f"NO VALID SHIFT COMBO (all violate 11h)"
+                )
 
     print("Constrainty 11h rest:", rest_constraints)
+
+    # DEBUG: podsumowanie per dzień
+    print("\n=== REST DEBUG SUMMARY ===")
+    for day, count in blocked_pairs_per_day.items():
+        print(f"Day {day}: blocked_pairs={count}")
+
     return violations

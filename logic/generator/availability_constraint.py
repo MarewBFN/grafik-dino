@@ -1,3 +1,8 @@
+# Ten plik odpowiada za nakładanie ograniczeń dostępności pracowników.
+# Dla każdego pracownika i dnia sprawdza, jakie zmiany są dozwolone (availability),
+# a następnie blokuje niedozwolone zmiany (HARD) lub dodaje kary (SOFT),
+# jeśli generator mimo wszystko przypisze niedozwoloną zmianę.
+
 from logic.generator.availability_mapper import get_allowed_shifts_for_day
 from logic.utils.time_utils import get_effective_daily_hours
 
@@ -41,13 +46,15 @@ def add_availability_constraint(
 
             allowed_set = set(allowed)
 
-            # 🔥 NOWE: odrzucamy zmiany które nie mieszczą się w dostępności przy tej długości zmiany
-            # (bazujemy na mapperze, ale filtrujemy realnie)
+            # DEBUG: brak dostępnych zmian
+            if len(allowed_set) == 0:
+                print(f"[AVAIL BLOCK] emp={e} day={d} NO SHIFTS ALLOWED")
 
+            # 🔥 filtr (na razie mapper decyduje — zostawiamy jak było)
             filtered_allowed = set()
 
             for s in allowed_set:
-                filtered_allowed.add(s)  # mapper już robi większość roboty
+                filtered_allowed.add(s)
 
             for s in all_shifts:
 
@@ -56,7 +63,10 @@ def add_availability_constraint(
 
                 if soft:
                     v = model.NewBoolVar(f"avail_violation_e{e}_d{d}_s{s}")
-                    model.Add(x[e, d, s] == 1).OnlyEnforceIf(v)
+
+                    # ✅ POPRAWKA: poprawna logika soft constraint
+                    model.Add(x[e, d, s] <= v)
+
                     violations.append(v)
                 else:
                     model.Add(x[e, d, s] == 0)

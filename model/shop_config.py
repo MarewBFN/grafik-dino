@@ -16,7 +16,7 @@ class ShopConfig:
 
         # Toggle dla constraintów z model.constraint_policy
         self.constraint_policies = {
-            "rest_11h": ConstraintPolicy.MANDATORY,
+            "rest_11h": ConstraintPolicy.PREFERRED,
             "meat": ConstraintPolicy.PREFERRED,
             "balance": ConstraintPolicy.PREFERRED,
             "max_consecutive": ConstraintPolicy.PREFERRED,

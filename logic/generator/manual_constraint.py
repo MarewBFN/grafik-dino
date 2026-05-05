@@ -94,7 +94,11 @@ def add_manual_shift_constraints(
             elif shift == "CLOSE":
                 shift = SHIFT_CLOSE
 
+            # 🔥 KLUCZOWA POPRAWKA:
+            # jeśli nie umiemy dopasować zmiany → blokujemy wszystko
             if shift is None:
+                for s in all_shifts:
+                    model.Add(x[e, d, s] == 0)
                 continue
 
             # 🔥 HARD LOCK — solver MUSI to ustawić
