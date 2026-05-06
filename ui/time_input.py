@@ -34,7 +34,9 @@ class TimeInputWidget(QWidget):
 
         self.input.textChanged.connect(self._format_time)
 
-        # 🔥 focus czyści pole
+        # 🔥 zapamiętanie ostatniej wartości
+        self._last_valid_time = "00:00"
+
         self.input.installEventFilter(self)
 
         layout.addWidget(self.input)
@@ -42,16 +44,22 @@ class TimeInputWidget(QWidget):
         self.set_time_str("00:00")
 
     def eventFilter(self, obj, event):
-        if obj == self.input and event.type() == QEvent.FocusIn:
-            self.input.blockSignals(True)
-            self.input.clear()
-            self.input.blockSignals(False)
+        if obj == self.input:
+            if event.type() == QEvent.MouseButtonPress:
+                self.input.blockSignals(True)
+                self.input.clear()
+                self.input.blockSignals(False)
+
+            # 🔥 przy utracie focusa przywróć jeśli puste
+            if event.type() == QEvent.FocusOut:
+                if not self.input.text():
+                    self.input.setText(self._last_valid_time)
+
         return super().eventFilter(obj, event)
 
     def _format_time(self, text):
         digits = "".join(filter(str.isdigit, text))
 
-        # 🔥 auto 0 jeśli pierwsza cyfra > 2
         if len(digits) == 1 and int(digits[0]) > 2:
             digits = "0" + digits
 
@@ -67,6 +75,10 @@ class TimeInputWidget(QWidget):
             self.input.setText(formatted)
             self.input.blockSignals(False)
 
+        # 🔥 zapisujemy ostatnią poprawną wartość
+        if len(formatted) == 5 and ":" in formatted:
+            self._last_valid_time = formatted
+
     def get_time_str(self):
         text = self.input.text()
         if len(text) == 5 and ":" in text:
@@ -80,6 +92,9 @@ class TimeInputWidget(QWidget):
 
         try:
             h, m = map(int, time_str.split(":"))
-            self.input.setText(f"{h:02d}:{m:02d}")
+            formatted = f"{h:02d}:{m:02d}"
+            self.input.setText(formatted)
+            self._last_valid_time = formatted
         except ValueError:
             self.input.setText("00:00")
+            self._last_valid_time = "00:00"
