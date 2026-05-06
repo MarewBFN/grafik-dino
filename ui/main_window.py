@@ -55,6 +55,7 @@ class GeneratorWorker(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        QTimer.singleShot(1000, self._check_updates)
 
         from ui.license_manager import load_license, validate_license
 
@@ -1204,3 +1205,21 @@ class MainWindow(QMainWindow):
 
         self._sync_everything()
         self.statusBar().showMessage("Usunięto wygenerowane zmiany.", 2500)
+
+    def _check_updates(self):
+        from update_checker import check_for_updates
+
+        result = check_for_updates()
+
+        if not result.get("available"):
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Dostępna aktualizacja",
+            f"Dostępna jest nowa wersja programu ({result['version']}).\n\nPobrać?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            QDesktopServices.openUrl(QUrl(result["url"]))
