@@ -416,6 +416,7 @@ class MainWindow(QMainWindow):
 
         edit_menu.addSeparator()
         edit_menu.addAction("Wyczyść grafik", self._clear_schedule)
+        edit_menu.addAction("Wyczyść auto", self._clear_generated)
 
         config_menu.addAction("Generator", self._open_config)
 
@@ -1169,3 +1170,37 @@ class MainWindow(QMainWindow):
                 except:
                     pass
 
+    def _clear_generated(self):
+        if not self.schedule or not self.controller:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Potwierdzenie",
+            "Usunąć tylko zmiany wygenerowane automatycznie?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        self.controller.snapshot()
+
+        for emp in self.schedule.employees:
+            for day in range(1, self.schedule.days_in_month + 1):
+                ds = self.schedule.get_day(emp, day)
+
+                if ds.is_locked:
+                    continue
+
+                ds.start = None
+                ds.end = None
+                ds.is_leave = False
+                ds.is_sick = False
+
+                if hasattr(ds, "is_day_off"):
+                    ds.is_day_off = False
+
+        self._sync_everything()
+        self.statusBar().showMessage("Usunięto wygenerowane zmiany.", 2500)

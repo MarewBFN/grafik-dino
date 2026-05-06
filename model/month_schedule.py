@@ -253,3 +253,19 @@ class MonthSchedule:
                     day_data.end = None
                     if hasattr(day_data, "is_day_off"):
                         day_data.is_day_off = False
+
+    def clear_generated_days(self):
+        for emp in self.employees:
+            for d in range(1, self.days_in_month + 1):
+                ds = self.get_day(emp, d)
+
+                if ds.is_locked:
+                    continue
+
+                ds.start = None
+                ds.end = None
+                ds.is_leave = False
+                ds.is_sick = False
+
+                if hasattr(ds, "is_day_off"):
+                    ds.is_day_off = False
