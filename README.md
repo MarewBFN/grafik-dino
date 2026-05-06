@@ -1,6 +1,4 @@
-# Grafik Dino V2
-
-**Grafik Dino V2** is a desktop application for automatically generating employee work schedules for retail stores.
+**DinGo!** is a desktop application for automatically generating employee work schedules for retail stores.
 
 The system is based on **Google OR-Tools CP-SAT solver** and uses a modular constraint architecture to build valid schedules while respecting business rules.
 
