@@ -74,6 +74,7 @@ class ScheduleController:
 
     def generate_schedule(self, force=False):
         from logic.auto_generator import AutoScheduleGenerator
+        self.snapshot()
         generator = AutoScheduleGenerator(self.schedule, self.shop_config)
         
         is_fix = getattr(self.schedule, "is_generated", False) and not force
@@ -151,6 +152,7 @@ class ScheduleController:
         return end.strftime(fmt)
     
     def remove_employee(self, employee):
+        self.snapshot()
         self.schedule.remove_employee(employee)
 
     def set_day_sick(self, emp, day):
