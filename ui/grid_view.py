@@ -245,6 +245,11 @@ class ScheduleGrid(QTableWidget):
         self.setHorizontalHeaderLabels(headers)
         self.setRowCount(len(self.schedule.employees) + len(SUMMARY_ROWS))
 
+        for day in range(1, days + 1):
+            header_item = self.horizontalHeaderItem(day)
+            if header_item:
+                header_item.setToolTip(self._day_header_tooltip(day))
+
         for col in range(1, self.columnCount()):
             self.frozen_name_column.setColumnHidden(col, True)
 
@@ -273,6 +278,14 @@ class ScheduleGrid(QTableWidget):
         for row in range(self.rowCount()):
             self.frozen_name_column.setRowHeight(row, self.rowHeight(row))
         self._update_frozen_name_column()
+
+    def _day_header_tooltip(self, day):
+        hours = self.shop_config.get_open_hours_for_day(day)
+        if hours:
+            hours_text = f"Godziny pracy sklepu: {hours[0]}–{hours[1]}"
+        else:
+            hours_text = "Sklep nieczynny tego dnia"
+        return f"{hours_text}\nKliknij dwukrotnie, aby zmienić godziny pracy lub status dnia."
 
     def refresh(self):
         if not self.schedule or not self.shop_config:

@@ -762,6 +762,8 @@ class MainWindow(QMainWindow):
         if result != QDialog.Accepted:
             return
 
+        # Undo must restore both the schedule and this day-specific shop setup.
+        self.controller.snapshot()
         if dialog.result_mode == "reset":
             self.shop_config.day_overrides.pop(day, None)
             self.shop_config.public_holidays.discard(day)
@@ -899,11 +901,13 @@ class MainWindow(QMainWindow):
 
     def _undo(self):
         self.schedule = self.controller.undo()
+        self.shop_config = self.controller.shop_config
         self._sync_everything()
         self.statusBar().showMessage("Cofnięto ostatnią zmianę.", 2500)
 
     def _redo(self):
         self.schedule = self.controller.redo()
+        self.shop_config = self.controller.shop_config
         self._sync_everything()
         self.statusBar().showMessage("Ponowiono zmianę.", 2500)
 

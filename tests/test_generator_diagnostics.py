@@ -17,6 +17,7 @@ from model.constraint_policy import ConstraintPolicy
 from model.employee import Employee
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
+from logic.schedule_controller import ScheduleController
 from persistence.project_io import load_project, save_project
 
 
@@ -78,6 +79,23 @@ class GeneratorDiagnosticsTests(unittest.TestCase):
 
         self.assertEqual(status, cp_model.OPTIMAL)
         self.assertEqual(sum(solver.Value(penalty) for penalty in penalties), 1)
+
+    def test_undo_redo_restores_day_working_status_and_hours(self):
+        schedule = MonthSchedule(2026, 8)
+        shop = ShopConfig(2026, 8)
+        controller = ScheduleController(schedule, shop)
+
+        controller.snapshot()
+        shop.day_overrides[4] = ("08:00", "18:00")
+        shop.public_holidays.add(4)
+
+        controller.undo()
+        self.assertNotIn(4, controller.shop_config.day_overrides)
+        self.assertNotIn(4, controller.shop_config.public_holidays)
+
+        controller.redo()
+        self.assertEqual(controller.shop_config.day_overrides[4], ("08:00", "18:00"))
+        self.assertIn(4, controller.shop_config.public_holidays)
 
 
 if __name__ == "__main__":

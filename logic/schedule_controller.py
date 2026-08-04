@@ -1,3 +1,6 @@
+from copy import deepcopy
+
+
 class ScheduleController:
     def __init__(self, schedule, shop_config):
         self.schedule = schedule
@@ -6,15 +9,17 @@ class ScheduleController:
         self.future = []
 
     def snapshot(self):
-        self.history.append(self.schedule.snapshot())
+        # Schedule and shop configuration change together from the user's point
+        # of view (e.g. a day override can make a day non-working).
+        self.history.append((self.schedule.snapshot(), deepcopy(self.shop_config)))
         self.future.clear()
 
     def undo(self):
         if not self.history:
             return self.schedule
 
-        self.future.append(self.schedule.snapshot())
-        self.schedule = self.history.pop()
+        self.future.append((self.schedule.snapshot(), deepcopy(self.shop_config)))
+        self.schedule, self.shop_config = self.history.pop()
         return self.schedule
 
     def set_day_free(self, emp, day):
@@ -169,6 +174,6 @@ class ScheduleController:
         if not self.future:
             return self.schedule
 
-        self.history.append(self.schedule.snapshot())
-        self.schedule = self.future.pop()
+        self.history.append((self.schedule.snapshot(), deepcopy(self.shop_config)))
+        self.schedule, self.shop_config = self.future.pop()
         return self.schedule
