@@ -54,25 +54,21 @@ def add_availability_constraint(
             if len(allowed_set) == 0:
                 print(f"[AVAIL BLOCK] emp={e} day={d} NO SHIFTS ALLOWED")
 
-            # 🔥 filtr (na razie mapper decyduje — zostawiamy jak było)
-            filtered_allowed = set()
-
-            for s in allowed_set:
-                filtered_allowed.add(s)
+            filtered_allowed = set(allowed_set)
 
             for s in all_shifts:
-
                 if s in filtered_allowed:
                     continue
 
                 if soft:
                     v = model.NewBoolVar(f"avail_violation_e{e}_d{d}_s{s}")
-
-                    # ✅ POPRAWKA: poprawna logika soft constraint
                     model.Add(x[e, d, s] <= v)
-
                     violations.append(v)
                 else:
+                    # W trybie twardym nadal blokujemy niedozwolone zmiany.
+                    # Jeśli jednak liczba dostępnych pracowników jest bardzo mała,
+                    # warto traktować to jako miękkie ograniczenie, żeby model nie
+                    # stawał się natychmiast infeasible.
                     model.Add(x[e, d, s] == 0)
 
     return violations

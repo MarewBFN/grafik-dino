@@ -20,11 +20,14 @@ class ShopConfig:
             "meat": ConstraintPolicy.PREFERRED,
             "balance": ConstraintPolicy.PREFERRED,
             "max_consecutive": ConstraintPolicy.PREFERRED,
-            "open": ConstraintPolicy.MANDATORY,
-            "close": ConstraintPolicy.MANDATORY,
+            # Przy ograniczonej liczbie dostępnych pracowników lepiej traktować
+            # obsadę OPEN/CLOSE oraz dostępność jako miękkie kary niż natychmiast
+            # blokować całe rozwiązanie.
+            "open": ConstraintPolicy.PREFERRED,
+            "close": ConstraintPolicy.PREFERRED,
             "monthly_hours": ConstraintPolicy.PREFERRED,
             "meat_coverage": ConstraintPolicy.PREFERRED,
-            "availability": ConstraintPolicy.MANDATORY,
+            "availability": ConstraintPolicy.PREFERRED,
         }
         # -----------------------------
         # Override godzin dla konkretnego dnia

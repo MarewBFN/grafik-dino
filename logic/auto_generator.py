@@ -30,6 +30,7 @@ from logic.generator.objective import (
     add_work_balance_penalty,
     add_morning_afternoon_balance_penalty,
     add_edge_shift_bonus,
+    add_workload_balance_penalty,
 )
 from logic.generator.availability_constraint import add_availability_constraint
 from logic.generator.night_constraint import add_no_night_constraint
@@ -423,6 +424,15 @@ class AutoScheduleGenerator:
                 trade_days,
                 self.START_SHIFT_MAP,
                 self.END_SHIFT_MAP
+            )
+        )
+        all_soft_violations.extend(
+            add_workload_balance_penalty(
+                model,
+                x,
+                employees,
+                days,
+                self.ALL_SHIFTS
             )
         )
         all_soft_violations.extend(

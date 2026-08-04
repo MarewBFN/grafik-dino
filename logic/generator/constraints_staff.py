@@ -32,16 +32,13 @@ def add_fixed_staff_shift_constraints(
                 if employees[e].is_meat
             )
 
-            # Twarde ograniczenia: suma osób musi się zgadzać, 
-            # ale składy specjalistyczne mogą się nakładać.
             model.Add(total_staff == min_staff)
             model.Add(opener_staff >= 1)
             model.Add(meat_staff >= 1)
 
         else:
-            # Logika soft (kary) jest już poprawnie oparta na >= 1
             total_violation = model.NewIntVar(
-                0, min_staff,
+                0, max(min_staff, 1),
                 f"staff_v_d{d}_{shift_type}"
             )
             model.Add(total_staff + total_violation >= min_staff)
@@ -53,7 +50,6 @@ def add_fixed_staff_shift_constraints(
             model.Add(opener_staff + opener_violation >= 1)
             violations.append(opener_violation)
 
-            # Dodajmy mięso do wersji soft, skoro go brakowało
             meat_staff = sum(
                 x[e, d, shift_type]
                 for e in range(len(employees))

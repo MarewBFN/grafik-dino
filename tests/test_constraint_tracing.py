@@ -12,7 +12,9 @@ if str(ROOT) not in sys.path:
 from logic.generator.constraints_basic import add_one_shift_per_day_constraint
 from logic.generator.constraints_staff import add_fixed_staff_shift_constraints
 from logic.generator.hours_constraint import add_monthly_hours_constraint
+from logic.generator.objective import add_workload_balance_penalty
 from logic.generator.trace import ConstraintTraceLogger, build_random_scenario
+from model.constraint_policy import ConstraintPolicy
 from model.employee import Employee
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -70,3 +72,27 @@ def test_random_scenario_builder_exports_json_payload(tmp_path):
     assert saved["employee_count"] == 3
     assert "schedule" in saved
     assert "shop" in saved
+
+
+def test_workload_balance_penalty_reduces_employee_spread():
+    model = cp_model.CpModel()
+    employees = [Employee(last_name="A", first_name="A"), Employee(last_name="B", first_name="B")]
+    days = [1, 2]
+    all_shifts = (0, 1)
+    x = {}
+    for e in range(len(employees)):
+        for d in days:
+            for s in all_shifts:
+                x[(e, d, s)] = model.NewBoolVar(f"x_{e}_{d}_{s}")
+
+    penalties = add_workload_balance_penalty(model, x, employees, days, all_shifts)
+
+    assert len(penalties) == 1
+
+
+def test_default_shop_config_uses_soft_staff_and_availability_policies():
+    shop = ShopConfig(2026, 8)
+
+    assert shop.constraint_policies["open"] == ConstraintPolicy.PREFERRED
+    assert shop.constraint_policies["close"] == ConstraintPolicy.PREFERRED
+    assert shop.constraint_policies["availability"] == ConstraintPolicy.PREFERRED

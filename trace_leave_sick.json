@@ -1,0 +1,84 @@
+{
+  "events": [
+    {
+      "type": "constraint",
+      "name": "non_trade_day",
+      "detail": "block work on non-trade days"
+    },
+    {
+      "type": "constraint",
+      "name": "leave",
+      "detail": "block all shifts on leave days"
+    },
+    {
+      "type": "constraint",
+      "name": "day_off",
+      "detail": "block all shifts on day off"
+    },
+    {
+      "type": "constraint",
+      "name": "manual_shift",
+      "detail": "apply locked/manual day assignments"
+    },
+    {
+      "type": "constraint",
+      "name": "work_dependency",
+      "detail": "work shifts depend on open/close coverage"
+    },
+    {
+      "type": "constraint",
+      "name": "one_shift_per_day",
+      "detail": "each employee can have at most one shift per day"
+    },
+    {
+      "type": "constraint",
+      "name": "fixed_staff_shift",
+      "detail": "shift=0 min_staff=3 soft=False"
+    },
+    {
+      "type": "constraint",
+      "name": "fixed_staff_shift",
+      "detail": "shift=1 min_staff=3 soft=False"
+    },
+    {
+      "type": "constraint",
+      "name": "rest_11h",
+      "detail": "soft=True"
+    },
+    {
+      "type": "constraint",
+      "name": "balance",
+      "detail": "soft=True"
+    },
+    {
+      "type": "constraint",
+      "name": "availability",
+      "detail": "soft=False"
+    },
+    {
+      "type": "constraint",
+      "name": "no_night",
+      "detail": "soft=False"
+    },
+    {
+      "type": "constraint",
+      "name": "meat",
+      "detail": "soft=True"
+    },
+    {
+      "type": "constraint",
+      "name": "meat_coverage",
+      "detail": "soft=True"
+    },
+    {
+      "type": "constraint",
+      "name": "max_consecutive",
+      "detail": "max_consecutive=4 soft=True"
+    },
+    {
+      "type": "constraint",
+      "name": "monthly_hours",
+      "detail": "soft=True"
+    }
+  ]
+}

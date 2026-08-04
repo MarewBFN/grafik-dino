@@ -129,3 +129,27 @@ def add_edge_shift_bonus(
         penalties.append(end_15_exists.Not())
 
     return penalties
+
+
+def add_workload_balance_penalty(model, x, employees, days, all_shifts):
+    penalties = []
+
+    if len(employees) < 2:
+        return penalties
+
+    total_assignments = []
+    for e in range(len(employees)):
+        assignments = sum(
+            x[e, d, s] for d in days for s in all_shifts
+        )
+        total_assignments.append(assignments)
+
+    max_assignments = model.NewIntVar(0, 1000, "max_workload")
+    min_assignments = model.NewIntVar(0, 1000, "min_workload")
+    model.AddMaxEquality(max_assignments, total_assignments)
+    model.AddMinEquality(min_assignments, total_assignments)
+
+    spread = model.NewIntVar(0, 1000, "workload_spread")
+    model.Add(spread == max_assignments - min_assignments)
+    penalties.append(spread)
+    return penalties
