@@ -5,8 +5,8 @@ from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPixmap, QPen
 from PySide6.QtWidgets import QAbstractItemView, QMenu, QTableWidget, QTableWidgetItem
 from logic.constraint_presenter import ConstraintPresenter
 from logic.schedule_presenter import SchedulePresenter
+from utils import resource_path
 from ui import theme
-
 
 class ScheduleGrid(QTableWidget):
     def __init__(self, parent=None):
@@ -29,9 +29,9 @@ class ScheduleGrid(QTableWidget):
         self.active_row = None
         self.setMouseTracking(True)
 
-        self.icon_open = QIcon("assets/key.png")
-        self.icon_meat = QIcon("assets/meat.png")
-        self.icon_open_meat = QIcon("assets/keymeat.png")
+        self.icon_open = QIcon(resource_path("assets/key.png"))
+        self.icon_meat = QIcon(resource_path("assets/meat.png"))
+        self.icon_open_meat = QIcon(resource_path("assets/keymeat.png"))
 
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -217,18 +217,16 @@ class ScheduleGrid(QTableWidget):
 
             if self.compact_mode:
                 text = ""
-                hours = self.shop_config.get_open_hours_for_day(day)
 
-                if hours and ds.start:
-                    open_start, open_end = hours
-                    from datetime import datetime
+                if ds.start:
+                    try:
+                        start_hour = int(ds.start.split(":")[0])
 
-                    fmt = "%H:%M"
-                    start = datetime.strptime(ds.start, fmt)
-                    shop_start = datetime.strptime(open_start, fmt)
+                        # 🔥 taka sama logika jak w podsumowaniu
+                        text = "1" if start_hour < 12 else "2"
 
-                    diff = (start - shop_start).total_seconds() / 60
-                    text = "2" if diff >= 120 else "1"
+                    except:
+                        text = ""
 
                 item.setText(text)
             else:

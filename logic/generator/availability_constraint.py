@@ -17,8 +17,12 @@ def add_availability_constraint(
     SHIFT_CLOSE,
     START_SHIFT_MAP,
     END_SHIFT_MAP,
-    soft=False
+    soft=False,
+    trace=None
 ):
+    if trace is not None:
+        trace.log_constraint("availability", f"soft={soft}")
+
     violations = []
 
     for e in range(len(employees)):

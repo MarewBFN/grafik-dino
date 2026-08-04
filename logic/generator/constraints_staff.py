@@ -5,8 +5,12 @@ def add_fixed_staff_shift_constraints(
     trade_days,
     shift_type,
     min_staff,
-    soft=False
+    soft=False,
+    trace=None
 ):
+    if trace is not None:
+        trace.log_constraint("fixed_staff_shift", f"shift={shift_type} min_staff={min_staff} soft={soft}")
+
     print(f"[CONSTRAINT] fixed_staff shift={shift_type} min={min_staff} soft={soft}")
     violations = []
 
@@ -68,8 +72,12 @@ def add_max_consecutive_constraint(
     days,
     max_consecutive,
     all_shifts,
-    soft=False
+    soft=False,
+    trace=None
 ):
+    if trace is not None:
+        trace.log_constraint("max_consecutive", f"max_consecutive={max_consecutive} soft={soft}")
+
     violations = []
 
     for e in range(len(employees)):

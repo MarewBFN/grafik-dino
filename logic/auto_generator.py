@@ -33,6 +33,7 @@ from logic.generator.objective import (
 )
 from logic.generator.availability_constraint import add_availability_constraint
 from logic.generator.night_constraint import add_no_night_constraint
+from logic.generator.trace import ConstraintTraceLogger
 
 class AutoScheduleGenerator:
 
@@ -114,9 +115,12 @@ class AutoScheduleGenerator:
     # PUBLIC
     # ==================================================
 
-    def generate(self, is_fix=False):
+    def generate(self, is_fix=False, trace=None, trace_output_path=None):
 
         print("=== START CP-SAT GENERATOR ===")
+
+        if trace is None:
+            trace = ConstraintTraceLogger()
 
         if not is_fix:
             self.schedule.clear_unlocked_days()
@@ -159,9 +163,9 @@ class AutoScheduleGenerator:
 
         x = self._create_variables(model, employees, days)
 
-        add_non_trade_day_constraints(model, x, employees, days, self.shop, self.ALL_SHIFTS)
-        add_leave_constraints(model, x, employees, days, self.schedule, self.ALL_SHIFTS)
-        add_day_off_constraints(model, x, employees, days, self.schedule, self.ALL_SHIFTS)
+        add_non_trade_day_constraints(model, x, employees, days, self.shop, self.ALL_SHIFTS, trace=trace)
+        add_leave_constraints(model, x, employees, days, self.schedule, self.ALL_SHIFTS, trace=trace)
+        add_day_off_constraints(model, x, employees, days, self.schedule, self.ALL_SHIFTS, trace=trace)
         add_manual_shift_constraints(
             model,
             x,
@@ -173,7 +177,8 @@ class AutoScheduleGenerator:
             self.SHIFT_OPEN,
             self.SHIFT_CLOSE,
             self.START_SHIFT_MAP,
-            self.END_SHIFT_MAP
+            self.END_SHIFT_MAP,
+            trace=trace
         )
         add_work_dependency_constraint(
             model,
@@ -182,9 +187,10 @@ class AutoScheduleGenerator:
             days,
             self.SHIFT_OPEN,
             self.SHIFT_CLOSE,
-            self.ALL_SHIFTS
+            self.ALL_SHIFTS,
+            trace=trace
         )
-        add_one_shift_per_day_constraint(model, x, employees, days, self.ALL_SHIFTS)
+        add_one_shift_per_day_constraint(model, x, employees, days, self.ALL_SHIFTS, trace=trace)
 
         open_violations = self._apply_policy(
             "open",
@@ -192,13 +198,15 @@ class AutoScheduleGenerator:
                 model, x, employees, trade_days,
                 self.SHIFT_OPEN,
                 min_open,
-                soft=False
+                soft=False,
+                trace=trace
             ),
             soft_fn=lambda: add_fixed_staff_shift_constraints(
                 model, x, employees, trade_days,
                 self.SHIFT_OPEN,
                 min_open,
-                soft=True
+                soft=True,
+                trace=trace
             )
         )
 
@@ -208,13 +216,15 @@ class AutoScheduleGenerator:
                 model, x, employees, trade_days,
                 self.SHIFT_CLOSE,
                 min_close,
-                soft=False
+                soft=False,
+                trace=trace
             ),
             soft_fn=lambda: add_fixed_staff_shift_constraints(
                 model, x, employees, trade_days,
                 self.SHIFT_CLOSE,
                 min_close,
-                soft=True
+                soft=True,
+                trace=trace
             )
         )
 
@@ -231,7 +241,8 @@ class AutoScheduleGenerator:
                 self.SHIFT_CLOSE,
                 self.START_SHIFT_MAP,
                 self.END_SHIFT_MAP,
-                soft=False
+                soft=False,
+                trace=trace
             ),
             soft_fn=lambda: add_rest_11h_constraint(
                 model,
@@ -244,17 +255,18 @@ class AutoScheduleGenerator:
                 self.SHIFT_CLOSE,
                 self.START_SHIFT_MAP,
                 self.END_SHIFT_MAP,
-                soft=True
+                soft=True,
+                trace=trace
             )
         )
 
         balance_violations = self._apply_policy(
             "balance",
             hard_fn=lambda: add_balance_constraint(
-                model, x, employees, days, self.shop, self.ALL_SHIFTS, soft=False
+                model, x, employees, days, self.shop, self.ALL_SHIFTS, soft=False, trace=trace
             ),
             soft_fn=lambda: add_balance_constraint(
-                model, x, employees, days, self.shop, self.ALL_SHIFTS, soft=True
+                model, x, employees, days, self.shop, self.ALL_SHIFTS, soft=True, trace=trace
             )
         )
 
@@ -271,7 +283,8 @@ class AutoScheduleGenerator:
                 self.SHIFT_CLOSE,
                 self.START_SHIFT_MAP,
                 self.END_SHIFT_MAP,
-                soft=False
+                soft=False,
+                trace=trace
             ),
             soft_fn=lambda: add_availability_constraint(
                 model,
@@ -284,7 +297,8 @@ class AutoScheduleGenerator:
                 self.SHIFT_CLOSE,
                 self.START_SHIFT_MAP,
                 self.END_SHIFT_MAP,
-                soft=True
+                soft=True,
+                trace=trace
             )
         )
 
@@ -301,7 +315,8 @@ class AutoScheduleGenerator:
                 self.SHIFT_CLOSE,
                 self.START_SHIFT_MAP,
                 self.END_SHIFT_MAP,
-                soft=False
+                soft=False,
+                trace=trace
             ),
             soft_fn=lambda: add_no_night_constraint(
                 model,
@@ -314,24 +329,25 @@ class AutoScheduleGenerator:
                 self.SHIFT_CLOSE,
                 self.START_SHIFT_MAP,
                 self.END_SHIFT_MAP,
-                soft=True
+                soft=True,
+                trace=trace
             )
         )
 
         meat_violations = self._apply_policy(
             "meat",
             hard_fn=lambda: add_meat_constraint(
-                model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=False
+                model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=False, trace=trace
             ),
             soft_fn=lambda: add_meat_constraint(
-                model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=True
+                model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=True, trace=trace
             )
         )
 
         coverage_violations = self._apply_policy(
             "meat_coverage",
             hard_fn=lambda: add_meat_coverage_constraint(
-                model, x, employees, trade_days, self.shop, self.SHIFT_OPEN, self.SHIFT_CLOSE, self.START_SHIFT_MAP, self.END_SHIFT_MAP, soft=False
+                model, x, employees, trade_days, self.shop, self.SHIFT_OPEN, self.SHIFT_CLOSE, self.START_SHIFT_MAP, self.END_SHIFT_MAP, soft=False, trace=trace
             ),
             soft_fn=lambda: add_meat_coverage_constraint(
                 model, x, employees, trade_days, self.shop,
@@ -339,27 +355,28 @@ class AutoScheduleGenerator:
                 self.SHIFT_CLOSE,
                 self.START_SHIFT_MAP,
                 self.END_SHIFT_MAP,
-                soft=True
+                soft=True,
+                trace=trace
             )
         )
 
         max_consec_violations = self._apply_policy(
             "max_consecutive",
             hard_fn=lambda: add_max_consecutive_constraint(
-                model, x, employees, days, max_consecutive, self.ALL_SHIFTS, soft=False
+                model, x, employees, days, max_consecutive, self.ALL_SHIFTS, soft=False, trace=trace
             ),
             soft_fn=lambda: add_max_consecutive_constraint(
-                model, x, employees, days, max_consecutive, self.ALL_SHIFTS, soft=True
+                model, x, employees, days, max_consecutive, self.ALL_SHIFTS, soft=True, trace=trace
             )
         )
 
         monthly_hours_violations = self._apply_policy(
             "monthly_hours",
             hard_fn=lambda: add_monthly_hours_constraint(
-                model, x, employees, days, self.schedule, self.shop, self.ALL_SHIFTS, soft=False
+                model, x, employees, days, self.schedule, self.shop, self.ALL_SHIFTS, soft=False, trace=trace
             ),
             soft_fn=lambda: add_monthly_hours_constraint(
-                model, x, employees, days, self.schedule, self.shop, self.ALL_SHIFTS, soft=True
+                model, x, employees, days, self.schedule, self.shop, self.ALL_SHIFTS, soft=True, trace=trace
             )
         )
 
@@ -447,13 +464,17 @@ class AutoScheduleGenerator:
             self.SHIFT_OPEN,
             self.SHIFT_CLOSE,
             self.START_SHIFT_MAP,
-            self.END_SHIFT_MAP
+            self.END_SHIFT_MAP,
+            trace=trace
         )
 
         # SPRZĄTANIE: Przywracamy oryginalne daily_hours, żeby UI i zapisy nie świrowały
         for emp in employees:
             if hasattr(emp, '_orig_daily_hours'):
                 object.__setattr__(emp, 'daily_hours', emp._orig_daily_hours)
+
+        if trace_output_path is not None:
+            trace.write_json(trace_output_path)
 
         return {
             "status": status,

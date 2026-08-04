@@ -14,7 +14,8 @@ def save_solution(
     SHIFT_OPEN,
     SHIFT_CLOSE,
     START_SHIFTS,
-    END_SHIFTS
+    END_SHIFTS,
+    trace=None
 ):
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         print("❌ BRAK ROZWIĄZANIA")
@@ -69,6 +70,8 @@ def save_solution(
                 or day_state.is_locked
                 or getattr(day_state, "is_day_off", False)
             ):
+                if trace is not None:
+                    trace.log_assignment(e, d, None, "skipped_due_to_leave_or_lock")
                 if day_state.is_locked:
                     print(f"[SKIP LOCKED] emp={e} day={d}")
                 continue
@@ -85,11 +88,15 @@ def save_solution(
             if solver.Value(x[e, d, SHIFT_OPEN]) == 1:
                 end = calc_end(open_time, eff_hours)
                 schedule.set_day_hours(emp, d, open_time, end)
+                if trace is not None:
+                    trace.log_assignment(e, d, SHIFT_OPEN, "solver_assignment")
                 continue
 
             if solver.Value(x[e, d, SHIFT_CLOSE]) == 1:
                 start = calc_start(close_time, eff_hours)
                 schedule.set_day_hours(emp, d, start, close_time)
+                if trace is not None:
+                    trace.log_assignment(e, d, SHIFT_CLOSE, "solver_assignment")
                 continue
 
             assigned = False
@@ -104,6 +111,8 @@ def save_solution(
                     end = calc_end(start, eff_hours)
 
                     schedule.set_day_hours(emp, d, start, end)
+                    if trace is not None:
+                        trace.log_assignment(e, d, shift, "solver_assignment")
                     assigned = True
                     break
 
@@ -118,6 +127,8 @@ def save_solution(
                         start = calc_start(end, eff_hours)
 
                         schedule.set_day_hours(emp, d, start, end)
+                        if trace is not None:
+                            trace.log_assignment(e, d, shift, "solver_assignment")
                         break
 
     # 🔥 WERYFIKACJA PO ZAPISIE (TO CI WSZYSTKO POWIE)

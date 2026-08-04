@@ -5,8 +5,12 @@ def add_work_dependency_constraint(
     days,
     SHIFT_OPEN,
     SHIFT_CLOSE,
-    ALL_SHIFTS
+    ALL_SHIFTS,
+    trace=None
 ):
+    if trace is not None:
+        trace.log_constraint("work_dependency", "work shifts depend on open/close coverage")
+
     print("[CONSTRAINT] work_dependency")
 
     for d in days:

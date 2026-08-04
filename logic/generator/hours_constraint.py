@@ -9,9 +9,13 @@ def add_monthly_hours_constraint(
     schedule,
     shop,
     all_shifts,
-    soft=False
+    soft=False,
+    trace=None
 ):
     violations = []
+
+    if trace is not None:
+        trace.log_constraint("monthly_hours", f"soft={soft}")
 
     nominal_hours = shop.get_full_time_nominal_hours()
     nominal_minutes = nominal_hours * 60
@@ -89,8 +93,12 @@ def add_balance_constraint(
     days,
     shop,
     all_shifts,
-    soft=True
+    soft=True,
+    trace=None
 ):
+    if trace is not None:
+        trace.log_constraint("balance", f"soft={soft}")
+
     nominal = shop.get_full_time_nominal_hours()
 
     if not nominal:

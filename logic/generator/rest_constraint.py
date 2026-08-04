@@ -15,9 +15,13 @@ def add_rest_11h_constraint(
     SHIFT_CLOSE,
     START_SHIFTS,
     END_SHIFTS,
-    soft=False
+    soft=False,
+    trace=None
 ):
     fmt = "%H:%M"
+
+    if trace is not None:
+        trace.log_constraint("rest_11h", f"soft={soft}")
 
     violations = []
     rest_constraints = 0

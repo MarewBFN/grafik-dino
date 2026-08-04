@@ -1,0 +1,104 @@
+{
+  "seed": 11,
+  "employee_count": 8,
+  "days": 7,
+  "employees": [
+    {
+      "first_name": "Emp0",
+      "last_name": "Worker0",
+      "is_opener": false,
+      "is_meat": false,
+      "no_night": false,
+      "monthly_target_hours": 160,
+      "daily_hours": 8,
+      "employment_fraction": 1.0
+    },
+    {
+      "first_name": "Emp1",
+      "last_name": "Worker1",
+      "is_opener": true,
+      "is_meat": true,
+      "no_night": false,
+      "monthly_target_hours": 160,
+      "daily_hours": 8,
+      "employment_fraction": 1.0
+    },
+    {
+      "first_name": "Emp2",
+      "last_name": "Worker2",
+      "is_opener": true,
+      "is_meat": true,
+      "no_night": false,
+      "monthly_target_hours": 160,
+      "daily_hours": 8,
+      "employment_fraction": 1.0
+    },
+    {
+      "first_name": "Emp3",
+      "last_name": "Worker3",
+      "is_opener": false,
+      "is_meat": true,
+      "no_night": true,
+      "monthly_target_hours": 160,
+      "daily_hours": 8,
+      "employment_fraction": 1.0
+    },
+    {
+      "first_name": "Emp4",
+      "last_name": "Worker4",
+      "is_opener": true,
+      "is_meat": false,
+      "no_night": false,
+      "monthly_target_hours": 160,
+      "daily_hours": 8,
+      "employment_fraction": 1.0
+    },
+    {
+      "first_name": "Emp5",
+      "last_name": "Worker5",
+      "is_opener": true,
+      "is_meat": true,
+      "no_night": true,
+      "monthly_target_hours": 160,
+      "daily_hours": 8,
+      "employment_fraction": 1.0
+    },
+    {
+      "first_name": "Emp6",
+      "last_name": "Worker6",
+      "is_opener": true,
+      "is_meat": true,
+      "no_night": true,
+      "monthly_target_hours": 160,
+      "daily_hours": 8,
+      "employment_fraction": 1.0
+    },
+    {
+      "first_name": "Emp7",
+      "last_name": "Worker7",
+      "is_opener": true,
+      "is_meat": true,
+      "no_night": false,
+      "monthly_target_hours": 160,
+      "daily_hours": 8,
+      "employment_fraction": 1.0
+    }
+  ],
+  "blocked_days": [
+    3,
+    4,
+    6,
+    7
+  ],
+  "schedule": {
+    "year": 2026,
+    "month": 8
+  },
+  "shop": {
+    "constraints": {
+      "min_open_staff": 2,
+      "min_close_staff": 2,
+      "max_consecutive_days": 4
+    }
+  }
+}

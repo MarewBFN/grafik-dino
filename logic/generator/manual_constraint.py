@@ -47,8 +47,12 @@ def add_manual_shift_constraints(
     SHIFT_OPEN,
     SHIFT_CLOSE,
     START_SHIFT_MAP,
-    END_SHIFT_MAP
+    END_SHIFT_MAP,
+    trace=None
 ):
+    if trace is not None:
+        trace.log_constraint("manual_shift", "apply locked/manual day assignments")
+
     for e in range(len(employees)):
         emp = employees[e]
 

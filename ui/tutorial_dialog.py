@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
+from utils import resource_path
 
 
 class TutorialDialog(QDialog):
@@ -65,12 +66,12 @@ class TutorialDialog(QDialog):
         # Podmienisz sobie później np. na: "assets/tutorial/step1.png"
         self.images = [
             None,
-            "assets/tutorial/step1.png",
-            "assets/tutorial/step2.png",
-            "assets/tutorial/step3.png",
-            "assets/tutorial/step4.png",
-            "assets/tutorial/step5.png",
-            "assets/tutorial/step6.png",
+            resource_path("assets/tutorial/step1.png"),
+            resource_path("assets/tutorial/step2.png"),
+            resource_path("assets/tutorial/step3.png"),
+            resource_path("assets/tutorial/step4.png"),
+            resource_path("assets/tutorial/step5.png"),
+            resource_path("assets/tutorial/step6.png"),
             None
         ]
 

@@ -11,8 +11,12 @@ def add_meat_constraint(
     all_shifts,
     SHIFT_OPEN,
     SHIFT_CLOSE,
-    soft=False
+    soft=False,
+    trace=None
 ):
+    if trace is not None:
+        trace.log_constraint("meat", f"soft={soft}")
+
     violations = []
 
     for d in trade_days:
@@ -75,8 +79,12 @@ def add_meat_coverage_constraint(
     SHIFT_CLOSE,
     START_SHIFT_MAP,
     END_SHIFT_MAP,
-    soft=False
+    soft=False,
+    trace=None
 ):
+    if trace is not None:
+        trace.log_constraint("meat_coverage", f"soft={soft}")
+
     violations = []
 
     for d in trade_days:
