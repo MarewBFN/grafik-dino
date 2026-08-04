@@ -21,6 +21,16 @@ from utils import resource_path
 from ui import theme
 
 
+# Edit this tuple to add, remove or reorder the summary rows at the bottom.
+SUMMARY_ROWS = (
+    ("Otwarcie", "open"),
+    ("Zamknięcie", "close"),
+    ("Rano", "morning"),
+    ("Popo", "afternoon"),
+    ("Mięso", "meat"),
+)
+
+
 def employment_fraction_label(employee):
     """Short labels for the employee column; full labels stay in EmployeeDialog."""
     labels = {
@@ -233,7 +243,7 @@ class ScheduleGrid(QTableWidget):
 
         self.setColumnCount(len(headers))
         self.setHorizontalHeaderLabels(headers)
-        self.setRowCount(len(self.schedule.employees) + 4)
+        self.setRowCount(len(self.schedule.employees) + len(SUMMARY_ROWS))
 
         for col in range(1, self.columnCount()):
             self.frozen_name_column.setColumnHidden(col, True)
@@ -252,7 +262,9 @@ class ScheduleGrid(QTableWidget):
         self.horizontalHeader().setStretchLastSection(False)
 
         employee_row_height = 42
-        summary_row_height = 32  # 25% less than the regular 42 px row (rounded)
+        # Height of the bottom summary rows. Change this value to adjust them.
+        # 24 px = a further 25% reduction from the previous 32 px height.
+        summary_row_height = 24
         for row in range(self.rowCount()):
             height = employee_row_height if row < len(self.schedule.employees) else summary_row_height
             self.setRowHeight(row, height)
@@ -416,14 +428,7 @@ class ScheduleGrid(QTableWidget):
 
     def _fill_validation_rows(self, emp_count, days, constraint_presenter):
         # Definiujemy wiersze podsumowania
-        rows = [
-            ("Otwarcie", "open"), 
-            ("Zamknięcie", "close"), 
-            ("Rano/Popo", "morning_afternoon"), 
-            ("Mięso", "meat")
-        ]
-
-        for offset, (label, key) in enumerate(rows):
+        for offset, (label, key) in enumerate(SUMMARY_ROWS):
             row = emp_count + offset
 
             # Etykieta wiersza (lewa kolumna)
@@ -495,9 +500,10 @@ class ScheduleGrid(QTableWidget):
                     display_text = str(at_opening)
                 elif key == "close":
                     display_text = str(at_closing)
-                elif key == "morning_afternoon":
-                    # Wyświetlamy w formacie Rano / Popo
-                    display_text = f"{total_morning}  /  {total_afternoon}"
+                elif key == "morning":
+                    display_text = str(total_morning)
+                elif key == "afternoon":
+                    display_text = str(total_afternoon)
                 elif key == "meat":
                     view = constraint_presenter.get_validation_cell_view("meat", day)
                     display_text = "❌" if view.bg == theme.ERR_RED else "✅"
@@ -506,8 +512,8 @@ class ScheduleGrid(QTableWidget):
                 item.setTextAlignment(Qt.AlignCenter)
 
                 # Kolorowanie tła
-                if key == "morning_afternoon":
-                    # Wiersz informacyjny ma stały kolor panelu (taki jak prawidłowe otw/zam)
+                if key in ("morning", "afternoon"):
+                    # Informacyjne wiersze mają stały kolor panelu.
                     item.setBackground(QBrush(QColor(theme.BG_PANEL)))
                 else:
                     # Reszta wierszy używa walidatora błędów
