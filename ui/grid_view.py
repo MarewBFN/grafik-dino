@@ -88,6 +88,53 @@ class EmployeeNameDelegate(QStyledItemDelegate):
         painter.drawText(fraction_rect, Qt.AlignVCenter | Qt.AlignLeft, fraction)
         painter.restore()
 
+class LockedCellDelegate(QStyledItemDelegate):
+    """Rysuje standardową komórkę i nakłada szrafowanie na zablokowane dni."""
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+
+        data = index.data(Qt.UserRole)
+
+        if not isinstance(data, tuple) or len(data) != 2:
+            return
+
+        table = self.parent()
+        if table is None or table.schedule is None:
+            return
+
+        emp, day = data
+        ds = table.schedule.get_day(emp, day)
+
+        if (
+            not getattr(ds, "is_locked", False)
+            or ds.is_leave
+            or getattr(ds, "is_sick", False)
+            or (not ds.start and not ds.end)
+        ):
+            return
+
+        painter.save()
+
+        # Nigdy nie rysuj poza komórką
+        painter.setClipRect(option.rect)
+
+        pen = QPen(QColor(205, 205, 205, 180), 1)
+        painter.setPen(pen)
+
+        step = 8
+        r = option.rect
+
+        for x in range(r.left() - r.height(), r.right(), step):
+            painter.drawLine(
+                x,
+                r.bottom(),
+                x + r.height(),
+                r.top(),
+            )
+
+        painter.restore()
+
 class ScheduleGrid(QTableWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -106,6 +153,11 @@ class ScheduleGrid(QTableWidget):
         self.setIconSize(QSize(20, 20))
         self._employee_name_delegate = EmployeeNameDelegate(self)
         self.setItemDelegateForColumn(0, self._employee_name_delegate)
+
+        self._locked_cell_delegate = LockedCellDelegate(self)
+
+        for col in range(1, 500):
+            self.setItemDelegateForColumn(col, self._locked_cell_delegate)
 
         self.hovered_row = None
         self.active_row = None
