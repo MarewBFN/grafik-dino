@@ -221,13 +221,6 @@ class MainWindow(QMainWindow):
         self.btn_generate.clicked.connect(self._on_generate_clicked)
         self.btn_generate.setToolTip("Tworzy nowy grafik od zera. Nie nadpisuje ręcznie wprowadzonych zmian")
 
-        self.btn_regenerate = QPushButton("↻ Generuj ponownie")
-        self.btn_regenerate.setObjectName("secondaryButton")
-        self.btn_regenerate.setMinimumHeight(44)
-        self.btn_regenerate.clicked.connect(self._on_force_generate_clicked)
-        self.btn_regenerate.setToolTip("Wymusza pełne generowanie od zera. Nadpisuje istniejący grafik")
-        self.btn_regenerate.hide()
-
         self.btn_add_employee = QPushButton("＋ Dodaj pracownika")
         self.btn_add_employee.setObjectName("secondaryButton")
         self.btn_add_employee.setMinimumHeight(44)
@@ -255,7 +248,6 @@ class MainWindow(QMainWindow):
         self.btn_quick_mode.clicked.connect(self._toggle_quick_mode)
 
         layout.addWidget(self.btn_generate)
-        layout.addWidget(self.btn_regenerate)
         self.generate_limit_label = QLabel("")
         self.generate_limit_label.setStyleSheet("color: #777; font-size: 11px;")
         layout.addWidget(self.generate_limit_label)
@@ -485,17 +477,6 @@ class MainWindow(QMainWindow):
         self._update_state_label()
         self._update_generate_label()
 
-        if getattr(self.schedule, "is_generated", False):
-            self.btn_generate.setText("Napraw grafik")
-            self.btn_generate.setToolTip("Naprawia istniejący grafik bez pełnej regeneracji")
-
-            self.btn_regenerate.show()
-            self.btn_regenerate.setToolTip("Wymusza pełne generowanie od zera. Nadpisuje cały grafik")
-        else:
-            self.btn_generate.setText("Generuj grafik")
-            self.btn_generate.setToolTip("Tworzy nowy grafik od zera. Nie nadpisuje ręcznie wprowadzonych zmian")
-
-            self.btn_regenerate.hide()
 
     def _sync_grid(self):
         self.grid.set_data(
@@ -581,12 +562,9 @@ class MainWindow(QMainWindow):
             self.btn_change_date.show()
 
     def _on_generate_clicked(self):
-        self._generate_schedule(force=False)
-        
-    def _on_force_generate_clicked(self):
         self._generate_schedule(force=True)
 
-    def _generate_schedule(self, force=False):
+    def _generate_schedule(self, force=True):
         if not self.demo.can_generate(self):
             return
 
