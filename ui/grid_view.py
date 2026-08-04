@@ -174,7 +174,7 @@ class ScheduleGrid(QTableWidget):
         
         # 1. Wyłączenie domyślnego niebieskiego tła zaznaczenia QTableWidget
         self.setStyleSheet("selection-background-color: transparent; selection-color: inherit;")
-        self.setFocusPolicy(Qt.NoFocus)
+        self.setFocusPolicy(Qt.StrongFocus)
 
         self._create_frozen_name_column()
 
@@ -401,6 +401,21 @@ class ScheduleGrid(QTableWidget):
             item.setTextAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
             item.setData(Qt.UserRole, (emp, day))
 
+            shift_class = getattr(ds, "shift_class", None)
+            if shift_class and ds.is_empty():
+                item.setText(shift_class)
+
+                brush = QBrush(QColor(205, 205, 205))
+                brush.setStyle(Qt.BDiagPattern)
+
+                item.setBackground(brush)
+                label = "rano" if shift_class == "1" else "popołudnie"
+                item.setToolTip(
+                    f"Zablokowany typ zmiany: {label} — generator dobierze godzinę."
+                )
+                self.setItem(row, day, item)
+                continue
+
             if getattr(ds, "is_locked", False) and not ds.start and not ds.end and not ds.is_leave and not getattr(ds, "is_sick", False):
                 item.setText("")  # Czyścimy tekst, żeby nie śmiecił
                 
@@ -475,6 +490,16 @@ class ScheduleGrid(QTableWidget):
                     item.setToolTip(f"{tooltip}\n\n{lock_info}")
                 else:
                     item.setToolTip(lock_info)
+
+            if shift_class:
+                tooltip = item.toolTip()
+                label = "rano" if shift_class == "1" else "popołudnie"
+                class_info = f"🔒 Zablokowany typ zmiany: {label} — godzinę dobrał generator."
+
+                if tooltip:
+                    item.setToolTip(f"{tooltip}\n\n{class_info}")
+                else:
+                    item.setToolTip(class_info)
 
             # 3. Sprawdzanie błędów z flagą highlight_max_consecutive oraz zabezpieczenie przed błędem typu
             error = constraint_presenter.get_cell_error(emp, day)
@@ -631,6 +656,41 @@ class ScheduleGrid(QTableWidget):
             rect = rect.united(self.visualRect(self.model().index(row, col)))
         return rect
 
+    def keyPressEvent(self, event):
+        if not self.schedule or not self.controller:
+            super().keyPressEvent(event)
+            return
+
+        row = self.currentRow()
+        col = self.currentColumn()
+        emp_count = len(self.schedule.employees)
+        days = self.schedule.days_in_month
+
+        if 0 <= row < emp_count and 1 <= col <= days:
+            emp = self.schedule.employees[row]
+            day = col
+
+            if event.key() in (Qt.Key_1, Qt.Key_2):
+                code = "1" if event.key() == Qt.Key_1 else "2"
+                self.controller.set_shift_class(emp, day, code)
+                self.schedule = self.controller.schedule
+                if self.main_window:
+                    self.main_window._sync_everything()
+                else:
+                    self.refresh()
+                return
+
+            if event.key() == Qt.Key_W:
+                self.controller.set_day_free(emp, day)
+                self.schedule = self.controller.schedule
+                if self.main_window:
+                    self.main_window._sync_everything()
+                else:
+                    self.refresh()
+                return
+
+        super().keyPressEvent(event)
+
     def _handle_click(self, row, col):
         self.active_row = row
         self.viewport().update()
@@ -733,6 +793,7 @@ class ScheduleGrid(QTableWidget):
             ds.is_leave = False
             ds.is_sick = False
             ds.is_locked = False
+            ds.shift_class = None
             self.refresh()
 
     def _open_header_context_menu(self, pos):
@@ -781,7 +842,14 @@ class ScheduleGrid(QTableWidget):
             ds = self.schedule.get_day(emp, day)
 
             # 🔥 jeśli już jest wolne → nic nie rób
-            if getattr(ds, "is_locked", False) and not ds.start and not ds.end and not ds.is_leave and not getattr(ds, "is_sick", False):
+            if (
+                getattr(ds, "is_locked", False)
+                and not ds.start
+                and not ds.end
+                and not ds.is_leave
+                and not getattr(ds, "is_sick", False)
+                and not getattr(ds, "shift_class", None)
+            ):
                 return
 
             self.controller.snapshot() # Zabezpieczenie undo
@@ -791,6 +859,7 @@ class ScheduleGrid(QTableWidget):
             ds.is_leave = False
             ds.is_sick = False
             ds.is_locked = True
+            ds.shift_class = None
 
             self.refresh()
             return

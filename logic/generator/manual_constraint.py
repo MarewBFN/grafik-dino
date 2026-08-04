@@ -60,6 +60,21 @@ def add_manual_shift_constraints(
 
             day_state = schedule.get_day(emp, d)
 
+            # 🔵 Zablokowany typ zmiany (1=rano/2=popołudnie) — solver sam
+            # dobiera konkretny slot z odpowiedniej grupy.
+            shift_class = getattr(day_state, "shift_class", None)
+            if shift_class in ("1", "2"):
+                if shift_class == "1":
+                    allowed = {SHIFT_OPEN, *START_SHIFT_MAP.keys()}
+                else:
+                    allowed = {SHIFT_CLOSE, *END_SHIFT_MAP.keys()}
+
+                model.Add(sum(x[e, d, s] for s in allowed) == 1)
+                for s in all_shifts:
+                    if s not in allowed:
+                        model.Add(x[e, d, s] == 0)
+                continue
+
             # 🔴 URLop
             if day_state.is_leave:
                 for s in all_shifts:

@@ -39,7 +39,6 @@ from ui.tutorial_dialog import TutorialDialog
 from ui.loading_overlay import LoadingOverlay
 from ui.demo_manager import DemoManager
 from ui.license_manager import get_user_id, show_license_dialog
-from simple_mode.window import SimpleModeWindow
 
 class GeneratorWorker(QObject):
     finished = Signal(object)
@@ -386,8 +385,6 @@ class MainWindow(QMainWindow):
         self.act_compact.triggered.connect(self._toggle_compact_mode)
         config_menu.addAction(self.act_compact)
 
-        config_menu.addAction("Tryb uproszczony...", self._open_simple_mode)
-
         help_menu.addAction("Samouczek", self._open_tutorial)
 
         file_menu.addAction("Zapisz", self._save_project)
@@ -691,6 +688,9 @@ class MainWindow(QMainWindow):
         menu.addAction("Rano", lambda: self._ctx_morning(emp, day))
         menu.addAction("Zamknięcie", lambda: self._ctx_close(emp, day))
         menu.addSeparator()
+        menu.addAction("Zablokuj: rano (generator dobierze godzinę)", lambda: self._ctx_lock_morning_class(emp, day))
+        menu.addAction("Zablokuj: popołudnie (generator dobierze godzinę)", lambda: self._ctx_lock_afternoon_class(emp, day))
+        menu.addSeparator()
         menu.addAction("Kopiuj dzień", lambda: self._ctx_copy(emp, day))
         menu.addAction("Wklej dzień", lambda: self._ctx_paste(emp, day))
         menu.addSeparator()
@@ -758,6 +758,16 @@ class MainWindow(QMainWindow):
         end = hours[1]
         start = self._calc_start_from_daily(end, emp.daily_hours)
         self.controller.set_day_hours(emp, day, start, end)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
+
+    def _ctx_lock_morning_class(self, emp, day):
+        self.controller.set_shift_class(emp, day, "1")
+        self.schedule = self.controller.schedule
+        self._sync_everything()
+
+    def _ctx_lock_afternoon_class(self, emp, day):
+        self.controller.set_shift_class(emp, day, "2")
         self.schedule = self.controller.schedule
         self._sync_everything()
 
@@ -1013,11 +1023,6 @@ class MainWindow(QMainWindow):
             2000
         )
 
-    def _open_simple_mode(self):
-        if not self.schedule:
-            return
-        dialog = SimpleModeWindow(self, self.schedule)
-        dialog.exec()
 
     def _toggle_quick_mode(self):
         self.quick_mode_enabled = self.btn_quick_mode.isChecked()

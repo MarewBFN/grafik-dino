@@ -25,12 +25,13 @@ class ScheduleController:
     def set_day_free(self, emp, day):
         ds = self.schedule.get_day(emp, day)
 
-        if ds.start is None and ds.end is None and not ds.is_leave and not ds.is_sick:
+        if ds.start is None and ds.end is None and not ds.is_leave and not ds.is_sick and not ds.shift_class:
             return
 
         self.snapshot()
         self.schedule.set_day_free(emp, day)
         ds.is_locked = True
+        ds.shift_class = None
 
     def set_day_hours(self, emp, day, start, end):
         from datetime import datetime
@@ -55,6 +56,7 @@ class ScheduleController:
         self.snapshot()
         self.schedule.set_day_hours(emp, day, start, end)
         ds.is_locked = True
+        ds.shift_class = None
 
     def set_day_leave(self, emp, day):
         ds = self.schedule.get_day(emp, day)
@@ -65,6 +67,19 @@ class ScheduleController:
         self.snapshot()
         ds.set_leave()
         ds.is_locked = True
+        ds.shift_class = None
+
+    def set_shift_class(self, emp, day, code):
+        if code not in ("1", "2"):
+            return
+
+        ds = self.schedule.get_day(emp, day)
+
+        if ds.shift_class == code:
+            return
+
+        self.snapshot()
+        ds.set_shift_class(code)
 
     def add_employee(self, emp):
         self.snapshot()
@@ -100,7 +115,7 @@ class ScheduleController:
 
         # --- BLOKADA DUPLIKATÓW ---
         if shift_type == "OFF":
-            if ds.start is None and ds.end is None and not ds.is_leave and not ds.is_sick:
+            if ds.start is None and ds.end is None and not ds.is_leave and not ds.is_sick and not ds.shift_class:
                 return
 
         elif shift_type == "LEAVE":
@@ -152,6 +167,7 @@ class ScheduleController:
             ds.is_sick = False
 
         ds.is_locked = True
+        ds.shift_class = None
 
     def _calc_end_from_daily(self, start_str, hours):
         from datetime import datetime, timedelta
@@ -174,6 +190,7 @@ class ScheduleController:
         self.snapshot()
         ds.set_sick()
         ds.is_locked = True
+        ds.shift_class = None
 
     def redo(self):
         if not self.future:

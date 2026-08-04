@@ -26,6 +26,7 @@ class DaySchedule:
     is_locked: bool = False
     is_sick: bool = False
     is_day_off: bool = False
+    shift_class: str | None = None  # "1" (rano) / "2" (popołudnie) — typ zmiany zablokowany dla generatora
 
 
     def is_empty(self) -> bool:
@@ -99,6 +100,9 @@ class DaySchedule:
         Jeśli wolne → puste stringi
         Jeśli urlop → 🌴 w pierwszej linii
         """
+        if self.shift_class and self.is_empty():
+            return self.shift_class, "", ""
+
         if self.is_leave:
             return "🌴", "", ""
 
@@ -120,6 +124,18 @@ class DaySchedule:
         self.is_leave = False
         self.is_sick = True
         self.is_day_off = False
+
+    def set_shift_class(self, code: str) -> None:
+        """
+        Blokuje typ zmiany (rano/popołudnie) bez ustalania dokładnej godziny —
+        generator sam dobierze start/end w ramach tego typu.
+        """
+        self.start = None
+        self.end = None
+        self.is_leave = False
+        self.is_sick = False
+        self.is_day_off = False
+        self.shift_class = code
 
     def total_minutes(self, employee=None, shop=None) -> int:
         # urlop / chorobowe
