@@ -100,6 +100,20 @@ QLabel#sectionLabel {
     color: #0f172a;
 }
 
+QLabel#sectionHeader {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 1px;
+}
+
+QFrame#sectionDivider {
+    background: #e7edf6;
+    max-height: 1px;
+    min-height: 1px;
+    border: none;
+}
+
 QLabel#metricValue {
     font-size: 14pt;
     font-weight: 700;
@@ -139,6 +153,33 @@ QPushButton#primaryButton:hover {
 
 QPushButton#primaryButton:pressed {
     background: #1e40af;
+}
+
+QPushButton#secondaryButton {
+    background: #ffffff;
+    border: 1px solid #cfd8e3;
+    color: #1f2937;
+}
+
+QPushButton#secondaryButton:hover {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+QPushButton#secondaryButton:pressed {
+    background: #dbeafe;
+}
+
+QPushButton:checked {
+    background: #2563eb;
+    color: #ffffff;
+    border: 1px solid #2563eb;
+    font-weight: 600;
+}
+
+QPushButton:checked:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
 }
 
 QLineEdit, QSpinBox, QComboBox, QTimeEdit, QDateEdit, QTextEdit, QPlainTextEdit {

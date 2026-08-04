@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QFrame,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -120,6 +121,29 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([320, 1120])
 
+        self._apply_card_shadow(self.left_panel)
+        self._apply_card_shadow(self.right_panel)
+
+    def _apply_card_shadow(self, widget):
+        shadow = QGraphicsDropShadowEffect(widget)
+        shadow.setBlurRadius(18)
+        shadow.setXOffset(0)
+        shadow.setYOffset(2)
+        shadow.setColor(QColor(15, 23, 42, 35))
+        widget.setGraphicsEffect(shadow)
+
+    def _add_section_header(self, layout, text):
+        self._add_section_divider(layout)
+        header = QLabel(text)
+        header.setObjectName("sectionHeader")
+        layout.addWidget(header)
+
+    def _add_section_divider(self, layout):
+        divider = QFrame()
+        divider.setObjectName("sectionDivider")
+        divider.setFrameShape(QFrame.HLine)
+        layout.addWidget(divider)
+
     def _build_left_panel(self):
         panel = QFrame()
         panel.setObjectName("panelCard")
@@ -147,7 +171,7 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(self.title_row_widget)
 
-        self.btn_change_date = QPushButton("Zmień datę")
+        self.btn_change_date = QPushButton("🗓 Zmień datę")
         self.btn_change_date.setStyleSheet("color: #0078d4; text-align: left; background: transparent; border: none; text-decoration: underline;")
         self.btn_change_date.setCursor(Qt.PointingHandCursor)
         self.btn_change_date.setFixedWidth(120)
@@ -191,45 +215,43 @@ class MainWindow(QMainWindow):
         self.nominal_hours_label.setObjectName("metricValue")
         layout.addWidget(self.nominal_hours_label)
 
-        self.btn_generate = QPushButton("Generuj grafik")
+        self.btn_generate = QPushButton("⚙ Generuj grafik")
         self.btn_generate.setObjectName("primaryButton")
         self.btn_generate.setMinimumHeight(44)
         self.btn_generate.clicked.connect(self._on_generate_clicked)
         self.btn_generate.setToolTip("Tworzy nowy grafik od zera. Nie nadpisuje ręcznie wprowadzonych zmian")
-        
-        self.btn_regenerate = QPushButton("Generuj ponownie")
+
+        self.btn_regenerate = QPushButton("↻ Generuj ponownie")
         self.btn_regenerate.setObjectName("secondaryButton")
         self.btn_regenerate.setMinimumHeight(44)
         self.btn_regenerate.clicked.connect(self._on_force_generate_clicked)
         self.btn_regenerate.setToolTip("Wymusza pełne generowanie od zera. Nadpisuje istniejący grafik")
         self.btn_regenerate.hide()
 
-        self.btn_add_employee = QPushButton("Dodaj pracownika")
+        self.btn_add_employee = QPushButton("＋ Dodaj pracownika")
         self.btn_add_employee.setObjectName("secondaryButton")
         self.btn_add_employee.setMinimumHeight(44)
         self.btn_add_employee.clicked.connect(self._open_add_employee)
 
-        self.btn_undo = QPushButton("Cofnij")
+        self.btn_undo = QPushButton("↶ Cofnij")
         self.btn_undo.setMinimumHeight(40)
         self.btn_undo.clicked.connect(self._undo)
 
-        self.btn_redo = QPushButton("Ponów")
+        self.btn_redo = QPushButton("↷ Ponów")
         self.btn_redo.setMinimumHeight(40)
         self.btn_redo.clicked.connect(self._redo)
 
-        self.btn_quick_mode = QPushButton("Tryb szybki")
+        self.btn_expand_view = QPushButton("⤢ Rozszerz widok")
+        self.btn_expand_view.setObjectName("secondaryButton")
+        self.btn_expand_view.setMinimumHeight(44)
+        self.btn_expand_view.setCheckable(True)
+        self.btn_expand_view.clicked.connect(self._toggle_expanded_view)
+
+        self.btn_quick_mode = QPushButton("⚡ Tryb szybki")
         self.btn_quick_mode.setToolTip("Tryb szybkiego wprowadzania zmian ręcznie.")
         self.btn_quick_mode.setObjectName("secondaryButton")
         self.btn_quick_mode.setMinimumHeight(44)
         self.btn_quick_mode.setCheckable(True)
-        self.btn_quick_mode.setStyleSheet("""
-            QPushButton:checked {
-                background-color: #0078d4;
-                color: white;
-                font-weight: bold;
-                border: none;
-            }
-        """)
         self.btn_quick_mode.clicked.connect(self._toggle_quick_mode)
 
         layout.addWidget(self.btn_generate)
@@ -237,14 +259,24 @@ class MainWindow(QMainWindow):
         self.generate_limit_label = QLabel("")
         self.generate_limit_label.setStyleSheet("color: #777; font-size: 11px;")
         layout.addWidget(self.generate_limit_label)
-        layout.addWidget(self.btn_add_employee)
-        layout.addWidget(self.btn_undo)
-        layout.addWidget(self.btn_redo)
+
+        self._add_section_header(layout, "WIDOK I TRYBY")
+        layout.addWidget(self.btn_expand_view)
         layout.addWidget(self.btn_quick_mode)
         layout.addWidget(self.quick_panel)
+
+        self._add_section_header(layout, "ZARZĄDZANIE")
+        layout.addWidget(self.btn_add_employee)
+
+        undo_redo_row = QHBoxLayout()
+        undo_redo_row.addWidget(self.btn_undo)
+        undo_redo_row.addWidget(self.btn_redo)
+        layout.addLayout(undo_redo_row)
+
         layout.addStretch(1)
 
         if self.demo.is_demo:
+            self._add_section_divider(layout)
             self.demo_label = QLabel("Wersja demonstracyjna")
             self.demo_label.setStyleSheet("color: #d9534f; font-size: 11px; font-weight: bold;")
             layout.addWidget(self.demo_label)
@@ -370,6 +402,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         self.grid = ScheduleGrid()
+        self.grid.compact_mode = True
         layout.addWidget(self.grid, 1)
 
         return panel
@@ -379,11 +412,6 @@ class MainWindow(QMainWindow):
         edit_menu = self.menuBar().addMenu("Edycja")
         config_menu = self.menuBar().addMenu("Konfiguracja")
         help_menu = self.menuBar().addMenu("Pomoc")
-
-        self.act_compact = QAction("Tryb kompaktowy", self)
-        self.act_compact.setCheckable(True)
-        self.act_compact.triggered.connect(self._toggle_compact_mode)
-        config_menu.addAction(self.act_compact)
 
         help_menu.addAction("Samouczek", self._open_tutorial)
 
@@ -1016,10 +1044,11 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _toggle_compact_mode(self, checked):
-        self.grid.set_compact_mode(checked)
+    def _toggle_expanded_view(self, checked):
+        self.grid.set_compact_mode(not checked)
+        self.btn_expand_view.setText("Zwiń widok" if checked else "Rozszerz widok")
         self.statusBar().showMessage(
-            "Tryb kompaktowy włączony." if checked else "Tryb kompaktowy wyłączony.",
+            "Widok rozszerzony włączony." if checked else "Widok kompaktowy włączony.",
             2000
         )
 
