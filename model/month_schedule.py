@@ -26,7 +26,7 @@ class MonthSchedule:
             raise ValueError("Ten pracownik już istnieje w grafiku")
 
         self.employees.append(employee)
-        self.employees.sort()
+        self.employees.sort(key=self._employee_sort_key)
         self._data[employee] = {
             day: DaySchedule()
             for day in range(1, self.days_in_month + 1)
@@ -236,8 +236,13 @@ class MonthSchedule:
                 ds.is_locked = dd.get("is_locked", False)
                 ds.is_day_off = dd.get("is_day_off", False)
 
-        sched.employees.sort(key=lambda e: e.last_name.lower())
+        sched.employees.sort(key=cls._employee_sort_key)
         return sched
+
+    @staticmethod
+    def _employee_sort_key(employee: Employee) -> tuple[str, str]:
+        """Alphabetical order independent of uppercase/lowercase letters."""
+        return employee.last_name.casefold(), employee.first_name.casefold()
 
     def replace_employee(self, old, new):
         if old not in self._data:
