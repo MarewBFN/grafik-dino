@@ -37,6 +37,12 @@ class GeneratorDiagnosticsTests(unittest.TestCase):
         self.assertEqual(report["infeasibility"]["irreducible_constraint_groups"], ["open"])
         self.assertEqual(report["stages"][0]["status"], "OPTIMAL")
 
+    def test_11_hour_rest_is_mandatory_by_default(self):
+        self.assertEqual(
+            ShopConfig(2026, 8).constraint_policies["rest_11h"],
+            ConstraintPolicy.MANDATORY,
+        )
+
     def test_random_project_round_trip_preserves_inputs_used_by_constraints(self):
         schedule, shop, metadata = build_random_project(
             seed=19,
