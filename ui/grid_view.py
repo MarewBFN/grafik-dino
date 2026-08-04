@@ -5,12 +5,14 @@ from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QPainter, QPixmap, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFrame,
     QMenu,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
+    QTableView,
 )
 from logic.constraint_presenter import ConstraintPresenter
 from logic.schedule_presenter import SchedulePresenter
@@ -92,7 +94,8 @@ class ScheduleGrid(QTableWidget):
         self._clipboard_day = None
         self.compact_mode = False
         self.setIconSize(QSize(20, 20))
-        self.setItemDelegateForColumn(0, EmployeeNameDelegate(self))
+        self._employee_name_delegate = EmployeeNameDelegate(self)
+        self.setItemDelegateForColumn(0, self._employee_name_delegate)
 
         self.hovered_row = None
         self.active_row = None
@@ -111,12 +114,71 @@ class ScheduleGrid(QTableWidget):
         self.setStyleSheet("selection-background-color: transparent; selection-color: inherit;")
         self.setFocusPolicy(Qt.NoFocus)
 
+        self._create_frozen_name_column()
+
         self.cellClicked.connect(self._handle_click)
         self.cellDoubleClicked.connect(self._handle_double_click)
         
         # 4. Podwójny klik na nagłówku (zamiast PPM)
         self.horizontalHeader().sectionDoubleClicked.connect(self._handle_header_double_click)
         self.horizontalHeader().setToolTip("Kliknij dwukrotnie, aby zmienić godziny pracy")
+
+    def _create_frozen_name_column(self):
+        """Overlay a second view for column 0 so it stays visible horizontally."""
+        self.frozen_name_column = QTableView(self)
+        self.frozen_name_column.setModel(self.model())
+        self.frozen_name_column.setSelectionModel(self.selectionModel())
+        self.frozen_name_column.setItemDelegateForColumn(0, self._employee_name_delegate)
+        self.frozen_name_column.setFocusPolicy(Qt.NoFocus)
+        self.frozen_name_column.setFrameShape(QFrame.NoFrame)
+        self.frozen_name_column.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.frozen_name_column.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.frozen_name_column.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.frozen_name_column.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.frozen_name_column.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.frozen_name_column.verticalHeader().setVisible(False)
+        self.frozen_name_column.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
+
+        for column in range(1, self.model().columnCount()):
+            self.frozen_name_column.setColumnHidden(column, True)
+
+        self.verticalScrollBar().valueChanged.connect(self.frozen_name_column.verticalScrollBar().setValue)
+        self.frozen_name_column.verticalScrollBar().valueChanged.connect(self.verticalScrollBar().setValue)
+        self.verticalHeader().sectionResized.connect(self._sync_frozen_row_height)
+        self.horizontalHeader().sectionResized.connect(self._sync_frozen_column_width)
+        self.frozen_name_column.clicked.connect(lambda index: self._handle_click(index.row(), 0))
+        self.frozen_name_column.doubleClicked.connect(lambda index: self._handle_double_click(index.row(), 0))
+        self._update_frozen_name_column()
+
+    def _sync_frozen_row_height(self, row, _old_size, new_size):
+        if hasattr(self, "frozen_name_column"):
+            self.frozen_name_column.setRowHeight(row, new_size)
+
+    def _sync_frozen_column_width(self, column, _old_size, new_size):
+        if column == 0 and hasattr(self, "frozen_name_column"):
+            self.frozen_name_column.setColumnWidth(0, new_size)
+            self._update_frozen_name_column()
+
+    def _update_frozen_name_column(self):
+        if not hasattr(self, "frozen_name_column"):
+            return
+        viewport_rect = self.viewport().geometry()
+        header_rect = self.horizontalHeader().geometry()
+        # The main header is taller because day labels use two lines (e.g. Pn\n1).
+        # Keep this one equally tall so row 0 starts on exactly the same Y axis.
+        self.frozen_name_column.horizontalHeader().setFixedHeight(header_rect.height())
+        self.frozen_name_column.setGeometry(
+            viewport_rect.x(),
+            header_rect.y(),
+            self.columnWidth(0),
+            header_rect.height() + viewport_rect.height(),
+        )
+        self.frozen_name_column.setColumnWidth(0, self.columnWidth(0))
+        self.frozen_name_column.raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_frozen_name_column()
     def mouseMoveEvent(self, event):
         item = self.itemAt(event.pos())
         if item:
@@ -173,6 +235,9 @@ class ScheduleGrid(QTableWidget):
         self.setHorizontalHeaderLabels(headers)
         self.setRowCount(len(self.schedule.employees) + 4)
 
+        for col in range(1, self.columnCount()):
+            self.frozen_name_column.setColumnHidden(col, True)
+
         self.setColumnWidth(0, 180)
         for col in range(1, days + 1):
             if self.compact_mode:
@@ -188,6 +253,11 @@ class ScheduleGrid(QTableWidget):
 
         for row in range(self.rowCount()):
             self.setRowHeight(row, 42)
+
+        # QTableView has its own vertical header, so mirror the explicit heights.
+        for row in range(self.rowCount()):
+            self.frozen_name_column.setRowHeight(row, self.rowHeight(row))
+        self._update_frozen_name_column()
 
     def refresh(self):
         if not self.schedule or not self.shop_config:
