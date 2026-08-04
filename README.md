@@ -69,7 +69,7 @@ grafik-dino-v2
 │   │   ├─ solver.py
 │   │   └─ solution_mapper.py
 │
-├─ ui                        # Tkinter GUI
+├─ ui                        # PySide6 GUI
 ├─ main.py                   # application entry point
 └─ README.md
 ```
