@@ -1,4 +1,9 @@
-from logic.generator.rest_constraint import get_effective_daily_hours
+from datetime import datetime, timedelta
+
+from ortools.sat.python import cp_model
+
+from logic.utils.time_utils import classify_shift_as_morning_or_afternoon, get_effective_daily_hours
+
 
 def add_open_close_penalty(x, employees, days, SHIFT_OPEN, SHIFT_CLOSE):
     print("[OBJECTIVE] penalty OPEN/CLOSE usage")
@@ -61,27 +66,53 @@ def add_morning_afternoon_balance_penalty(
     print("[OBJECTIVE] balance daily Morning vs Afternoon staff")
     penalties = []
 
+    fmt = "%H:%M"
+
     for d in days:
+        hours = shop.get_open_hours_for_day(d)
+        if not hours:
+            continue
 
-        # 🔥 tylko zmiany blisko otwarcia = rano
-        morning_shifts = sum(
-            x[e, d, s]
-            for e in range(len(employees))
-            for s in (
-                [SHIFT_OPEN] +
-                [k for k, v in START_SHIFT_MAP.items() if v <= 60]
-            )
-        )
+        open_time_str, close_time_str = hours
+        shop_open_dt = datetime.strptime(open_time_str, fmt)
+        shop_close_dt = datetime.strptime(close_time_str, fmt)
 
-        # 🔥 tylko zmiany blisko zamknięcia = popo
-        afternoon_shifts = sum(
-            x[e, d, s]
-            for e in range(len(employees))
-            for s in (
-                [SHIFT_CLOSE] +
-                [k for k, v in END_SHIFT_MAP.items() if v <= 60]
-            )
-        )
+        morning_shifts = 0
+        afternoon_shifts = 0
+
+        for e, emp in enumerate(employees):
+            eff_hours = get_effective_daily_hours(emp, shop)
+            shift_delta = timedelta(hours=eff_hours)
+
+            for s in (SHIFT_OPEN, SHIFT_CLOSE) + tuple(START_SHIFT_MAP.keys()) + tuple(END_SHIFT_MAP.keys()):
+                if s == SHIFT_OPEN:
+                    shift_start = shop_open_dt
+                    shift_end = shop_open_dt + shift_delta
+                elif s == SHIFT_CLOSE:
+                    shift_start = shop_close_dt - shift_delta
+                    shift_end = shop_close_dt
+                elif s in START_SHIFT_MAP:
+                    offset = START_SHIFT_MAP[s]
+                    shift_start = shop_open_dt + timedelta(minutes=offset)
+                    shift_end = shift_start + shift_delta
+                elif s in END_SHIFT_MAP:
+                    offset = END_SHIFT_MAP[s]
+                    shift_end = shop_close_dt - timedelta(minutes=offset)
+                    shift_start = shift_end - shift_delta
+                else:
+                    continue
+
+                classification = classify_shift_as_morning_or_afternoon(
+                    shift_start,
+                    shift_end,
+                    shop_open_dt,
+                    shop_close_dt,
+                )
+
+                if classification == "morning":
+                    morning_shifts += x[e, d, s]
+                elif classification == "afternoon":
+                    afternoon_shifts += x[e, d, s]
 
         diff = model.NewIntVar(-50, 50, f"daily_balance_diff_d{d}")
         model.Add(diff == morning_shifts - afternoon_shifts)

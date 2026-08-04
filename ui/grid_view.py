@@ -1,10 +1,12 @@
 import calendar
+from datetime import datetime
 
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPixmap, QPen
 from PySide6.QtWidgets import QAbstractItemView, QMenu, QTableWidget, QTableWidgetItem
 from logic.constraint_presenter import ConstraintPresenter
 from logic.schedule_presenter import SchedulePresenter
+from logic.utils.time_utils import classify_shift_as_morning_or_afternoon
 from utils import resource_path
 from ui import theme
 
@@ -219,14 +221,23 @@ class ScheduleGrid(QTableWidget):
                 text = ""
 
                 if ds.start:
-                    try:
-                        start_hour = int(ds.start.split(":")[0])
-
-                        # 🔥 taka sama logika jak w podsumowaniu
-                        text = "1" if start_hour < 12 else "2"
-
-                    except:
-                        text = ""
+                    hours = self.shop_config.get_open_hours_for_day(day)
+                    if hours:
+                        shop_open_str, shop_close_str = hours
+                        try:
+                            shop_open_dt = datetime.strptime(shop_open_str, "%H:%M")
+                            shop_close_dt = datetime.strptime(shop_close_str, "%H:%M")
+                            emp_start_dt = datetime.strptime(ds.start, "%H:%M")
+                            emp_end_dt = datetime.strptime(ds.end, "%H:%M")
+                            classification = classify_shift_as_morning_or_afternoon(
+                                emp_start_dt,
+                                emp_end_dt,
+                                shop_open_dt,
+                                shop_close_dt,
+                            )
+                            text = "1" if classification == "morning" else "2"
+                        except ValueError:
+                            text = ""
 
                 item.setText(text)
             else:
@@ -294,45 +305,49 @@ class ScheduleGrid(QTableWidget):
                 if not hours:
                     continue
                 shop_open_str, shop_close_str = hours
-                
+
+                fmt = "%H:%M"
                 try:
-                    shop_open_h = int(shop_open_str.split(":")[0])
-                    shop_close_h = int(shop_close_str.split(":")[0])
-                except:
+                    shop_open_dt = datetime.strptime(shop_open_str, fmt)
+                    shop_close_dt = datetime.strptime(shop_close_str, fmt)
+                except ValueError:
                     continue
 
                 for emp in self.schedule.employees:
                     ds = self.schedule.get_day(emp, day)
-                    
+
                     # Ignorujemy osoby, które nie pracują, są na urlopie lub L4
                     if not ds.start or ds.is_leave or getattr(ds, "is_sick", False):
                         continue
 
                     try:
-                        emp_start_h = int(ds.start.split(":")[0])
-                        emp_end_h = int(ds.end.split(":")[0])
+                        emp_start_dt = datetime.strptime(ds.start, fmt)
+                        emp_end_dt = datetime.strptime(ds.end, fmt)
 
                         # --- LOGIKA ZGODNA Z GENERATOREM ---
-                        
+
                         # 1. Dokładne Otwarcie/Zamknięcie (walidacja)
                         if ds.start == shop_open_str:
                             at_opening += 1
                         if ds.end == shop_close_str:
                             at_closing += 1
 
-                        # 2. Rano / Popołudnie (wszystkie zmiany rano i po południu)
-                        # Rano: Zaczyna tak jak sklep LUB przed 12:00
-                        if emp_start_h <= shop_open_h or emp_start_h < 12:
+                        # 2. Rano / Popołudnie (jedno przypisanie na zmianę)
+                        classification = classify_shift_as_morning_or_afternoon(
+                            emp_start_dt,
+                            emp_end_dt,
+                            shop_open_dt,
+                            shop_close_dt,
+                        )
+                        if classification == "morning":
                             total_morning += 1
-                        
-                        # Popołudnie: Kończy tak jak sklep LUB zaczyna od 12:00 wzwyż
-                        if emp_end_h >= shop_close_h or emp_start_h >= 12:
+                        elif classification == "afternoon":
                             total_afternoon += 1
 
                         # 3. Mięso
                         if emp.is_meat and ds.start and not ds.is_leave and not getattr(ds, "is_sick", False):
                             count_meat += 1
-                    except:
+                    except ValueError:
                         continue
 
                 # Budowanie tekstu do wyświetlenia
