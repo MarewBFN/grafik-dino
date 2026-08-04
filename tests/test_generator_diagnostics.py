@@ -97,6 +97,20 @@ class GeneratorDiagnosticsTests(unittest.TestCase):
         self.assertEqual(controller.shop_config.day_overrides[4], ("08:00", "18:00"))
         self.assertIn(4, controller.shop_config.public_holidays)
 
+    def test_constraint_policies_survive_project_save_and_load(self):
+        schedule = MonthSchedule(2026, 8)
+        shop = ShopConfig(2026, 8)
+        shop.constraint_policies["open"] = ConstraintPolicy.MANDATORY
+        shop.constraint_policies["monthly_hours"] = ConstraintPolicy.DISABLED
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "project.json"
+            save_project(path, schedule, shop)
+            _, restored_shop = load_project(path)
+
+        self.assertEqual(restored_shop.constraint_policies["open"], ConstraintPolicy.MANDATORY)
+        self.assertEqual(restored_shop.constraint_policies["monthly_hours"], ConstraintPolicy.DISABLED)
+
 
 if __name__ == "__main__":
     unittest.main()

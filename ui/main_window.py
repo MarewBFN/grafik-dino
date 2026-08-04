@@ -784,6 +784,12 @@ class MainWindow(QMainWindow):
             return
         self._update_nominal_hours_label()
         self._sync_grid()
+        # Constraint policies are part of the local working project, so retain
+        # the selected generator configuration for the next application start.
+        try:
+            save_project("last_project.json", self.schedule, self.shop_config)
+        except OSError:
+            pass
         self.statusBar().showMessage("Zapisano konfigurację.", 2500)
 
     def _save_project(self):

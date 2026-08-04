@@ -3,6 +3,7 @@ import calendar
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -18,6 +19,27 @@ from PySide6.QtWidgets import (
     QFrame,
 )
 from ui.time_input import TimeInputWidget
+from model.constraint_policy import ConstraintPolicy
+
+
+POLICY_OPTIONS = (
+    ("Preferowane", ConstraintPolicy.PREFERRED),
+    ("Wymagane", ConstraintPolicy.MANDATORY),
+    ("Wyłączone", ConstraintPolicy.DISABLED),
+)
+
+POLICY_LABELS = (
+    ("rest_11h", "Odpoczynek 11 h"),
+    ("open", "Obsada otwarcia"),
+    ("close", "Obsada zamknięcia"),
+    ("meat", "Mięso na zmianach"),
+    ("meat_coverage", "Mięso przez cały dzień"),
+    ("availability", "Dostępność pracownika"),
+    ("no_night", "Zakaz pracy nocnej"),
+    ("monthly_hours", "Godziny miesięczne"),
+    ("balance", "Bilans godzin"),
+    ("max_consecutive", "Dni pod rząd"),
+)
 
 def _parse_time(value: str) -> QTime:
     if not value:
@@ -32,7 +54,7 @@ class ConfigDialog(QDialog):
         self.shop_config = shop_config
         self.setWindowTitle("Konfiguracja")
         self.setModal(True)
-        self.resize(580, 500)
+        self.resize(720, 640)
 
         # Wspólny styl dla wszystkich kart i elementów w dialogu
         self.setStyleSheet("""
@@ -223,6 +245,42 @@ class ConfigDialog(QDialog):
         form_staff.addRow("Pracowników na zamknięciu (wieczór):", self.min_close)
         layout.addLayout(form_staff)
 
+        # --- Sekcja: polityki constraintów generatora ---
+        policy_label = QLabel("ZASADY GENERATORA")
+        policy_label.setObjectName("groupLabel")
+        layout.addWidget(policy_label)
+
+        policy_info = QLabel(
+            "Wymagane: reguła musi być spełniona. "
+            "Preferowane: solver może ją naruszyć za karę."
+        )
+        policy_info.setStyleSheet("color: #666; font-size: 11px;")
+        policy_info.setWordWrap(True)
+        layout.addWidget(policy_info)
+
+        policy_grid = QGridLayout()
+        policy_grid.setHorizontalSpacing(12)
+        policy_grid.setVerticalSpacing(7)
+        self.policy_selectors = {}
+        split_at = (len(POLICY_LABELS) + 1) // 2
+
+        for index, (policy_name, label) in enumerate(POLICY_LABELS):
+            row = index % split_at
+            column = (index // split_at) * 2
+            selector = QComboBox()
+            selector.setMinimumWidth(125)
+            for text, value in POLICY_OPTIONS:
+                selector.addItem(text, value)
+            current_policy = self.shop_config.constraint_policies.get(
+                policy_name, ConstraintPolicy.PREFERRED
+            )
+            selector.setCurrentIndex(selector.findData(current_policy))
+            policy_grid.addWidget(QLabel(label + ":"), row, column)
+            policy_grid.addWidget(selector, row, column + 1)
+            self.policy_selectors[policy_name] = selector
+
+        layout.addLayout(policy_grid)
+
         layout.addStretch()
         return page
 
@@ -252,6 +310,8 @@ class ConfigDialog(QDialog):
             self.shop_config.constraints["enforce_meat_coverage"] = True
             self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
             self.shop_config.constraints["highlight_max_consecutive"] = self.hl_consecutive.isChecked()
+            for policy_name, selector in self.policy_selectors.items():
+                self.shop_config.constraint_policies[policy_name] = selector.currentData()
         except Exception as exc:
             QMessageBox.critical(self, "Błąd konfiguracji", str(exc))
             return
