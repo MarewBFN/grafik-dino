@@ -251,8 +251,11 @@ class ScheduleGrid(QTableWidget):
         self.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
         self.horizontalHeader().setStretchLastSection(False)
 
+        employee_row_height = 42
+        summary_row_height = 32  # 25% less than the regular 42 px row (rounded)
         for row in range(self.rowCount()):
-            self.setRowHeight(row, 42)
+            height = employee_row_height if row < len(self.schedule.employees) else summary_row_height
+            self.setRowHeight(row, height)
 
         # QTableView has its own vertical header, so mirror the explicit heights.
         for row in range(self.rowCount()):

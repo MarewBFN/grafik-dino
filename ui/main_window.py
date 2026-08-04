@@ -366,19 +366,8 @@ class MainWindow(QMainWindow):
         panel.setObjectName("contentCard")
 
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(12, 0, 12, 12)
         layout.setSpacing(10)
-
-        top = QHBoxLayout()
-        self.grid_title = QLabel("Widok grafiku")
-        self.grid_title.setObjectName("sectionLabel")
-        top.addWidget(self.grid_title)
-
-        top.addStretch(1)
-        self.state_label = QLabel("")
-        self.state_label.setObjectName("subtitleLabel")
-        top.addWidget(self.state_label)
-        layout.addLayout(top)
 
         self.grid = ScheduleGrid()
         layout.addWidget(self.grid, 1)
@@ -505,10 +494,8 @@ class MainWindow(QMainWindow):
         self.nominal_hours_label.setText(f"{hours} h")
 
     def _update_state_label(self):
-        if not self.schedule:
-            self.state_label.setText("")
-            return
-        self.state_label.setText(f"{self.month:02d}.{self.year}")
+        # The month/year is shown in the left control panel; no duplicate grid header.
+        pass
 
     def _set_date_controls(self, year, month):
         self._loading = True
