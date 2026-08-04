@@ -73,6 +73,9 @@ class ScheduleController:
         if code not in ("1", "2"):
             return
 
+        if not self.shop_config.is_trade_day(day):
+            return
+
         ds = self.schedule.get_day(emp, day)
 
         if ds.shift_class == code:

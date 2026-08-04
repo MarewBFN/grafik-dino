@@ -666,30 +666,43 @@ class ScheduleGrid(QTableWidget):
         emp_count = len(self.schedule.employees)
         days = self.schedule.days_in_month
 
-        if 0 <= row < emp_count and 1 <= col <= days:
+        if (
+            0 <= row < emp_count
+            and 1 <= col <= days
+            and self.shop_config
+            and self.shop_config.is_trade_day(col)
+        ):
             emp = self.schedule.employees[row]
             day = col
 
             if event.key() in (Qt.Key_1, Qt.Key_2):
                 code = "1" if event.key() == Qt.Key_1 else "2"
                 self.controller.set_shift_class(emp, day, code)
-                self.schedule = self.controller.schedule
-                if self.main_window:
-                    self.main_window._sync_everything()
-                else:
-                    self.refresh()
+                self._sync_and_keep_position(row, col)
                 return
 
             if event.key() == Qt.Key_W:
                 self.controller.set_day_free(emp, day)
-                self.schedule = self.controller.schedule
-                if self.main_window:
-                    self.main_window._sync_everything()
-                else:
-                    self.refresh()
+                self._sync_and_keep_position(row, col)
                 return
 
         super().keyPressEvent(event)
+
+    def _sync_and_keep_position(self, row, col):
+        self.schedule = self.controller.schedule
+
+        v_scroll = self.verticalScrollBar().value()
+        h_scroll = self.horizontalScrollBar().value()
+
+        if self.main_window:
+            self.main_window._sync_everything()
+        else:
+            self.refresh()
+
+        self.setCurrentCell(row, col)
+        self.verticalScrollBar().setValue(v_scroll)
+        self.horizontalScrollBar().setValue(h_scroll)
+        self.setFocus()
 
     def _handle_click(self, row, col):
         self.active_row = row
