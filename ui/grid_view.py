@@ -2,13 +2,79 @@ import calendar
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPixmap, QPen
-from PySide6.QtWidgets import QAbstractItemView, QMenu, QTableWidget, QTableWidgetItem
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QPainter, QPixmap, QPen
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QMenu,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+    QTableWidget,
+    QTableWidgetItem,
+)
 from logic.constraint_presenter import ConstraintPresenter
 from logic.schedule_presenter import SchedulePresenter
 from logic.utils.time_utils import classify_shift_as_morning_or_afternoon
 from utils import resource_path
 from ui import theme
+
+
+def employment_fraction_label(employee):
+    """Short labels for the employee column; full labels stay in EmployeeDialog."""
+    labels = {
+        1.0: "1/1",
+        1.01: "1/1 8h",
+        0.875: "7/8",
+        0.75: "3/4",
+        0.625: "5/8",
+        0.5: "1/2",
+        0.375: "3/8",
+        0.25: "1/4",
+    }
+    return labels.get(round(employee.employment_fraction, 3), str(employee.employment_fraction))
+
+
+class EmployeeNameDelegate(QStyledItemDelegate):
+    """Paint employee name and a subdued employment fraction on one line."""
+
+    def paint(self, painter, option, index):
+        employee = index.data(Qt.UserRole)
+        if employee is None or not hasattr(employee, "employment_fraction"):
+            super().paint(painter, option, index)
+            return
+
+        style_option = QStyleOptionViewItem(option)
+        self.initStyleOption(style_option, index)
+        style_option.text = ""
+        style = style_option.widget.style() if style_option.widget else QStyle()
+        style.drawControl(QStyle.CE_ItemViewItem, style_option, painter, style_option.widget)
+
+        text_rect = style.subElementRect(QStyle.SE_ItemViewItemText, style_option, style_option.widget)
+        name_font = QFont(style_option.font)
+        name_font.setBold(True)
+        fraction_font = QFont(name_font)
+        fraction_font.setBold(False)
+        fraction_font.setPointSize(max(name_font.pointSize() - 2, 8))
+
+        fraction = employment_fraction_label(employee)
+        name_metrics = QFontMetrics(name_font)
+        fraction_metrics = QFontMetrics(fraction_font)
+        gap = 7
+        fraction_width = fraction_metrics.horizontalAdvance(fraction)
+        available_name_width = max(0, text_rect.width() - fraction_width - gap)
+        name = name_metrics.elidedText(employee.display_name(), Qt.ElideRight, available_name_width)
+
+        painter.save()
+        painter.setFont(name_font)
+        painter.setPen(style_option.palette.text().color())
+        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, name)
+
+        name_width = name_metrics.horizontalAdvance(name)
+        fraction_rect = text_rect.adjusted(name_width + gap, 0, 0, 0)
+        painter.setFont(fraction_font)
+        painter.setPen(QColor("#8a8a8a"))
+        painter.drawText(fraction_rect, Qt.AlignVCenter | Qt.AlignLeft, fraction)
+        painter.restore()
 
 class ScheduleGrid(QTableWidget):
     def __init__(self, parent=None):
@@ -26,6 +92,7 @@ class ScheduleGrid(QTableWidget):
         self._clipboard_day = None
         self.compact_mode = False
         self.setIconSize(QSize(20, 20))
+        self.setItemDelegateForColumn(0, EmployeeNameDelegate(self))
 
         self.hovered_row = None
         self.active_row = None
