@@ -167,6 +167,101 @@ def preflight_supply(schedule, shop) -> list[dict[str, Any]]:
     return report
 
 
+def build_infeasibility_summary(schedule, shop) -> list[str]:
+    """Return client-readable causes that can be proven from the input data."""
+    messages: list[str] = []
+    policies = shop.constraint_policies
+    min_open = shop.constraints.get("min_open_staff", 3)
+    min_close = shop.constraints.get("min_close_staff", 3)
+
+    def add(message: str) -> None:
+        if message not in messages and len(messages) < 6:
+            messages.append(message)
+
+    for day in range(1, schedule.days_in_month + 1):
+        if not shop.is_trade_day(day):
+            continue
+        hours = shop.get_open_hours_for_day(day)
+        if not hours:
+            continue
+
+        open_time, close_time = hours
+        for policy_name, target_time, required, label in (
+            ("open", open_time, min_open, "otwarciu"),
+            ("close", close_time, min_close, "zamknięciu"),
+        ):
+            if policies.get(policy_name) != ConstraintPolicy.MANDATORY:
+                continue
+
+            fixed = []
+            possible = []
+            for employee in schedule.employees:
+                state = schedule.get_day(employee, day)
+                if state.is_leave or getattr(state, "is_sick", False) or getattr(state, "is_day_off", False):
+                    continue
+                matches = state.start == target_time if policy_name == "open" else state.end == target_time
+                if state.is_locked:
+                    if matches:
+                        fixed.append(employee)
+                else:
+                    possible.append(employee)
+
+            if len(fixed) > required:
+                add(
+                    f"Dzień {day}: zablokowano {len(fixed)} osoby na {label}, "
+                    f"a wymagane są dokładnie {required}."
+                )
+            elif len(fixed) + len(possible) < required:
+                add(
+                    f"Dzień {day}: za mało osób możliwych do pracy na {label} "
+                    f"({len(fixed) + len(possible)} z wymaganych {required})."
+                )
+            elif not any(employee.is_opener for employee in fixed + possible):
+                add(f"Dzień {day}: brak pracownika otwarcia możliwego do pracy na {label}.")
+            elif not any(employee.is_meat for employee in fixed + possible):
+                add(f"Dzień {day}: brak osoby z uprawnieniem mięso możliwej do pracy na {label}.")
+
+        if policies.get("meat_coverage") == ConstraintPolicy.MANDATORY:
+            available_meat = [
+                employee for employee in schedule.employees
+                if employee.is_meat
+                and not schedule.get_day(employee, day).is_leave
+                and not getattr(schedule.get_day(employee, day), "is_sick", False)
+                and not getattr(schedule.get_day(employee, day), "is_day_off", False)
+            ]
+            if not available_meat:
+                add(f"Dzień {day}: brak dostępnej osoby z uprawnieniem mięso na cały dzień.")
+
+    if policies.get("rest_11h") == ConstraintPolicy.MANDATORY:
+        fmt = "%H:%M"
+        for employee in schedule.employees:
+            for day in range(1, schedule.days_in_month):
+                if not (shop.is_trade_day(day) and shop.is_trade_day(day + 1)):
+                    continue
+                today = schedule.get_day(employee, day)
+                tomorrow = schedule.get_day(employee, day + 1)
+                if not (today.is_locked and tomorrow.is_locked and today.end and tomorrow.start):
+                    continue
+                end = datetime.strptime(today.end, fmt)
+                start = datetime.strptime(tomorrow.start, fmt)
+                rest = start - end
+                if rest.total_seconds() < 0:
+                    rest += timedelta(days=1)
+                if rest < timedelta(hours=11):
+                    hours = rest.total_seconds() / 3600
+                    add(
+                        f"{employee.display_name()}, dni {day}–{day + 1}: "
+                        f"zablokowana przerwa wynosi tylko {hours:.2f} h (wymagane 11 h)."
+                    )
+
+    if not messages:
+        add(
+            "Wymagane zasady są ze sobą sprzeczne. Sprawdź zablokowane zmiany, "
+            "dostępność pracowników oraz wymagania dla danego dnia."
+        )
+    return messages
+
+
 class GeneratorDiagnostics:
     """Run isolated stage solves and locate an irreducible hard-constraint set."""
 

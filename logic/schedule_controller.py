@@ -79,13 +79,18 @@ class ScheduleController:
 
     def generate_schedule(self, force=False):
         from logic.auto_generator import AutoScheduleGenerator
-        self.snapshot()
+
+        # Keep an undo entry only when generation actually changes the schedule.
+        schedule_before_generation = self.schedule.snapshot()
+        shop_before_generation = deepcopy(self.shop_config)
         generator = AutoScheduleGenerator(self.schedule, self.shop_config)
         
         is_fix = getattr(self.schedule, "is_generated", False) and not force
         result = generator.generate(is_fix=is_fix)
         
         if result and result.get("success"):
+            self.history.append((schedule_before_generation, shop_before_generation))
+            self.future.clear()
             self.schedule.is_generated = True
             
         return result

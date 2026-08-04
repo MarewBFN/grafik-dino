@@ -128,6 +128,8 @@ class AutoScheduleGenerator:
 
         print("=== START CP-SAT GENERATOR ===")
 
+        schedule_before_generation = self.schedule.snapshot()
+
         if trace is None:
             trace = ConstraintTraceLogger()
 
@@ -495,6 +497,17 @@ class AutoScheduleGenerator:
             if hasattr(emp, '_orig_daily_hours'):
                 object.__setattr__(emp, 'daily_hours', emp._orig_daily_hours)
 
+        infeasibility_reasons = []
+        if not success:
+            # clear_unlocked_days() runs before solving. Never leave its partial
+            # changes in the UI when CP-SAT could not produce a full schedule.
+            self.schedule.restore(schedule_before_generation)
+            from logic.generator.diagnostics import build_infeasibility_summary
+            infeasibility_reasons = build_infeasibility_summary(
+                schedule_before_generation,
+                self.shop,
+            )
+
         if trace_output_path is not None:
             trace.write_json(trace_output_path)
 
@@ -503,7 +516,8 @@ class AutoScheduleGenerator:
             "success": success,
             "conflicts": solver.NumConflicts(),
             "branches": solver.NumBranches(),
-            "wall_time": solver.WallTime()
+            "wall_time": solver.WallTime(),
+            "infeasibility_reasons": infeasibility_reasons,
         }
 
     def diagnose(self, output_path=None, time_limit_seconds=5):

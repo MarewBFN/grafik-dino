@@ -20,11 +20,9 @@ class ShopConfig:
             "meat": ConstraintPolicy.PREFERRED,
             "balance": ConstraintPolicy.PREFERRED,
             "max_consecutive": ConstraintPolicy.PREFERRED,
-            # Przy ograniczonej liczbie dostępnych pracowników lepiej traktować
-            # obsadę OPEN/CLOSE oraz dostępność jako miękkie kary niż natychmiast
-            # blokować całe rozwiązanie.
-            "open": ConstraintPolicy.PREFERRED,
-            "close": ConstraintPolicy.PREFERRED,
+            # Minimalna obsada na otwarciu i zamknięciu jest zasadą twardą.
+            "open": ConstraintPolicy.MANDATORY,
+            "close": ConstraintPolicy.MANDATORY,
             "monthly_hours": ConstraintPolicy.PREFERRED,
             "meat_coverage": ConstraintPolicy.PREFERRED,
             "availability": ConstraintPolicy.PREFERRED,
@@ -189,6 +187,9 @@ class ShopConfig:
                 cfg.constraint_policies[name] = ConstraintPolicy(value)
             except ValueError:
                 continue
+
+        # This rule is an optimization target, not a strict feasibility rule.
+        cfg.constraint_policies["balance"] = ConstraintPolicy.PREFERRED
 
         return cfg
 

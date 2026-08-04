@@ -274,7 +274,12 @@ class ConfigDialog(QDialog):
             current_policy = self.shop_config.constraint_policies.get(
                 policy_name, ConstraintPolicy.PREFERRED
             )
+            if policy_name == "balance":
+                current_policy = ConstraintPolicy.PREFERRED
             selector.setCurrentIndex(selector.findData(current_policy))
+            if policy_name == "balance":
+                selector.setEnabled(False)
+                selector.setToolTip("Bilans godzin zawsze pozostaje preferowany.")
             policy_grid.addWidget(QLabel(label + ":"), row, column)
             policy_grid.addWidget(selector, row, column + 1)
             self.policy_selectors[policy_name] = selector
@@ -312,6 +317,7 @@ class ConfigDialog(QDialog):
             self.shop_config.constraints["highlight_max_consecutive"] = self.hl_consecutive.isChecked()
             for policy_name, selector in self.policy_selectors.items():
                 self.shop_config.constraint_policies[policy_name] = selector.currentData()
+            self.shop_config.constraint_policies["balance"] = ConstraintPolicy.PREFERRED
         except Exception as exc:
             QMessageBox.critical(self, "Błąd konfiguracji", str(exc))
             return

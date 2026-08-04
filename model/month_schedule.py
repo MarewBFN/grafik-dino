@@ -160,6 +160,15 @@ class MonthSchedule:
     def snapshot(self) -> "MonthSchedule":
         return deepcopy(self)
 
+    def restore(self, snapshot: "MonthSchedule") -> None:
+        """Restore a previously captured state without replacing this schedule object."""
+        self.year = snapshot.year
+        self.month = snapshot.month
+        self.days_in_month = snapshot.days_in_month
+        self.is_generated = snapshot.is_generated
+        self.employees = snapshot.employees
+        self._data = snapshot._data
+
     def _validate_day(self, day: int) -> None:
         if day < 1 or day > self.days_in_month:
             raise ValueError("Nieprawidłowy dzień miesiąca")

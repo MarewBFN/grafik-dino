@@ -597,7 +597,15 @@ class MainWindow(QMainWindow):
             else:
                 QMessageBox.information(self, "Sukces", "Grafik został wygenerowany.")
         else:
-            QMessageBox.warning(self, "Brak rozwiązania", "Nie udało się znaleźć poprawnego grafiku.")
+            reasons = result.get("infeasibility_reasons", []) if result else []
+            reason_text = "\n".join(f"• {reason}" for reason in reasons)
+            QMessageBox.warning(
+                self,
+                "Nie udało się wygenerować grafiku",
+                "Nie znaleziono grafiku spełniającego wszystkie wymagane zasady.\n\n"
+                f"Wykryto:\n{reason_text}\n\n"
+                "Grafik nie został zmieniony.",
+            )
 
     def _open_add_employee(self):
         dialog = EmployeeDialog(self)

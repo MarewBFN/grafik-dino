@@ -1,4 +1,6 @@
 import json
+from contextlib import redirect_stdout
+import io
 from pathlib import Path
 import sys
 import tempfile
@@ -39,10 +41,11 @@ class GeneratorDiagnosticsTests(unittest.TestCase):
         self.assertEqual(report["stages"][0]["status"], "OPTIMAL")
 
     def test_11_hour_rest_is_mandatory_by_default(self):
-        self.assertEqual(
-            ShopConfig(2026, 8).constraint_policies["rest_11h"],
-            ConstraintPolicy.MANDATORY,
-        )
+        policies = ShopConfig(2026, 8).constraint_policies
+        self.assertEqual(policies["rest_11h"], ConstraintPolicy.MANDATORY)
+        self.assertEqual(policies["open"], ConstraintPolicy.MANDATORY)
+        self.assertEqual(policies["close"], ConstraintPolicy.MANDATORY)
+        self.assertEqual(policies["balance"], ConstraintPolicy.PREFERRED)
 
     def test_random_project_round_trip_preserves_inputs_used_by_constraints(self):
         schedule, shop, metadata = build_random_project(
@@ -110,6 +113,43 @@ class GeneratorDiagnosticsTests(unittest.TestCase):
 
         self.assertEqual(restored_shop.constraint_policies["open"], ConstraintPolicy.MANDATORY)
         self.assertEqual(restored_shop.constraint_policies["monthly_hours"], ConstraintPolicy.DISABLED)
+
+    def test_infeasible_generation_restores_schedule_and_explains_locked_staffing(self):
+        schedule = MonthSchedule(2026, 8)
+        shop = ShopConfig(2026, 8)
+        shop.public_holidays = set(range(2, 32))
+        for name in shop.constraint_policies:
+            shop.constraint_policies[name] = ConstraintPolicy.DISABLED
+        shop.constraint_policies["open"] = ConstraintPolicy.MANDATORY
+
+        for index in range(4):
+            employee = Employee(f"Locked{index}", "Test", is_opener=True, is_meat=True)
+            schedule.add_employee(employee)
+            state = schedule.get_day(employee, 1)
+            state.is_locked = True
+            state.start, state.end = "05:30", "14:00"
+
+        # This unlocked entry is cleared before solving in normal generation.
+        # It must come back unchanged when the model is infeasible.
+        schedule.get_day(schedule.employees[0], 2).set_hours("08:00", "16:00")
+        before = schedule.to_dict()
+
+        with redirect_stdout(io.StringIO()):
+            result = AutoScheduleGenerator(schedule, shop).generate(
+                solver_time_limit_seconds=2,
+                solver_workers=1,
+            )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(schedule.to_dict(), before)
+        self.assertTrue(any("Dzień 1" in reason and "zablokowano 4" in reason
+                            for reason in result["infeasibility_reasons"]))
+
+        controller = ScheduleController(schedule, shop)
+        with redirect_stdout(io.StringIO()):
+            controller_result = controller.generate_schedule(force=True)
+        self.assertFalse(controller_result["success"])
+        self.assertEqual(controller.history, [])
 
 
 if __name__ == "__main__":
