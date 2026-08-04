@@ -28,6 +28,7 @@ class ShopConfig:
             "monthly_hours": ConstraintPolicy.PREFERRED,
             "meat_coverage": ConstraintPolicy.PREFERRED,
             "availability": ConstraintPolicy.PREFERRED,
+            "no_night": ConstraintPolicy.PREFERRED,
         }
         # -----------------------------
         # Override godzin dla konkretnego dnia
@@ -145,6 +146,10 @@ class ShopConfig:
             "cell_display_mode": self.cell_display_mode,
             "public_holidays": list(self.public_holidays),
             "standard_daily_hours": self.standard_daily_hours,
+            "constraint_policies": {
+                name: policy.value if isinstance(policy, ConstraintPolicy) else policy
+                for name, policy in self.constraint_policies.items()
+            },
         }
 
     @classmethod
@@ -177,6 +182,13 @@ class ShopConfig:
         # UI
         cfg.cell_display_mode = data.get("cell_display_mode", "compact")
         cfg.standard_daily_hours = data.get("standard_daily_hours", 8.0)
+
+        # Project files created before this field was added retain the defaults.
+        for name, value in data.get("constraint_policies", {}).items():
+            try:
+                cfg.constraint_policies[name] = ConstraintPolicy(value)
+            except ValueError:
+                continue
 
         return cfg
 

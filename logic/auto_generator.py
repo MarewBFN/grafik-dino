@@ -109,6 +109,7 @@ class AutoScheduleGenerator:
             "close": 200,
             "monthly_hours": 250,
             "availability": 5000,
+            "no_night": 5000,
             "morning_afternoon_balance": 10000,
             "add_edge_shift_bonus": 1000,
         }
@@ -116,7 +117,14 @@ class AutoScheduleGenerator:
     # PUBLIC
     # ==================================================
 
-    def generate(self, is_fix=False, trace=None, trace_output_path=None):
+    def generate(
+        self,
+        is_fix=False,
+        trace=None,
+        trace_output_path=None,
+        solver_time_limit_seconds=60,
+        solver_workers=10,
+    ):
 
         print("=== START CP-SAT GENERATOR ===")
 
@@ -304,7 +312,7 @@ class AutoScheduleGenerator:
         )
 
         night_violations = self._apply_policy(
-            "availability",  # używamy tej samej polityki co availability
+            "no_night",
             hard_fn=lambda: add_no_night_constraint(
                 model,
                 x,
@@ -462,7 +470,11 @@ class AutoScheduleGenerator:
             all_soft_violations.extend(fix_penalties)
 
         build_objective(model, all_soft_violations)
-        solver, status = solve_model(model)
+        solver, status = solve_model(
+            model,
+            time_limit_seconds=solver_time_limit_seconds,
+            num_search_workers=solver_workers,
+        )
         success = save_solution(
             self.schedule,
             self.shop,
@@ -493,6 +505,19 @@ class AutoScheduleGenerator:
             "branches": solver.NumBranches(),
             "wall_time": solver.WallTime()
         }
+
+    def diagnose(self, output_path=None, time_limit_seconds=5):
+        """Build and solve the model in stages without changing this schedule."""
+        from logic.generator.diagnostics import GeneratorDiagnostics
+
+        report = GeneratorDiagnostics(
+            self.schedule,
+            self.shop,
+            time_limit_seconds=time_limit_seconds,
+        ).run()
+        if output_path is not None:
+            GeneratorDiagnostics.write_report(report, output_path)
+        return report
     
     def _create_variables(self, model, employees, days):
         x = {}

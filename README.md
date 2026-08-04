@@ -97,6 +97,29 @@ python main.py
 
 ---
 
+# Diagnostyka generatora
+
+Do odtwarzalnego badania solvera uruchom:
+
+```bash
+python tests/run_generator_diagnostics.py --seed 17 --employees 10
+```
+
+W `Output/diagnostics/` powstaną cztery pliki:
+
+* `random_project_seed_17.json` — wejściowy projekt JSON, który można otworzyć w aplikacji;
+* `diagnostics_seed_17.json` — raport po każdym kolejnym constraintcie/polityce;
+* `generated_project_seed_17.json` — finalny grafik w formacie projektu;
+* `trace_seed_17.json` — surowy ślad przypisań solvera.
+
+Raport etapowy zawiera macierz zmian pracownik/dzień, różnicę względem poprzedniego
+etapu, audyt godzin miesięcznych i przerw 11h oraz dane wejściowe o dostępnej
+obsadzie. Jeżeli model jest infeasible, pole `infeasibility` wskazuje pierwszy etap
+oraz nieredukowalny zestaw twardych grup constraintów: usunięcie dowolnej z nich
+czyni ten konkretny model wykonalnym.
+
+---
+
 # Project status
 
 The project is actively developed and already includes a fully working schedule generator.

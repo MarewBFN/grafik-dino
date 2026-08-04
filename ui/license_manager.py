@@ -1,33 +1,59 @@
 import os
 import json
-import uuid
 import hashlib
 import platform
+import socket
+import getpass
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 LICENSE_FILE = "license.json"
+SECRET = "dupadupa"
+
+
+def build_machine_fingerprint() -> str:
+    """Build a stable machine fingerprint from non-changing machine data.
+
+    We intentionally avoid the MAC address because it can change after certain
+    network adapter changes. The fingerprint combines OS, hostname, username,
+    and a few other stable values that are specific to the current machine.
+    """
+
+    parts = [
+        platform.system(),
+        platform.release(),
+        platform.version(),
+        platform.machine(),
+        socket.gethostname(),
+        getpass.getuser(),
+    ]
+
+    # Add a couple of platform-specific values that are usually stable,
+    # but still unique enough per machine.
+    try:
+        import uuid
+        parts.append(uuid.getnode().__str__())
+    except Exception:
+        pass
+
+    raw = "|".join(parts)
+    hash_hex = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return hash_hex[:6].upper()
+
 
 def get_user_id() -> str:
-    raw = (
-        platform.node()
-        + platform.system()
-        + str(uuid.getnode())
-    )
+    return build_machine_fingerprint()
 
-    hash_hex = hashlib.sha256(raw.encode()).hexdigest()
-    return hash_hex[:8].upper()
+
+def generate_license(user_id: str) -> str:
+    raw = user_id + SECRET
+    hash_hex = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    digits = ''.join(filter(str.isdigit, hash_hex))
+    return digits[:8]
 
 
 def validate_license(user_id: str, key: str) -> bool:
-    secret = "dupadupa"
-
-    raw = user_id + secret
-    hash_hex = hashlib.sha256(raw.encode()).hexdigest()
-
-    digits = ''.join(filter(str.isdigit, hash_hex))
-    expected = digits[:8]
-
-    return key == expected
+    return generate_license(user_id) == key
 
 
 def save_license(key: str):

@@ -77,7 +77,10 @@ def add_no_night_constraint(
 
                 if soft:
                     v = model.NewBoolVar(f"night_violation_e{e}_d{d}_s{s}")
-                    model.Add(x[e, d, s] == 1).OnlyEnforceIf(v)
+                    # A violation must be paid *when the forbidden shift is used*.
+                    # The previous implication only said ``v => assigned`` and let
+                    # CP-SAT choose a forbidden shift with v=0 at no cost.
+                    model.Add(x[e, d, s] <= v)
                     violations.append(v)
                 else:
                     model.Add(x[e, d, s] == 0)

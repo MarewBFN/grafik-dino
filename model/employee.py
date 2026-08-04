@@ -51,8 +51,10 @@ class Employee:
             if wd < 0 or wd > 6:
                 raise ValueError("Nieprawidłowy dzień tygodnia")
 
-            if "start" not in cfg or "end" not in cfg:
-                raise ValueError("Brak godzin w availability")
-
-            if cfg.get("mode") not in ("hard", "soft"):
-                raise ValueError("Nieprawidłowy tryb availability")
+            # The mapper accepts several availability windows for one weekday.
+            rules = cfg if isinstance(cfg, list) else [cfg]
+            for rule in rules:
+                if "start" not in rule or "end" not in rule:
+                    raise ValueError("Brak godzin w availability")
+                if rule.get("mode") not in ("hard", "soft"):
+                    raise ValueError("Nieprawidłowy tryb availability")

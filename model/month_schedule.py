@@ -179,6 +179,7 @@ class MonthSchedule:
                     "monthly_target_hours": e.monthly_target_hours,
                     "daily_hours": e.daily_hours,
                     "employment_fraction": e.employment_fraction,
+                    "availability": e.availability,
                     "days": {
                         day: {
                             "start": ds.start,
@@ -186,6 +187,7 @@ class MonthSchedule:
                             "is_leave": ds.is_leave,
                             "is_locked": ds.is_locked,
                             "is_sick": ds.is_sick,
+                            "is_day_off": ds.is_day_off,
                         }
                         for day in range(1, self.days_in_month + 1)
                         if (
@@ -215,6 +217,7 @@ class MonthSchedule:
                 monthly_target_hours=ed.get("monthly_target_hours", 160),
                 daily_hours=ed.get("daily_hours", 8),
                 employment_fraction=ed.get("employment_fraction", 1.0),
+                availability={int(k): v for k, v in ed.get("availability", {}).items()},
             )
             sched.add_employee(emp)
 
@@ -231,6 +234,7 @@ class MonthSchedule:
                 ds.is_leave = dd.get("is_leave", False)
                 ds.is_sick = dd.get("is_sick", False)
                 ds.is_locked = dd.get("is_locked", False)
+                ds.is_day_off = dd.get("is_day_off", False)
 
         sched.employees.sort(key=lambda e: e.last_name.lower())
         return sched

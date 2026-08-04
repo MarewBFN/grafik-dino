@@ -25,6 +25,7 @@ class DaySchedule:
     is_leave: bool = False   # ← DODANE
     is_locked: bool = False
     is_sick: bool = False
+    is_day_off: bool = False
 
 
     def is_empty(self) -> bool:
@@ -37,6 +38,7 @@ class DaySchedule:
         self.end = None
         self.is_leave = False
         self.is_sick = False
+        self.is_day_off = True
 
     def set_leave(self) -> None:
         """Ustawia dzień jako urlop."""
@@ -44,6 +46,7 @@ class DaySchedule:
         self.end = None
         self.is_leave = True
         self.is_sick = False  
+        self.is_day_off = False
 
     def set_hours(self, start: str, end: str) -> None:
         """
@@ -60,6 +63,7 @@ class DaySchedule:
         self.end = end
         self.is_leave = False
         self.is_sick = False
+        self.is_day_off = False
 
     def total_duration(self) -> timedelta | None:
         """
@@ -115,6 +119,7 @@ class DaySchedule:
         self.end = None
         self.is_leave = False
         self.is_sick = True
+        self.is_day_off = False
 
     def total_minutes(self, employee=None, shop=None) -> int:
         # urlop / chorobowe
