@@ -39,6 +39,7 @@ from ui.tutorial_dialog import TutorialDialog
 from ui.loading_overlay import LoadingOverlay
 from ui.demo_manager import DemoManager
 from ui.license_manager import get_user_id, show_license_dialog
+from simple_mode.window import SimpleModeWindow
 
 class GeneratorWorker(QObject):
     finished = Signal(object)
@@ -384,6 +385,8 @@ class MainWindow(QMainWindow):
         self.act_compact.setCheckable(True)
         self.act_compact.triggered.connect(self._toggle_compact_mode)
         config_menu.addAction(self.act_compact)
+
+        config_menu.addAction("Tryb uproszczony...", self._open_simple_mode)
 
         help_menu.addAction("Samouczek", self._open_tutorial)
 
@@ -1009,6 +1012,12 @@ class MainWindow(QMainWindow):
             "Tryb kompaktowy włączony." if checked else "Tryb kompaktowy wyłączony.",
             2000
         )
+
+    def _open_simple_mode(self):
+        if not self.schedule:
+            return
+        dialog = SimpleModeWindow(self, self.schedule)
+        dialog.exec()
 
     def _toggle_quick_mode(self):
         self.quick_mode_enabled = self.btn_quick_mode.isChecked()
