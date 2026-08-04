@@ -466,6 +466,16 @@ class ScheduleGrid(QTableWidget):
             if cell_view.tooltip:
                 item.setToolTip(cell_view.tooltip)
 
+            if getattr(ds, "is_locked", False):
+                tooltip = item.toolTip()
+
+                lock_info = "🔒 Wprowadzono ręcznie – generator nie zmieni tej komórki."
+
+                if tooltip:
+                    item.setToolTip(f"{tooltip}\n\n{lock_info}")
+                else:
+                    item.setToolTip(lock_info)
+
             # 3. Sprawdzanie błędów z flagą highlight_max_consecutive oraz zabezpieczenie przed błędem typu
             error = constraint_presenter.get_cell_error(emp, day)
 
