@@ -43,6 +43,7 @@ class ShopConfig:
             "force_fulltime_845": True,
             # "standard" (dokładny) albo "simplified" (tylko klasa zmiany rano/popo)
             "rest_11h_mode": "standard",
+            "solver_time_limit_seconds": 60,
         }
 
         # -----------------------------

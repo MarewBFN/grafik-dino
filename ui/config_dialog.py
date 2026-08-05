@@ -263,6 +263,22 @@ class ConfigDialog(QDialog):
         policy_info.setWordWrap(True)
         layout.addWidget(policy_info)
 
+        form_solver = QFormLayout()
+        self.solver_time_limit = QSpinBox()
+        self.solver_time_limit.setRange(5, 600)
+        self.solver_time_limit.setSuffix(" s")
+        self.solver_time_limit.setFixedWidth(90)
+        self.solver_time_limit.setValue(
+            self.shop_config.constraints.get("solver_time_limit_seconds", 60)
+        )
+        self.solver_time_limit.setToolTip(
+            "Ile czasu solver ma na znalezienie grafiku, zanim zwróci najlepszy "
+            "znaleziony wynik. Dłuższy limit daje lepsze rozwiązania, ale wydłuża "
+            "generowanie — przydatne do zwiększenia na słabszym sprzęcie."
+        )
+        form_solver.addRow("Limit czasu generatora:", self.solver_time_limit)
+        layout.addLayout(form_solver)
+
         policy_grid = QGridLayout()
         policy_grid.setHorizontalSpacing(12)
         policy_grid.setVerticalSpacing(7)
@@ -341,6 +357,7 @@ class ConfigDialog(QDialog):
             self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
             self.shop_config.constraints["highlight_max_consecutive"] = self.hl_consecutive.isChecked()
             self.shop_config.constraints["rest_11h_mode"] = self.rest_11h_mode_selector.currentData()
+            self.shop_config.constraints["solver_time_limit_seconds"] = self.solver_time_limit.value()
             for policy_name, selector in self.policy_selectors.items():
                 self.shop_config.constraint_policies[policy_name] = selector.currentData()
             self.shop_config.constraint_policies["balance"] = ConstraintPolicy.PREFERRED

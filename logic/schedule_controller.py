@@ -104,7 +104,8 @@ class ScheduleController:
         generator = AutoScheduleGenerator(self.schedule, self.shop_config)
         
         is_fix = getattr(self.schedule, "is_generated", False) and not force
-        result = generator.generate(is_fix=is_fix)
+        time_limit = self.shop_config.constraints.get("solver_time_limit_seconds", 60)
+        result = generator.generate(is_fix=is_fix, solver_time_limit_seconds=time_limit)
         
         if result and result.get("success"):
             self.history.append((schedule_before_generation, shop_before_generation))
