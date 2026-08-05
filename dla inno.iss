@@ -3,7 +3,7 @@
 ; Non-commercial use only
 
 #define MyAppName "Dingo! - narzędzie do grafików pracy"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.1"
 #define MyAppPublisher "Kewin Madej"
 #define MyAppURL "https://www.madebykewin.pl"
 #define MyAppExeName "Dingo! - narzędzie do grafików pracy.exe"
@@ -34,6 +34,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ChangesAssociations=yes
 DisableProgramGroupPage=yes
+CloseApplications=yes
+CloseApplicationsFilter={#MyAppExeName}
+RestartApplications=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 OutputBaseFilename=DingoSetup

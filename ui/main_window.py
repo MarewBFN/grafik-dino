@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -52,6 +53,35 @@ class GeneratorWorker(QObject):
     def run(self):
         result = self.controller.generate_schedule(force=self.force)
         self.finished.emit(result)
+
+
+class UpdateCancelled(Exception):
+    pass
+
+
+class UpdateDownloadWorker(QObject):
+    progress = Signal(int, int)
+    finished = Signal(object, object)  # (path, error)
+
+    def __init__(self, url):
+        super().__init__()
+        self.url = url
+
+    def _on_progress(self, downloaded, total):
+        if QThread.currentThread().isInterruptionRequested():
+            raise UpdateCancelled()
+        self.progress.emit(downloaded, total)
+
+    def run(self):
+        from update_checker import download_installer
+
+        try:
+            path = download_installer(self.url, progress_callback=self._on_progress)
+            self.finished.emit(path, None)
+        except UpdateCancelled:
+            self.finished.emit(None, None)
+        except Exception as e:
+            self.finished.emit(None, str(e))
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -464,6 +494,7 @@ class MainWindow(QMainWindow):
         config_menu.addAction("Generator", self._open_config)
 
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
+        help_menu.addAction("Sprawdź aktualizacje", lambda: self._check_updates(manual=True))
         help_menu.addAction("O programie", self._about)
 
     def _init_state(self):
@@ -1243,20 +1274,94 @@ class MainWindow(QMainWindow):
         self._sync_everything()
         self.statusBar().showMessage("Usunięto wygenerowane zmiany.", 2500)
 
-    def _check_updates(self):
+    def _check_updates(self, manual=False):
         from update_checker import check_for_updates
 
         result = check_for_updates()
 
         if not result.get("available"):
+            if manual:
+                if result.get("error"):
+                    QMessageBox.warning(
+                        self,
+                        "Sprawdzanie aktualizacji",
+                        f"Nie udało się sprawdzić dostępności aktualizacji.\n\n{result['error']}",
+                    )
+                else:
+                    QMessageBox.information(
+                        self,
+                        "Sprawdzanie aktualizacji",
+                        "Masz już najnowszą wersję programu.",
+                    )
             return
 
         reply = QMessageBox.question(
             self,
             "Dostępna aktualizacja",
-            f"Dostępna jest nowa wersja programu ({result['version']}).\n\nPobrać?",
+            f"Dostępna jest nowa wersja programu ({result['version']}).\n\nPobrać i zainstalować?",
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
-            QDesktopServices.openUrl(QUrl(result["url"]))
+            self._start_update_download(result["url"])
+
+    def _start_update_download(self, url):
+        progress_dialog = QProgressDialog("Pobieranie aktualizacji...", "Anuluj", 0, 100, self)
+        progress_dialog.setWindowTitle("Aktualizacja")
+        progress_dialog.setWindowModality(Qt.WindowModal)
+        progress_dialog.setMinimumDuration(0)
+        progress_dialog.setValue(0)
+
+        self.update_thread = QThread()
+        self.update_worker = UpdateDownloadWorker(url)
+        self.update_worker.moveToThread(self.update_thread)
+
+        def on_progress(downloaded, total):
+            if total > 0:
+                progress_dialog.setMaximum(100)
+                progress_dialog.setValue(int(downloaded * 100 / total))
+            else:
+                progress_dialog.setMaximum(0)
+
+        def on_finished(path, error):
+            progress_dialog.close()
+            self.update_thread.quit()
+
+            if error:
+                QMessageBox.warning(
+                    self,
+                    "Aktualizacja",
+                    f"Nie udało się pobrać aktualizacji.\n\n{error}",
+                )
+                return
+
+            if not path:
+                return  # anulowane przez użytkownika
+
+            self._launch_installer_and_quit(path)
+
+        self.update_thread.started.connect(self.update_worker.run)
+        self.update_worker.progress.connect(on_progress)
+        self.update_worker.finished.connect(on_finished)
+        self.update_worker.finished.connect(self.update_thread.quit)
+        self.update_worker.finished.connect(self.update_worker.deleteLater)
+        self.update_thread.finished.connect(self.update_thread.deleteLater)
+        progress_dialog.canceled.connect(self.update_thread.requestInterruption)
+
+        self.update_thread.start()
+        progress_dialog.exec()
+
+    def _launch_installer_and_quit(self, installer_path):
+        import subprocess
+
+        try:
+            subprocess.Popen([installer_path])
+        except OSError as e:
+            QMessageBox.warning(
+                self,
+                "Aktualizacja",
+                f"Nie udało się uruchomić instalatora.\n\n{e}",
+            )
+            return
+
+        self.close()
