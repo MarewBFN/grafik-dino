@@ -851,6 +851,12 @@ class ScheduleGrid(QTableWidget):
             self.refresh()
             return
 
+        elif shift in ("MORNING_CLASS", "AFTERNOON_CLASS"):
+            code = "1" if shift == "MORNING_CLASS" else "2"
+            self.controller.set_shift_class(emp, day, code)
+            self.refresh()
+            return
+
         elif shift == "OFF":
             ds = self.schedule.get_day(emp, day)
 

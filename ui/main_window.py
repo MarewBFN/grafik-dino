@@ -2,7 +2,7 @@ import os
 from datetime import date
 
 from PySide6.QtCore import Qt, QThread, Signal, QObject, QTimer, QUrl
-from PySide6.QtGui import QAction, QPainter, QColor, QImage, QDesktopServices
+from PySide6.QtGui import QPainter, QColor, QImage, QDesktopServices
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog, QPrintPreviewDialog
 import tempfile
 from PySide6.QtWidgets import (
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QGraphicsDropShadowEffect,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -21,7 +22,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QDialog,
-    QToolBar,
 )
 
 from export.excel_exporter import export_schedule_to_excel
@@ -126,17 +126,30 @@ class MainWindow(QMainWindow):
 
     def _apply_card_shadow(self, widget):
         shadow = QGraphicsDropShadowEffect(widget)
-        shadow.setBlurRadius(18)
+        shadow.setBlurRadius(28)
         shadow.setXOffset(0)
-        shadow.setYOffset(2)
-        shadow.setColor(QColor(15, 23, 42, 35))
+        shadow.setYOffset(4)
+        shadow.setColor(QColor(15, 23, 42, 45))
         widget.setGraphicsEffect(shadow)
 
     def _add_section_header(self, layout, text):
         self._add_section_divider(layout)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+
+        bar = QFrame()
+        bar.setObjectName("sectionAccentBar")
+        bar.setFixedSize(3, 14)
+        row.addWidget(bar)
+
         header = QLabel(text)
         header.setObjectName("sectionHeader")
-        layout.addWidget(header)
+        row.addWidget(header)
+        row.addStretch(1)
+
+        layout.addLayout(row)
 
     def _add_section_divider(self, layout):
         divider = QFrame()
@@ -154,12 +167,18 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(14)
 
-        # Widget dla "Grafik na:" i Daty
+        # Karta-nagłówek sidebaru: "Grafik na:" + data + edycja daty
+        hero = QFrame()
+        hero.setObjectName("sidebarHero")
+        hero_layout = QVBoxLayout(hero)
+        hero_layout.setContentsMargins(14, 14, 14, 14)
+        hero_layout.setSpacing(8)
+
         self.title_row_widget = QWidget()
         title_row_layout = QHBoxLayout(self.title_row_widget)
         title_row_layout.setContentsMargins(0, 0, 0, 0)
         title_row_layout.setSpacing(6)
-        
+
         self.title_label = QLabel("Grafik na:")
         self.title_label.setObjectName("titleLabel")
         title_row_layout.addWidget(self.title_label)
@@ -168,16 +187,16 @@ class MainWindow(QMainWindow):
         self.date_display_label.setObjectName("titleLabel")
         title_row_layout.addWidget(self.date_display_label)
         title_row_layout.addStretch(1)
-        
-        layout.addWidget(self.title_row_widget)
+
+        hero_layout.addWidget(self.title_row_widget)
 
         self.btn_change_date = QPushButton("🗓 Zmień datę")
         self.btn_change_date.setStyleSheet("color: #0078d4; text-align: left; background: transparent; border: none; text-decoration: underline;")
         self.btn_change_date.setCursor(Qt.PointingHandCursor)
         self.btn_change_date.setFixedWidth(120)
         self.btn_change_date.clicked.connect(self._enter_edit_date_mode)
-        
-        layout.addWidget(self.btn_change_date)
+
+        hero_layout.addWidget(self.btn_change_date)
 
         # Widget dla trybu edycji daty
         self.date_edit_widget = QWidget()
@@ -205,7 +224,9 @@ class MainWindow(QMainWindow):
         date_row.addWidget(self.btn_save_date)
 
         date_edit_layout.addLayout(date_row)
-        layout.addWidget(self.date_edit_widget)
+        hero_layout.addWidget(self.date_edit_widget)
+
+        layout.addWidget(hero)
 
         metric_hint = QLabel("Nominalny etat")
         metric_hint.setObjectName("metricHint")
@@ -301,55 +322,69 @@ class MainWindow(QMainWindow):
 
     def _build_quick_panel(self):
         self.quick_panel = QWidget(self)
+        self.quick_panel.setObjectName("quickPanel")
 
         layout = QVBoxLayout(self.quick_panel)
         layout.setContentsMargins(0, 5, 0, 0)
+        layout.setSpacing(8)
 
         self.quick_info_label = QLabel("Tryb szybki włączony. Ustaw preferowany typ zmiany i nanieś na grafik jednym kliknięciem.")
         self.quick_info_label.setWordWrap(True)
-        self.quick_info_label.setStyleSheet("color: #555; font-size: 11px; margin-bottom: 5px; font-style: italic;")
+        self.quick_info_label.setStyleSheet("color: #555; font-size: 11px; font-style: italic;")
         layout.addWidget(self.quick_info_label)
 
-        # --- przyciski ---
-        btn_row = QHBoxLayout()
-
-        button_style = """
-            QPushButton:checked {
-                background-color: #0078d4;
-                color: white;
-                font-weight: bold;
-                border: 1px solid #005a9e;
-            }
-        """
+        # --- przyciski: siatka 2x3 (Praca/Rano/Popo, Wolne/Urlop/L4) ---
+        btn_grid = QGridLayout()
+        btn_grid.setSpacing(6)
 
         self.btn_work = QPushButton("Praca")
         self.btn_work.setCheckable(True)
-        self.btn_work.setStyleSheet(button_style)
+        self.btn_work.setToolTip("Wprowadź dokładne godziny pracy dla wybranej komórki.")
         self.btn_work.clicked.connect(lambda: self._set_quick_shift("WORK"))
+
+        self.btn_morning = QPushButton("Rano")
+        self.btn_morning.setCheckable(True)
+        self.btn_morning.setToolTip(
+            "Blokuje zmianę na typ „rano” — dokładną godzinę dobierze później generator."
+        )
+        self.btn_morning.clicked.connect(lambda: self._set_quick_shift("MORNING_CLASS"))
+
+        self.btn_afternoon = QPushButton("Popo")
+        self.btn_afternoon.setCheckable(True)
+        self.btn_afternoon.setToolTip(
+            "Blokuje zmianę na typ „popołudnie” — dokładną godzinę dobierze później generator."
+        )
+        self.btn_afternoon.clicked.connect(lambda: self._set_quick_shift("AFTERNOON_CLASS"))
 
         self.btn_off = QPushButton("Wolne")
         self.btn_off.setCheckable(True)
-        self.btn_off.setStyleSheet(button_style)
         self.btn_off.clicked.connect(lambda: self._set_quick_shift("OFF"))
 
         self.btn_leave = QPushButton("Urlop")
         self.btn_leave.setCheckable(True)
-        self.btn_leave.setStyleSheet(button_style)
         self.btn_leave.clicked.connect(lambda: self._set_quick_shift("LEAVE"))
 
         self.btn_sick = QPushButton("L4")
         self.btn_sick.setCheckable(True)
-        self.btn_sick.setStyleSheet(button_style)
         self.btn_sick.clicked.connect(lambda: self._set_quick_shift("SICK"))
 
-        btn_row.addWidget(self.btn_work)
-        btn_row.addWidget(self.btn_off)
-        btn_row.addWidget(self.btn_leave)
-        btn_row.addWidget(self.btn_sick)
+        for btn in (
+            self.btn_work, self.btn_morning, self.btn_afternoon,
+            self.btn_off, self.btn_leave, self.btn_sick,
+        ):
+            btn.setObjectName("secondaryButton")
+            btn.setMinimumHeight(36)
 
-        layout.addLayout(btn_row)
+        btn_grid.addWidget(self.btn_work, 0, 0)
+        btn_grid.addWidget(self.btn_morning, 0, 1)
+        btn_grid.addWidget(self.btn_afternoon, 0, 2)
+        btn_grid.addWidget(self.btn_off, 1, 0)
+        btn_grid.addWidget(self.btn_leave, 1, 1)
+        btn_grid.addWidget(self.btn_sick, 1, 2)
 
-        # --- panel godzin ---
+        layout.addLayout(btn_grid)
+
+        # --- panel godzin (tylko dla "Praca") ---
         self.time_panel = QWidget(self)
         time_layout = QHBoxLayout(self.time_panel)
         time_layout.setContentsMargins(0, 5, 0, 0)
@@ -365,9 +400,6 @@ class MainWindow(QMainWindow):
         time_layout.addWidget(QLabel(" Do "))
         time_layout.addWidget(self.end_input)
 
-        self.quick_duration_label = QLabel("0:00")
-        self.quick_duration_label.setStyleSheet("color: #555; font-size: 11px;")
-
         self.time_panel.setLayout(time_layout)
         self.time_panel.hide()
 
@@ -375,6 +407,7 @@ class MainWindow(QMainWindow):
 
         self.quick_duration_label = QLabel("Czas pracy: 0:00")
         self.quick_duration_label.setObjectName("metricValue")
+        self.quick_duration_label.hide()
         layout.addWidget(self.quick_duration_label)
 
         self.quick_panel.setLayout(layout)
@@ -432,34 +465,6 @@ class MainWindow(QMainWindow):
 
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
         help_menu.addAction("O programie", self._about)
-
-    def _build_toolbar(self):
-        toolbar = QToolBar("Szybkie akcje", self)
-        toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        self.addToolBar(toolbar)
-
-        act_save = QAction("Zapisz", self)
-        act_save.triggered.connect(self._save_project)
-        toolbar.addAction(act_save)
-
-        act_load = QAction("Wczytaj", self)
-        act_load.triggered.connect(self._load_project)
-        toolbar.addAction(act_load)
-
-        act_excel = QAction("Excel", self)
-        act_excel.triggered.connect(self._export_excel)
-        toolbar.addAction(act_excel)
-
-        toolbar.addSeparator()
-
-        act_config = QAction("Konfiguracja", self)
-        act_config.triggered.connect(self._open_config)
-        toolbar.addAction(act_config)
-
-        act_undo = QAction("Cofnij", self)
-        act_undo.triggered.connect(self._undo)
-        toolbar.addAction(act_undo)
 
     def _init_state(self):
         old_employees = []
@@ -1048,23 +1053,29 @@ class MainWindow(QMainWindow):
 
         # reset
         self.btn_work.setChecked(False)
+        self.btn_morning.setChecked(False)
+        self.btn_afternoon.setChecked(False)
         self.btn_off.setChecked(False)
         self.btn_leave.setChecked(False)
         self.btn_sick.setChecked(False)
 
+        is_work = shift_type == "WORK"
+        self.time_panel.setVisible(is_work)
+        self.quick_duration_label.setVisible(is_work)
+
         # aktywny
         if shift_type == "WORK":
             self.btn_work.setChecked(True)
-            self.time_panel.show()
+        elif shift_type == "MORNING_CLASS":
+            self.btn_morning.setChecked(True)
+        elif shift_type == "AFTERNOON_CLASS":
+            self.btn_afternoon.setChecked(True)
         elif shift_type == "OFF":
             self.btn_off.setChecked(True)
-            self.time_panel.hide()
         elif shift_type == "LEAVE":
             self.btn_leave.setChecked(True)
-            self.time_panel.hide()
         elif shift_type == "SICK":
             self.btn_sick.setChecked(True)
-            self.time_panel.hide()
 
     def _calc_end_from_daily(self, start_str, hours):
         from datetime import datetime, timedelta

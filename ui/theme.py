@@ -14,8 +14,8 @@ GRID_BORDER = "#cbd5e1"
 BG_APP = "#f5f7fb"
 BG_PANEL = "#ffffff"
 BG_CARD = "#ffffff"
-ACCENT = "#2563eb"
-ACCENT_HOVER = "#1d4ed8"
+ACCENT = "#1d4ed8"
+ACCENT_HOVER = "#1e3a8a"
 ACCENT_SOFT = "#dbeafe"
 SOFT_BORDER = "#d7e0ea"
 
@@ -78,15 +78,61 @@ QToolButton:hover {
     background: #eff6ff;
 }
 
+QToolBar#topBar {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #1e3a8a, stop:1 #1d4ed8);
+    border-bottom: none;
+    spacing: 8px;
+    padding: 8px 14px;
+}
+
+QToolBar#topBar QLabel#brandLabel {
+    color: #ffffff;
+    font-size: 15pt;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+QToolBar#topBar QLabel#brandPeriodLabel {
+    color: #dbeafe;
+    font-size: 10pt;
+    font-weight: 500;
+}
+
+QToolBar#topBar QToolButton {
+    background: rgba(255, 255, 255, 28);
+    border: 1px solid rgba(255, 255, 255, 60);
+    color: #ffffff;
+    border-radius: 10px;
+    padding: 7px 14px;
+    font-weight: 600;
+}
+
+QToolBar#topBar QToolButton:hover {
+    background: rgba(255, 255, 255, 50);
+}
+
+QToolBar#topBar::separator {
+    background: rgba(255, 255, 255, 60);
+    width: 1px;
+    margin: 4px 6px;
+}
+
 QFrame#panelCard, QFrame#contentCard {
     background: #ffffff;
     border: 1px solid #d7e0ea;
+    border-radius: 20px;
+}
+
+QFrame#sidebarHero {
+    background: #eaf0fd;
+    border: 1px solid #d7e5fb;
     border-radius: 16px;
 }
 
 QLabel#titleLabel {
-    font-size: 22px;
-    font-weight: 700;
+    font-size: 26px;
+    font-weight: 800;
     color: #0f172a;
 }
 
@@ -111,6 +157,12 @@ QFrame#sectionDivider {
     background: #e7edf6;
     max-height: 1px;
     min-height: 1px;
+    border: none;
+}
+
+QFrame#sectionAccentBar {
+    background: #1d4ed8;
+    border-radius: 1px;
     border: none;
 }
 
@@ -140,19 +192,21 @@ QPushButton:pressed {
 }
 
 QPushButton#primaryButton {
-    background: #2563eb;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #2f65eb, stop:1 #1d4ed8);
     color: #ffffff;
-    border: 1px solid #2563eb;
-    font-weight: 600;
+    border: 1px solid #1d4ed8;
+    font-weight: 700;
 }
 
 QPushButton#primaryButton:hover {
-    background: #1d4ed8;
-    border-color: #1d4ed8;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #2555d6, stop:1 #1a3fb3);
+    border-color: #1a3fb3;
 }
 
 QPushButton#primaryButton:pressed {
-    background: #1e40af;
+    background: #1e3a8a;
 }
 
 QPushButton#secondaryButton {
@@ -171,15 +225,15 @@ QPushButton#secondaryButton:pressed {
 }
 
 QPushButton:checked {
-    background: #2563eb;
+    background: #1d4ed8;
     color: #ffffff;
-    border: 1px solid #2563eb;
+    border: 1px solid #1d4ed8;
     font-weight: 600;
 }
 
 QPushButton:checked:hover {
-    background: #1d4ed8;
-    border-color: #1d4ed8;
+    background: #1e3a8a;
+    border-color: #1e3a8a;
 }
 
 QLineEdit, QSpinBox, QComboBox, QTimeEdit, QDateEdit, QTextEdit, QPlainTextEdit {
