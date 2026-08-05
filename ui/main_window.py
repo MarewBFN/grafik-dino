@@ -1306,50 +1306,85 @@ class MainWindow(QMainWindow):
             self._start_update_download(result["url"])
 
     def _start_update_download(self, url):
-        progress_dialog = QProgressDialog("Pobieranie aktualizacji...", "Anuluj", 0, 100, self)
-        progress_dialog.setWindowTitle("Aktualizacja")
-        progress_dialog.setWindowModality(Qt.WindowModal)
-        progress_dialog.setMinimumDuration(0)
-        progress_dialog.setValue(0)
+        self.update_progress_dialog = QProgressDialog("Łączenie z serwerem aktualizacji...", "Anuluj", 0, 100, self)
+        self.update_progress_dialog.setWindowTitle("Aktualizacja DinGO")
+        self.update_progress_dialog.setWindowModality(Qt.WindowModal)
+        self.update_progress_dialog.setMinimumDuration(0)
+        self.update_progress_dialog.setAutoClose(False)
+        self.update_progress_dialog.setAutoReset(False)
+        self.update_progress_dialog.setMinimum(0)
+        self.update_progress_dialog.setMaximum(0)  # tryb nieokreślony, dopóki nie znamy rozmiaru pliku
+        self.update_progress_dialog.setValue(0)
 
         self.update_thread = QThread()
         self.update_worker = UpdateDownloadWorker(url)
         self.update_worker.moveToThread(self.update_thread)
 
-        def on_progress(downloaded, total):
-            if total > 0:
-                progress_dialog.setMaximum(100)
-                progress_dialog.setValue(int(downloaded * 100 / total))
-            else:
-                progress_dialog.setMaximum(0)
-
-        def on_finished(path, error):
-            progress_dialog.close()
-            self.update_thread.quit()
-
-            if error:
-                QMessageBox.warning(
-                    self,
-                    "Aktualizacja",
-                    f"Nie udało się pobrać aktualizacji.\n\n{error}",
-                )
-                return
-
-            if not path:
-                return  # anulowane przez użytkownika
-
-            self._launch_installer_and_quit(path)
-
+        # Uwaga: sygnały MUSZĄ być podpięte do metod związanych z self (QObject
+        # żyjącym w wątku głównym), nie do lokalnych domknięć — inaczej Qt
+        # wywołuje je bezpośrednio w wątku roboczym (brak automatycznego
+        # queued connection dla zwykłych funkcji), co dotyka widgetów spoza
+        # wątku GUI i zawiesza aplikację.
         self.update_thread.started.connect(self.update_worker.run)
-        self.update_worker.progress.connect(on_progress)
-        self.update_worker.finished.connect(on_finished)
+        self.update_worker.progress.connect(self._on_update_progress)
+        self.update_worker.finished.connect(self._on_update_download_finished)
         self.update_worker.finished.connect(self.update_thread.quit)
         self.update_worker.finished.connect(self.update_worker.deleteLater)
         self.update_thread.finished.connect(self.update_thread.deleteLater)
-        progress_dialog.canceled.connect(self.update_thread.requestInterruption)
+        self.update_progress_dialog.canceled.connect(self.update_thread.requestInterruption)
 
         self.update_thread.start()
-        progress_dialog.exec()
+        self.update_progress_dialog.exec()
+
+    def _on_update_progress(self, downloaded, total):
+        downloaded_mb = downloaded / (1024 * 1024)
+
+        if total > 0:
+            total_mb = total / (1024 * 1024)
+            percent = int(downloaded * 100 / total)
+            self.update_progress_dialog.setMaximum(100)
+            self.update_progress_dialog.setValue(percent)
+            self.update_progress_dialog.setLabelText(
+                f"Pobieranie aktualizacji... {percent}%\n"
+                f"{downloaded_mb:.1f} MB z {total_mb:.1f} MB"
+            )
+        else:
+            # serwer nie podał rozmiaru pliku — pokaż sam postęp w MB
+            self.update_progress_dialog.setMaximum(0)
+            self.update_progress_dialog.setLabelText(
+                f"Pobieranie aktualizacji...\n{downloaded_mb:.1f} MB pobrane"
+            )
+
+    def _on_update_download_finished(self, path, error):
+        self.update_thread.quit()
+
+        if error:
+            self.update_progress_dialog.close()
+            QMessageBox.warning(
+                self,
+                "Aktualizacja",
+                f"Nie udało się pobrać aktualizacji.\n\n{error}",
+            )
+            return
+
+        if not path:
+            self.update_progress_dialog.close()
+            return  # anulowane przez użytkownika
+
+        # Krótka, czytelna informacja przed zamknięciem programu, żeby
+        # użytkownik wiedział co się dzieje zamiast nagle widzieć zniknięcie okna.
+        self.update_progress_dialog.setCancelButton(None)
+        self.update_progress_dialog.setLabelText(
+            "Pobrano aktualizację.\nUruchamiam instalator, program zaraz się zamknie..."
+        )
+        self.update_progress_dialog.setMaximum(1)
+        self.update_progress_dialog.setValue(1)
+
+        QTimer.singleShot(1200, lambda: self._finish_update_install(path))
+
+    def _finish_update_install(self, path):
+        self.update_progress_dialog.close()
+        self._launch_installer_and_quit(path)
 
     def _launch_installer_and_quit(self, installer_path):
         import subprocess
