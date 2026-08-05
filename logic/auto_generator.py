@@ -1,3 +1,4 @@
+import os
 from pyexpat import model
 
 from ortools.sat.python import cp_model
@@ -17,7 +18,10 @@ from logic.generator.constraints_staff import (
     add_fixed_staff_shift_constraints,
     add_max_consecutive_constraint,
 )
-from logic.generator.rest_constraint import add_rest_11h_constraint
+from logic.generator.rest_constraint import (
+    add_rest_11h_constraint,
+    add_rest_11h_constraint_simplified,
+)
 from logic.generator.meat_constraint import (add_meat_constraint, add_meat_coverage_constraint)
 from logic.generator.hours_constraint import (
     add_monthly_hours_constraint,
@@ -77,12 +81,10 @@ class AutoScheduleGenerator:
             self.SHIFT_WORK_END_60: 60,
             self.SHIFT_WORK_END_75: 75,
         }
-        self.SHIFT_MANUAL = 14
         # wszystkie zmiany (tu można dodawać kolejne typy zmian)
         self.ALL_SHIFTS = (
             self.SHIFT_OPEN,
             self.SHIFT_CLOSE,
-            self.SHIFT_MANUAL,
 
             self.SHIFT_WORK_START_15,
             self.SHIFT_WORK_START_30,
@@ -123,8 +125,12 @@ class AutoScheduleGenerator:
         trace=None,
         trace_output_path=None,
         solver_time_limit_seconds=60,
-        solver_workers=10,
+        solver_workers=None,
     ):
+        if solver_workers is None:
+            # Zahardkodowane 10 wątków przeciążało słabsze maszyny (mniej
+            # rdzeni niż wątków = solver wolniejszy, nie szybszy).
+            solver_workers = max(1, min(8, os.cpu_count() or 4))
 
         print("=== START CP-SAT GENERATOR ===")
 
@@ -239,9 +245,37 @@ class AutoScheduleGenerator:
             )
         )
 
-        rest_violations = self._apply_policy(
-            "rest_11h",
-            hard_fn=lambda: add_rest_11h_constraint(
+        rest_11h_mode = self.shop.constraints.get("rest_11h_mode", "standard")
+
+        if rest_11h_mode == "simplified":
+            rest_hard_fn = lambda: add_rest_11h_constraint_simplified(
+                model,
+                x,
+                employees,
+                days,
+                trade_days,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP,
+                soft=False,
+                trace=trace
+            )
+            rest_soft_fn = lambda: add_rest_11h_constraint_simplified(
+                model,
+                x,
+                employees,
+                days,
+                trade_days,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP,
+                soft=True,
+                trace=trace
+            )
+        else:
+            rest_hard_fn = lambda: add_rest_11h_constraint(
                 model,
                 x,
                 employees,
@@ -254,8 +288,8 @@ class AutoScheduleGenerator:
                 self.END_SHIFT_MAP,
                 soft=False,
                 trace=trace
-            ),
-            soft_fn=lambda: add_rest_11h_constraint(
+            )
+            rest_soft_fn = lambda: add_rest_11h_constraint(
                 model,
                 x,
                 employees,
@@ -269,6 +303,11 @@ class AutoScheduleGenerator:
                 soft=True,
                 trace=trace
             )
+
+        rest_violations = self._apply_policy(
+            "rest_11h",
+            hard_fn=rest_hard_fn,
+            soft_fn=rest_soft_fn
         )
 
         balance_violations = self._apply_policy(

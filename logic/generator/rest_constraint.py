@@ -4,6 +4,26 @@ from model.day_schedule import calc_start, calc_end
 from logic.utils.time_utils import get_effective_daily_hours
 
 
+def _build_shift_windows(fmt, open_t, close_t, eff_hours, START_SHIFTS, END_SHIFTS):
+    """Zwraca {shift_id: (start_str, end_str)} dla wszystkich wariantów zmiany
+    w danym dniu, przy danych godzinach sklepu i efektywnych godzinach pracownika.
+    """
+    windows = {}
+
+    windows["OPEN"] = (open_t, calc_end(open_t, eff_hours))
+    windows["CLOSE"] = (calc_start(close_t, eff_hours), close_t)
+
+    for shift, off in START_SHIFTS.items():
+        start = (datetime.strptime(open_t, fmt) + timedelta(minutes=off)).strftime(fmt)
+        windows[shift] = (start, calc_end(start, eff_hours))
+
+    for shift, off in END_SHIFTS.items():
+        end = (datetime.strptime(close_t, fmt) - timedelta(minutes=off)).strftime(fmt)
+        windows[shift] = (calc_start(end, eff_hours), end)
+
+    return windows
+
+
 def add_rest_11h_constraint(
     model,
     x,
@@ -18,6 +38,13 @@ def add_rest_11h_constraint(
     soft=False,
     trace=None
 ):
+    """Dokładny wariant: sprawdza rzeczywisty odstęp w minutach między
+    każdą parą wariantów zmiany dwóch kolejnych dni. Wyniki budowy okien
+    czasowych (`shifts_today`/`shifts_next`) są memoizowane po kluczu
+    (dzień, efektywne godziny pracownika), bo zależą wyłącznie od tych
+    dwóch wartości i inaczej są liczone od zera dla każdej pary
+    pracownik×dzień — bez zmiany semantyki, tylko szybciej.
+    """
     fmt = "%H:%M"
 
     if trace is not None:
@@ -25,158 +52,125 @@ def add_rest_11h_constraint(
 
     violations = []
     rest_constraints = 0
+    windows_cache = {}
 
-    # DEBUG
-    blocked_pairs_per_day = {}
+    def windows_for(day, eff_hours):
+        key = (day, eff_hours)
+        cached = windows_cache.get(key)
+        if cached is not None:
+            return cached
+
+        hours = shop.get_open_hours_for_day(day)
+        if not hours:
+            windows_cache[key] = None
+            return None
+
+        open_t, close_t = hours
+        raw = _build_shift_windows(fmt, open_t, close_t, eff_hours, START_SHIFTS, END_SHIFTS)
+        # normalizuj nazwy OPEN/CLOSE na prawdziwe id-ki shift'ów
+        raw[SHIFT_OPEN] = raw.pop("OPEN")
+        raw[SHIFT_CLOSE] = raw.pop("CLOSE")
+
+        windows_cache[key] = raw
+        return raw
 
     for e in range(len(employees)):
-
         emp = employees[e]
         eff_hours = get_effective_daily_hours(emp, shop)
 
         for i in range(len(days) - 1):
-
             d = days[i]
             d_next = days[i + 1]
 
             if d not in trade_days or d_next not in trade_days:
                 continue
 
-            hours_d = shop.get_open_hours_for_day(d)
-            hours_next = shop.get_open_hours_for_day(d_next)
+            shifts_today = windows_for(d, eff_hours)
+            shifts_next = windows_for(d_next, eff_hours)
 
-            if not hours_d or not hours_next:
+            if not shifts_today or not shifts_next:
                 continue
 
-            open_d, close_d = hours_d
-            open_next, close_next = hours_next
+            for s1, (_, end_today_str) in shifts_today.items():
+                end_today = datetime.strptime(end_today_str, fmt)
 
-            shifts_today = {}
-
-            shifts_today[SHIFT_OPEN] = (
-                open_d,
-                calc_end(open_d, eff_hours)
-            )
-
-            shifts_today[SHIFT_CLOSE] = (
-                calc_start(close_d, eff_hours),
-                close_d
-            )
-
-            for shift, off in START_SHIFTS.items():
-                start = (
-                    datetime.strptime(open_d, fmt)
-                    + timedelta(minutes=off)
-                ).strftime(fmt)
-
-                shifts_today[shift] = (
-                    start,
-                    calc_end(start, eff_hours)
-                )
-
-            for shift, off in END_SHIFTS.items():
-                end = (
-                    datetime.strptime(close_d, fmt)
-                    - timedelta(minutes=off)
-                ).strftime(fmt)
-
-                shifts_today[shift] = (
-                    calc_start(end, eff_hours),
-                    end
-                )
-
-            shifts_next = {}
-
-            shifts_next[SHIFT_OPEN] = (
-                open_next,
-                calc_end(open_next, eff_hours)
-            )
-
-            shifts_next[SHIFT_CLOSE] = (
-                calc_start(close_next, eff_hours),
-                close_next
-            )
-
-            for shift, off in START_SHIFTS.items():
-                start = (
-                    datetime.strptime(open_next, fmt)
-                    + timedelta(minutes=off)
-                ).strftime(fmt)
-
-                shifts_next[shift] = (
-                    start,
-                    calc_end(start, eff_hours)
-                )
-
-            for shift, off in END_SHIFTS.items():
-                end = (
-                    datetime.strptime(close_next, fmt)
-                    - timedelta(minutes=off)
-                ).strftime(fmt)
-
-                shifts_next[shift] = (
-                    calc_start(end, eff_hours),
-                    end
-                )
-
-            # DEBUG: sprawdź czy pracownik ma jakąkolwiek opcję
-            possible_next = 0
-            total_pairs = 0
-
-            for s1 in shifts_today:
-                for s2 in shifts_next:
-
-                    total_pairs += 1
-
-                    end_today = datetime.strptime(shifts_today[s1][1], fmt)
-                    start_next = datetime.strptime(shifts_next[s2][0], fmt)
+                for s2, (start_next_str, _) in shifts_next.items():
+                    start_next = datetime.strptime(start_next_str, fmt)
 
                     rest = start_next - end_today
                     if rest.total_seconds() < 0:
                         rest += timedelta(days=1)
 
-                    if rest < timedelta(hours=11):
+                    if rest >= timedelta(hours=11):
+                        continue
 
-                        # DEBUG: licz blokady per dzień
-                        blocked_pairs_per_day.setdefault(d, 0)
-                        blocked_pairs_per_day[d] += 1
-
-                        # DEBUG: tylko krytyczne przypadki OPEN/CLOSE
-                        if s1 in (SHIFT_OPEN, SHIFT_CLOSE) and s2 in (SHIFT_OPEN, SHIFT_CLOSE):
-                            print(
-                                f"[REST BLOCK] emp={e} day={d}->{d_next} "
-                                f"{s1}->{s2} rest={rest}"
-                            )
-
-                        if not soft:
-                            model.Add(
-                                x[e, d, s1] + x[e, d_next, s2] <= 1
-                            )
-                        else:
-                            violation = model.NewBoolVar(
-                                f"rest_violation_e{e}_d{d}_{s1}_{s2}"
-                            )
-                            model.Add(
-                                x[e, d, s1] + x[e, d_next, s2] <= 1 + violation
-                            )
-                            violations.append(violation)
-
-                        rest_constraints += 1
+                    if not soft:
+                        model.Add(x[e, d, s1] + x[e, d_next, s2] <= 1)
                     else:
-                        possible_next += 1
+                        violation = model.NewBoolVar(
+                            f"rest_violation_e{e}_d{d}_{s1}_{s2}"
+                        )
+                        model.Add(
+                            x[e, d, s1] + x[e, d_next, s2] <= 1 + violation
+                        )
+                        violations.append(violation)
 
-            # DEBUG: pracownik całkowicie zablokowany
-            if possible_next == 0:
-                print(
-                    f"[FULL BLOCK] emp={e} day={d}->{d_next} "
-                    f"NO VALID SHIFT COMBO (all violate 11h)"
-                )
+                    rest_constraints += 1
 
-    print("Constrainty 11h rest:", rest_constraints)
+    print("Constrainty 11h rest (standard):", rest_constraints)
 
-    # DEBUG: podsumowanie per dzień
-    print("\n=== REST DEBUG SUMMARY ===")
-    for day, count in blocked_pairs_per_day.items():
-        print(f"Day {day}: blocked_pairs={count}")
+    return violations
+
+
+def add_rest_11h_constraint_simplified(
+    model,
+    x,
+    employees,
+    days,
+    trade_days,
+    SHIFT_OPEN,
+    SHIFT_CLOSE,
+    START_SHIFT_MAP,
+    END_SHIFT_MAP,
+    soft=False,
+    trace=None
+):
+    """Uproszczony wariant dla sklepów z dokładnie dwoma typami zmian
+    (rano/popołudnie): jeśli pracownik pracuje dziś na zmianie popołudniowej,
+    jutro może mieć tylko zmianę popołudniową (albo nic). Zmiana poranna dziś
+    nie nakłada żadnego ograniczenia na jutro. Działa na klasie zmiany, nie na
+    dokładnych godzinach — O(pracownicy × dni) constraintów zamiast O(pracownicy
+    × dni × warianty²), bez żadnego parsowania dat.
+    """
+    if trace is not None:
+        trace.log_constraint("rest_11h", f"soft={soft} mode=simplified")
+
+    morning_shifts = {SHIFT_OPEN, *START_SHIFT_MAP.keys()}
+    afternoon_shifts = {SHIFT_CLOSE, *END_SHIFT_MAP.keys()}
+
+    violations = []
+    rest_constraints = 0
+
+    for e in range(len(employees)):
+        for i in range(len(days) - 1):
+            d = days[i]
+            d_next = days[i + 1]
+
+            if d not in trade_days or d_next not in trade_days:
+                continue
+
+            is_afternoon_today = sum(x[e, d, s] for s in afternoon_shifts)
+            is_morning_next = sum(x[e, d_next, s] for s in morning_shifts)
+
+            if not soft:
+                model.Add(is_afternoon_today + is_morning_next <= 1)
+            else:
+                violation = model.NewBoolVar(f"rest_violation_simplified_e{e}_d{d}")
+                model.Add(is_afternoon_today + is_morning_next <= 1 + violation)
+                violations.append(violation)
+
+            rest_constraints += 1
+
+    print("Constrainty 11h rest (simplified):", rest_constraints)
 
     return violations

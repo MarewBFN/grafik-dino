@@ -41,6 +41,8 @@ class ShopConfig:
             "min_open_staff": 3,
             "min_close_staff": 3,
             "force_fulltime_845": True,
+            # "standard" (dokładny) albo "simplified" (tylko klasa zmiany rano/popo)
+            "rest_11h_mode": "standard",
         }
 
         # -----------------------------

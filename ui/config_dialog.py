@@ -28,6 +28,11 @@ POLICY_OPTIONS = (
     ("Wyłączone", ConstraintPolicy.DISABLED),
 )
 
+REST_11H_MODE_OPTIONS = (
+    ("Standardowy (dokładny)", "standard"),
+    ("Uproszczony (2 zmiany — szybszy)", "simplified"),
+)
+
 POLICY_LABELS = (
     ("rest_11h", "Odpoczynek 11 h"),
     ("open", "Obsada otwarcia"),
@@ -284,6 +289,26 @@ class ConfigDialog(QDialog):
             policy_grid.addWidget(selector, row, column + 1)
             self.policy_selectors[policy_name] = selector
 
+        rest_row = len(POLICY_LABELS) % split_at
+        rest_column = (len(POLICY_LABELS) // split_at) * 2
+        self.rest_11h_mode_selector = QComboBox()
+        self.rest_11h_mode_selector.setMinimumWidth(125)
+        for text, value in REST_11H_MODE_OPTIONS:
+            self.rest_11h_mode_selector.addItem(text, value)
+        current_mode = self.shop_config.constraints.get("rest_11h_mode", "standard")
+        self.rest_11h_mode_selector.setCurrentIndex(
+            self.rest_11h_mode_selector.findData(current_mode)
+        )
+        self.rest_11h_mode_selector.setToolTip(
+            "Standardowy: dokładne godziny zmian.\n"
+            "Uproszczony: tylko klasa zmiany (rano/popołudnie) — po zmianie "
+            "popołudniowej następny dzień może być tylko popołudniowy albo wolny. "
+            "Szybszy na słabszym sprzęcie; sensowny tylko dla sklepów z dokładnie "
+            "dwoma typami zmian."
+        )
+        policy_grid.addWidget(QLabel("Tryb liczenia odpoczynku 11h:"), rest_row, rest_column)
+        policy_grid.addWidget(self.rest_11h_mode_selector, rest_row, rest_column + 1)
+
         layout.addLayout(policy_grid)
 
         layout.addStretch()
@@ -315,6 +340,7 @@ class ConfigDialog(QDialog):
             self.shop_config.constraints["enforce_meat_coverage"] = True
             self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
             self.shop_config.constraints["highlight_max_consecutive"] = self.hl_consecutive.isChecked()
+            self.shop_config.constraints["rest_11h_mode"] = self.rest_11h_mode_selector.currentData()
             for policy_name, selector in self.policy_selectors.items():
                 self.shop_config.constraint_policies[policy_name] = selector.currentData()
             self.shop_config.constraint_policies["balance"] = ConstraintPolicy.PREFERRED

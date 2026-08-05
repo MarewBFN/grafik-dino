@@ -50,7 +50,6 @@ def add_monthly_hours_constraint(
                 x[e, d, s] * shift_minutes
                 for d in days
                 for s in all_shifts
-                if s != 14
             )
         )
 
