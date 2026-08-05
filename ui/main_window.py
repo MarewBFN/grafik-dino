@@ -41,6 +41,7 @@ from ui.tutorial_dialog import TutorialDialog
 from ui.loading_overlay import LoadingOverlay
 from ui.demo_manager import DemoManager
 from ui.license_manager import get_user_id, show_license_dialog
+from version import APP_VERSION
 
 class GeneratorWorker(QObject):
     finished = Signal(object)
@@ -344,6 +345,10 @@ class MainWindow(QMainWindow):
         self.user_id_label = QLabel(f"ID użytkownika: {self.user_id}")
         self.user_id_label.setStyleSheet("color: #777; font-size: 11px;")
         layout.addWidget(self.user_id_label)
+
+        self.version_label = QLabel(f"Wersja: {APP_VERSION}")
+        self.version_label.setStyleSheet("color: #777; font-size: 11px;")
+        layout.addWidget(self.version_label)
 
         return panel
 
@@ -1014,7 +1019,6 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QMessageBox
         from PySide6.QtGui import QDesktopServices
         from PySide6.QtCore import QUrl, Qt
-        from version import APP_VERSION
 
         msg = QMessageBox(self)
         msg.setWindowTitle("O programie")
