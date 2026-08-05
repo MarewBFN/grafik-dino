@@ -1014,6 +1014,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QMessageBox
         from PySide6.QtGui import QDesktopServices
         from PySide6.QtCore import QUrl, Qt
+        from version import APP_VERSION
 
         msg = QMessageBox(self)
         msg.setWindowTitle("O programie")
@@ -1023,7 +1024,7 @@ class MainWindow(QMainWindow):
             "Nowoczesne narzędzie do tworzenia grafików pracy.<br><br>"
             "Z dedykacją dla Mamy ❤️<br>"
             "Dzięki za wsparcie i motywację.<br><br>"
-            "<b>Wersja:</b> 1.0<br><br>"
+            f"<b>Wersja:</b> {APP_VERSION}<br><br>"
             "Strona: madebykewin.pl"
         )
 
