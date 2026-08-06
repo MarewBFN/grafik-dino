@@ -84,6 +84,21 @@ class UpdateDownloadWorker(QObject):
         except Exception as e:
             self.finished.emit(None, str(e))
 
+class SettlementBalanceWorker(QObject):
+    finished = Signal(object)
+
+    def __init__(self, schedule, shop_config):
+        super().__init__()
+        self.schedule = schedule
+        self.shop_config = shop_config
+
+    def run(self):
+        from logic.settlement_balancer import balance_settlement_period
+
+        result = balance_settlement_period(self.schedule, self.shop_config)
+        self.finished.emit(result)
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -113,6 +128,8 @@ class MainWindow(QMainWindow):
 
         self.quick_mode_enabled = False
         self.quick_selected_shift = None
+
+        self.settlement_mode_active = False
 
         self._build_quick_panel()
         self._build_ui()
@@ -317,6 +334,36 @@ class MainWindow(QMainWindow):
         undo_redo_row.addWidget(self.btn_redo)
         layout.addLayout(undo_redo_row)
 
+        self.settlement_section = QWidget()
+        settlement_layout = QVBoxLayout(self.settlement_section)
+        settlement_layout.setContentsMargins(0, 0, 0, 0)
+        settlement_layout.setSpacing(8)
+
+        self._add_section_header(settlement_layout, "OKRES ROZLICZENIOWY")
+
+        self.btn_settlement_toggle = QPushButton("Włącz okres rozliczeniowy")
+        self.btn_settlement_toggle.setObjectName("secondaryButton")
+        self.btn_settlement_toggle.setMinimumHeight(40)
+        self.btn_settlement_toggle.setCheckable(True)
+        self.btn_settlement_toggle.clicked.connect(self._toggle_settlement_mode)
+        settlement_layout.addWidget(self.btn_settlement_toggle)
+
+        self.settlement_info_label = QLabel("Edytujesz teraz okres rozliczeniowy")
+        self.settlement_info_label.setStyleSheet("color: #b45309; font-size: 11px; font-style: italic;")
+        self.settlement_info_label.setWordWrap(True)
+        self.settlement_info_label.hide()
+        settlement_layout.addWidget(self.settlement_info_label)
+
+        self.btn_settlement_balance = QPushButton("Wyrównaj godziny")
+        self.btn_settlement_balance.setObjectName("primaryButton")
+        self.btn_settlement_balance.setMinimumHeight(40)
+        self.btn_settlement_balance.clicked.connect(self._on_balance_hours_clicked)
+        self.btn_settlement_balance.hide()
+        settlement_layout.addWidget(self.btn_settlement_balance)
+
+        layout.addWidget(self.settlement_section)
+        self.settlement_section.hide()
+
         layout.addStretch(1)
 
         if self.demo.is_demo:
@@ -517,6 +564,15 @@ class MainWindow(QMainWindow):
         self._update_window_title()
         self._update_state_label()
         self._update_generate_label()
+        self._update_settlement_section_visibility()
+
+    def _update_settlement_section_visibility(self):
+        is_generated = bool(self.schedule and getattr(self.schedule, "is_generated", False))
+        self.settlement_section.setVisible(is_generated)
+
+        if not is_generated and self.settlement_mode_active:
+            self.btn_settlement_toggle.setChecked(False)
+            self._toggle_settlement_mode()
 
 
     def _sync_grid(self):
@@ -1012,6 +1068,8 @@ class MainWindow(QMainWindow):
                 ds.is_sick = False
                 ds.is_locked = False
 
+        self.schedule.settlement_targets.clear()
+
         self._sync_everything()
         self.statusBar().showMessage("Wyczyszczono grafik.", 2500)
 
@@ -1071,6 +1129,59 @@ class MainWindow(QMainWindow):
             2000
         )
 
+
+    def _toggle_settlement_mode(self):
+        self.settlement_mode_active = self.btn_settlement_toggle.isChecked()
+        self.btn_settlement_toggle.setText(
+            "Wyłącz okres rozliczeniowy" if self.settlement_mode_active else "Włącz okres rozliczeniowy"
+        )
+        self.settlement_info_label.setVisible(self.settlement_mode_active)
+        self.btn_settlement_balance.setVisible(self.settlement_mode_active)
+        self.btn_generate.setEnabled(not self.settlement_mode_active)
+        self.grid.set_settlement_mode(self.settlement_mode_active)
+
+    def _on_balance_hours_clicked(self):
+        if not self.schedule.settlement_targets:
+            QMessageBox.information(
+                self,
+                "Okres rozliczeniowy",
+                "Wpisz najpierw docelową liczbę godzin przynajmniej jednemu "
+                "pracownikowi (dwuklik w kolumnie \"Cel\").",
+            )
+            return
+
+        self.controller.snapshot()
+        self._show_loading()
+
+        self.settlement_thread = QThread()
+        self.settlement_worker = SettlementBalanceWorker(self.schedule, self.shop_config)
+        self.settlement_worker.moveToThread(self.settlement_thread)
+
+        self.settlement_thread.started.connect(self.settlement_worker.run)
+        self.settlement_worker.finished.connect(self._on_settlement_balance_finished)
+        self.settlement_worker.finished.connect(self.settlement_thread.quit)
+        self.settlement_worker.finished.connect(self.settlement_worker.deleteLater)
+        self.settlement_thread.finished.connect(self.settlement_thread.deleteLater)
+
+        self.settlement_thread.start()
+
+    def _on_settlement_balance_finished(self, result):
+        self._hide_loading()
+        self._sync_everything()
+
+        employees = result.get("employees", [])
+        if not employees:
+            return
+
+        lines = []
+        for entry in employees:
+            if entry["reached_target"]:
+                status = "cel osiągnięty"
+            else:
+                status = f"pozostało {entry['remaining_delta']} min do celu"
+            lines.append(f"{entry['employee']}: {status}")
+
+        QMessageBox.information(self, "Wyrównano godziny", "\n".join(lines))
 
     def _toggle_quick_mode(self):
         self.quick_mode_enabled = self.btn_quick_mode.isChecked()

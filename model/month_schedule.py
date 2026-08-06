@@ -16,6 +16,10 @@ class MonthSchedule:
         self.employees: list[Employee] = []
         self._data: Dict[Employee, Dict[int, DaySchedule]] = {}
 
+        # Docelowa liczba minut w miesiącu per pracownik (funkcja "Okres
+        # rozliczeniowy") — None/brak wpisu oznacza brak ustalonego celu.
+        self.settlement_targets: Dict[Employee, int] = {}
+
         if employees:
             for emp in employees:
                 self.add_employee(emp)
@@ -37,6 +41,16 @@ class MonthSchedule:
             return
         self.employees.remove(employee)
         del self._data[employee]
+        self.settlement_targets.pop(employee, None)
+
+    def get_settlement_target(self, employee: Employee) -> int | None:
+        return self.settlement_targets.get(employee)
+
+    def set_settlement_target(self, employee: Employee, minutes: int | None) -> None:
+        if minutes is None:
+            self.settlement_targets.pop(employee, None)
+        else:
+            self.settlement_targets[employee] = minutes
 
     def get_day(self, employee: Employee, day: int) -> DaySchedule:
         self._validate_day(day)
@@ -123,7 +137,12 @@ class MonthSchedule:
         minutes = total_minutes % 60
         return f"{hours}:{minutes:02d}"
 
-    def total_with_leave_and_sick_for_employee(self, employee):
+    def total_with_leave_and_sick_minutes_for_employee(self, employee) -> int:
+        """To samo co total_with_leave_and_sick_for_employee, ale jako int
+        minut zamiast sformatowanego stringa — do obliczeń (np. okres
+        rozliczeniowy), gdzie liczy się dokładna wartość, nie tekst do
+        wyświetlenia w siatce.
+        """
         total_minutes = 0
         for day in range(1, self.days_in_month + 1):
             ds = self._data[employee][day]
@@ -147,6 +166,10 @@ class MonthSchedule:
                     * 60
                 )
 
+        return total_minutes
+
+    def total_with_leave_and_sick_for_employee(self, employee):
+        total_minutes = self.total_with_leave_and_sick_minutes_for_employee(employee)
         return f"{total_minutes // 60}:{total_minutes % 60:02d}"
 
     def total_hours_for_day(self, day: int) -> int:
@@ -168,6 +191,7 @@ class MonthSchedule:
         self.is_generated = snapshot.is_generated
         self.employees = snapshot.employees
         self._data = snapshot._data
+        self.settlement_targets = snapshot.settlement_targets
 
     def _validate_day(self, day: int) -> None:
         if day < 1 or day > self.days_in_month:
@@ -189,6 +213,7 @@ class MonthSchedule:
                     "daily_hours": e.daily_hours,
                     "employment_fraction": e.employment_fraction,
                     "availability": e.availability,
+                    "settlement_target_minutes": self.settlement_targets.get(e),
                     "days": {
                         day: {
                             "start": ds.start,
@@ -197,6 +222,7 @@ class MonthSchedule:
                             "is_locked": ds.is_locked,
                             "is_sick": ds.is_sick,
                             "is_day_off": ds.is_day_off,
+                            "shift_class": ds.shift_class,
                         }
                         for day in range(1, self.days_in_month + 1)
                         if (
@@ -204,6 +230,7 @@ class MonthSchedule:
                             or ds.is_leave
                             or getattr(ds, "is_sick", False)
                             or getattr(ds, "is_locked", False)
+                            or getattr(ds, "shift_class", None)
                         )
                     },
                 }
@@ -230,6 +257,10 @@ class MonthSchedule:
             )
             sched.add_employee(emp)
 
+            target_minutes = ed.get("settlement_target_minutes")
+            if target_minutes is not None:
+                sched.set_settlement_target(emp, target_minutes)
+
             for day in range(1, sched.days_in_month + 1):
                 ds = sched.get_day(emp, day)
                 ds.start = None
@@ -244,6 +275,7 @@ class MonthSchedule:
                 ds.is_sick = dd.get("is_sick", False)
                 ds.is_locked = dd.get("is_locked", False)
                 ds.is_day_off = dd.get("is_day_off", False)
+                ds.shift_class = dd.get("shift_class")
 
         sched.employees.sort(key=cls._employee_sort_key)
         return sched

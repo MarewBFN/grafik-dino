@@ -1,18 +1,24 @@
 import calendar
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QPainter, QPixmap, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QFrame,
+    QLabel,
     QMenu,
+    QSpinBox,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
     QTableView,
+    QVBoxLayout,
 )
 from logic.constraint_presenter import ConstraintPresenter
 from logic.schedule_presenter import SchedulePresenter
@@ -99,11 +105,16 @@ class LockedCellDelegate(QStyledItemDelegate):
         if not isinstance(data, tuple) or len(data) != 2:
             return
 
+        emp, day = data
+        if not isinstance(day, int):
+            # Inne kolumny (np. "Cel") też przechowują dane w UserRole jako
+            # krotka (emp, ...) — tu interesują nas tylko prawdziwe komórki dnia.
+            return
+
         table = self.parent()
         if table is None or table.schedule is None:
             return
 
-        emp, day = data
         ds = table.schedule.get_day(emp, day)
 
         if (
@@ -150,6 +161,7 @@ class ScheduleGrid(QTableWidget):
 
         self._clipboard_day = None
         self.compact_mode = False
+        self.settlement_mode = False
         self.setIconSize(QSize(20, 20))
         self._employee_name_delegate = EmployeeNameDelegate(self)
         self.setItemDelegateForColumn(0, self._employee_name_delegate)
@@ -292,6 +304,8 @@ class ScheduleGrid(QTableWidget):
             wd = calendar.weekday(self.schedule.year, self.schedule.month, day)
             headers.append(f"{weekday_names[wd]}\n{day}")
         headers.extend(["Praca\n(h)", "Urlop\n(h)", "L4\n(h)", "Razem\n(h)"])
+        if self.settlement_mode:
+            headers.append("Cel\n(h)")
 
         self.setColumnCount(len(headers))
         self.setHorizontalHeaderLabels(headers)
@@ -302,6 +316,14 @@ class ScheduleGrid(QTableWidget):
             if header_item:
                 header_item.setToolTip(self._day_header_tooltip(day))
 
+        if self.settlement_mode:
+            target_header_item = self.horizontalHeaderItem(days + 5)
+            if target_header_item:
+                target_header_item.setToolTip(
+                    "Docelowa liczba godzin w miesiącu dla tego pracownika.\n"
+                    "Kliknij dwukrotnie, aby ustawić."
+                )
+
         for col in range(1, self.columnCount()):
             self.frozen_name_column.setColumnHidden(col, True)
 
@@ -311,7 +333,7 @@ class ScheduleGrid(QTableWidget):
                 self.setColumnWidth(col, 30)
             else:
                 self.setColumnWidth(col, 60)
-        for col in range(days + 1, days + 5):
+        for col in range(days + 1, self.columnCount()):
             self.setColumnWidth(col, 60)
 
         self.verticalHeader().setVisible(False)
@@ -330,6 +352,14 @@ class ScheduleGrid(QTableWidget):
         for row in range(self.rowCount()):
             self.frozen_name_column.setRowHeight(row, self.rowHeight(row))
         self._update_frozen_name_column()
+
+        # Zmiana liczby kolumn (np. włączenie/wyłączenie trybu rozliczeniowego)
+        # może w tym samym cyklu zdarzeń zmienić widoczność poziomego paska
+        # przewijania, co zmienia wysokość viewportu already used above — Qt
+        # przelicza to dopiero po tym wywołaniu. Domykamy synchronizację
+        # jeszcze raz po przetworzeniu zdarzeń layoutu, żeby wiersze kolumny
+        # z nazwiskami nie "uciekały" w pionie względem reszty siatki.
+        QTimer.singleShot(0, self._update_frozen_name_column)
 
     def _day_header_tooltip(self, day):
         hours = self.shop_config.get_open_hours_for_day(day)
@@ -525,6 +555,20 @@ class ScheduleGrid(QTableWidget):
             item.setTextAlignment(Qt.AlignCenter)
             item.setBackground(QBrush(QColor(theme.BG_PANEL)))
             self.setItem(row, idx, item)
+
+        if self.settlement_mode:
+            target_minutes = self.schedule.get_settlement_target(emp)
+            if target_minutes is None:
+                text = "-"
+            else:
+                text = f"{target_minutes // 60}:{target_minutes % 60:02d}"
+
+            target_item = QTableWidgetItem(text)
+            target_item.setTextAlignment(Qt.AlignCenter)
+            target_item.setBackground(QBrush(QColor(theme.ACCENT_SOFT)))
+            target_item.setData(Qt.UserRole, (emp, "settlement_target"))
+            target_item.setToolTip("Dwuklik, aby ustawić docelową liczbę godzin w miesiącu.")
+            self.setItem(row, days + 5, target_item)
 
     def _fill_validation_rows(self, emp_count, days, constraint_presenter):
         # Definiujemy wiersze podsumowania
@@ -728,6 +772,10 @@ class ScheduleGrid(QTableWidget):
         emp_count = len(self.schedule.employees)
         days = self.schedule.days_in_month
 
+        if self.settlement_mode and row < emp_count and col == days + 5:
+            self._edit_settlement_target(self.schedule.employees[row])
+            return
+
         if row < emp_count and col == 0 and self.on_edit_employee:
             self.on_edit_employee(self.schedule.employees[row])
             return
@@ -740,6 +788,50 @@ class ScheduleGrid(QTableWidget):
                 self._apply_quick_shift(row, col)
             elif self.on_edit_day:
                 self.on_edit_day(self.schedule.employees[row], col)
+
+    def _edit_settlement_target(self, emp):
+        # Ta sama wartość, co kolumna "Razem" w siatce.
+        actual_minutes = self.schedule.total_with_leave_and_sick_minutes_for_employee(emp)
+
+        existing_target = self.schedule.get_settlement_target(emp)
+        default_minutes = existing_target if existing_target is not None else actual_minutes
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Okres rozliczeniowy")
+        layout = QVBoxLayout(dialog)
+
+        info = QLabel(
+            f"{emp.display_name()}\n"
+            f"Aktualna suma w tym miesiącu: {actual_minutes // 60}:{actual_minutes % 60:02d}"
+        )
+        layout.addWidget(info)
+
+        form = QFormLayout()
+
+        hours_spin = QSpinBox()
+        hours_spin.setRange(0, 400)
+        hours_spin.setValue(default_minutes // 60)
+        form.addRow("Cel — godziny:", hours_spin)
+
+        minutes_spin = QSpinBox()
+        minutes_spin.setRange(0, 59)
+        minutes_spin.setSingleStep(15)
+        minutes_spin.setValue(default_minutes % 60)
+        form.addRow("Cel — minuty:", minutes_spin)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        target_minutes = hours_spin.value() * 60 + minutes_spin.value()
+        self.schedule.set_settlement_target(emp, target_minutes)
+        self.refresh()
 
     def _handle_header_double_click(self, col):
         # 4. Dwuklik na nagłówku
@@ -911,6 +1003,10 @@ class ScheduleGrid(QTableWidget):
 
     def set_compact_mode(self, enabled: bool):
         self.compact_mode = enabled
+        self.refresh()
+
+    def set_settlement_mode(self, enabled: bool):
+        self.settlement_mode = enabled
         self.refresh()
 
     def clear_schedule(self):
