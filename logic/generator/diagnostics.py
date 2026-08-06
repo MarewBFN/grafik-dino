@@ -31,6 +31,7 @@ POLICY_STAGES = (
     "balance",
     "availability",
     "no_night",
+    "no_afternoon",
     "meat",
     "meat_coverage",
     "max_consecutive",

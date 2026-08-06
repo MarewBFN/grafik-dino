@@ -39,6 +39,7 @@ from logic.generator.objective import (
 )
 from logic.generator.availability_constraint import add_availability_constraint
 from logic.generator.night_constraint import add_no_night_constraint
+from logic.generator.afternoon_constraint import add_no_afternoon_constraint
 from logic.generator.trace import ConstraintTraceLogger
 
 class AutoScheduleGenerator:
@@ -114,6 +115,7 @@ class AutoScheduleGenerator:
             "monthly_hours": 250,
             "availability": 5000,
             "no_night": 5000,
+            "no_afternoon": 5000,
             "morning_afternoon_balance": 10000,
             "add_edge_shift_bonus": 1000,
         }
@@ -414,6 +416,36 @@ class AutoScheduleGenerator:
             )
         )
 
+        afternoon_violations = self._apply_policy(
+            "no_afternoon",
+            hard_fn=lambda: add_no_afternoon_constraint(
+                model,
+                x,
+                employees,
+                days,
+                self.ALL_SHIFTS,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP,
+                soft=False,
+                trace=trace
+            ),
+            soft_fn=lambda: add_no_afternoon_constraint(
+                model,
+                x,
+                employees,
+                days,
+                self.ALL_SHIFTS,
+                self.SHIFT_OPEN,
+                self.SHIFT_CLOSE,
+                self.START_SHIFT_MAP,
+                self.END_SHIFT_MAP,
+                soft=True,
+                trace=trace
+            )
+        )
+
         meat_violations = self._apply_policy(
             "meat",
             hard_fn=lambda: add_meat_constraint(
@@ -506,6 +538,7 @@ class AutoScheduleGenerator:
         )
         all_soft_violations.extend(availability_violations)
         all_soft_violations.extend(night_violations)
+        all_soft_violations.extend(afternoon_violations)
         all_soft_violations.extend(
             add_work_balance_penalty(
                 model,

@@ -140,6 +140,13 @@ class EmployeeDialog(QDialog):
         night_layout.addWidget(self.no_night)
         root.addWidget(night_card)
 
+        self.no_afternoon = QCheckBox("Nie pracuje na popołudniu (tylko zmiany poranne)")
+        afternoon_card = QFrame()
+        afternoon_card.setObjectName("configCard")
+        afternoon_layout = QHBoxLayout(afternoon_card)
+        afternoon_layout.addWidget(self.no_afternoon)
+        root.addWidget(afternoon_card)
+
         root.addStretch()
 
         # --- Dolny pasek przycisków ---
@@ -211,6 +218,7 @@ class EmployeeDialog(QDialog):
         self.is_meat_light.setChecked(getattr(self.employee, "is_meat_light", False))
         self.is_manager.setChecked(getattr(self.employee, "is_manager", False))
         self.no_night.setChecked(getattr(self.employee, "no_night", False))
+        self.no_afternoon.setChecked(getattr(self.employee, "no_afternoon", False))
         self.monthly_target_hours.setValue(self.employee.monthly_target_hours)
         idx = self.employment_fraction.findData(self.employee.employment_fraction)
         if idx >= 0:
@@ -233,6 +241,7 @@ class EmployeeDialog(QDialog):
                 is_meat_light=self.is_meat_light.isChecked(),
                 is_manager=self.is_manager.isChecked(),
                 no_night=self.no_night.isChecked(),
+                no_afternoon=self.no_afternoon.isChecked(),
                 monthly_target_hours=self.monthly_target_hours.value(),
                 employment_fraction=self.employment_fraction.currentData(),
             )

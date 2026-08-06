@@ -2,7 +2,7 @@ import calendar
 import math
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QPointF, QSize, QTimer
+from PySide6.QtCore import Qt, QPointF, QRectF, QSize, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPixmap, QPen, QPolygonF, qGray
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -77,6 +77,100 @@ def _build_star_icon(size: int = 64, fill_color: str = "#f4b400", outline_color:
     return QIcon(pixmap)
 
 
+def _draw_prohibition_slash(painter: QPainter, size: int) -> None:
+    """Overlay the universal 'no' circle-slash on whatever was already painted."""
+    pen = QPen(QColor("#d64545"), max(1.5, size * 0.12))
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+    margin = size * 0.08
+    painter.drawEllipse(QRectF(margin, margin, size - 2 * margin, size - 2 * margin))
+    painter.drawLine(QPointF(size * 0.22, size * 0.22), QPointF(size * 0.78, size * 0.78))
+
+
+def _build_no_night_icon(size: int = 32) -> QIcon:
+    """Crescent moon + prohibition slash, for the 'no_night' flag (no asset file)."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+
+    center = QPointF(size * 0.46, size * 0.46)
+    moon_r = size * 0.30
+
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QBrush(QColor("#37474f")))
+    painter.drawEllipse(center, moon_r, moon_r)
+
+    painter.setCompositionMode(QPainter.CompositionMode_DestinationOut)
+    painter.drawEllipse(
+        QPointF(center.x() + moon_r * 0.55, center.y() - moon_r * 0.35),
+        moon_r * 0.85, moon_r * 0.85,
+    )
+    painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+
+    _draw_prohibition_slash(painter, size)
+    painter.end()
+
+    return QIcon(pixmap)
+
+
+def _build_no_afternoon_icon(size: int = 32) -> QIcon:
+    """Sun + prohibition slash, for the 'no_afternoon' flag (no asset file)."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+
+    center = QPointF(size * 0.46, size * 0.5)
+    sun_r = size * 0.19
+
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QBrush(QColor("#f2a13c")))
+    painter.drawEllipse(center, sun_r, sun_r)
+
+    ray_pen = QPen(QColor("#f2a13c"), max(1.2, size * 0.06))
+    painter.setPen(ray_pen)
+    for i in range(8):
+        angle = i * math.pi / 4
+        inner = sun_r * 1.35
+        outer = sun_r * 1.85
+        painter.drawLine(
+            QPointF(center.x() + math.cos(angle) * inner, center.y() + math.sin(angle) * inner),
+            QPointF(center.x() + math.cos(angle) * outer, center.y() + math.sin(angle) * outer),
+        )
+
+    _draw_prohibition_slash(painter, size)
+    painter.end()
+
+    return QIcon(pixmap)
+
+
+def _employee_badges(table, employee):
+    """Large corner-role badges (opener/meat/manager) shown for an employee."""
+    badges = []
+    if employee.is_opener:
+        badges.append(table.icon_open)
+    if employee.is_meat:
+        badges.append(table.icon_meat)
+    elif employee.is_meat_light:
+        badges.append(table.icon_meat_light)
+    if employee.is_manager:
+        badges.append(table.icon_manager)
+    return badges
+
+
+def _employee_restriction_icons(table, employee):
+    """Small inline icons shown next to the employment-fraction label."""
+    icons = []
+    if getattr(employee, "no_night", False):
+        icons.append(table.icon_no_night)
+    if getattr(employee, "no_afternoon", False):
+        icons.append(table.icon_no_afternoon)
+    return icons
+
+
 def employment_fraction_label(employee):
     """Short labels for the employee column; full labels stay in EmployeeDialog."""
     labels = {
@@ -93,7 +187,19 @@ def employment_fraction_label(employee):
 
 
 class EmployeeNameDelegate(QStyledItemDelegate):
-    """Paint employee name and a subdued employment fraction on one line."""
+    """Paint employee name, role badges and a subdued employment fraction
+    (plus small restriction icons) on one line.
+
+    Badges/icons are painted directly at a fixed pixel size instead of via
+    QTableWidgetItem.setIcon(), which would otherwise scale a wider composed
+    pixmap down to fit the view's single shared iconSize() box - shrinking
+    every individual icon as soon as an employee has more than one flag.
+    """
+
+    BADGE_SIZE = 20
+    BADGE_GAP = 2
+    RESTRICTION_ICON_SIZE = 16
+    RESTRICTION_ICON_GAP = 2
 
     def paint(self, painter, option, index):
         employee = index.data(Qt.UserRole)
@@ -101,13 +207,33 @@ class EmployeeNameDelegate(QStyledItemDelegate):
             super().paint(painter, option, index)
             return
 
+        table = self.parent()
+
         style_option = QStyleOptionViewItem(option)
         self.initStyleOption(style_option, index)
         style_option.text = ""
+        style_option.icon = QIcon()
         style = style_option.widget.style() if style_option.widget else QStyle()
         style.drawControl(QStyle.CE_ItemViewItem, style_option, painter, style_option.widget)
 
         text_rect = style.subElementRect(QStyle.SE_ItemViewItemText, style_option, style_option.widget)
+
+        painter.save()
+
+        # --- Odznaki roli (opener/mięso/kierowniczka), stały rozmiar ---
+        badges = _employee_badges(table, employee) if table is not None else []
+        badge_x = text_rect.left()
+        badge_y = text_rect.top() + (text_rect.height() - self.BADGE_SIZE) // 2
+        for icon in badges:
+            icon.paint(painter, badge_x, badge_y, self.BADGE_SIZE, self.BADGE_SIZE)
+            badge_x += self.BADGE_SIZE + self.BADGE_GAP
+
+        name_left = badge_x + (6 if badges else 0)
+
+        # --- Ikony ograniczeń (brak nocy / popołudnia), stały rozmiar ---
+        restriction_icons = _employee_restriction_icons(table, employee) if table is not None else []
+        restriction_width = len(restriction_icons) * (self.RESTRICTION_ICON_SIZE + self.RESTRICTION_ICON_GAP)
+
         name_font = QFont(style_option.font)
         name_font.setBold(True)
         fraction_font = QFont(name_font)
@@ -119,19 +245,28 @@ class EmployeeNameDelegate(QStyledItemDelegate):
         fraction_metrics = QFontMetrics(fraction_font)
         gap = 7
         fraction_width = fraction_metrics.horizontalAdvance(fraction)
-        available_name_width = max(0, text_rect.width() - fraction_width - gap)
+        available_name_width = max(
+            0, text_rect.right() - name_left - fraction_width - gap - restriction_width
+        )
         name = name_metrics.elidedText(employee.display_name(), Qt.ElideRight, available_name_width)
 
-        painter.save()
+        name_rect = text_rect.adjusted(name_left - text_rect.left(), 0, 0, 0)
         painter.setFont(name_font)
         painter.setPen(style_option.palette.text().color())
-        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, name)
+        painter.drawText(name_rect, Qt.AlignVCenter | Qt.AlignLeft, name)
 
         name_width = name_metrics.horizontalAdvance(name)
-        fraction_rect = text_rect.adjusted(name_width + gap, 0, 0, 0)
+        fraction_rect = name_rect.adjusted(name_width + gap, 0, 0, 0)
         painter.setFont(fraction_font)
         painter.setPen(QColor("#8a8a8a"))
         painter.drawText(fraction_rect, Qt.AlignVCenter | Qt.AlignLeft, fraction)
+
+        icon_x = fraction_rect.left() + fraction_width + self.RESTRICTION_ICON_GAP
+        icon_y = text_rect.top() + (text_rect.height() - self.RESTRICTION_ICON_SIZE) // 2
+        for icon in restriction_icons:
+            icon.paint(painter, icon_x, icon_y, self.RESTRICTION_ICON_SIZE, self.RESTRICTION_ICON_SIZE)
+            icon_x += self.RESTRICTION_ICON_SIZE + self.RESTRICTION_ICON_GAP
+
         painter.restore()
 
 class LockedCellDelegate(QStyledItemDelegate):
@@ -220,6 +355,8 @@ class ScheduleGrid(QTableWidget):
         self.icon_open_meat = QIcon(resource_path("assets/keymeat.png"))
         self.icon_meat_light = _grayed_icon(self.icon_meat)
         self.icon_manager = _build_star_icon()
+        self.icon_no_night = _build_no_night_icon()
+        self.icon_no_afternoon = _build_no_afternoon_icon()
 
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -369,7 +506,9 @@ class ScheduleGrid(QTableWidget):
         for col in range(1, self.columnCount()):
             self.frozen_name_column.setColumnHidden(col, True)
 
-        self.setColumnWidth(0, 180)
+        # 180 * 1.3 = 234, rounded up further so up to 3 role badges + name +
+        # fraction + 2 restriction icons all fit without crowding/eliding.
+        self.setColumnWidth(0, 260)
         for col in range(1, days + 1):
             if self.compact_mode:
                 self.setColumnWidth(col, 30)
@@ -437,31 +576,10 @@ class ScheduleGrid(QTableWidget):
         item = QTableWidgetItem(emp.display_name())
         item.setData(Qt.UserRole, emp)
         item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-
-        badges = []
-        if emp.is_opener:
-            badges.append(self.icon_open)
-        if emp.is_meat:
-            badges.append(self.icon_meat)
-        elif emp.is_meat_light:
-            badges.append(self.icon_meat_light)
-        if emp.is_manager:
-            badges.append(self.icon_manager)
-
-        if len(badges) == 1:
-            item.setIcon(badges[0])
-        elif badges:
-            size = 32
-            pixmap = QPixmap(size * len(badges), size)
-            pixmap.fill(Qt.transparent)
-
-            painter = QPainter(pixmap)
-            painter.setRenderHint(QPainter.Antialiasing)
-            for i, icon in enumerate(badges):
-                painter.drawPixmap(size * i, 0, icon.pixmap(size, size))
-            painter.end()
-
-            item.setIcon(QIcon(pixmap))
+        # Badges and restriction icons are painted directly by
+        # EmployeeNameDelegate at a fixed size, instead of going through
+        # QTableWidgetItem.setIcon() - that would scale everything down to
+        # fit a single shared iconSize() box as more flags are added.
 
         font = QFont()
         font.setBold(True)

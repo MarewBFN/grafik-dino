@@ -27,6 +27,7 @@ class ShopConfig:
             "meat_coverage": ConstraintPolicy.PREFERRED,
             "availability": ConstraintPolicy.PREFERRED,
             "no_night": ConstraintPolicy.PREFERRED,
+            "no_afternoon": ConstraintPolicy.PREFERRED,
         }
         # -----------------------------
         # Override godzin dla konkretnego dnia

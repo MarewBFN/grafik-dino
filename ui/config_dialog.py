@@ -41,6 +41,7 @@ POLICY_LABELS = (
     ("meat_coverage", "Mięso przez cały dzień"),
     ("availability", "Dostępność pracownika"),
     ("no_night", "Zakaz pracy nocnej"),
+    ("no_afternoon", "Zakaz pracy popołudniami"),
     ("monthly_hours", "Godziny miesięczne"),
     ("balance", "Bilans godzin"),
     ("max_consecutive", "Dni pod rząd"),

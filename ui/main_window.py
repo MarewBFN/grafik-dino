@@ -100,7 +100,7 @@ class SettlementBalanceWorker(QObject):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, open_path=None):
         super().__init__()
         QTimer.singleShot(1000, self._check_updates)
 
@@ -135,7 +135,8 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._init_state()
         self._sync_everything()
-        self._try_load_last_project()
+        if not self._open_project_from_path(open_path):
+            self._try_load_last_project()
         self.loading_overlay = LoadingOverlay(self)
 
         self.statusBar().showMessage("Gotowe")
@@ -920,28 +921,56 @@ class MainWindow(QMainWindow):
 
         if self.demo.block_save(self):
             return
-        
-        path, _ = QFileDialog.getSaveFileName(self, "Zapisz projekt", "", "Projekt grafiku (*.json)")
+
+        # .myp is the extension the installer registers as this app's file
+        # type (see "dla inno.iss"), so double-clicking a saved project opens
+        # it here. Older .json saves remain readable, just not the default.
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self, "Zapisz projekt", "",
+            "Projekt grafiku (*.myp);;Starszy format JSON (*.json)"
+        )
         if not path:
             return
+
+        if not path.lower().endswith((".myp", ".json")):
+            path += ".json" if selected_filter.endswith("(*.json)") else ".myp"
 
         save_project(path, self.schedule, self.shop_config)
         save_project("last_project.json", self.schedule, self.shop_config)
         self.statusBar().showMessage("Zapisano projekt.", 2500)
 
     def _load_project(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Wczytaj projekt", "", "Projekt grafiku (*.json)")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Wczytaj projekt", "", "Projekt grafiku (*.myp *.json)"
+        )
         if not path:
             return
 
-        self.schedule, self.shop_config = load_project(path)
+        self._apply_loaded_project(*load_project(path))
+        self.statusBar().showMessage("Wczytano projekt.", 2500)
+
+    def _apply_loaded_project(self, schedule, shop_config):
+        self.schedule = schedule
+        self.shop_config = shop_config
         self.controller = ScheduleController(self.schedule, self.shop_config)
         self.year = self.schedule.year
         self.month = self.schedule.month
         self._set_date_controls(self.year, self.month)
         self._update_nominal_hours_label()
         self._sync_everything()
+
+    def _open_project_from_path(self, path) -> bool:
+        """Load a project passed on the command line - e.g. Windows launching
+        us with a .myp file's path after the user double-clicked it. Returns
+        whether a project was actually opened this way."""
+        if not path or not os.path.exists(path):
+            return False
+        try:
+            self._apply_loaded_project(*load_project(path))
+        except Exception:
+            return False
         self.statusBar().showMessage("Wczytano projekt.", 2500)
+        return True
 
     def _export_excel(self):
         if self.demo.block_export(self):
@@ -1111,13 +1140,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self.schedule, self.shop_config = load_project("last_project.json")
-            self.controller = ScheduleController(self.schedule, self.shop_config)
-            self.year = self.schedule.year
-            self.month = self.schedule.month
-            self._set_date_controls(self.year, self.month)
-            self._update_nominal_hours_label()
-            self._sync_everything()
+            self._apply_loaded_project(*load_project("last_project.json"))
         except Exception:
             pass
 

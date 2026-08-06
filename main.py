@@ -11,7 +11,11 @@ def main():
     app.setStyle("Fusion")
     app.setStyleSheet(APP_STYLESHEET)
 
-    window = MainWindow()
+    # Double-clicking a .myp file (registered by the installer, see
+    # "dla inno.iss") launches us with its path as an argument.
+    open_path = next((arg for arg in sys.argv[1:] if os.path.isfile(arg)), None)
+
+    window = MainWindow(open_path=open_path)
     window.show()
 
     sys.exit(app.exec())
