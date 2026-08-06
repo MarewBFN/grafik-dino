@@ -259,9 +259,9 @@ def meat_coverage(schedule, shop, day: int) -> dict:
 
     intervals = []
 
-    # 🔹 zbierz przedziały tylko dla pracowników z mięsem
+    # 🔹 zbierz przedziały dla pracowników z mięsem (w tym zastępczo "może na chwilę")
     for emp in schedule.employees:
-        if not emp.is_meat:
+        if not (emp.is_meat or emp.is_meat_light):
             continue
 
         ds = schedule.get_day(emp, day)

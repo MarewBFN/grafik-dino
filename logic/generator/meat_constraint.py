@@ -12,7 +12,8 @@ def add_meat_constraint(
     SHIFT_OPEN,
     SHIFT_CLOSE,
     soft=False,
-    trace=None
+    trace=None,
+    meat_light_penalties=None
 ):
     if trace is not None:
         trace.log_constraint("meat", f"soft={soft}")
@@ -41,6 +42,26 @@ def add_meat_constraint(
             and employees[e].is_meat
         )
 
+        meat_on_open_light = sum(
+            x[e, d, SHIFT_OPEN]
+            for e in range(len(employees))
+            if employees[e].is_meat_light
+        )
+
+        meat_on_close_light = sum(
+            x[e, d, SHIFT_CLOSE]
+            for e in range(len(employees))
+            if employees[e].is_meat_light
+        )
+
+        meat_on_work_light = sum(
+            x[e, d, s]
+            for e in range(len(employees))
+            for s in all_shifts
+            if s not in (SHIFT_OPEN, SHIFT_CLOSE)
+            and employees[e].is_meat_light
+        )
+
         total_work = sum(
             x[e, d, s]
             for e in range(len(employees))
@@ -55,17 +76,23 @@ def add_meat_constraint(
             model.Add(total_work == 0).OnlyEnforceIf(work_exists.Not())
 
             model.Add(
-                meat_on_work >= 1
+                meat_on_work + meat_on_work_light >= 1
             ).OnlyEnforceIf(work_exists)
+            if meat_light_penalties is not None:
+                meat_light_penalties.append(meat_on_work_light)
 
         else:
             v1 = model.NewBoolVar(f"meat_open_v_d{d}")
-            model.Add(meat_on_open + v1 >= 1)
+            model.Add(meat_on_open + meat_on_open_light + v1 >= 1)
             violations.append(v1)
 
             v2 = model.NewBoolVar(f"meat_close_v_d{d}")
-            model.Add(meat_on_close + v2 >= 1)
+            model.Add(meat_on_close + meat_on_close_light + v2 >= 1)
             violations.append(v2)
+
+            if meat_light_penalties is not None:
+                meat_light_penalties.append(meat_on_open_light)
+                meat_light_penalties.append(meat_on_close_light)
 
     return violations
 
@@ -80,7 +107,8 @@ def add_meat_coverage_constraint(
     START_SHIFT_MAP,
     END_SHIFT_MAP,
     soft=False,
-    trace=None
+    trace=None,
+    meat_light_penalties=None
 ):
     if trace is not None:
         trace.log_constraint("meat_coverage", f"soft={soft}")
@@ -105,13 +133,15 @@ def add_meat_coverage_constraint(
 
             slot = t.strftime(fmt)
             meat_cover = []
+            meat_cover_light = []
 
             for e in range(len(employees)):
 
-                if not employees[e].is_meat:
+                emp = employees[e]
+                if not (emp.is_meat or emp.is_meat_light):
                     continue
 
-                emp = employees[e]
+                target = meat_cover if emp.is_meat else meat_cover_light
                 shift_len = timedelta(hours=get_effective_daily_hours(emp, shop))
 
                 # OPEN
@@ -119,39 +149,43 @@ def add_meat_coverage_constraint(
                 end = start + shift_len
 
                 if start <= t < end:
-                    meat_cover.append(x[e, d, SHIFT_OPEN])
+                    target.append(x[e, d, SHIFT_OPEN])
 
                 # CLOSE
                 end = close_dt
                 start = end - shift_len
 
                 if start <= t < end:
-                    meat_cover.append(x[e, d, SHIFT_CLOSE])
+                    target.append(x[e, d, SHIFT_CLOSE])
 
                 # WORK od otwarcia
                 for shift, offset in START_SHIFT_MAP.items():
                     work_start = open_dt + timedelta(minutes=offset)
                     work_end = work_start + shift_len
                     if work_start <= t < work_end:
-                        meat_cover.append(x[e, d, shift])
+                        target.append(x[e, d, shift])
 
                 # WORK od zamknięcia
                 for shift, offset in END_SHIFT_MAP.items():
                     work_end = close_dt - timedelta(minutes=offset)
                     work_start = work_end - shift_len
                     if work_start <= t < work_end:
-                        meat_cover.append(x[e, d, shift])
+                        target.append(x[e, d, shift])
 
-            if not meat_cover:
+            if not meat_cover and not meat_cover_light:
                 t += timedelta(minutes=15)
                 continue
 
+            light_sum = sum(meat_cover_light) if meat_cover_light else 0
+            if meat_light_penalties is not None and meat_cover_light:
+                meat_light_penalties.append(light_sum)
+
             if not soft:
-                model.Add(sum(meat_cover) >= 1)
+                model.Add(sum(meat_cover) + light_sum >= 1)
 
             else:
                 v = model.NewBoolVar(f"meat_cover_v_d{d}_{slot}")
-                model.Add(sum(meat_cover) + v >= 1)
+                model.Add(sum(meat_cover) + light_sum + v >= 1)
                 violations.append(v)
 
             t += timedelta(minutes=15)

@@ -160,6 +160,7 @@ def preflight_supply(schedule, shop) -> list[dict[str, Any]]:
             "available_employees": len(available),
             "available_openers": sum(employee.is_opener for employee in available),
             "available_meat_staff": sum(employee.is_meat for employee in available),
+            "available_meat_light_staff": sum(employee.is_meat_light for employee in available),
             "min_open_staff": shop.constraints.get("min_open_staff", 3),
             "min_close_staff": shop.constraints.get("min_close_staff", 3),
             "locked_assignments": locked,
@@ -218,19 +219,19 @@ def build_infeasibility_summary(schedule, shop) -> list[str]:
                 )
             elif not any(employee.is_opener for employee in fixed + possible):
                 add(f"Dzień {day}: brak pracownika otwarcia możliwego do pracy na {label}.")
-            elif not any(employee.is_meat for employee in fixed + possible):
-                add(f"Dzień {day}: brak osoby z uprawnieniem mięso możliwej do pracy na {label}.")
+            elif not any(employee.is_meat or employee.is_meat_light for employee in fixed + possible):
+                add(f"Dzień {day}: brak osoby z uprawnieniem mięso (ani zastępczej) możliwej do pracy na {label}.")
 
         if policies.get("meat_coverage") == ConstraintPolicy.MANDATORY:
             available_meat = [
                 employee for employee in schedule.employees
-                if employee.is_meat
+                if (employee.is_meat or employee.is_meat_light)
                 and not schedule.get_day(employee, day).is_leave
                 and not getattr(schedule.get_day(employee, day), "is_sick", False)
                 and not getattr(schedule.get_day(employee, day), "is_day_off", False)
             ]
             if not available_meat:
-                add(f"Dzień {day}: brak dostępnej osoby z uprawnieniem mięso na cały dzień.")
+                add(f"Dzień {day}: brak dostępnej osoby z uprawnieniem mięso (ani zastępczej) na cały dzień.")
 
     if policies.get("rest_11h") == ConstraintPolicy.MANDATORY:
         fmt = "%H:%M"

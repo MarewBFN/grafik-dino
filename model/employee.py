@@ -19,6 +19,7 @@ class Employee:
     # pozostałe dane (nie wpływają na sortowanie)
     is_opener: bool = field(default=False, compare=False)
     is_meat: bool = field(default=False, compare=False)
+    is_meat_light: bool = field(default=False, compare=False)
     no_night: bool = field(default=False, compare=False)
     monthly_target_hours: int = field(default=160, compare=False)
     daily_hours: int = field(default=8, compare=False)
@@ -38,6 +39,9 @@ class Employee:
 
         if not self.first_name.strip():
             raise ValueError("Imię nie może być puste")
+
+        if self.is_meat and self.is_meat_light:
+            raise ValueError("Pracownik nie może mieć jednocześnie flagi mięsa i \"może stanąć na chwilę na mięsie\"")
 
         # 🔧 ZMIANA – luzujemy ograniczenie
         if self.daily_hours <= 0:

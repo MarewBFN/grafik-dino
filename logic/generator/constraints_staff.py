@@ -6,7 +6,8 @@ def add_fixed_staff_shift_constraints(
     shift_type,
     min_staff,
     soft=False,
-    trace=None
+    trace=None,
+    meat_light_penalties=None
 ):
     if trace is not None:
         trace.log_constraint("fixed_staff_shift", f"shift={shift_type} min_staff={min_staff} soft={soft}")
@@ -25,6 +26,12 @@ def add_fixed_staff_shift_constraints(
             if employees[e].is_opener
         )
 
+        meat_light_staff = sum(
+            x[e, d, shift_type]
+            for e in range(len(employees))
+            if employees[e].is_meat_light
+        )
+
         if not soft:
             meat_staff = sum(
                 x[e, d, shift_type]
@@ -34,7 +41,9 @@ def add_fixed_staff_shift_constraints(
 
             model.Add(total_staff == min_staff)
             model.Add(opener_staff >= 1)
-            model.Add(meat_staff >= 1)
+            model.Add(meat_staff + meat_light_staff >= 1)
+            if meat_light_penalties is not None:
+                meat_light_penalties.append(meat_light_staff)
 
         else:
             total_violation = model.NewIntVar(
@@ -56,8 +65,10 @@ def add_fixed_staff_shift_constraints(
                 if employees[e].is_meat
             )
             meat_violation = model.NewBoolVar(f"meat_v_d{d}_{shift_type}")
-            model.Add(meat_staff + meat_violation >= 1)
+            model.Add(meat_staff + meat_light_staff + meat_violation >= 1)
             violations.append(meat_violation)
+            if meat_light_penalties is not None:
+                meat_light_penalties.append(meat_light_staff)
 
     return violations
 

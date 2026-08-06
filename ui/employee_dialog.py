@@ -112,6 +112,16 @@ class EmployeeDialog(QDialog):
         meat_layout.addWidget(self.is_meat)
         root.addWidget(meat_card)
 
+        self.is_meat_light = QCheckBox("mooooże stanąć na chwilę na mięsie")
+        meat_light_card = QFrame()
+        meat_light_card.setObjectName("configCard")
+        meat_light_layout = QHBoxLayout(meat_light_card)
+        meat_light_layout.addWidget(self.is_meat_light)
+        root.addWidget(meat_light_card)
+
+        self.is_meat.toggled.connect(self._on_meat_toggled)
+        self.is_meat_light.toggled.connect(self._on_meat_light_toggled)
+
         self.no_night = QCheckBox("Nie pracuje w godzinach nocnych (przed 6:00 i po 22:00)")
         night_card = QFrame()
         night_card.setObjectName("configCard")
@@ -164,6 +174,14 @@ class EmployeeDialog(QDialog):
 
         root.addLayout(button_row)
 
+    def _on_meat_toggled(self, checked):
+        if checked and self.is_meat_light.isChecked():
+            self.is_meat_light.setChecked(False)
+
+    def _on_meat_light_toggled(self, checked):
+        if checked and self.is_meat.isChecked():
+            self.is_meat.setChecked(False)
+
     def _fill_from_employee(self):
         if not self.employee:
             return
@@ -171,6 +189,7 @@ class EmployeeDialog(QDialog):
         self.first_name.setText(self.employee.first_name)
         self.is_opener.setChecked(self.employee.is_opener)
         self.is_meat.setChecked(self.employee.is_meat)
+        self.is_meat_light.setChecked(getattr(self.employee, "is_meat_light", False))
         self.no_night.setChecked(getattr(self.employee, "no_night", False))
         self.monthly_target_hours.setValue(self.employee.monthly_target_hours)
         idx = self.employment_fraction.findData(self.employee.employment_fraction)
@@ -191,6 +210,7 @@ class EmployeeDialog(QDialog):
                 first_name=fn,
                 is_opener=self.is_opener.isChecked(),
                 is_meat=self.is_meat.isChecked(),
+                is_meat_light=self.is_meat_light.isChecked(),
                 no_night=self.no_night.isChecked(),
                 monthly_target_hours=self.monthly_target_hours.value(),
                 employment_fraction=self.employment_fraction.currentData(),

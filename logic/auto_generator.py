@@ -104,6 +104,7 @@ class AutoScheduleGenerator:
         self.constraint_weights = {
             "meat": 1000,
             "meat_coverage": 1500,
+            "meat_light_usage": 400,
             "rest_11h": 5000,
             "balance": 1000,
             "max_consecutive": 100,
@@ -209,6 +210,10 @@ class AutoScheduleGenerator:
         )
         add_one_shift_per_day_constraint(model, x, employees, days, self.ALL_SHIFTS, trace=trace)
 
+        # Osoby is_meat_light: pula zapasowa dla obłożenia mięsa, używana tylko
+        # gdy brak innej możliwości - patrz waga "meat_light_usage" w objective.
+        meat_light_penalties = []
+
         open_violations = self._apply_policy(
             "open",
             hard_fn=lambda: add_fixed_staff_shift_constraints(
@@ -216,14 +221,16 @@ class AutoScheduleGenerator:
                 self.SHIFT_OPEN,
                 min_open,
                 soft=False,
-                trace=trace
+                trace=trace,
+                meat_light_penalties=meat_light_penalties
             ),
             soft_fn=lambda: add_fixed_staff_shift_constraints(
                 model, x, employees, trade_days,
                 self.SHIFT_OPEN,
                 min_open,
                 soft=True,
-                trace=trace
+                trace=trace,
+                meat_light_penalties=meat_light_penalties
             )
         )
 
@@ -234,14 +241,16 @@ class AutoScheduleGenerator:
                 self.SHIFT_CLOSE,
                 min_close,
                 soft=False,
-                trace=trace
+                trace=trace,
+                meat_light_penalties=meat_light_penalties
             ),
             soft_fn=lambda: add_fixed_staff_shift_constraints(
                 model, x, employees, trade_days,
                 self.SHIFT_CLOSE,
                 min_close,
                 soft=True,
-                trace=trace
+                trace=trace,
+                meat_light_penalties=meat_light_penalties
             )
         )
 
@@ -387,17 +396,20 @@ class AutoScheduleGenerator:
         meat_violations = self._apply_policy(
             "meat",
             hard_fn=lambda: add_meat_constraint(
-                model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=False, trace=trace
+                model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=False, trace=trace,
+                meat_light_penalties=meat_light_penalties
             ),
             soft_fn=lambda: add_meat_constraint(
-                model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=True, trace=trace
+                model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=True, trace=trace,
+                meat_light_penalties=meat_light_penalties
             )
         )
 
         coverage_violations = self._apply_policy(
             "meat_coverage",
             hard_fn=lambda: add_meat_coverage_constraint(
-                model, x, employees, trade_days, self.shop, self.SHIFT_OPEN, self.SHIFT_CLOSE, self.START_SHIFT_MAP, self.END_SHIFT_MAP, soft=False, trace=trace
+                model, x, employees, trade_days, self.shop, self.SHIFT_OPEN, self.SHIFT_CLOSE, self.START_SHIFT_MAP, self.END_SHIFT_MAP, soft=False, trace=trace,
+                meat_light_penalties=meat_light_penalties
             ),
             soft_fn=lambda: add_meat_coverage_constraint(
                 model, x, employees, trade_days, self.shop,
@@ -406,7 +418,8 @@ class AutoScheduleGenerator:
                 self.START_SHIFT_MAP,
                 self.END_SHIFT_MAP,
                 soft=True,
-                trace=trace
+                trace=trace,
+                meat_light_penalties=meat_light_penalties
             )
         )
 
@@ -436,6 +449,9 @@ class AutoScheduleGenerator:
         all_soft_violations.extend(balance_violations)
         all_soft_violations.extend(meat_violations)
         all_soft_violations.extend(coverage_violations)
+        if meat_light_penalties:
+            meat_light_weight = self.constraint_weights.get("meat_light_usage", 400)
+            all_soft_violations.extend(meat_light_weight * t for t in meat_light_penalties)
         all_soft_violations.extend(max_consec_violations)
         all_soft_violations.extend(open_violations)
         all_soft_violations.extend(close_violations)

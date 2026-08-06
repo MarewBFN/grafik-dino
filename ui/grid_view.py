@@ -2,7 +2,7 @@ import calendar
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QSize, QTimer
-from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QPainter, QPixmap, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPixmap, QPen, qGray
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -35,6 +35,20 @@ SUMMARY_ROWS = (
     ("Popo", "afternoon"),
     ("Mięso", "meat"),
 )
+
+
+def _grayed_icon(icon: QIcon, size: int = 64, opacity: float = 0.55) -> QIcon:
+    """Build a desaturated, faded variant of an icon (no separate asset file)."""
+    image = icon.pixmap(size, size).toImage().convertToFormat(QImage.Format_ARGB32)
+    for y in range(image.height()):
+        for x in range(image.width()):
+            color = image.pixelColor(x, y)
+            if color.alpha() == 0:
+                continue
+            gray = qGray(color.rgb())
+            color.setRgb(gray, gray, gray, int(color.alpha() * opacity))
+            image.setPixelColor(x, y, color)
+    return QIcon(QPixmap.fromImage(image))
 
 
 def employment_fraction_label(employee):
@@ -178,6 +192,7 @@ class ScheduleGrid(QTableWidget):
         self.icon_open = QIcon(resource_path("assets/key.png"))
         self.icon_meat = QIcon(resource_path("assets/meat.png"))
         self.icon_open_meat = QIcon(resource_path("assets/keymeat.png"))
+        self.icon_meat_light = _grayed_icon(self.icon_meat)
 
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -396,8 +411,9 @@ class ScheduleGrid(QTableWidget):
         item.setData(Qt.UserRole, emp)
         item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
 
-        if emp.is_opener and emp.is_meat:
+        if emp.is_opener and (emp.is_meat or emp.is_meat_light):
             size = 32
+            meat_icon = self.icon_meat if emp.is_meat else self.icon_meat_light
 
             pixmap = QPixmap(size * 2, size)
             pixmap.fill(Qt.transparent)
@@ -406,7 +422,7 @@ class ScheduleGrid(QTableWidget):
             painter.setRenderHint(QPainter.Antialiasing)
 
             painter.drawPixmap(0, 0, self.icon_open.pixmap(size, size))
-            painter.drawPixmap(size, 0, self.icon_meat.pixmap(size, size))
+            painter.drawPixmap(size, 0, meat_icon.pixmap(size, size))
 
             painter.end()
 
@@ -417,6 +433,9 @@ class ScheduleGrid(QTableWidget):
 
         elif emp.is_meat:
             item.setIcon(self.icon_meat)
+
+        elif emp.is_meat_light:
+            item.setIcon(self.icon_meat_light)
 
         font = QFont()
         font.setBold(True)
@@ -633,8 +652,8 @@ class ScheduleGrid(QTableWidget):
                         elif classification == "afternoon":
                             total_afternoon += 1
 
-                        # 3. Mięso
-                        if emp.is_meat and ds.start and not ds.is_leave and not getattr(ds, "is_sick", False):
+                        # 3. Mięso (w tym zastępczo "mooooże stanąć na chwilę na mięsie")
+                        if (emp.is_meat or emp.is_meat_light) and ds.start and not ds.is_leave and not getattr(ds, "is_sick", False):
                             count_meat += 1
                     except ValueError:
                         continue
