@@ -162,6 +162,20 @@ class MeatCoverageRule(Rule):
                     )
                 )
 
+            elif result["light_ranges"]:
+                msg = "; ".join(
+                    f"mięsiara tymczasowa między {start} a {end}"
+                    for start, end in result["light_ranges"]
+                )
+                results.append(
+                    ConstraintViolation(
+                        type="meat_light_coverage",
+                        employee=None,
+                        day=day,
+                        message=msg
+                    )
+                )
+
         return results
 
 
@@ -244,22 +258,43 @@ from datetime import datetime
 FMT = "%H:%M"
 
 
+def _merge_intervals(intervals):
+    if not intervals:
+        return []
+    intervals = sorted(intervals)
+    merged = [list(intervals[0])]
+    for start, end in intervals[1:]:
+        if start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return merged
+
+
+def _covered_by(intervals, moment) -> bool:
+    return any(start <= moment < end for start, end in intervals)
+
+
 def meat_coverage(schedule, shop, day: int) -> dict:
     """
     Sprawdza czy mięso jest pokryte przez cały dzień.
-    Wersja zoptymalizowana – analiza przedziałowa.
+
+    Rozróżnia pokrycie przez pełnoprawnych "mięsiarzy" (is_meat) od pokrycia
+    zastępczego przez osoby z flagą is_meat_light ("może stanąć na chwilę") -
+    to drugie liczy się jako pokrycie, ale jest zwracane osobno w
+    "light_ranges", żeby UI mogło to zaznaczyć jako ostrzeżenie, nie sukces.
     """
 
     open_hours = shop.get_open_hours_for_day(day)
     if not open_hours:
-        return {"ok": True, "gap": None}
+        return {"ok": True, "gap": None, "light_ranges": []}
 
     open_t = datetime.strptime(open_hours[0], FMT)
     close_t = datetime.strptime(open_hours[1], FMT)
 
-    intervals = []
+    real_intervals = []
+    light_intervals = []
 
-    # 🔹 zbierz przedziały dla pracowników z mięsem (w tym zastępczo "może na chwilę")
     for emp in schedule.employees:
         if not (emp.is_meat or emp.is_meat_light):
             continue
@@ -275,43 +310,54 @@ def meat_coverage(schedule, shop, day: int) -> dict:
         if start >= end:
             continue
 
-        intervals.append((start, end))
+        (real_intervals if emp.is_meat else light_intervals).append((start, end))
 
-    if not intervals:
-        return {
-            "ok": False,
-            "gap": (open_t.strftime(FMT), close_t.strftime(FMT))
-        }
+    real_merged = _merge_intervals(real_intervals)
+    light_merged = _merge_intervals(light_intervals)
 
-    # 🔹 sortujemy po czasie rozpoczęcia
-    intervals.sort(key=lambda x: x[0])
+    boundaries = {open_t, close_t}
+    for start, end in real_merged + light_merged:
+        if open_t < start < close_t:
+            boundaries.add(start)
+        if open_t < end < close_t:
+            boundaries.add(end)
+    points = sorted(boundaries)
 
-    current = open_t
+    gap_start = None
+    gap = None
+    light_start = None
+    light_ranges = []
 
-    for start, end in intervals:
+    for seg_start, seg_end in zip(points, points[1:]):
+        mid = seg_start + (seg_end - seg_start) / 2
+        real_cov = _covered_by(real_merged, mid)
+        light_cov = _covered_by(light_merged, mid)
 
-        # luka przed kolejnym przedziałem
-        if start > current:
-            return {
-                "ok": False,
-                "gap": (current.strftime(FMT), start.strftime(FMT))
-            }
+        if not real_cov and not light_cov:
+            if gap_start is None:
+                gap_start = seg_start
+            if light_start is not None:
+                light_ranges.append((light_start.strftime(FMT), seg_start.strftime(FMT)))
+                light_start = None
+            continue
 
-        # rozszerzamy pokrycie
-        if end > current:
-            current = end
+        # segment pokryty - zamykamy ewentualną otwartą lukę
+        if gap_start is not None and gap is None:
+            gap = (gap_start.strftime(FMT), seg_start.strftime(FMT))
 
-        if current >= close_t:
-            return {"ok": True, "gap": None}
+        if not real_cov and light_cov:
+            if light_start is None:
+                light_start = seg_start
+        elif light_start is not None:
+            light_ranges.append((light_start.strftime(FMT), seg_start.strftime(FMT)))
+            light_start = None
 
-    # jeśli po przejściu wszystkich nadal nie pokryliśmy
-    if current < close_t:
-        return {
-            "ok": False,
-            "gap": (current.strftime(FMT), close_t.strftime(FMT))
-        }
+    if gap_start is not None and gap is None:
+        gap = (gap_start.strftime(FMT), close_t.strftime(FMT))
+    if light_start is not None:
+        light_ranges.append((light_start.strftime(FMT), close_t.strftime(FMT)))
 
-    return {"ok": True, "gap": None}
+    return {"ok": gap is None, "gap": gap, "light_ranges": light_ranges}
 
 
 def rest_11h_violation(schedule: MonthSchedule, emp, day: int):

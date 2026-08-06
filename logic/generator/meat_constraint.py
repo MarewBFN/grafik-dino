@@ -13,12 +13,14 @@ def add_meat_constraint(
     SHIFT_CLOSE,
     soft=False,
     trace=None,
-    meat_light_penalties=None
+    meat_light_penalties=None,
+    shift_duty_sum=None
 ):
     if trace is not None:
         trace.log_constraint("meat", f"soft={soft}")
 
     violations = []
+    shift_duty_sum = shift_duty_sum or {}
 
     for d in trade_days:
 
@@ -42,20 +44,23 @@ def add_meat_constraint(
             and employees[e].is_meat
         )
 
+        # Budżet "mięsa tymczasowego" (is_meat_light) - twardo ograniczony do
+        # max 1h/dzień/osobę w build_meat_light_duty; tu tylko odczytujemy
+        # przydzielony budżet w oknie danej zmiany.
         meat_on_open_light = sum(
-            x[e, d, SHIFT_OPEN]
+            shift_duty_sum.get((e, d, SHIFT_OPEN), 0)
             for e in range(len(employees))
             if employees[e].is_meat_light
         )
 
         meat_on_close_light = sum(
-            x[e, d, SHIFT_CLOSE]
+            shift_duty_sum.get((e, d, SHIFT_CLOSE), 0)
             for e in range(len(employees))
             if employees[e].is_meat_light
         )
 
         meat_on_work_light = sum(
-            x[e, d, s]
+            shift_duty_sum.get((e, d, s), 0)
             for e in range(len(employees))
             for s in all_shifts
             if s not in (SHIFT_OPEN, SHIFT_CLOSE)
@@ -108,12 +113,14 @@ def add_meat_coverage_constraint(
     END_SHIFT_MAP,
     soft=False,
     trace=None,
-    meat_light_penalties=None
+    meat_light_penalties=None,
+    slot_duty_sum=None
 ):
     if trace is not None:
         trace.log_constraint("meat_coverage", f"soft={soft}")
 
     violations = []
+    slot_duty_sum = slot_duty_sum or {}
 
     for d in trade_days:
 
@@ -133,15 +140,13 @@ def add_meat_coverage_constraint(
 
             slot = t.strftime(fmt)
             meat_cover = []
-            meat_cover_light = []
 
             for e in range(len(employees)):
 
                 emp = employees[e]
-                if not (emp.is_meat or emp.is_meat_light):
+                if not emp.is_meat:
                     continue
 
-                target = meat_cover if emp.is_meat else meat_cover_light
                 shift_len = timedelta(hours=get_effective_daily_hours(emp, shop))
 
                 # OPEN
@@ -149,35 +154,43 @@ def add_meat_coverage_constraint(
                 end = start + shift_len
 
                 if start <= t < end:
-                    target.append(x[e, d, SHIFT_OPEN])
+                    meat_cover.append(x[e, d, SHIFT_OPEN])
 
                 # CLOSE
                 end = close_dt
                 start = end - shift_len
 
                 if start <= t < end:
-                    target.append(x[e, d, SHIFT_CLOSE])
+                    meat_cover.append(x[e, d, SHIFT_CLOSE])
 
                 # WORK od otwarcia
                 for shift, offset in START_SHIFT_MAP.items():
                     work_start = open_dt + timedelta(minutes=offset)
                     work_end = work_start + shift_len
                     if work_start <= t < work_end:
-                        target.append(x[e, d, shift])
+                        meat_cover.append(x[e, d, shift])
 
                 # WORK od zamknięcia
                 for shift, offset in END_SHIFT_MAP.items():
                     work_end = close_dt - timedelta(minutes=offset)
                     work_start = work_end - shift_len
                     if work_start <= t < work_end:
-                        target.append(x[e, d, shift])
+                        meat_cover.append(x[e, d, shift])
 
-            if not meat_cover and not meat_cover_light:
+            # Budżet "mięsa tymczasowego" (is_meat_light) na ten kwadrans -
+            # twardo ograniczony do max 1h/dzień/osobę w build_meat_light_duty.
+            light_terms = [
+                slot_duty_sum[(e, d, slot)]
+                for e in range(len(employees))
+                if employees[e].is_meat_light and (e, d, slot) in slot_duty_sum
+            ]
+            light_sum = sum(light_terms) if light_terms else 0
+
+            if not meat_cover and not light_terms:
                 t += timedelta(minutes=15)
                 continue
 
-            light_sum = sum(meat_cover_light) if meat_cover_light else 0
-            if meat_light_penalties is not None and meat_cover_light:
+            if meat_light_penalties is not None and light_terms:
                 meat_light_penalties.append(light_sum)
 
             if not soft:

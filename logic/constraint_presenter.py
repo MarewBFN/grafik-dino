@@ -32,6 +32,7 @@ class ConstraintPresenter:
             return view
 
         messages = []
+        warn_messages = []
         for v in self.violations:
             if v.day != day:
                 continue
@@ -41,10 +42,15 @@ class ConstraintPresenter:
                 messages.append(v.message)
             elif key == "meat" and v.type == "meat_coverage":
                 messages.append(v.message)
+            elif key == "meat" and v.type == "meat_light_coverage":
+                warn_messages.append(v.message)
 
         if messages:
             view.bg = theme.ERR_RED
             view.tooltip = "\n".join(messages)
+        elif warn_messages:
+            view.bg = theme.WARN_YELLOW
+            view.tooltip = "\n".join(warn_messages)
         else:
             view.bg = theme.BG_MAIN
 

@@ -669,7 +669,12 @@ class ScheduleGrid(QTableWidget):
                     display_text = str(total_afternoon)
                 elif key == "meat":
                     view = constraint_presenter.get_validation_cell_view("meat", day)
-                    display_text = "❌" if view.bg == theme.ERR_RED else "✅"
+                    if view.bg == theme.ERR_RED:
+                        display_text = "❌"
+                    elif view.bg == theme.WARN_YELLOW:
+                        display_text = "⚠️"
+                    else:
+                        display_text = "✅"
 
                 item = QTableWidgetItem(display_text)
                 item.setTextAlignment(Qt.AlignCenter)

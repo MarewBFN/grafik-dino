@@ -23,6 +23,7 @@ from logic.generator.rest_constraint import (
     add_rest_11h_constraint_simplified,
 )
 from logic.generator.meat_constraint import (add_meat_constraint, add_meat_coverage_constraint)
+from logic.generator.meat_light_budget import build_meat_light_duty
 from logic.generator.hours_constraint import (
     add_monthly_hours_constraint,
     add_balance_constraint
@@ -211,7 +212,17 @@ class AutoScheduleGenerator:
         add_one_shift_per_day_constraint(model, x, employees, days, self.ALL_SHIFTS, trace=trace)
 
         # Osoby is_meat_light: pula zapasowa dla obłożenia mięsa, używana tylko
-        # gdy brak innej możliwości - patrz waga "meat_light_usage" w objective.
+        # gdy brak innej możliwości. Budżet ich "mięsnego" czasu jest twardo
+        # ograniczony do max 1h/dzień/osobę (build_meat_light_duty) i ta sama
+        # pula (shift_duty_sum / slot_duty_sum) jest współdzielona przez
+        # wszystkie poniższe constrainty mięsne, żeby limit nie dało się obejść
+        # przez inny z nich. Waga "meat_light_usage" w objective dodatkowo
+        # zniechęca do używania ich, gdy jest dostępny prawdziwy "mięsiarz".
+        slot_duty_sum, shift_duty_sum = build_meat_light_duty(
+            model, x, employees, trade_days, self.shop,
+            self.SHIFT_OPEN, self.SHIFT_CLOSE,
+            self.START_SHIFT_MAP, self.END_SHIFT_MAP,
+        )
         meat_light_penalties = []
 
         open_violations = self._apply_policy(
@@ -222,7 +233,8 @@ class AutoScheduleGenerator:
                 min_open,
                 soft=False,
                 trace=trace,
-                meat_light_penalties=meat_light_penalties
+                meat_light_penalties=meat_light_penalties,
+                shift_duty_sum=shift_duty_sum
             ),
             soft_fn=lambda: add_fixed_staff_shift_constraints(
                 model, x, employees, trade_days,
@@ -230,7 +242,8 @@ class AutoScheduleGenerator:
                 min_open,
                 soft=True,
                 trace=trace,
-                meat_light_penalties=meat_light_penalties
+                meat_light_penalties=meat_light_penalties,
+                shift_duty_sum=shift_duty_sum
             )
         )
 
@@ -242,7 +255,8 @@ class AutoScheduleGenerator:
                 min_close,
                 soft=False,
                 trace=trace,
-                meat_light_penalties=meat_light_penalties
+                meat_light_penalties=meat_light_penalties,
+                shift_duty_sum=shift_duty_sum
             ),
             soft_fn=lambda: add_fixed_staff_shift_constraints(
                 model, x, employees, trade_days,
@@ -250,7 +264,8 @@ class AutoScheduleGenerator:
                 min_close,
                 soft=True,
                 trace=trace,
-                meat_light_penalties=meat_light_penalties
+                meat_light_penalties=meat_light_penalties,
+                shift_duty_sum=shift_duty_sum
             )
         )
 
@@ -397,11 +412,13 @@ class AutoScheduleGenerator:
             "meat",
             hard_fn=lambda: add_meat_constraint(
                 model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=False, trace=trace,
-                meat_light_penalties=meat_light_penalties
+                meat_light_penalties=meat_light_penalties,
+                shift_duty_sum=shift_duty_sum
             ),
             soft_fn=lambda: add_meat_constraint(
                 model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=True, trace=trace,
-                meat_light_penalties=meat_light_penalties
+                meat_light_penalties=meat_light_penalties,
+                shift_duty_sum=shift_duty_sum
             )
         )
 
@@ -409,7 +426,8 @@ class AutoScheduleGenerator:
             "meat_coverage",
             hard_fn=lambda: add_meat_coverage_constraint(
                 model, x, employees, trade_days, self.shop, self.SHIFT_OPEN, self.SHIFT_CLOSE, self.START_SHIFT_MAP, self.END_SHIFT_MAP, soft=False, trace=trace,
-                meat_light_penalties=meat_light_penalties
+                meat_light_penalties=meat_light_penalties,
+                slot_duty_sum=slot_duty_sum
             ),
             soft_fn=lambda: add_meat_coverage_constraint(
                 model, x, employees, trade_days, self.shop,
@@ -419,7 +437,8 @@ class AutoScheduleGenerator:
                 self.END_SHIFT_MAP,
                 soft=True,
                 trace=trace,
-                meat_light_penalties=meat_light_penalties
+                meat_light_penalties=meat_light_penalties,
+                slot_duty_sum=slot_duty_sum
             )
         )
 

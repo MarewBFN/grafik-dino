@@ -7,13 +7,15 @@ def add_fixed_staff_shift_constraints(
     min_staff,
     soft=False,
     trace=None,
-    meat_light_penalties=None
+    meat_light_penalties=None,
+    shift_duty_sum=None
 ):
     if trace is not None:
         trace.log_constraint("fixed_staff_shift", f"shift={shift_type} min_staff={min_staff} soft={soft}")
 
     print(f"[CONSTRAINT] fixed_staff shift={shift_type} min={min_staff} soft={soft}")
     violations = []
+    shift_duty_sum = shift_duty_sum or {}
 
     for d in trade_days:
         total_staff = sum(
@@ -26,8 +28,11 @@ def add_fixed_staff_shift_constraints(
             if employees[e].is_opener
         )
 
+        # Budżet "mięsa tymczasowego" (is_meat_light) - ograniczony twardo do
+        # max 1h/dzień/osobę gdzie indziej (build_meat_light_duty), tu tylko
+        # sumujemy przydzielony budżet w oknie tej zmiany.
         meat_light_staff = sum(
-            x[e, d, shift_type]
+            shift_duty_sum.get((e, d, shift_type), 0)
             for e in range(len(employees))
             if employees[e].is_meat_light
         )
