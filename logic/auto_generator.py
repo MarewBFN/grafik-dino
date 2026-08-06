@@ -144,6 +144,12 @@ class AutoScheduleGenerator:
         if not is_fix:
             self.schedule.clear_unlocked_days()
 
+        # Kierowniczki (is_manager) mają sztywny, cotygodniowy grafik -
+        # odświeżamy go przed każdym generowaniem, żeby nikt nie musiał
+        # wpisywać tych godzin ręcznie ani pilnować, że ich dane przetrwały.
+        from logic.manager_schedule import apply_all_manager_schedules
+        apply_all_manager_schedules(self.schedule, self.shop)
+
         for emp in self.schedule.employees:
             object.__setattr__(emp, '_orig_daily_hours', emp.daily_hours)
 

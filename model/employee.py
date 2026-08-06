@@ -20,6 +20,7 @@ class Employee:
     is_opener: bool = field(default=False, compare=False)
     is_meat: bool = field(default=False, compare=False)
     is_meat_light: bool = field(default=False, compare=False)
+    is_manager: bool = field(default=False, compare=False)
     no_night: bool = field(default=False, compare=False)
     monthly_target_hours: int = field(default=160, compare=False)
     daily_hours: int = field(default=8, compare=False)

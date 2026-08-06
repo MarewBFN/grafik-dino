@@ -87,10 +87,18 @@ class ScheduleController:
     def add_employee(self, emp):
         self.snapshot()
         self.schedule.add_employee(emp)
+        self._apply_manager_schedule_if_needed(emp)
 
     def replace_employee(self, old, new):
         self.snapshot()
         self.schedule.replace_employee(old, new)
+        self._apply_manager_schedule_if_needed(new)
+
+    def _apply_manager_schedule_if_needed(self, emp):
+        if not getattr(emp, "is_manager", False):
+            return
+        from logic.manager_schedule import apply_manager_schedule
+        apply_manager_schedule(self.schedule, self.shop_config, emp)
 
     def get_day(self, emp, day):
         return self.schedule.get_day(emp, day)

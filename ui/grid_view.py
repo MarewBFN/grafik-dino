@@ -1,8 +1,9 @@
 import calendar
+import math
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QSize, QTimer
-from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPixmap, QPen, qGray
+from PySide6.QtCore import Qt, QPointF, QSize, QTimer
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPixmap, QPen, QPolygonF, qGray
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -49,6 +50,31 @@ def _grayed_icon(icon: QIcon, size: int = 64, opacity: float = 0.55) -> QIcon:
             color.setRgb(gray, gray, gray, int(color.alpha() * opacity))
             image.setPixelColor(x, y, color)
     return QIcon(QPixmap.fromImage(image))
+
+
+def _build_star_icon(size: int = 64, fill_color: str = "#f4b400", outline_color: str = "#8a6100") -> QIcon:
+    """Draw a simple 5-point star badge for the manager flag (no asset file)."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+
+    center = size / 2
+    outer_r = size * 0.46
+    inner_r = outer_r * 0.42
+    points = []
+    for i in range(10):
+        angle = math.pi / 2 + i * math.pi / 5
+        r = outer_r if i % 2 == 0 else inner_r
+        points.append(QPointF(center + r * math.cos(angle), center - r * math.sin(angle)))
+
+    painter.setPen(QPen(QColor(outline_color), max(1.0, size * 0.04)))
+    painter.setBrush(QBrush(QColor(fill_color)))
+    painter.drawPolygon(QPolygonF(points))
+    painter.end()
+
+    return QIcon(pixmap)
 
 
 def employment_fraction_label(employee):
@@ -193,6 +219,7 @@ class ScheduleGrid(QTableWidget):
         self.icon_meat = QIcon(resource_path("assets/meat.png"))
         self.icon_open_meat = QIcon(resource_path("assets/keymeat.png"))
         self.icon_meat_light = _grayed_icon(self.icon_meat)
+        self.icon_manager = _build_star_icon()
 
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -411,31 +438,30 @@ class ScheduleGrid(QTableWidget):
         item.setData(Qt.UserRole, emp)
         item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
 
-        if emp.is_opener and (emp.is_meat or emp.is_meat_light):
-            size = 32
-            meat_icon = self.icon_meat if emp.is_meat else self.icon_meat_light
+        badges = []
+        if emp.is_opener:
+            badges.append(self.icon_open)
+        if emp.is_meat:
+            badges.append(self.icon_meat)
+        elif emp.is_meat_light:
+            badges.append(self.icon_meat_light)
+        if emp.is_manager:
+            badges.append(self.icon_manager)
 
-            pixmap = QPixmap(size * 2, size)
+        if len(badges) == 1:
+            item.setIcon(badges[0])
+        elif badges:
+            size = 32
+            pixmap = QPixmap(size * len(badges), size)
             pixmap.fill(Qt.transparent)
 
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.Antialiasing)
-
-            painter.drawPixmap(0, 0, self.icon_open.pixmap(size, size))
-            painter.drawPixmap(size, 0, meat_icon.pixmap(size, size))
-
+            for i, icon in enumerate(badges):
+                painter.drawPixmap(size * i, 0, icon.pixmap(size, size))
             painter.end()
 
             item.setIcon(QIcon(pixmap))
-
-        elif emp.is_opener:
-            item.setIcon(self.icon_open)
-
-        elif emp.is_meat:
-            item.setIcon(self.icon_meat)
-
-        elif emp.is_meat_light:
-            item.setIcon(self.icon_meat_light)
 
         font = QFont()
         font.setBold(True)
