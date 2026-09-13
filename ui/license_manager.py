@@ -7,7 +7,35 @@ import getpass
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 LICENSE_FILE = "license.json"
+MACHINE_ID_FILE = "machine_id.json"
 SECRET = "dupadupa"
+
+
+def _get_or_create_persisted_node() -> str:
+    """Return a random id that is generated once and reused on every call.
+
+    Used as a fallback for uuid.getnode() below, so it must be persisted
+    to disk to stay stable across process restarts.
+    """
+    if os.path.exists(MACHINE_ID_FILE):
+        try:
+            with open(MACHINE_ID_FILE, "r") as f:
+                node = json.load(f).get("node")
+                if node:
+                    return node
+        except Exception:
+            pass
+
+    import uuid as uuid_module
+    node = uuid_module.uuid4().hex
+
+    try:
+        with open(MACHINE_ID_FILE, "w") as f:
+            json.dump({"node": node}, f)
+    except Exception:
+        pass
+
+    return node
 
 
 def build_machine_fingerprint() -> str:
@@ -31,7 +59,17 @@ def build_machine_fingerprint() -> str:
     # but still unique enough per machine.
     try:
         import uuid
-        parts.append(uuid.getnode().__str__())
+        node = uuid.getnode()
+        if (node >> 40) & 0x01:
+            # uuid.getnode() couldn't find a real network adapter, so it
+            # returned a random 48-bit number (RFC 4122 multicast bit set)
+            # that changes on every single process run. Using it as-is
+            # would make the fingerprint — and therefore the license key —
+            # change every time the app restarts. Fall back to an id we
+            # persist ourselves so it stays stable instead.
+            parts.append(_get_or_create_persisted_node())
+        else:
+            parts.append(str(node))
     except Exception:
         pass
 

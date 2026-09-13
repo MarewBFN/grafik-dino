@@ -1526,10 +1526,14 @@ class MainWindow(QMainWindow):
         self._launch_installer_and_quit(path)
 
     def _launch_installer_and_quit(self, installer_path):
-        import subprocess
-
         try:
-            subprocess.Popen([installer_path])
+            # Instalator (Inno Setup) wymaga uprawnień administratora
+            # (domyślne PrivilegesRequired=admin), więc trzeba go uruchomić
+            # przez ShellExecute (os.startfile), żeby Windows pokazał prompt
+            # UAC. subprocess.Popen woła CreateProcess bezpośrednio, które
+            # nie potrafi podnieść uprawnień i kończy się błędem/brakiem
+            # efektu — dla użytkownika wyglądało to jak zawieszenie programu.
+            os.startfile(installer_path)
         except OSError as e:
             QMessageBox.warning(
                 self,
