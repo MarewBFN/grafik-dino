@@ -1130,11 +1130,6 @@ class MainWindow(QMainWindow):
         if msg.clickedButton() == btn_open:
             QDesktopServices.openUrl(QUrl("https://madebykewin.pl"))
 
-        def open_link():
-            QDesktopServices.openUrl(QUrl("https://madebykewin.pl"))
-
-        msg.exec()
-
     def _try_load_last_project(self):
         if not os.path.exists("last_project.json"):
             return
