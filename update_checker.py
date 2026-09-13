@@ -62,6 +62,7 @@ def check_for_updates():
             "available": True,
             "version": latest,
             "url": download_url,
+            "notes": (data.get("body") or "").strip(),
         }
 
     except Exception as e:

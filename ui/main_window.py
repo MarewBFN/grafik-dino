@@ -1499,12 +1499,22 @@ class MainWindow(QMainWindow):
                     )
             return
 
-        reply = QMessageBox.question(
-            self,
-            "Dostępna aktualizacja",
-            f"Dostępna jest nowa wersja programu ({result['version']}).\n\nPobrać i zainstalować?",
-            QMessageBox.Yes | QMessageBox.No
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Question)
+        msg.setWindowTitle("Dostępna aktualizacja")
+        msg.setText(
+            f"Dostępna jest nowa wersja programu ({result['version']}).\n\nPobrać i zainstalować?"
         )
+        # Opis wydania z GitHub Releases (jeśli autor go wypełnił) trafia pod
+        # rozwijany przycisk "Show Details...", żeby nie zaśmiecać głównego
+        # okna długim changelogiem.
+        notes = result.get("notes")
+        if notes:
+            msg.setDetailedText(notes)
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.Yes)
+
+        reply = msg.exec()
 
         if reply == QMessageBox.Yes:
             self._start_update_download(result["url"])
