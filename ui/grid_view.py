@@ -3,7 +3,7 @@ import math
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QPointF, QRectF, QSize, QTimer
-from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPixmap, QPen, QPolygonF, qGray
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QImage, QKeySequence, QPainter, QPixmap, QPen, QPolygonF, qGray
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -951,6 +951,26 @@ class ScheduleGrid(QTableWidget):
             if event.key() == Qt.Key_W:
                 self.controller.set_day_free(emp, day)
                 self._sync_and_keep_position(row, col)
+                return
+
+            if event.matches(QKeySequence.Copy):
+                ds = self.schedule.get_day(emp, day)
+                self._clipboard_day = {
+                    "start": ds.start,
+                    "end": ds.end,
+                    "is_leave": ds.is_leave,
+                    "is_sick": getattr(ds, "is_sick", False),
+                }
+                if self.main_window:
+                    self.main_window.statusBar().showMessage("Skopiowano dzień.", 2000)
+                return
+
+            if event.matches(QKeySequence.Paste):
+                if self._clipboard_day:
+                    self.controller.set_day_hours(
+                        emp, day, self._clipboard_day["start"], self._clipboard_day["end"]
+                    )
+                    self._sync_and_keep_position(row, col)
                 return
 
         super().keyPressEvent(event)

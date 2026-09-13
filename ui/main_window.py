@@ -2,7 +2,7 @@ import os
 from datetime import date
 
 from PySide6.QtCore import Qt, QThread, Signal, QObject, QTimer, QUrl
-from PySide6.QtGui import QPainter, QColor, QImage, QDesktopServices
+from PySide6.QtGui import QPainter, QColor, QImage, QDesktopServices, QKeySequence
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog, QPrintPreviewDialog
 import tempfile
 from PySide6.QtWidgets import (
@@ -545,8 +545,11 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction("Zamknij", self.close)
 
-        edit_menu.addAction("Cofnij", self._undo)
-        edit_menu.addAction("Ponów", self._redo)
+        undo_action = edit_menu.addAction("Cofnij", self._undo)
+        undo_action.setShortcut(QKeySequence.Undo)
+
+        redo_action = edit_menu.addAction("Ponów", self._redo)
+        redo_action.setShortcut(QKeySequence.Redo)
 
         edit_menu.addSeparator()
         edit_menu.addAction("Wyczyść grafik", self._clear_schedule)
