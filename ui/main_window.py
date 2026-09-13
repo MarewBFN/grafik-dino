@@ -240,7 +240,7 @@ class MainWindow(QMainWindow):
         hero_layout.addWidget(self.title_row_widget)
 
         self.btn_change_date = QPushButton("🗓 Zmień datę")
-        self.btn_change_date.setStyleSheet("color: #0078d4; text-align: left; background: transparent; border: none; text-decoration: underline;")
+        self.btn_change_date.setObjectName("linkButton")
         self.btn_change_date.setCursor(Qt.PointingHandCursor)
         self.btn_change_date.setFixedWidth(120)
         self.btn_change_date.clicked.connect(self._enter_edit_date_mode)
@@ -319,7 +319,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self.btn_generate)
         self.generate_limit_label = QLabel("")
-        self.generate_limit_label.setStyleSheet("color: #777; font-size: 11px;")
+        self.generate_limit_label.setObjectName("mutedHint")
         layout.addWidget(self.generate_limit_label)
 
         self._add_section_header(layout, "WIDOK I TRYBY")
@@ -350,7 +350,7 @@ class MainWindow(QMainWindow):
         settlement_layout.addWidget(self.btn_settlement_toggle)
 
         self.settlement_info_label = QLabel("Edytujesz teraz okres rozliczeniowy")
-        self.settlement_info_label.setStyleSheet("color: #b45309; font-size: 11px; font-style: italic;")
+        self.settlement_info_label.setObjectName("warningHint")
         self.settlement_info_label.setWordWrap(True)
         self.settlement_info_label.hide()
         settlement_layout.addWidget(self.settlement_info_label)
@@ -370,32 +370,20 @@ class MainWindow(QMainWindow):
         if self.demo.is_demo:
             self._add_section_divider(layout)
             self.demo_label = QLabel("Wersja demonstracyjna")
-            self.demo_label.setStyleSheet("color: #d9534f; font-size: 11px; font-weight: bold;")
+            self.demo_label.setObjectName("dangerHint")
             layout.addWidget(self.demo_label)
 
             self.btn_buy = QPushButton("Zakup pełną wersję")
-            self.btn_buy.setStyleSheet("""
-                QPushButton {
-                    background-color: #28a745;
-                    color: white;
-                    font-weight: bold;
-                    border: none;
-                    padding: 6px;
-                    border-radius: 4px;
-                }
-                QPushButton:hover {
-                    background-color: #218838;
-                }
-            """)
+            self.btn_buy.setObjectName("successButton")
             self.btn_buy.clicked.connect(self._open_buy_page)
             layout.addWidget(self.btn_buy)
 
         self.user_id_label = QLabel(f"ID użytkownika: {self.user_id}")
-        self.user_id_label.setStyleSheet("color: #777; font-size: 11px;")
+        self.user_id_label.setObjectName("mutedHint")
         layout.addWidget(self.user_id_label)
 
         self.version_label = QLabel(f"Wersja: {APP_VERSION}")
-        self.version_label.setStyleSheet("color: #777; font-size: 11px;")
+        self.version_label.setObjectName("mutedHint")
         layout.addWidget(self.version_label)
 
         return panel
@@ -413,7 +401,7 @@ class MainWindow(QMainWindow):
 
         self.quick_info_label = QLabel("Tryb szybki włączony. Ustaw preferowany typ zmiany i nanieś na grafik jednym kliknięciem.")
         self.quick_info_label.setWordWrap(True)
-        self.quick_info_label.setStyleSheet("color: #555; font-size: 11px; font-style: italic;")
+        self.quick_info_label.setObjectName("quickInfoHint")
         layout.addWidget(self.quick_info_label)
 
         # --- przyciski: siatka 2x3 (Praca/Rano/Popo, Wolne/Urlop/L4) ---

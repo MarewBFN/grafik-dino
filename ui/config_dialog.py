@@ -66,49 +66,9 @@ class ConfigDialog(QDialog):
         self.setModal(True)
         self.resize(720, 640)
 
-        # Wspólny styl dla wszystkich kart i elementów w dialogu.
-        # Kolory są ustawione jawnie na każdym selektorze (a nie tylko
-        # nadpisane tam, gdzie się różnią od reszty apki) — to okno ma
-        # własny setStyleSheet(), więc nie może liczyć na to, że kolor
-        # tekstu odziedziczy z arkusza stylów aplikacji; bez tego część
-        # etykiet i checkboxów renderowała się białym tekstem na jasnym tle.
-        self.setStyleSheet("""
-            QDialog {
-                background: #f5f7fb;
-            }
-            QDialog, QLabel, QCheckBox, QComboBox, QSpinBox, QTabBar::tab {
-                color: #1f2937;
-            }
-            QFrame#configCard {
-                background-color: #ffffff;
-                border: 1px solid #d7e0ea;
-                border-radius: 10px;
-                padding: 10px;
-                margin-bottom: 2px;
-            }
-            QFrame#configCard:hover {
-                background-color: #eff6ff;
-                border-color: #1d4ed8;
-            }
-            QCheckBox {
-                font-size: 14px;
-                font-weight: 600;
-                spacing: 12px;
-            }
-            QCheckBox::indicator {
-                width: 22px;
-                height: 22px;
-            }
-            QLabel#groupLabel {
-                font-weight: 700;
-                color: #1d4ed8;
-                font-size: 13px;
-                margin-top: 10px;
-                border-bottom: 1px solid #e7edf6;
-                padding-bottom: 4px;
-            }
-        """)
-
+        # Wygląd (karty, checkboxy, kolory) pochodzi teraz w całości ze
+        # wspólnego arkusza stylów aplikacji (ui/theme.py) — to okno nie
+        # definiuje już własnego, osobnego setStyleSheet().
         self._build_ui()
         QTimer.singleShot(0, self._maybe_show_tutorial)
 
@@ -226,29 +186,27 @@ class ConfigDialog(QDialog):
         form_gen.addRow("Maksymalna liczba dni pod rząd:", self.max_consecutive)
         layout.addLayout(form_gen)
 
-        # Karta Checkboxa (ten sam styl co niedziele)
-        fulltime_card = QFrame()
-        fulltime_card.setObjectName("configCard")
-        fulltime_layout = QHBoxLayout(fulltime_card)
+        # Jedna karta na obie flagi zamiast osobnej ramki na każdy checkbox.
+        flags_card = QFrame()
+        flags_card.setObjectName("configCard")
+        flags_layout = QVBoxLayout(flags_card)
+        flags_layout.setSpacing(10)
+
         self.force_fulltime_845 = QCheckBox("Wymuś 8h 30 min dla pracowników pełnoetatowych")
         self.force_fulltime_845.setCursor(Qt.PointingHandCursor)
         self.force_fulltime_845.setChecked(
             self.shop_config.constraints.get("force_fulltime_845", True)
         )
-        fulltime_layout.addWidget(self.force_fulltime_845)
-        layout.addWidget(fulltime_card)
+        flags_layout.addWidget(self.force_fulltime_845)
 
-        # Karta dla podświetlania limitu dni pod rząd
-        hl_card = QFrame()
-        hl_card.setObjectName("configCard")
-        hl_layout = QHBoxLayout(hl_card)
         self.hl_consecutive = QCheckBox("Podświetlaj przekroczenie limitu dni pod rząd")
         self.hl_consecutive.setCursor(Qt.PointingHandCursor)
         self.hl_consecutive.setChecked(
             self.shop_config.constraints.get("highlight_max_consecutive", False)
         )
-        hl_layout.addWidget(self.hl_consecutive)
-        layout.addWidget(hl_card)
+        flags_layout.addWidget(self.hl_consecutive)
+
+        layout.addWidget(flags_card)
 
         # --- Sekcja: Obsada ---
         staff_label = QLabel("MINIMALNA OBSADA PRACOWNIKÓW")

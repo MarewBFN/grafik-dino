@@ -124,6 +124,77 @@ QFrame#panelCard, QFrame#contentCard {
     border-radius: 20px;
 }
 
+QFrame#configCard {
+    background-color: #ffffff;
+    border: 1px solid #d7e0ea;
+    border-radius: 10px;
+    padding: 10px;
+}
+
+QLabel#groupLabel {
+    font-weight: 700;
+    color: #1d4ed8;
+    font-size: 13px;
+    margin-top: 10px;
+    border-bottom: 1px solid #e7edf6;
+    padding-bottom: 4px;
+}
+
+QPushButton#dangerButton {
+    background-color: #fdf2f2;
+    color: #b00020;
+    border: 1px solid #f8b4b4;
+}
+
+QPushButton#dangerButton:hover {
+    background-color: #b00020;
+    color: #ffffff;
+}
+
+QPushButton#successButton {
+    background-color: #28a745;
+    color: #ffffff;
+    font-weight: bold;
+    border: none;
+    padding: 6px;
+    border-radius: 4px;
+}
+
+QPushButton#successButton:hover {
+    background-color: #218838;
+}
+
+QPushButton#linkButton {
+    color: #1d4ed8;
+    text-align: left;
+    background: transparent;
+    border: none;
+    text-decoration: underline;
+}
+
+QLabel#mutedHint {
+    color: #6b7280;
+    font-size: 11px;
+}
+
+QLabel#quickInfoHint {
+    color: #6b7280;
+    font-size: 11px;
+    font-style: italic;
+}
+
+QLabel#warningHint {
+    color: #b45309;
+    font-size: 11px;
+    font-style: italic;
+}
+
+QLabel#dangerHint {
+    color: #d9534f;
+    font-size: 11px;
+    font-weight: bold;
+}
+
 QFrame#sidebarHero {
     background: #eaf0fd;
     border: 1px solid #d7e5fb;
@@ -244,6 +315,10 @@ QLineEdit, QSpinBox, QComboBox, QTimeEdit, QDateEdit, QTextEdit, QPlainTextEdit 
     selection-background-color: #dbeafe;
 }
 
+QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QTimeEdit:focus, QDateEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    border: 2px solid #1d4ed8;
+}
+
 QComboBox::drop-down {
     border: 0px;
     width: 24px;
@@ -318,6 +393,44 @@ QTabBar::tab:selected {
 }
 
 QCheckBox {
-    spacing: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    spacing: 12px;
+    background: transparent;
+    border-radius: 6px;
+    padding: 4px 6px;
 }
+
+QCheckBox:hover {
+    background: #eff6ff;
+}
+
+QCheckBox::indicator {
+    width: 20px;
+    height: 20px;
+    border: 1.5px solid #cfd8e3;
+    border-radius: 5px;
+    background: #ffffff;
+}
+
+QCheckBox::indicator:hover {
+    border-color: #1d4ed8;
+}
+"""
+
+# Kolor zaznaczenia checkboxa dorysowujemy własną ikonką (assets/checkbox_check.png),
+# bo Qt Style Sheets nie generują domyślnego "ptaszka" na wystylizowanym
+# ::indicator, a data:-URI dla obrazków nie działa w tej wersji Qt — stąd
+# potrzebny prawdziwy plik, ścieżka rozwiązywana przez resource_path()
+# (żeby też działało w spakowanej wersji .exe, nie tylko z kodu źródłowego).
+from utils import resource_path as _resource_path
+
+_CHECK_ICON_PATH = _resource_path("assets/checkbox_check.png").replace("\\", "/")
+
+APP_STYLESHEET += f"""
+QCheckBox::indicator:checked {{
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    image: url({_CHECK_ICON_PATH});
+}}
 """

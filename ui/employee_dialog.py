@@ -27,37 +27,7 @@ class EmployeeDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(460)
 
-        # Stylistyka spójna z ConfigDialog
-        self.setStyleSheet("""
-            QFrame#configCard {
-                background-color: #f9f9f9;
-                border: 1px solid #ddd;
-                border-radius: 8px;
-                padding: 5px;
-            }
-            QFrame#configCard:hover {
-                background-color: #f0f7ff;
-                border-color: #0078d4;
-            }
-            QCheckBox {
-                font-size: 14px;
-                font-weight: bold;
-                spacing: 12px;
-            }
-            QCheckBox::indicator {
-                width: 22px;
-                height: 22px;
-            }
-            QLineEdit, QSpinBox, QComboBox {
-                padding: 6px;
-                border: 1px solid #ccc;
-                border-radius: 4px;
-            }
-            QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
-                border: 2px solid #0078d4;
-            }
-        """)
-
+        # Wygląd pochodzi ze wspólnego arkusza stylów aplikacji (ui/theme.py).
         self._build_ui()
         self._fill_from_employee()
 
@@ -97,27 +67,20 @@ class EmployeeDialog(QDialog):
 
         root.addLayout(form)
 
-        # --- Karty Checkboxów ---
+        # --- Role i ograniczenia: jedna karta zamiast osobnej ramki na checkbox ---
+        flags_card = QFrame()
+        flags_card.setObjectName("configCard")
+        flags_layout = QVBoxLayout(flags_card)
+        flags_layout.setSpacing(10)
+
         self.is_opener = QCheckBox("Pracownik otwarcia")
-        opener_card = QFrame()
-        opener_card.setObjectName("configCard")
-        opener_layout = QHBoxLayout(opener_card)
-        opener_layout.addWidget(self.is_opener)
-        root.addWidget(opener_card)
+        flags_layout.addWidget(self.is_opener)
 
         self.is_meat = QCheckBox("Obsługa stoiska mięsnego")
-        meat_card = QFrame()
-        meat_card.setObjectName("configCard")
-        meat_layout = QHBoxLayout(meat_card)
-        meat_layout.addWidget(self.is_meat)
-        root.addWidget(meat_card)
+        flags_layout.addWidget(self.is_meat)
 
         self.is_meat_light = QCheckBox("mooooże stanąć na chwilę na mięsie")
-        meat_light_card = QFrame()
-        meat_light_card.setObjectName("configCard")
-        meat_light_layout = QHBoxLayout(meat_light_card)
-        meat_light_layout.addWidget(self.is_meat_light)
-        root.addWidget(meat_light_card)
+        flags_layout.addWidget(self.is_meat_light)
 
         self.is_meat.toggled.connect(self._on_meat_toggled)
         self.is_meat_light.toggled.connect(self._on_meat_light_toggled)
@@ -125,28 +88,16 @@ class EmployeeDialog(QDialog):
         self.is_manager = QCheckBox(
             "Kierowniczka (sztywny grafik: pon. wolne, wt-pt 7:00-15:00, sob 6:00-14:00)"
         )
-        manager_card = QFrame()
-        manager_card.setObjectName("configCard")
-        manager_layout = QHBoxLayout(manager_card)
-        manager_layout.addWidget(self.is_manager)
-        root.addWidget(manager_card)
-
+        flags_layout.addWidget(self.is_manager)
         self.is_manager.toggled.connect(self._on_manager_toggled)
 
         self.no_night = QCheckBox("Nie pracuje w godzinach nocnych (przed 6:00 i po 22:00)")
-        night_card = QFrame()
-        night_card.setObjectName("configCard")
-        night_layout = QHBoxLayout(night_card)
-        night_layout.addWidget(self.no_night)
-        root.addWidget(night_card)
+        flags_layout.addWidget(self.no_night)
 
         self.no_afternoon = QCheckBox("Nie pracuje na popołudniu (tylko zmiany poranne)")
-        afternoon_card = QFrame()
-        afternoon_card.setObjectName("configCard")
-        afternoon_layout = QHBoxLayout(afternoon_card)
-        afternoon_layout.addWidget(self.no_afternoon)
-        root.addWidget(afternoon_card)
+        flags_layout.addWidget(self.no_afternoon)
 
+        root.addWidget(flags_card)
         root.addStretch()
 
         # --- Dolny pasek przycisków ---
@@ -155,20 +106,8 @@ class EmployeeDialog(QDialog):
         # Przycisk Usuń (w lewym rogu)
         if self.employee:
             self.delete_btn = QPushButton("Usuń pracownika")
+            self.delete_btn.setObjectName("dangerButton")
             self.delete_btn.setMinimumHeight(34)
-            self.delete_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #fdf2f2;
-                    color: #b00020;
-                    border: 1px solid #f8b4b4;
-                    border-radius: 4px;
-                    padding: 0 15px;
-                }
-                QPushButton:hover {
-                    background-color: #b00020;
-                    color: white;
-                }
-            """)
             self.delete_btn.clicked.connect(self._delete_employee)
             button_row.addWidget(self.delete_btn)
         
@@ -177,6 +116,7 @@ class EmployeeDialog(QDialog):
 
         # Przyciski Zapisz / Anuluj
         cancel_btn = QPushButton("Anuluj")
+        cancel_btn.setObjectName("secondaryButton")
         cancel_btn.setMinimumHeight(34)
         cancel_btn.setMinimumWidth(80)
         cancel_btn.clicked.connect(self.reject)
