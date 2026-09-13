@@ -3,7 +3,7 @@
 ; Non-commercial use only
 
 #define MyAppName "Dingo! - narzędzie do grafików pracy"
-#define MyAppVersion "1.1.8"
+#define MyAppVersion "1.1.9"
 #define MyAppPublisher "Kewin Madej"
 #define MyAppURL "https://www.madebykewin.pl"
 #define MyAppExeName "Dingo! - narzędzie do grafików pracy.exe"
@@ -37,8 +37,11 @@ DisableProgramGroupPage=yes
 CloseApplications=yes
 CloseApplicationsFilter={#MyAppExeName}
 RestartApplications=yes
-; Uncomment the following line to run in non administrative install mode (install for current user only).
-;PrivilegesRequired=lowest
+; Instalator pisze do {localappdata} (per-user), ale przy PrivilegesRequired=admin
+; elevacja moze zajsc na innym koncie administratora niz zalogowany uzytkownik -
+; wtedy {localappdata} wskazuje na profil TEGO admina, a nie uzytkownika programu,
+; wiec aktualizacja instaluje sie w innym miejscu i skrot dalej wskazuje na stara wersje.
+PrivilegesRequired=lowest
 OutputBaseFilename=DingoSetup
 SetupIconFile=C:\Users\kewi1\Desktop\madebykewin\Grafik dino V2\dingo_icon.ico
 SolidCompression=yes
