@@ -363,7 +363,6 @@ class MainWindow(QMainWindow):
         settlement_layout.addWidget(self.btn_settlement_balance)
 
         layout.addWidget(self.settlement_section)
-        self.settlement_section.hide()
 
         layout.addStretch(1)
 
@@ -557,7 +556,10 @@ class MainWindow(QMainWindow):
 
     def _update_settlement_section_visibility(self):
         is_generated = bool(self.schedule and getattr(self.schedule, "is_generated", False))
-        self.settlement_section.setVisible(is_generated)
+        self.btn_settlement_toggle.setEnabled(is_generated)
+        self.btn_settlement_toggle.setToolTip(
+            "" if is_generated else "Najpierw należy wygenerować grafik."
+        )
 
         if not is_generated and self.settlement_mode_active:
             self.btn_settlement_toggle.setChecked(False)
