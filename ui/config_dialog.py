@@ -1,6 +1,7 @@
 import calendar
+import os
 
-from PySide6.QtCore import Qt, QTime
+from PySide6.QtCore import Qt, QTime, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -19,7 +20,10 @@ from PySide6.QtWidgets import (
     QFrame,
 )
 from ui.time_input import TimeInputWidget
+from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from model.constraint_policy import ConstraintPolicy
+
+CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
 
 
 POLICY_OPTIONS = (
@@ -62,22 +66,33 @@ class ConfigDialog(QDialog):
         self.setModal(True)
         self.resize(720, 640)
 
-        # Wspólny styl dla wszystkich kart i elementów w dialogu
+        # Wspólny styl dla wszystkich kart i elementów w dialogu.
+        # Kolory są ustawione jawnie na każdym selektorze (a nie tylko
+        # nadpisane tam, gdzie się różnią od reszty apki) — to okno ma
+        # własny setStyleSheet(), więc nie może liczyć na to, że kolor
+        # tekstu odziedziczy z arkusza stylów aplikacji; bez tego część
+        # etykiet i checkboxów renderowała się białym tekstem na jasnym tle.
         self.setStyleSheet("""
+            QDialog {
+                background: #f5f7fb;
+            }
+            QDialog, QLabel, QCheckBox, QComboBox, QSpinBox, QTabBar::tab {
+                color: #1f2937;
+            }
             QFrame#configCard {
-                background-color: #f9f9f9;
-                border: 1px solid #ddd;
-                border-radius: 8px;
+                background-color: #ffffff;
+                border: 1px solid #d7e0ea;
+                border-radius: 10px;
                 padding: 10px;
                 margin-bottom: 2px;
             }
             QFrame#configCard:hover {
-                background-color: #f0f7ff;
-                border-color: #0078d4;
+                background-color: #eff6ff;
+                border-color: #1d4ed8;
             }
             QCheckBox {
                 font-size: 14px;
-                font-weight: bold;
+                font-weight: 600;
                 spacing: 12px;
             }
             QCheckBox::indicator {
@@ -85,15 +100,17 @@ class ConfigDialog(QDialog):
                 height: 22px;
             }
             QLabel#groupLabel {
-                font-weight: bold;
-                color: #0078d4;
+                font-weight: 700;
+                color: #1d4ed8;
                 font-size: 13px;
                 margin-top: 10px;
-                border-bottom: 1px solid #eee;
+                border-bottom: 1px solid #e7edf6;
+                padding-bottom: 4px;
             }
         """)
 
         self._build_ui()
+        QTimer.singleShot(0, self._maybe_show_tutorial)
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -102,7 +119,8 @@ class ConfigDialog(QDialog):
         title.setObjectName("sectionLabel")
         root.addWidget(title)
 
-        tabs = QTabWidget()
+        self.tabs = QTabWidget()
+        tabs = self.tabs
         root.addWidget(tabs, 1)
 
         tabs.addTab(self._build_hours_tab(), "Godziny otwarcia")
@@ -111,6 +129,7 @@ class ConfigDialog(QDialog):
 
         buttons = QDialogButtonBox()
         cancel_btn = QPushButton("Anuluj")
+        cancel_btn.setObjectName("secondaryButton")
         save_btn = QPushButton("Zapisz")
         save_btn.setObjectName("primaryButton")
         buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
@@ -156,7 +175,7 @@ class ConfigDialog(QDialog):
         layout.setSpacing(10)
 
         info = QLabel("Zaznacz niedziele handlowe w tym miesiącu:")
-        info.setStyleSheet("color: #666; margin-bottom: 5px;")
+        info.setStyleSheet("color: #6b7280; margin-bottom: 5px;")
         layout.addWidget(info)
 
         self.sunday_checks = {}
@@ -260,7 +279,7 @@ class ConfigDialog(QDialog):
             "Wymagane: reguła musi być spełniona. "
             "Preferowane: solver może ją naruszyć za karę."
         )
-        policy_info.setStyleSheet("color: #666; font-size: 11px;")
+        policy_info.setStyleSheet("color: #6b7280; font-size: 11px;")
         policy_info.setWordWrap(True)
         layout.addWidget(policy_info)
 
@@ -330,6 +349,56 @@ class ConfigDialog(QDialog):
 
         layout.addStretch()
         return page
+
+    def _build_tutorial_steps(self):
+        return [
+            TutorialStep(
+                "Konfiguracja sklepu",
+                "Tutaj ustawiasz zasady, według których generator układa grafik: "
+                "godziny otwarcia, niedziele handlowe i limity.",
+            ),
+            TutorialStep(
+                "Godziny otwarcia",
+                "Ustaw godziny pracy sklepu osobno dla każdego dnia tygodnia.",
+                target=self.tabs,
+                on_show=lambda: self.tabs.setCurrentIndex(0),
+            ),
+            TutorialStep(
+                "Niedziele handlowe",
+                "Zaznacz, które niedziele w tym miesiącu są handlowe — tylko one "
+                "będą uwzględnione przy generowaniu grafiku.",
+                target=self.tabs,
+                on_show=lambda: self.tabs.setCurrentIndex(1),
+            ),
+            TutorialStep(
+                "Limit czasu generatora",
+                "Ile czasu solver ma na znalezienie grafiku. Dłuższy limit daje "
+                "lepsze wyniki, ale wydłuża generowanie.",
+                target=self.solver_time_limit,
+                on_show=lambda: self.tabs.setCurrentIndex(2),
+            ),
+            TutorialStep(
+                "Zasady generatora",
+                "Dla każdej reguły wybierz Wymagane (musi być spełniona) albo "
+                "Preferowane (solver może ją naruszyć, jeśli nie ma innego wyjścia).",
+                target=self.policy_selectors["rest_11h"],
+                on_show=lambda: self.tabs.setCurrentIndex(2),
+            ),
+        ]
+
+    def _maybe_show_tutorial(self):
+        if os.path.exists(CONFIG_TUTORIAL_FLAG):
+            return
+
+        def mark_seen():
+            try:
+                with open(CONFIG_TUTORIAL_FLAG, "w") as f:
+                    f.write("seen")
+            except OSError:
+                pass
+
+        self._tutorial_overlay = TutorialOverlay(self, self._build_tutorial_steps(), on_finished=mark_seen)
+        self._tutorial_overlay.start()
 
     def _save(self):
         try:

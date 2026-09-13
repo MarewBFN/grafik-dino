@@ -37,7 +37,7 @@ from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import ScheduleGrid
 from ui.time_input import TimeInputWidget
-from ui.tutorial_dialog import TutorialDialog
+from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.loading_overlay import LoadingOverlay
 from ui.demo_manager import DemoManager
 from ui.license_manager import get_user_id, show_license_dialog
@@ -1261,10 +1261,65 @@ class MainWindow(QMainWindow):
         start = end - timedelta(hours=hours)
         return start.strftime(fmt)
 
+    def _build_tutorial_steps(self):
+        return [
+            TutorialStep(
+                "Witaj w Dingo!",
+                "Program służy do tworzenia grafików pracy dla sklepów.\n"
+                "Możesz generować grafik automatycznie albo układać go ręcznie.",
+            ),
+            TutorialStep(
+                "Dodaj pracowników",
+                "Tutaj dodajesz pracowników i ustawiasz ich dane: wymiar etatu, "
+                "godziny dzienne oraz role (np. otwarcie, obsługa mięsa).",
+                target=self.btn_add_employee,
+            ),
+            TutorialStep(
+                "Generowanie grafiku",
+                "Program ułoży grafik automatycznie, uwzględniając wszystkie "
+                "ograniczenia. Nigdy nie nadpisuje zmian wprowadzonych ręcznie.",
+                target=self.btn_generate,
+            ),
+            TutorialStep(
+                "Edycja ręczna",
+                "Kliknij dwukrotnie komórkę w siatce, żeby ręcznie ustawić "
+                "godziny pracy, dzień wolny albo urlop.",
+                target=self.grid,
+            ),
+            TutorialStep(
+                "Tryb szybki",
+                "Najszybszy sposób na ręczne zmiany: wybierz typ zmiany, ustaw "
+                "godziny i klikaj kolejne komórki w siatce.",
+                target=self.btn_quick_mode,
+            ),
+            TutorialStep(
+                "Rozszerz widok",
+                "Przełącza między pełnym widokiem grafiku a kompaktowym, "
+                "czytelnym jak kartka papieru.",
+                target=self.btn_expand_view,
+            ),
+            TutorialStep(
+                "Okres rozliczeniowy",
+                "Włącz, jeśli chcesz dostroić długość już przypisanych zmian do "
+                "celu godzinowego pracownika, bez ponownego generowania grafiku.",
+                target=self.btn_settlement_toggle,
+            ),
+            TutorialStep(
+                "Gotowe!",
+                "Dodaj pracowników, wygeneruj grafik, popraw ręcznie jeśli trzeba.\n"
+                "W każdej chwili wrócisz tu przez Pomoc → Samouczek.",
+            ),
+        ]
+
+    def _start_tutorial(self, on_finished=None):
+        existing = getattr(self, "_tutorial_overlay", None)
+        if existing is not None:
+            existing.deleteLater()
+        self._tutorial_overlay = TutorialOverlay(self, self._build_tutorial_steps(), on_finished=on_finished)
+        self._tutorial_overlay.start()
+
     def _open_tutorial(self):
-        from ui.tutorial_dialog import TutorialDialog
-        dialog = TutorialDialog(self)
-        dialog.exec()
+        self._start_tutorial()
 
     def _show_loading(self):
         self.loading_overlay.show_overlay()
@@ -1368,15 +1423,14 @@ class MainWindow(QMainWindow):
 
         if not os.path.exists(flag_path):
 
-            dialog = TutorialDialog(self)
-            dialog.setWindowModality(Qt.ApplicationModal)
-
-            if dialog.exec() == QDialog.Accepted:
+            def mark_seen():
                 try:
                     with open(flag_path, "w") as f:
                         f.write("seen")
-                except:
+                except OSError:
                     pass
+
+            self._start_tutorial(on_finished=mark_seen)
 
     def _clear_generated(self):
         if not self.schedule or not self.controller:
