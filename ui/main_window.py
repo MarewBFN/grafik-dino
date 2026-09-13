@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressDialog,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QSplitter,
     QVBoxLayout,
@@ -207,10 +208,30 @@ class MainWindow(QMainWindow):
         layout.addWidget(divider)
 
     def _build_left_panel(self):
-        panel = QFrame()
-        panel.setObjectName("panelCard")
-        panel.setMinimumWidth(300)
-        panel.setMaximumWidth(360)
+        outer_panel = QFrame()
+        outer_panel.setObjectName("panelCard")
+        outer_panel.setMinimumWidth(300)
+        outer_panel.setMaximumWidth(360)
+
+        outer_layout = QVBoxLayout(outer_panel)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        # Sidebar bywa wyższy niż mały/niskorozdzielczy ekran ma miejsca —
+        # bez przewijania dolne przyciski (okres rozliczeniowy, wersja itd.)
+        # znikały wtedy poza widoczny obszar okna, bez możliwości dojechania
+        # do nich. Karta zostaje wizualnie taka sama, tylko jej zawartość
+        # jest teraz w scrollu.
+        scroll = QScrollArea()
+        scroll.setObjectName("sidebarScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        outer_layout.addWidget(scroll)
+
+        panel = QWidget()
+        panel.setObjectName("sidebarContent")
+        scroll.setWidget(panel)
 
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -385,7 +406,7 @@ class MainWindow(QMainWindow):
         self.version_label.setObjectName("mutedHint")
         layout.addWidget(self.version_label)
 
-        return panel
+        return outer_panel
 
     def _open_buy_page(self):
         QDesktopServices.openUrl(QUrl("https://madebykewin.pl"))
@@ -471,13 +492,13 @@ class MainWindow(QMainWindow):
         time_layout.addWidget(self.end_input)
 
         self.time_panel.setLayout(time_layout)
-        self.time_panel.hide()
+        self.time_panel.setEnabled(False)
 
         layout.addWidget(self.time_panel)
 
         self.quick_duration_label = QLabel("Czas pracy: 0:00")
         self.quick_duration_label.setObjectName("metricValue")
-        self.quick_duration_label.hide()
+        self.quick_duration_label.setEnabled(False)
         layout.addWidget(self.quick_duration_label)
 
         self.quick_panel.setLayout(layout)
@@ -1214,9 +1235,11 @@ class MainWindow(QMainWindow):
         self.btn_leave.setChecked(False)
         self.btn_sick.setChecked(False)
 
+        # Wyszarzone zamiast ukryte, żeby reszta panelu bocznego nie
+        # "przeskakiwała" przy każdej zmianie typu zmiany w trybie szybkim.
         is_work = shift_type == "WORK"
-        self.time_panel.setVisible(is_work)
-        self.quick_duration_label.setVisible(is_work)
+        self.time_panel.setEnabled(is_work)
+        self.quick_duration_label.setEnabled(is_work)
 
         # aktywny
         if shift_type == "WORK":

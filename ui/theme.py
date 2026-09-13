@@ -203,6 +203,15 @@ QLabel#dangerHint {
     font-weight: bold;
 }
 
+QScrollArea#sidebarScroll, QScrollArea#sidebarScroll > QWidget > QWidget {
+    background: transparent;
+    border: none;
+}
+
+QWidget#sidebarContent {
+    background: transparent;
+}
+
 QFrame#sidebarHero {
     background: #eaf0fd;
     border: 1px solid #d7e5fb;

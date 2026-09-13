@@ -598,6 +598,13 @@ class ScheduleGrid(QTableWidget):
         if not self.schedule or not self.shop_config:
             return
 
+        # build() robi clear() i od nowa ustawia liczbę wierszy/kolumn, co
+        # resetuje przewinięcie do (0, 0) — bez tego przełączenie np. trybu
+        # rozliczeniowego albo kompaktowego "przeskakiwało" widok z powrotem
+        # na początek grafiku.
+        h_scroll = self.horizontalScrollBar().value()
+        v_scroll = self.verticalScrollBar().value()
+
         self.build()
         presenter = SchedulePresenter(self.schedule, self.shop_config)
         constraint_presenter = ConstraintPresenter(self.schedule, self.shop_config)
@@ -614,6 +621,10 @@ class ScheduleGrid(QTableWidget):
             self._fill_summary_cells(row, emp, days)
 
         self._fill_validation_rows(emp_count, days, constraint_presenter)
+
+        self.horizontalScrollBar().setValue(h_scroll)
+        self.verticalScrollBar().setValue(v_scroll)
+
         self.viewport().update()
 
     def _fill_employee_name(self, row, emp):
