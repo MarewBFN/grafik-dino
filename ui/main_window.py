@@ -1505,18 +1505,23 @@ class MainWindow(QMainWindow):
         msg.setText(
             f"Dostępna jest nowa wersja programu ({result['version']}).\n\nPobrać i zainstalować?"
         )
-        # Opis wydania z GitHub Releases (jeśli autor go wypełnił) trafia pod
-        # rozwijany przycisk "Show Details...", żeby nie zaśmiecać głównego
-        # okna długim changelogiem.
+        # Opis wydania z GitHub Releases (jeśli autor go wypełnił) pokazuje się
+        # od razu pod treścią pytania. setDetailedText() dawałby rozwijany
+        # przycisk, ale Qt sam zarządza jego stanem/tekstem i przy próbie
+        # spolszczenia go w locie potrafi zostawić na przycisku wizualnie
+        # uszkodzony tekst (nakładka starego i nowego renderu) — nie warto
+        # tego obchodzić dla czegoś, co i tak zwykle ma kilka linijek.
         notes = result.get("notes")
         if notes:
-            msg.setDetailedText(notes)
-        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        msg.setDefaultButton(QMessageBox.Yes)
+            msg.setInformativeText(notes)
 
-        reply = msg.exec()
+        btn_yes = msg.addButton("Tak", QMessageBox.YesRole)
+        msg.addButton("Nie", QMessageBox.NoRole)
+        msg.setDefaultButton(btn_yes)
 
-        if reply == QMessageBox.Yes:
+        msg.exec()
+
+        if msg.clickedButton() == btn_yes:
             self._start_update_download(result["url"])
 
     def _start_update_download(self, url):
