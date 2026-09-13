@@ -64,7 +64,7 @@ class ConfigDialog(QDialog):
         self.shop_config = shop_config
         self.setWindowTitle("Konfiguracja")
         self.setModal(True)
-        self.resize(720, 640)
+        self.resize(720, 560)
 
         # Wygląd (karty, checkboxy, kolory) pochodzi teraz w całości ze
         # wspólnego arkusza stylów aplikacji (ui/theme.py) — to okno nie
@@ -85,17 +85,22 @@ class ConfigDialog(QDialog):
 
         tabs.addTab(self._build_hours_tab(), "Godziny otwarcia")
         tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
-        tabs.addTab(self._build_constraints_tab(), "Limity")
+        tabs.addTab(self._build_limits_tab(), "Limity")
+        tabs.addTab(self._build_generator_rules_tab(), "Zasady generatora")
 
         buttons = QDialogButtonBox()
+        help_btn = QPushButton("Pomoc")
+        help_btn.setObjectName("secondaryButton")
         cancel_btn = QPushButton("Anuluj")
         cancel_btn.setObjectName("secondaryButton")
         save_btn = QPushButton("Zapisz")
         save_btn.setObjectName("primaryButton")
+        buttons.addButton(help_btn, QDialogButtonBox.HelpRole)
         buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
         buttons.addButton(save_btn, QDialogButtonBox.AcceptRole)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self._save)
+        help_btn.clicked.connect(self._open_tutorial)
         root.addWidget(buttons)
 
     def _build_hours_tab(self):
@@ -185,7 +190,7 @@ class ConfigDialog(QDialog):
         layout.addStretch()
         return page
 
-    def _build_constraints_tab(self):
+    def _build_limits_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -245,6 +250,15 @@ class ConfigDialog(QDialog):
         form_staff.addRow("Pracowników na otwarciu (rano):", self.min_open)
         form_staff.addRow("Pracowników na zamknięciu (wieczór):", self.min_close)
         layout.addLayout(form_staff)
+
+        layout.addStretch()
+        return page
+
+    def _build_generator_rules_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
 
         # --- Sekcja: polityki constraintów generatora ---
         policy_label = QLabel("ZASADY GENERATORA")
@@ -323,6 +337,16 @@ class ConfigDialog(QDialog):
 
         layout.addLayout(policy_grid)
 
+        hint = QLabel(
+            "Te reguły możesz swobodnie zmieniać i testować, jak zachowuje się "
+            "generator dla różnych ustawień — dopasuj je do specyfiki własnej "
+            "placówki. Zmiana reguły nie wpływa na już wygenerowany grafik, "
+            "dopóki nie klikniesz „Generuj grafik” ponownie."
+        )
+        hint.setObjectName("mutedHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
         layout.addStretch()
         return page
 
@@ -331,7 +355,7 @@ class ConfigDialog(QDialog):
             TutorialStep(
                 "Konfiguracja sklepu",
                 "Tutaj ustawiasz zasady, według których generator układa grafik: "
-                "godziny otwarcia, niedziele handlowe i limity.",
+                "godziny otwarcia, niedziele handlowe, limity i zasady generatora.",
             ),
             TutorialStep(
                 "Godziny otwarcia",
@@ -347,20 +371,38 @@ class ConfigDialog(QDialog):
                 on_show=lambda: self.tabs.setCurrentIndex(1),
             ),
             TutorialStep(
+                "Limity",
+                "Maksymalna liczba dni z rzędu oraz minimalna liczba pracowników "
+                "na otwarciu i zamknięciu sklepu.",
+                target=self.tabs,
+                on_show=lambda: self.tabs.setCurrentIndex(2),
+            ),
+            TutorialStep(
                 "Limit czasu generatora",
                 "Ile czasu solver ma na znalezienie grafiku. Dłuższy limit daje "
                 "lepsze wyniki, ale wydłuża generowanie.",
                 target=self.solver_time_limit,
-                on_show=lambda: self.tabs.setCurrentIndex(2),
+                on_show=lambda: self.tabs.setCurrentIndex(3),
             ),
             TutorialStep(
                 "Zasady generatora",
                 "Dla każdej reguły wybierz Wymagane (musi być spełniona) albo "
-                "Preferowane (solver może ją naruszyć, jeśli nie ma innego wyjścia).",
+                "Preferowane (solver może ją naruszyć, jeśli nie ma innego wyjścia) — "
+                "śmiało testuj różne ustawienia i dopasuj je do swojej placówki.",
                 target=self.policy_selectors["rest_11h"],
-                on_show=lambda: self.tabs.setCurrentIndex(2),
+                on_show=lambda: self.tabs.setCurrentIndex(3),
             ),
         ]
+
+    def _start_tutorial(self, on_finished=None):
+        existing = getattr(self, "_tutorial_overlay", None)
+        if existing is not None:
+            existing.deleteLater()
+        self._tutorial_overlay = TutorialOverlay(self, self._build_tutorial_steps(), on_finished=on_finished)
+        self._tutorial_overlay.start()
+
+    def _open_tutorial(self):
+        self._start_tutorial()
 
     def _maybe_show_tutorial(self):
         if os.path.exists(CONFIG_TUTORIAL_FLAG):
@@ -373,8 +415,7 @@ class ConfigDialog(QDialog):
             except OSError:
                 pass
 
-        self._tutorial_overlay = TutorialOverlay(self, self._build_tutorial_steps(), on_finished=mark_seen)
-        self._tutorial_overlay.start()
+        self._start_tutorial(on_finished=mark_seen)
 
     def _save(self):
         try:
