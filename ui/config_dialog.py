@@ -100,20 +100,27 @@ class ConfigDialog(QDialog):
 
     def _build_hours_tab(self):
         page = QWidget()
-        layout = QGridLayout(page)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(10)
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(20, 20, 20, 20)
+        outer.setSpacing(12)
+
+        card = QFrame()
+        card.setObjectName("configCard")
+        layout = QGridLayout(card)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setHorizontalSpacing(14)
+        layout.setVerticalSpacing(10)
 
         self.open_edits = {}
         days = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
 
         for row, name in enumerate(days):
             label = QLabel(name)
-            label.setStyleSheet("font-weight: bold;")
+            label.setStyleSheet("font-weight: 600;")
             layout.addWidget(label, row, 0)
 
             start, end = self.shop_config.open_hours[row]
-            
+
             start_edit = TimeInputWidget()
             start_edit.set_time_str(start)
 
@@ -126,6 +133,17 @@ class ConfigDialog(QDialog):
 
             self.open_edits[row] = (start_edit, end_edit)
 
+        outer.addWidget(card)
+
+        hint = QLabel(
+            "Godziny pracy dla pojedynczego dnia możesz zmienić ręcznie, "
+            "klikając dwukrotnie na nagłówek tego dnia w grafiku (np. „Wt 22”)."
+        )
+        hint.setObjectName("mutedHint")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
+
+        outer.addStretch()
         return page
 
     def _build_sundays_tab(self):

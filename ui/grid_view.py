@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QFrame,
+    QHeaderView,
     QLabel,
     QMenu,
     QSpinBox,
@@ -321,6 +322,37 @@ class LockedCellDelegate(QStyledItemDelegate):
 
         painter.restore()
 
+
+class DayHeaderView(QHeaderView):
+    """Nagłówek dni z paskiem podświetlającym te dni, dla których godziny
+    pracy sklepu zostały ręcznie nadpisane (ShopConfig.day_overrides).
+
+    Zwykłe QTableWidgetItem.setBackground() nie działa tutaj, bo tło sekcji
+    nagłówka jest rysowane przez arkusz stylów apki (QHeaderView::section) i
+    to ono ma pierwszeństwo — stąd własny akcent dorysowywany na wierzchu.
+    """
+
+    OVERRIDE_BAR_COLOR = QColor("#f59e0b")
+    OVERRIDE_BAR_HEIGHT = 3
+
+    def __init__(self, orientation, parent=None):
+        super().__init__(orientation, parent)
+        self.overridden_days = set()
+
+    def paintSection(self, painter, rect, logicalIndex):
+        super().paintSection(painter, rect, logicalIndex)
+        if logicalIndex in self.overridden_days:
+            painter.save()
+            painter.fillRect(
+                rect.left(),
+                rect.bottom() - self.OVERRIDE_BAR_HEIGHT + 1,
+                rect.width(),
+                self.OVERRIDE_BAR_HEIGHT,
+                self.OVERRIDE_BAR_COLOR,
+            )
+            painter.restore()
+
+
 class ScheduleGrid(QTableWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -367,11 +399,13 @@ class ScheduleGrid(QTableWidget):
         self.setStyleSheet("selection-background-color: transparent; selection-color: inherit;")
         self.setFocusPolicy(Qt.StrongFocus)
 
+        self.setHorizontalHeader(DayHeaderView(Qt.Horizontal, self))
+
         self._create_frozen_name_column()
 
         self.cellClicked.connect(self._handle_click)
         self.cellDoubleClicked.connect(self._handle_double_click)
-        
+
         # 4. Podwójny klik na nagłówku (zamiast PPM)
         self.horizontalHeader().sectionDoubleClicked.connect(self._handle_header_double_click)
         self.horizontalHeader().setToolTip("Kliknij dwukrotnie, aby zmienić godziny pracy")
@@ -495,6 +529,11 @@ class ScheduleGrid(QTableWidget):
             if header_item:
                 header_item.setToolTip(self._day_header_tooltip(day))
 
+        header = self.horizontalHeader()
+        if isinstance(header, DayHeaderView):
+            header.overridden_days = set(self.shop_config.day_overrides.keys())
+            header.update()
+
         if self.settlement_mode:
             target_header_item = self.horizontalHeaderItem(days + 5)
             if target_header_item:
@@ -548,7 +587,12 @@ class ScheduleGrid(QTableWidget):
             hours_text = f"Godziny pracy sklepu: {hours[0]}–{hours[1]}"
         else:
             hours_text = "Sklep nieczynny tego dnia"
-        return f"{hours_text}\nKliknij dwukrotnie, aby zmienić godziny pracy lub status dnia."
+
+        override_text = ""
+        if day in self.shop_config.day_overrides:
+            override_text = "\n⚠ Godziny pracy zmienione ręcznie dla tego dnia."
+
+        return f"{hours_text}{override_text}\nKliknij dwukrotnie, aby zmienić godziny pracy lub status dnia."
 
     def refresh(self):
         if not self.schedule or not self.shop_config:

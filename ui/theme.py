@@ -131,6 +131,14 @@ QFrame#configCard {
     padding: 10px;
 }
 
+/* Fusion domyślnie wypełnia tło dzieci wewnątrz stylowanej ramki kolorem
+   przycisku z palety, gdy tylko dziecko ma jakikolwiek własny setStyleSheet()
+   (np. samo pogrubienie) — stąd jawne wymuszenie przezroczystości dla
+   wszystkich etykiet w kartach konfiguracji. */
+QFrame#configCard QLabel {
+    background: transparent;
+}
+
 QLabel#groupLabel {
     font-weight: 700;
     color: #1d4ed8;
