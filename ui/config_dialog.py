@@ -28,7 +28,7 @@ from ui.profile_wizard_dialog import ProfileWizardDialog
 from ui.slug import slugify
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import BUSINESS_PROFILES, DEFAULT_BUSINESS_TYPE, get_profile
-from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig
+from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig, normalize_night_shift
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
 
@@ -59,6 +59,7 @@ class _LocationRow(QFrame):
     def __init__(
         self, on_remove, name="", open_time="08:00", close_time="20:00",
         max_consecutive_days=None, rule_defs=(), rule_overrides=None,
+        night_shift=None,
     ):
         super().__init__()
         self.setObjectName("configCard")
@@ -85,6 +86,31 @@ class _LocationRow(QFrame):
         remove_btn.clicked.connect(lambda: on_remove(self))
         top.addWidget(remove_btn)
         outer.addLayout(top)
+
+        # Sztywny blok zmiany nocnej dla tej lokalizacji (Etap B planu zmian
+        # nocnych) - osobny od "Godziny" powyżej, bo może (i typowo będzie)
+        # przechodzić przez północ, czego open_hours jeszcze nie wspiera.
+        # Sam generator jeszcze tego nie czyta (Etap C) - to na razie tylko
+        # przechowywanie i edycja konfiguracji.
+        night_row = QHBoxLayout()
+        self.night_shift_check = QCheckBox("Zmiana nocna:")
+        night_row.addWidget(self.night_shift_check)
+        self.night_start_input = TimeInputWidget()
+        self.night_end_input = TimeInputWidget()
+        night_start, night_end = (night_shift or {}).get("start"), (night_shift or {}).get("end")
+        self.night_start_input.set_time_str(night_start or "22:00")
+        self.night_end_input.set_time_str(night_end or "06:00")
+        self.night_shift_check.setChecked(bool(night_shift))
+        self.night_start_input.setEnabled(bool(night_shift))
+        self.night_end_input.setEnabled(bool(night_shift))
+        self.night_shift_check.toggled.connect(self.night_start_input.setEnabled)
+        self.night_shift_check.toggled.connect(self.night_end_input.setEnabled)
+        night_row.addWidget(self.night_start_input)
+        night_row.addWidget(QLabel("—"))
+        night_row.addWidget(self.night_end_input)
+        night_row.addWidget(QLabel("(może przechodzić przez północ)"))
+        night_row.addStretch()
+        outer.addLayout(night_row)
 
         thresholds = QHBoxLayout()
         thresholds.addWidget(QLabel("Progi obsady dla tej lokalizacji:"))
@@ -121,6 +147,11 @@ class _LocationRow(QFrame):
             if spin.value():
                 overrides[rule_key] = spin.value()
         return overrides
+
+    def night_shift_hours(self) -> tuple[str, str] | None:
+        if not self.night_shift_check.isChecked():
+            return None
+        return self.night_start_input.get_time_str(), self.night_end_input.get_time_str()
 
 
 def _parse_time(value: str) -> QTime:
@@ -517,8 +548,13 @@ class ConfigDialog(QDialog):
             "chronionych lokalizacji), każdy z własnymi godzinami. Bez "
             "zdefiniowanych lokalizacji projekt działa jak dziś - jedna, "
             "wspólna konfiguracja z zakładki \"Godziny otwarcia\".\n"
-            "Działalność całodobowa: ustaw np. 00:00–23:45 (godziny "
-            "przechodzące przez północ nie są jeszcze wspierane).\n"
+            "Godziny otwarcia: dla działalności całodobowej ustaw np. "
+            "00:00–23:45 (ten zakres, w odróżnieniu od zmiany nocnej "
+            "poniżej, nie może jeszcze przechodzić przez północ).\n"
+            "Zmiana nocna: opcjonalny, osobny blok godzinowy dla tej "
+            "lokalizacji (np. 22:00–06:00) - może przechodzić przez "
+            "północ. Generator jeszcze go nie przydziela (to dopiero "
+            "przechowywanie/edycja konfiguracji).\n"
             "Progi obsady poniżej nadpisują wartości domyślne tylko dla "
             "pracowników przypisanych do tej lokalizacji."
         )
@@ -553,6 +589,7 @@ class ConfigDialog(QDialog):
                 loc.name, start, end,
                 max_consecutive_days=loc.constraints.get("max_consecutive_days"),
                 rule_overrides=loc.constraints,
+                night_shift=loc.night_shift,
             )
 
         add_btn = QPushButton("Dodaj lokalizację")
@@ -565,13 +602,14 @@ class ConfigDialog(QDialog):
 
     def _add_location_row(
         self, name="", open_time="08:00", close_time="20:00",
-        max_consecutive_days=None, rule_overrides=None,
+        max_consecutive_days=None, rule_overrides=None, night_shift=None,
     ):
         row = _LocationRow(
             self._remove_location_row, name, open_time, close_time,
             max_consecutive_days=max_consecutive_days,
             rule_defs=self._location_rule_defs,
             rule_overrides=rule_overrides,
+            night_shift=night_shift,
         )
         self._location_rows.append(row)
         self.locations_container.addWidget(row)
@@ -820,10 +858,17 @@ class ConfigDialog(QDialog):
                         "Zmiany przechodzące przez północ nie są jeszcze wspierane — dla działalności "
                         "całodobowej ustaw np. 00:00–23:45."
                     )
+                night_start, night_end = row.night_shift_hours() or (None, None)
+                try:
+                    night_shift = normalize_night_shift(night_start, night_end)
+                except ValueError as exc:
+                    raise ValueError(f"{exc} (lokalizacja: {name}).") from exc
+
                 new_locations[key] = LocationConfig(
                     key=key, name=name,
                     open_hours={wd: (start, end) for wd in range(7)},
                     constraints=row.constraints_overrides(),
+                    night_shift=night_shift,
                 )
             self.shop_config.locations = new_locations
 

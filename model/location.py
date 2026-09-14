@@ -28,6 +28,23 @@ DEFAULT_LOCATION_CONSTRAINTS = {
 }
 
 
+def normalize_night_shift(start: str | None, end: str | None) -> dict | None:
+    """Shared validation for the (optional) night-shift window used by both
+    LocationConfig and ShopConfig (Etap B of the night-shift plan). A None/
+    empty pair clears the window; a single missing side or start == end is
+    rejected the same way DaySchedule.set_hours() rejects an ambiguous
+    zero-length shift. end < start is allowed on purpose - that's exactly
+    what marks the window as crossing midnight.
+    """
+    if not start and not end:
+        return None
+    if not start or not end:
+        raise ValueError("Zmiana nocna wymaga podania obu godzin (początku i końca)")
+    if start == end:
+        raise ValueError("Godzina początku i końca zmiany nocnej nie mogą być takie same")
+    return {"start": start, "end": end}
+
+
 @dataclass
 class LocationConfig:
     key: str
@@ -37,6 +54,11 @@ class LocationConfig:
     public_holidays: set = field(default_factory=set)
     day_overrides: dict = field(default_factory=dict)
     constraints: dict = field(default_factory=lambda: dict(DEFAULT_LOCATION_CONSTRAINTS))
+    # Opcjonalny, sztywny blok zmiany nocnej dla tej lokalizacji, np.
+    # {"start": "22:00", "end": "06:00"}. None = lokalizacja nie ma zmiany
+    # nocnej (domyślne - zero zmiany zachowania dla Dino i profili bez tej
+    # potrzeby). Zob. "plan zmiany nocne (24-7).md", Etap B.
+    night_shift: dict | None = field(default=None)
 
     # Same logic as ShopConfig.weekday/is_trade_day/get_open_hours_for_day
     # (model/shop_config.py) - a location has no year/month of its own, so
@@ -75,6 +97,19 @@ class LocationConfig:
             return None
         return start, end
 
+    def get_night_shift_hours(self) -> tuple[str, str] | None:
+        """(start, end) zmiany nocnej tej lokalizacji, albo None gdy jej nie ma."""
+        if not self.night_shift:
+            return None
+        start = self.night_shift.get("start")
+        end = self.night_shift.get("end")
+        if not start or not end:
+            return None
+        return start, end
+
+    def set_night_shift(self, start: str | None, end: str | None) -> None:
+        self.night_shift = normalize_night_shift(start, end)
+
     def to_dict(self):
         return {
             "key": self.key,
@@ -84,6 +119,7 @@ class LocationConfig:
             "public_holidays": list(self.public_holidays),
             "day_overrides": self.day_overrides,
             "constraints": self.constraints,
+            "night_shift": self.night_shift,
         }
 
     @classmethod
@@ -99,4 +135,6 @@ class LocationConfig:
         }
         loc.constraints = dict(DEFAULT_LOCATION_CONSTRAINTS)
         loc.constraints.update(data.get("constraints", {}))
+        night_shift = data.get("night_shift")
+        loc.night_shift = dict(night_shift) if night_shift else None
         return loc
