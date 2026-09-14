@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from model.constraint_policy import ConstraintPolicy
-from model.business_profile import get_profile
+from model.business_profile import BUSINESS_PROFILES, get_profile
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
 
@@ -66,6 +66,23 @@ class ConfigDialog(QDialog):
         title = QLabel("Konfiguracja sklepu")
         title.setObjectName("sectionLabel")
         root.addWidget(title)
+
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(QLabel("Profil działalności:"))
+        self.business_type_selector = QComboBox()
+        self.business_type_selector.setMinimumWidth(220)
+        for profile in BUSINESS_PROFILES.values():
+            self.business_type_selector.addItem(profile.display_name, profile.key)
+        idx = self.business_type_selector.findData(self.shop_config.business_type)
+        self.business_type_selector.setCurrentIndex(idx if idx >= 0 else 0)
+        if self.business_type_selector.count() <= 1:
+            self.business_type_selector.setEnabled(False)
+            self.business_type_selector.setToolTip(
+                "Na razie dostępny jest tylko jeden profil działalności."
+            )
+        profile_row.addWidget(self.business_type_selector)
+        profile_row.addStretch()
+        root.addLayout(profile_row)
 
         self.tabs = QTabWidget()
         tabs = self.tabs
@@ -408,6 +425,8 @@ class ConfigDialog(QDialog):
 
     def _save(self):
         try:
+            self.shop_config.business_type = self.business_type_selector.currentData()
+
             for wd, (start_input, end_input) in self.open_edits.items():
                 start_str = start_input.get_time_str()
                 end_str = end_input.get_time_str()
