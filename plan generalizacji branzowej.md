@@ -1,8 +1,11 @@
 # Plan: generalizacja Dingo pod różne branże
 
-Branch: `feature/business-profiles` (12 commitów względem `main` na
-początek tej sesji; zmiany z sekcji 7 i 8 poniżej jeszcze
-niescommitowane). Stan na dziś: `pytest tests/` → 82 passed, 1
+Branch: `feature/business-profiles`, wyłącznie lokalny (nigdy
+niewypchnięty na `origin`), working tree czyste. Historia od `ad45fd4` w
+górę została raz przepisana w tej sesji (poprawka message'a jednego
+commita, patrz sekcja "Drobne" niżej) — jeśli masz gdzieś starą kopię
+tego brancha sprzed 2026-09-14, jej hashe od `ad45fd4` w górę już się nie
+zgadzają z tym repo. Stan na dziś: `pytest tests/` → 85 passed, 1
 pre-existing fail niezwiązany z tą pracą
 (`test_default_shop_config_uses_soft_staff_and_availability_policies`,
 istniał już na `main`).
@@ -30,7 +33,7 @@ fundamentem pod to przejście, nie tylko łatką pod jednego klienta.
   wiersze podsumowania (`ui/grid_view.py`) sterowane profilem zamiast
   zahardkodowane.
 
-### 2. Kreator własnych profili (commity `61e1c71`, `d2ac7ed`, `0bca725`, `24c6d43`)
+### 2. Kreator własnych profili (commity `61e1c71`, `d2ac7ed`, `0bca725`, `df50b07`)
 
 - `ui/profile_wizard_dialog.py` — tworzenie **i edycja** profilu: nazwa,
   role (z ikoną z `ui/emoji_palette.py`), reguły z zamkniętego katalogu 2
@@ -54,7 +57,7 @@ fundamentem pod to przejście, nie tylko łatką pod jednego klienta.
 - `ui/new_project_dialog.py` — wybór branży + rok/miesiąc jako pierwszy
   krok nowego projektu, zamiast cichego domyślnego `dino_retail`.
 
-### 4. Lokalizacje / multi-placówka (commity `339fc79`, `6920577`, `e7c50f3`, `91f35fa`)
+### 4. Lokalizacje / multi-placówka (commity `339fc79`, `6920577`, `e7c50f3`, `4da03c3`)
 
 - `model/location.py` — `LocationConfig` (godziny, obsada, kalendarz).
 - `ShopConfig.get_location(employee)` — resolver godzin per pracownik
@@ -63,7 +66,7 @@ fundamentem pod to przejście, nie tylko łatką pod jednego klienta.
 - UI: zakładka "Lokalizacje" w Konfiguracji, wybór lokalizacji w
   formularzu pracownika.
 
-### 5. Odpięcie rzeczy "sklepowych" (commit `26d0a59`)
+### 5. Odpięcie rzeczy "sklepowych" (commit `8a35eb3`)
 
 - `BusinessProfile.uses_trade_calendar` — niedziele handlowe/święta
   domyślnie **wyłączone** dla każdego profilu poza `dino_retail`
@@ -86,7 +89,7 @@ fundamentem pod to przejście, nie tylko łatką pod jednego klienta.
   mogłoby uczynić drugą (wciąż aktywną) niespełnialną. Test:
   `tests/test_profile_features.py::test_grid_view_hides_open_and_close_summary_rows_independently_when_disabled`.
 
-### 6. Higiena/UX (commit `ad45fd4` i drobne po drodze)
+### 6. Higiena/UX (commit `4e168f1` i drobne po drodze)
 
 - Scrollbary we wszystkich oknach z dynamicznie rosnącą treścią
   (kreator profilu, lokalizacje, lista profili, role pracownika).
@@ -226,25 +229,25 @@ fundamentem pod to przejście, nie tylko łatką pod jednego klienta.
   przypadku, który by to uzasadniał.
   Testy: `tests/test_profile_features.py::test_constraint_engine_skips_dino_only_rules_for_custom_profiles`,
   `::test_constraint_engine_max_consecutive_respects_employee_location_override`.
-- **Commit `ad45fd4`** ("Add scrollbars...") — wciąż zawiera niepasujący
-  opis (kod poprawny, message nietrafiony). Branch `feature/business-profiles`
-  jest **wyłącznie lokalny** (`git branch -r` nie pokazuje go na
-  `origin`), więc rebase/amend tego jednego commita nie dotknie
-  nikogo poza Tobą — ale to wciąż przepisywanie historii, więc czekam na
-  wyraźne potwierdzenie, zanim to zrobię (patrz pytanie w rozmowie).
+- **Commit `ad45fd4`** — message poprawiony (teraz opisuje też dodanie
+  "Edytuj profil..." do Konfiguracji, nie tylko scrollbary). Zrobione
+  przez ręczne przepisanie łańcucha commitów od `ad45fd4` w górę
+  (`git commit-tree` per commit, bez `-i`) — każde drzewo zweryfikowane
+  jako identyczne z oryginałem przed przesunięciem wskaźnika brancha, więc
+  kod się nie zmienił, tylko hashe od `ad45fd4` w górę (branch lokalny,
+  nigdy niewypchnięty na `origin`, więc nikogo to nie dotyka poza Tobą).
+  Nowy hash tego commita: `4e168f1`.
 
-### Incydent do zamknięcia
+### Incydent zamknięty
 
-- Podczas testów w tej sesji przypadkowo skasowany plik
-  `custom_profiles.json` (stary skrypt testowy czyścił go na starcie),
-  co usunęło 3 Twoje realne profile custom (`custom_sdgsdgsg`,
-  `custom_hdhdh`, `custom_dupa`). Bez kopii zapasowej, nieodzyskane.
-  Nie potwierdzone, czy to była realna strata czy tylko klikanie testowe.
+- `custom_profiles.json` skasowany w poprzedniej sesji — potwierdzone,
+  że to było klikanie testowe (nazwy `custom_sdgsdgsg`/`custom_hdhdh`/
+  `custom_dupa`), nie realna strata. Wątek zamknięty.
 
 ---
 
 ## Jak z tego korzystać
 
 Ten plik to zrzut stanu na dziś (branch `feature/business-profiles`,
-commit `26d0a59`) — aktualizuj go albo poproś o świeże podsumowanie, gdy
+commit `ab89225`) — aktualizuj go albo poproś o świeże podsumowanie, gdy
 zrobimy kolejny krok, bo inaczej szybko się zdezaktualizuje.
