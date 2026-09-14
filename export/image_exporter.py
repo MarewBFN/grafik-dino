@@ -142,8 +142,12 @@ class ImageScheduleExporter:
                 mid_y = y + 2 * self.CELL_H
                 self.draw.line([x + 10, mid_y, x + self.CELL_W - 10, mid_y], fill=self.GRID)
 
+                end_text = self._format_hour(ds.end)
+                if ds.crosses_midnight():
+                    end_text += "+1"  # zmiana nocna - koniec leży w kolejnej dobie
+
                 self.draw.text((x + self.CELL_W // 2, y + self.CELL_H // 2), self._format_hour(ds.start), fill=(0, 0, 0), font=self.font, anchor="mm")
-                self.draw.text((x + self.CELL_W // 2, y + self.CELL_H + self.CELL_H // 2), self._format_hour(ds.end), fill=(0, 0, 0), font=self.font, anchor="mm")
+                self.draw.text((x + self.CELL_W // 2, y + self.CELL_H + self.CELL_H // 2), end_text, fill=(0, 0, 0), font=self.font, anchor="mm")
                 self.draw.text((x + self.CELL_W // 2, y + 2 * self.CELL_H + self.CELL_H // 2), ds.total_as_str(), fill=(0, 0, 0), font=self.font, anchor="mm")
 
         summary_x = self.NAME_W + self.LABEL_W + self.days * self.CELL_W

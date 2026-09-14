@@ -123,6 +123,12 @@ class Rest11hRule(Rule):
                     continue
 
                 end_today = datetime.strptime(today.end, fmt)
+                if today.crosses_midnight():
+                    # Zmiana nocna (plan zmian nocnych) kończy się w
+                    # kolejnej dobie kalendarzowej z definicji - bez tego
+                    # ta reguła liczyłaby odpoczynek o 24h za dużo i nigdy
+                    # nie wykryłaby realnego naruszenia po zmianie nocnej.
+                    end_today += timedelta(days=1)
                 start_next = datetime.strptime(next_day.start, fmt)
                 start_next += timedelta(days=1)
 
@@ -397,6 +403,9 @@ def rest_11h_violation(schedule: MonthSchedule, emp, day: int):
     fmt = "%H:%M"
 
     end_today = datetime.strptime(today.end, fmt)
+    if today.crosses_midnight():
+        # Zmiana nocna kończy się w kolejnej dobie kalendarzowej z definicji.
+        end_today += timedelta(days=1)
     start_next = datetime.strptime(next_day.start, fmt)
 
     # 🔥 uwzględnij przejście do kolejnego dnia
