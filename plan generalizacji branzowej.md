@@ -72,6 +72,19 @@ fundamentem pod to przejście, nie tylko łatką pod jednego klienta.
 - `RoleDef.linked_policy` — polityka constraintu steruje widocznością w
   UI (przykład: wyłączenie polityki "mięso" chowa checkboxy
   `is_meat`/`is_meat_light` i powiązany wiersz/odznakę w gridzie).
+- (sesja 2026-09-14, cd.) `ui/grid_view.py::_summary_rows()` — to samo
+  ukrywanie wiersza podsumowania rozszerzone z samego "mięsa" na "open"/
+  "close" (niezależnie od siebie) - kod miał wprost zapisany komentarz,
+  że te dwa "nie są dotknięte stanem własnej polityki"; teraz są.
+  `constraint_policies["open"]`/`["close"]` dało się wyłączyć od dawna
+  (`apply_registry` już wcześniej poprawnie pomijał wyłączony constraint
+  w całości) - brakowało tylko kaskady w UI. Checkbox `is_opener` w
+  formularzu pracownika i jego odznaka w gridzie **świadomie
+  pozostawione bez zmian**: `constraints_staff.add_fixed_staff_shift_constraints`
+  wymaga `opener_staff >= 1` przy WSPÓLNEJ funkcji obsługującej i "open",
+  i "close", więc ukrycie roli tylko pod jedną z tych dwóch polityk
+  mogłoby uczynić drugą (wciąż aktywną) niespełnialną. Test:
+  `tests/test_profile_features.py::test_grid_view_hides_open_and_close_summary_rows_independently_when_disabled`.
 
 ### 6. Higiena/UX (commit `ad45fd4` i drobne po drodze)
 

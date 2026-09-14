@@ -508,12 +508,17 @@ class ScheduleGrid(QTableWidget):
         business_type = self.shop_config.business_type if self.shop_config else None
         rows = get_profile(business_type).summary_rows
 
-        # The "Mięso" row configures a constraint that no longer does
-        # anything once "meat" is disabled - hide it instead of showing a
-        # dead indicator (narrowly scoped to this one, explicit case; other
-        # rows like "open"/"close" aren't affected by their own policy state).
-        if self.shop_config is not None and self.shop_config.constraint_policies.get("meat") == ConstraintPolicy.DISABLED:
-            rows = tuple(row for row in rows if row[1] != "meat")
+        # A summary row for a constraint that's currently DISABLED tracks
+        # nothing meaningful - hide it instead of showing a dead indicator.
+        # Each of these is independent (a project can disable "close" while
+        # keeping "open" on, etc.).
+        if self.shop_config is not None:
+            disabled_keys = {
+                key for key in ("meat", "open", "close")
+                if self.shop_config.constraint_policies.get(key) == ConstraintPolicy.DISABLED
+            }
+            if disabled_keys:
+                rows = tuple(row for row in rows if row[1] not in disabled_keys)
 
         return rows
 

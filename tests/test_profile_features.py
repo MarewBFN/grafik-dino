@@ -110,3 +110,23 @@ def test_grid_view_hides_meat_summary_row_and_badge_when_disabled():
 
     emp = Employee(last_name="A", first_name="A", is_meat=True)
     assert _employee_badges(_FakeTable(), emp) == []
+
+
+def test_grid_view_hides_open_and_close_summary_rows_independently_when_disabled():
+    shop = ShopConfig(2026, 3)  # dino_retail; open/close default to MANDATORY
+
+    grid = ScheduleGrid()
+    grid.shop_config = shop
+    rows = grid._summary_rows()
+    assert any(key == "open" for _, key in rows)
+    assert any(key == "close" for _, key in rows)
+
+    shop.constraint_policies["close"] = ConstraintPolicy.DISABLED
+    rows = grid._summary_rows()
+    assert any(key == "open" for _, key in rows)  # untouched policy stays
+    assert not any(key == "close" for _, key in rows)
+
+    shop.constraint_policies["open"] = ConstraintPolicy.DISABLED
+    rows = grid._summary_rows()
+    assert not any(key == "open" for _, key in rows)
+    assert not any(key == "close" for _, key in rows)
