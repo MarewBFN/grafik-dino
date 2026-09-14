@@ -1,13 +1,14 @@
 # Plan: generalizacja Dingo pod różne branże
 
-Branch: `feature/business-profiles`, wyłącznie lokalny (nigdy
-niewypchnięty na `origin`), working tree czyste. Historia od `ad45fd4` w
-górę została raz przepisana w tej sesji (poprawka message'a jednego
-commita, patrz sekcja "Drobne" niżej) — jeśli masz gdzieś starą kopię
-tego brancha sprzed 2026-09-14, jej hashe od `ad45fd4` w górę już się nie
-zgadzają z tym repo. Stan na dziś: `pytest tests/` → 85 passed, 1
-pre-existing fail niezwiązany z tą pracą
-(`test_default_shop_config_uses_soft_staff_and_availability_policies`,
+Branch: `feature/business-profiles`, wypchnięty na `origin` 2026-09-14
+(wcześniej był wyłącznie lokalny). Working tree czyste. Historia od
+`ad45fd4` w górę została raz przepisana W TEJ SESJI, **przed** tym
+pushem (poprawka message'a jednego commita, patrz sekcja "Drobne"
+niżej) — więc to przepisanie już nie jest bezpieczne do powtórzenia
+(branch jest teraz publiczny/współdzielony na `origin`, kolejny rebase
+wymagałby force-push i koordynacji z każdym, kto go już pobrał). Stan na
+dziś: `pytest tests/` → 85 passed, 1 pre-existing fail niezwiązany z tą
+pracą (`test_default_shop_config_uses_soft_staff_and_availability_policies`,
 istniał już na `main`).
 
 Powód całej tej pracy: klient z firmy ochroniarskiej chce kupić lokalną
