@@ -27,6 +27,7 @@ from logic.constraint_presenter import ConstraintPresenter
 from logic.schedule_presenter import SchedulePresenter
 from logic.utils.time_utils import classify_shift_as_morning_or_afternoon
 from model.business_profile import get_profile
+from model.constraint_policy import ConstraintPolicy
 from utils import resource_path
 from ui import theme
 
@@ -163,11 +164,15 @@ def _employee_badges(table, employee):
     opener/meat/manager icons, plus one emoji badge per custom-profile role
     that has an icon set and this employee carries."""
     badges = []
+    meat_disabled = (
+        table.shop_config is not None
+        and table.shop_config.constraint_policies.get("meat") == ConstraintPolicy.DISABLED
+    )
     if employee.is_opener:
         badges.append(table.icon_open)
-    if employee.is_meat:
+    if not meat_disabled and employee.is_meat:
         badges.append(table.icon_meat)
-    elif employee.is_meat_light:
+    elif not meat_disabled and employee.is_meat_light:
         badges.append(table.icon_meat_light)
     if employee.is_manager:
         badges.append(table.icon_manager)
@@ -501,7 +506,16 @@ class ScheduleGrid(QTableWidget):
 
     def _summary_rows(self):
         business_type = self.shop_config.business_type if self.shop_config else None
-        return get_profile(business_type).summary_rows
+        rows = get_profile(business_type).summary_rows
+
+        # The "Mięso" row configures a constraint that no longer does
+        # anything once "meat" is disabled - hide it instead of showing a
+        # dead indicator (narrowly scoped to this one, explicit case; other
+        # rows like "open"/"close" aren't affected by their own policy state).
+        if self.shop_config is not None and self.shop_config.constraint_policies.get("meat") == ConstraintPolicy.DISABLED:
+            rows = tuple(row for row in rows if row[1] != "meat")
+
+        return rows
 
     def set_data(
         self,

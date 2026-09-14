@@ -23,6 +23,12 @@ class RoleDef:
     label: str
     description: str = ""
     icon: str = ""
+    # When set, this role is only shown/usable while
+    # shop.constraint_policies[linked_policy] isn't DISABLED - e.g. Dino's
+    # meat-counter roles disappear from the UI once the "meat" policy is
+    # turned off, instead of showing a checkbox for a constraint that no
+    # longer does anything.
+    linked_policy: str = ""
 
 
 @dataclass(frozen=True)
@@ -32,6 +38,11 @@ class BusinessProfile:
     roles: tuple[RoleDef, ...] = field(default_factory=tuple)
     policy_labels: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     summary_rows: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    # "Dni handlowe" (trade Sundays / public holidays) is a Polish-retail-
+    # specific concept - most businesses (a security company, say) don't
+    # have it at all and every day is a normal working day. False by
+    # default for every profile except dino_retail.
+    uses_trade_calendar: bool = False
 
 
 DEFAULT_BUSINESS_TYPE = "dino_retail"
@@ -52,8 +63,8 @@ DINO_RETAIL_PROFILE = BusinessProfile(
     display_name="Sklep (Dino)",
     roles=(
         RoleDef("is_opener", "Pracownik otwarcia"),
-        RoleDef("is_meat", "Obsługa stoiska mięsnego"),
-        RoleDef("is_meat_light", "mooooże stanąć na chwilę na mięsie"),
+        RoleDef("is_meat", "Obsługa stoiska mięsnego", linked_policy="meat"),
+        RoleDef("is_meat_light", "mooooże stanąć na chwilę na mięsie", linked_policy="meat"),
         RoleDef(
             "is_manager",
             "Kierowniczka (sztywny grafik: pon. wolne, wt-pt 7:00-15:00, sob 6:00-14:00)",
@@ -81,6 +92,7 @@ DINO_RETAIL_PROFILE = BusinessProfile(
         ("Popo", "afternoon"),
         ("Mięso", "meat"),
     ),
+    uses_trade_calendar=True,
 )
 
 register_profile(DINO_RETAIL_PROFILE)

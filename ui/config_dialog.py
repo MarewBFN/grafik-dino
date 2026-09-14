@@ -134,12 +134,18 @@ class ConfigDialog(QDialog):
         profile_row.addStretch()
         root.addLayout(profile_row)
 
+        # Domyślnie puste - _build_sundays_tab() nadpisuje tylko gdy profil
+        # faktycznie ma kalendarz handlowy (patrz niżej), a _save() zawsze
+        # czyta ten słownik.
+        self.sunday_checks = {}
+
         self.tabs = QTabWidget()
         tabs = self.tabs
         root.addWidget(tabs, 1)
 
         tabs.addTab(self._build_hours_tab(), "Godziny otwarcia")
-        tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
+        if self.profile.uses_trade_calendar:
+            tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
         tabs.addTab(self._build_limits_tab(), "Limity")
         tabs.addTab(self._build_generator_rules_tab(), "Zasady generatora")
         tabs.addTab(self._build_locations_tab(), "Lokalizacje")

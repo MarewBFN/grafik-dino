@@ -1,6 +1,6 @@
 import calendar
 from model.constraint_policy import ConstraintPolicy
-from model.business_profile import DEFAULT_BUSINESS_TYPE
+from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
 from model.location import LocationConfig
 
 
@@ -131,6 +131,11 @@ class ShopConfig:
         return self.weekday(day) == 6
 
     def is_trade_day(self, day: int) -> bool:
+        # "Dni handlowe" is a Dino/retail-specific concept - businesses
+        # whose profile doesn't use it (see BusinessProfile.uses_trade_calendar)
+        # treat every day as a normal potential working day.
+        if not get_profile(self.business_type).uses_trade_calendar:
+            return True
 
         if day in self.public_holidays:
             return False

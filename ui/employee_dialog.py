@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from model.employee import Employee
 from model.business_profile import get_profile
+from model.constraint_policy import ConstraintPolicy
 
 # RoleDef.key values that map directly onto an Employee dataclass field
 # (the six legacy Dino flags). Any other key lives in Employee.custom_roles
@@ -30,11 +31,12 @@ _EMPLOYEE_FIELDS = {f.name for f in dataclasses.fields(Employee)}
 
 
 class EmployeeDialog(QDialog):
-    def __init__(self, parent=None, employee=None, business_type=None, locations=None):
+    def __init__(self, parent=None, employee=None, shop_config=None):
         super().__init__(parent)
         self.employee = employee
-        self.profile = get_profile(business_type)
-        self.locations = locations or {}
+        self.shop_config = shop_config
+        self.profile = get_profile(shop_config.business_type if shop_config else None)
+        self.locations = shop_config.locations if shop_config else {}
         self.role_checkboxes: dict[str, QCheckBox] = {}
         self.location_combo: QComboBox | None = None
         self.setWindowTitle("Edytuj pracownika" if employee else "Dodaj pracownika")
@@ -44,6 +46,14 @@ class EmployeeDialog(QDialog):
         # Wygląd pochodzi ze wspólnego arkusza stylów aplikacji (ui/theme.py).
         self._build_ui()
         self._fill_from_employee()
+
+    def _role_is_hidden(self, role) -> bool:
+        """True when this role's linked_policy (e.g. Dino's meat roles ->
+        "meat") is DISABLED for the active project, so the checkbox for it
+        shouldn't be shown at all."""
+        if not role.linked_policy or not self.shop_config:
+            return False
+        return self.shop_config.constraint_policies.get(role.linked_policy) == ConstraintPolicy.DISABLED
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -110,6 +120,8 @@ class EmployeeDialog(QDialog):
         flags_layout.setSpacing(10)
 
         for role in self.profile.roles:
+            if self._role_is_hidden(role):
+                continue
             checkbox = QCheckBox(role.label)
             if role.description:
                 checkbox.setToolTip(role.description)
@@ -210,11 +222,24 @@ class EmployeeDialog(QDialog):
 
         legacy_roles = {}
         custom_roles = {}
-        for key, checkbox in self.role_checkboxes.items():
-            if key in _EMPLOYEE_FIELDS:
-                legacy_roles[key] = checkbox.isChecked()
+        for role in self.profile.roles:
+            key = role.key
+            if key in self.role_checkboxes:
+                value = self.role_checkboxes[key].isChecked()
             else:
-                custom_roles[key] = checkbox.isChecked()
+                # Hidden because its linked_policy is DISABLED - preserve
+                # whatever the employee already had instead of silently
+                # wiping it to False (e.g. turning the "meat" policy off
+                # must not un-flag every meat-counter employee).
+                if key in _EMPLOYEE_FIELDS:
+                    value = getattr(self.employee, key, False) if self.employee else False
+                else:
+                    value = self.employee.custom_roles.get(key, False) if self.employee else False
+
+            if key in _EMPLOYEE_FIELDS:
+                legacy_roles[key] = value
+            else:
+                custom_roles[key] = value
 
         location_key = self.location_combo.currentData() if self.location_combo is not None else ""
 
