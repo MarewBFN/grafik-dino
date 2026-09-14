@@ -123,10 +123,23 @@ def _build_availability(ctx, soft):
 
 
 def _build_max_consecutive(ctx, soft):
-    max_consecutive = ctx.shop.constraints.get("max_consecutive_days", 4)
-    return add_max_consecutive_constraint(
-        ctx.model, ctx.x, ctx.employees, ctx.days, max_consecutive, ctx.all_shifts, soft=soft, trace=ctx.trace
-    )
+    # Group employees by their resolved (project-wide, or per-location if
+    # assigned) max_consecutive_days threshold, so each group gets its own
+    # value while reusing the same shared constraint function per group -
+    # with no locations (or all locations sharing the default), this is one
+    # group with every employee, identical to before per-location support.
+    groups: dict[int, list[int]] = {}
+    for e, emp in enumerate(ctx.employees):
+        value = ctx.shop.get_location(emp).constraints.get("max_consecutive_days", 4)
+        groups.setdefault(value, []).append(e)
+
+    violations = []
+    for max_consecutive, indices in groups.items():
+        violations.extend(add_max_consecutive_constraint(
+            ctx.model, ctx.x, ctx.employees, ctx.days, max_consecutive, ctx.all_shifts,
+            soft=soft, trace=ctx.trace, employee_indices=indices,
+        ))
+    return violations
 
 
 def _build_monthly_hours(ctx, soft):

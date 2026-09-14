@@ -11,16 +11,26 @@ class _LocationView:
     shop.get_location(emp).get_open_hours_for_day(d) the same way it calls
     shop.get_open_hours_for_day(d) today, regardless of which one it got."""
 
-    def __init__(self, location: LocationConfig, year: int, month: int):
+    def __init__(self, location: LocationConfig, year: int, month: int, fallback_constraints: dict):
         self._location = location
         self._year = year
         self._month = month
+        self._fallback_constraints = fallback_constraints
 
     def weekday(self, day: int) -> int:
         return self._location.weekday(self._year, self._month, day)
 
     def get_open_hours_for_day(self, day: int):
         return self._location.get_open_hours_for_day(self._year, self._month, day)
+
+    @property
+    def constraints(self) -> dict:
+        # LocationConfig always carries all of DEFAULT_LOCATION_CONSTRAINTS
+        # today, so this merge only matters for a location saved before a
+        # future key gets added there.
+        merged = dict(self._fallback_constraints)
+        merged.update(self._location.constraints)
+        return merged
 
 
 class ShopConfig:
@@ -174,12 +184,12 @@ class ShopConfig:
     def get_location(self, employee):
         """Godzinowy "widok" dla tego pracownika: jeśli ma przypisaną
         lokalizację (employee.location_key) i projekt ją definiuje, zwraca
-        obiekt z tym samym API co ShopConfig (`weekday`/`get_open_hours_for_day`)
-        wspierający się o tę lokalizację; w przeciwnym razie zwraca `self` -
-        dokładnie dzisiejsza, jednolokalizacyjna ścieżka.
+        obiekt z tym samym API co ShopConfig (`weekday`/`get_open_hours_for_day`/
+        `constraints`) wspierający się o tę lokalizację; w przeciwnym razie
+        zwraca `self` - dokładnie dzisiejsza, jednolokalizacyjna ścieżka.
         """
         if self.locations and employee.location_key in self.locations:
-            return _LocationView(self.locations[employee.location_key], self.year, self.month)
+            return _LocationView(self.locations[employee.location_key], self.year, self.month, self.constraints)
         return self
 
     # ==========================================================

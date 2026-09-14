@@ -69,6 +69,50 @@ def test_multi_location_generator_resolves_each_employees_own_location_hours():
     assert checked_any, "generator produced no assigned shifts to check"
 
 
+def test_max_consecutive_days_is_resolved_per_employee_location():
+    profile = CustomBusinessProfile(
+        key="custom_test_maxconsec",
+        display_name="Test MaxConsec",
+        roles=[RoleDefinition(key="worker", label="Pracownik")],
+        rules=[],
+    )
+    register_custom_profile(profile)
+
+    def build(location_max_consecutive):
+        shop = ShopConfig(2026, 3)
+        shop.business_type = profile.key
+        shop.constraint_policies.update(default_policies(profile))
+        from model.constraint_policy import ConstraintPolicy
+        shop.constraint_policies["max_consecutive"] = ConstraintPolicy.MANDATORY
+
+        loc = LocationConfig(
+            key="loc", name="Obiekt",
+            open_hours={i: ("08:00", "16:00") for i in range(7)},
+            constraints={"max_consecutive_days": location_max_consecutive},
+        )
+        shop.locations = {"loc": loc}
+
+        schedule = MonthSchedule(2026, 3)
+        emp = Employee(last_name="A", first_name="A", location_key="loc", custom_roles={"worker": True})
+        schedule.add_employee(emp)
+
+        # Lock 3 consecutive worked days - satisfiable only if the location's
+        # max_consecutive_days allows 3+ in a row.
+        for day in (2, 3, 4):
+            ds = schedule.get_day(emp, day)
+            ds.start, ds.end = "08:00", "16:00"
+            ds.is_locked = True
+
+        with redirect_stdout(io.StringIO()):
+            result = AutoScheduleGenerator(schedule, shop).generate(
+                is_fix=True, solver_time_limit_seconds=10, solver_workers=1
+            )
+        return result["success"]
+
+    assert build(2) is False, "3 locked consecutive days should conflict with a 2-day location limit"
+    assert build(6) is True, "3 locked consecutive days should be fine under a 6-day location limit"
+
+
 def test_shop_config_get_location_falls_back_to_self_without_locations():
     shop = ShopConfig(2026, 3)
     emp = Employee(last_name="Kowalski", first_name="Jan")
