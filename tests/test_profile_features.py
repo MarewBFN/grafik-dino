@@ -32,6 +32,60 @@ def _first_sunday(year, month):
     raise AssertionError("no Sunday found")
 
 
+def test_constraint_engine_skips_dino_only_rules_for_custom_profiles():
+    from model.constraints import ConstraintEngine
+    from model.employee import Employee
+    from model.month_schedule import MonthSchedule
+
+    profile = CustomBusinessProfile(
+        key="custom_test_constraint_engine",
+        display_name="Test ConstraintEngine",
+        roles=[RoleDefinition(key="worker", label="Pracownik")],
+        rules=[],
+    )
+    register_custom_profile(profile)
+
+    shop = ShopConfig(2026, 3)
+    shop.business_type = profile.key
+    # shop.constraints always carries min_open_staff/min_close_staff
+    # defaults regardless of business_type - set them impossibly high so a
+    # leaking dino_retail rule would definitely flag a violation.
+    shop.constraints["min_open_staff"] = 99
+    shop.constraints["min_close_staff"] = 99
+
+    schedule = MonthSchedule(2026, 3)
+    emp = Employee(last_name="A", first_name="A", custom_roles={"worker": True})
+    schedule.add_employee(emp)
+    ds = schedule.get_day(emp, 2)
+    ds.start, ds.end = "08:00", "16:00"
+
+    violations = ConstraintEngine.evaluate(schedule, shop)
+    assert not any(v.type in ("min_open_staff", "min_close_staff", "meat_coverage") for v in violations)
+
+
+def test_constraint_engine_max_consecutive_respects_employee_location_override():
+    from model.constraints import ConstraintEngine
+    from model.employee import Employee
+    from model.location import LocationConfig
+    from model.month_schedule import MonthSchedule
+
+    shop = ShopConfig(2026, 3)  # dino_retail
+    shop.constraints["max_consecutive_days"] = 6  # generous project-wide default
+    shop.locations["loc"] = LocationConfig(
+        key="loc", name="Obiekt", constraints={"max_consecutive_days": 2}
+    )
+
+    schedule = MonthSchedule(2026, 3)
+    emp = Employee(last_name="A", first_name="A", location_key="loc")
+    schedule.add_employee(emp)
+    for day in (2, 3, 4):  # 3 consecutive days > location's limit of 2
+        ds = schedule.get_day(emp, day)
+        ds.start, ds.end = "08:00", "16:00"
+
+    violations = ConstraintEngine.evaluate(schedule, shop)
+    assert any(v.type == "max_consecutive_days" and v.employee is emp for v in violations)
+
+
 def test_dino_retail_keeps_trade_calendar_behavior():
     shop = ShopConfig(2026, 3)  # business_type defaults to dino_retail
     sunday = _first_sunday(2026, 3)

@@ -197,18 +197,41 @@ fundamentem pod to przejście, nie tylko łatką pod jednego klienta.
   współdzielona przez prawie każdy moduł constraintu w generatorze —
   zrobienie tego per lokalizacja to osobna, spora przeróbka.
 
-### Drobne, nieblokujące
+### Drobne — zamknięte (sesja 2026-09-14, cd.)
 
-- **`last_projec.json`** (literówka w nazwie) w katalogu repo z realnymi
-  danymi projektu, nieobjęty `.gitignore` — zgłoszone, nienaprawione.
-- **`model/constraints.py`** — równoległa, zduplikowana logika
-  meat/opener używana tylko do kolorowania grida (przez
-  `logic/constraint_presenter.py`); może rozjechać się z prawdziwym
-  generatorem. Dług techniczny z pierwszej fazy, nieadresowany.
-- **Commit `ad45fd4`** ("Add scrollbars...") przez pomyłkę zawiera też
-  całą funkcję edycji profili pod niepasującym opisem — historia gita
-  jest w tym miejscu myląca (kod poprawny, tylko message nietrafiony).
-  Nie naprawiane (wymagałoby rebase/amend, nie robię tego bez pytania).
+- **`last_projec.json`** — plik zniknął z katalogu repo w trakcie tej
+  sesji (trafił do Kosza Windows, niedotknięty żadną moją komendą - patrz
+  sekcja 8 wyżej). Poprawna nazwa (`last_project.json`) już od dawna jest
+  w `.gitignore`; skoro pliku nie ma i nic go już nie tworzy, nie ma czego
+  dalej naprawiać.
+- **`model/constraints.py`** — `ConstraintEngine.evaluate()` uruchamiał
+  `MinStaffRule`(open/close)/`MeatCoverageRule` **bezwarunkowo**, nawet
+  dla projektów na profilu custom (bo `shop.constraints` zawsze ma
+  domyślne `min_open_staff`/`min_close_staff` = 3/3, niezależnie od
+  `business_type`) - realny, żywy bug: kolorowanie wierszy
+  "Otwarcie"/"Zamknięcie" w gridzie dla DOWOLNEGO profilu custom (np.
+  ochrony) walidowało się względem liczb z Dino, kompletnie
+  niepowiązanych z faktycznie skonfigurowanymi regułami tego profilu.
+  Naprawione: te trzy reguły uruchamiają się teraz tylko dla
+  `business_type == "dino_retail"`. Przy okazji `MaxConsecutiveDaysRule`
+  (który zostaje generyczny, dla każdego profilu) zaczął też respektować
+  per-lokalizacyjne nadpisanie `max_consecutive_days` (Etap 3d / sekcja 7
+  wyżej) - wcześniej kolorowanie grida ignorowało lokalizacje nawet dla
+  Dino. `Rest11hRule` **świadomie zostawiony bez zmian** - nie
+  odzwierciedla `rest_11h_mode` ("standard" vs "simplified") generatora,
+  ale to porównanie rzeczywistych godzin z gotowego grafiku względem
+  jednej, uniwersalnej zasady 11h, nie duplikat konkretnego trybu solvera;
+  nie jest to udowodniony bug, tylko potencjalna, drugorzędna
+  rozbieżność - zostawione, żeby nie ciągnąć tego dalej bez konkretnego
+  przypadku, który by to uzasadniał.
+  Testy: `tests/test_profile_features.py::test_constraint_engine_skips_dino_only_rules_for_custom_profiles`,
+  `::test_constraint_engine_max_consecutive_respects_employee_location_override`.
+- **Commit `ad45fd4`** ("Add scrollbars...") — wciąż zawiera niepasujący
+  opis (kod poprawny, message nietrafiony). Branch `feature/business-profiles`
+  jest **wyłącznie lokalny** (`git branch -r` nie pokazuje go na
+  `origin`), więc rebase/amend tego jednego commita nie dotknie
+  nikogo poza Tobą — ale to wciąż przepisywanie historii, więc czekam na
+  wyraźne potwierdzenie, zanim to zrobię (patrz pytanie w rozmowie).
 
 ### Incydent do zamknięcia
 
