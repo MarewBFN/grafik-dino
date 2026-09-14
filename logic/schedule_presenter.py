@@ -36,7 +36,7 @@ class SchedulePresenter:
         if not s or not e:
             return CellView(bg=theme.BG_MAIN)
 
-        hours = self.shop_config.get_open_hours_for_day(day)
+        hours = self.shop_config.get_location(emp).get_open_hours_for_day(day)
         text_start = s
         text_end = e
         bg = theme.BG_MAIN

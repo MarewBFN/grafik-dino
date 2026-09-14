@@ -1,5 +1,3 @@
-import re
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -29,6 +27,7 @@ from model.custom_profile import (
     RULE_TYPE_ROLE_TIME_RESTRICTION,
 )
 from model.custom_profile_store import save_custom_profile
+from ui.slug import slugify as _slugify
 
 POLICY_OPTIONS = (
     ("Preferowane", ConstraintPolicy.PREFERRED.value),
@@ -46,16 +45,6 @@ SCOPE_OPTIONS = (
     ("na zamknięciu", "close"),
     ("w dowolnym momencie dnia", "any_shift"),
 )
-
-
-def _slugify(label: str, taken: set) -> str:
-    base = re.sub(r"[^a-z0-9]+", "_", label.strip().lower()).strip("_") or "rola"
-    key = base
-    i = 2
-    while key in taken:
-        key = f"{base}_{i}"
-        i += 1
-    return key
 
 
 class _RoleRow(QFrame):

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGridLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -22,8 +23,10 @@ from PySide6.QtWidgets import (
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.profile_wizard_dialog import ProfileWizardDialog
+from ui.slug import slugify
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import BUSINESS_PROFILES, get_profile
+from model.location import LocationConfig
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
 
@@ -38,6 +41,39 @@ REST_11H_MODE_OPTIONS = (
     ("Standardowy (dokładny)", "standard"),
     ("Uproszczony (2 zmiany — szybszy)", "simplified"),
 )
+
+class _LocationRow(QFrame):
+    """One editable location row in the "Lokalizacje" tab: name + a single
+    open/close pair applied to every weekday for that location (full
+    per-weekday-per-location hours are a possible future refinement, not
+    needed for the first usable version)."""
+
+    def __init__(self, on_remove, name="", open_time="08:00", close_time="20:00"):
+        super().__init__()
+        self.setObjectName("configCard")
+        layout = QHBoxLayout(self)
+
+        self.name_edit = QLineEdit(name)
+        self.name_edit.setPlaceholderText("np. Galeria Płn")
+        layout.addWidget(self.name_edit, 1)
+
+        layout.addWidget(QLabel("Godziny:"))
+        self.open_input = TimeInputWidget()
+        self.open_input.set_time_str(open_time)
+        layout.addWidget(self.open_input)
+        layout.addWidget(QLabel("—"))
+        self.close_input = TimeInputWidget()
+        self.close_input.set_time_str(close_time)
+        layout.addWidget(self.close_input)
+
+        remove_btn = QPushButton("Usuń")
+        remove_btn.setObjectName("dangerButton")
+        remove_btn.clicked.connect(lambda: on_remove(self))
+        layout.addWidget(remove_btn)
+
+    def name(self) -> str:
+        return self.name_edit.text().strip()
+
 
 def _parse_time(value: str) -> QTime:
     if not value:
@@ -92,6 +128,7 @@ class ConfigDialog(QDialog):
         tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
         tabs.addTab(self._build_limits_tab(), "Limity")
         tabs.addTab(self._build_generator_rules_tab(), "Zasady generatora")
+        tabs.addTab(self._build_locations_tab(), "Lokalizacje")
 
         buttons = QDialogButtonBox()
         help_btn = QPushButton("Pomoc")
@@ -295,6 +332,48 @@ class ConfigDialog(QDialog):
         layout.addStretch()
         return page
 
+    def _build_locations_tab(self):
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(20, 20, 20, 20)
+        outer.setSpacing(12)
+
+        hint = QLabel(
+            "Osobne obiekty/placówki w ramach tego projektu (np. kilka "
+            "chronionych lokalizacji), każdy z własnymi godzinami. Bez "
+            "zdefiniowanych lokalizacji projekt działa jak dziś - jedna, "
+            "wspólna konfiguracja z zakładki \"Godziny otwarcia\"."
+        )
+        hint.setObjectName("mutedHint")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
+
+        self._location_rows: list[_LocationRow] = []
+        self.locations_container = QVBoxLayout()
+        outer.addLayout(self.locations_container)
+
+        for loc in self.shop_config.locations.values():
+            start, end = next(iter(loc.open_hours.values()), ("08:00", "20:00"))
+            self._add_location_row(loc.name, start, end)
+
+        add_btn = QPushButton("Dodaj lokalizację")
+        add_btn.setObjectName("secondaryButton")
+        add_btn.clicked.connect(lambda: self._add_location_row())
+        outer.addWidget(add_btn)
+
+        outer.addStretch()
+        return page
+
+    def _add_location_row(self, name="", open_time="08:00", close_time="20:00"):
+        row = _LocationRow(self._remove_location_row, name, open_time, close_time)
+        self._location_rows.append(row)
+        self.locations_container.addWidget(row)
+
+    def _remove_location_row(self, row):
+        self._location_rows.remove(row)
+        row.setParent(None)
+        row.deleteLater()
+
     def _build_generator_rules_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -479,6 +558,24 @@ class ConfigDialog(QDialog):
             self.shop_config.trade_sundays = {
                 day for day, box in self.sunday_checks.items() if box.isChecked()
             }
+
+            new_locations = {}
+            taken_keys = set()
+            for row in self._location_rows:
+                name = row.name()
+                if not name:
+                    continue
+                key = slugify(name, taken_keys)
+                taken_keys.add(key)
+                start = row.open_input.get_time_str()
+                end = row.close_input.get_time_str()
+                if _parse_time(end) <= _parse_time(start):
+                    raise ValueError(f"Zamknięcie musi być później niż otwarcie dla lokalizacji: {name}.")
+                new_locations[key] = LocationConfig(
+                    key=key, name=name,
+                    open_hours={wd: (start, end) for wd in range(7)},
+                )
+            self.shop_config.locations = new_locations
 
             self.shop_config.constraints["max_consecutive_days"] = self.max_consecutive.value()
             self.shop_config.constraints["min_open_staff"] = self.min_open.value()

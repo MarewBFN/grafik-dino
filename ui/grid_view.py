@@ -803,19 +803,7 @@ class ScheduleGrid(QTableWidget):
                 count_meat = 0
                 count_role = 0
                 role_key = key[len("role:"):] if key.startswith("role:") else None
-
-                # Pobieramy godziny pracy sklepu z konfiguracji
-                hours = self.shop_config.get_open_hours_for_day(day)
-                if not hours:
-                    continue
-                shop_open_str, shop_close_str = hours
-
                 fmt = "%H:%M"
-                try:
-                    shop_open_dt = datetime.strptime(shop_open_str, fmt)
-                    shop_close_dt = datetime.strptime(shop_close_str, fmt)
-                except ValueError:
-                    continue
 
                 for emp in self.schedule.employees:
                     ds = self.schedule.get_day(emp, day)
@@ -824,7 +812,17 @@ class ScheduleGrid(QTableWidget):
                     if not ds.start or ds.is_leave or getattr(ds, "is_sick", False):
                         continue
 
+                    # Godziny rozwiązywane per lokalizacja pracownika (patrz
+                    # ShopConfig.get_location) - bez lokalizacji to dokładnie
+                    # jedna, wspólna konfiguracja sklepu co dziś.
+                    hours = self.shop_config.get_location(emp).get_open_hours_for_day(day)
+                    if not hours:
+                        continue
+                    shop_open_str, shop_close_str = hours
+
                     try:
+                        shop_open_dt = datetime.strptime(shop_open_str, fmt)
+                        shop_close_dt = datetime.strptime(shop_close_str, fmt)
                         emp_start_dt = datetime.strptime(ds.start, fmt)
                         emp_end_dt = datetime.strptime(ds.end, fmt)
 

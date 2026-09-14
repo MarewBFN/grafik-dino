@@ -764,7 +764,8 @@ class MainWindow(QMainWindow):
 
     def _open_add_employee(self):
         business_type = self.shop_config.business_type if self.shop_config else None
-        dialog = EmployeeDialog(self, business_type=business_type)
+        locations = self.shop_config.locations if self.shop_config else None
+        dialog = EmployeeDialog(self, business_type=business_type, locations=locations)
 
         if dialog.exec() != QDialog.Accepted:
             return
@@ -776,7 +777,8 @@ class MainWindow(QMainWindow):
 
     def _edit_employee(self, emp):
         business_type = self.shop_config.business_type if self.shop_config else None
-        dialog = EmployeeDialog(self, employee=emp, business_type=business_type)
+        locations = self.shop_config.locations if self.shop_config else None
+        dialog = EmployeeDialog(self, employee=emp, business_type=business_type, locations=locations)
         if dialog.exec() != QDialog.Accepted:
             return
 

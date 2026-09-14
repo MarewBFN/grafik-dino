@@ -28,11 +28,13 @@ _EMPLOYEE_FIELDS = {f.name for f in dataclasses.fields(Employee)}
 
 
 class EmployeeDialog(QDialog):
-    def __init__(self, parent=None, employee=None, business_type=None):
+    def __init__(self, parent=None, employee=None, business_type=None, locations=None):
         super().__init__(parent)
         self.employee = employee
         self.profile = get_profile(business_type)
+        self.locations = locations or {}
         self.role_checkboxes: dict[str, QCheckBox] = {}
+        self.location_combo: QComboBox | None = None
         self.setWindowTitle("Edytuj pracownika" if employee else "Dodaj pracownika")
         self.setModal(True)
         self.setMinimumWidth(460)
@@ -74,6 +76,13 @@ class EmployeeDialog(QDialog):
         form.addRow("Nazwisko:", self.last_name)
         form.addRow("Imię:", self.first_name)
         form.addRow("Wymiar etatu:", self.employment_fraction)
+
+        if self.locations:
+            self.location_combo = QComboBox()
+            self.location_combo.addItem("Brak", "")
+            for loc in self.locations.values():
+                self.location_combo.addItem(loc.name, loc.key)
+            form.addRow("Lokalizacja:", self.location_combo)
 
         root.addLayout(form)
 
@@ -170,6 +179,9 @@ class EmployeeDialog(QDialog):
         idx = self.employment_fraction.findData(self.employee.employment_fraction)
         if idx >= 0:
             self.employment_fraction.setCurrentIndex(idx)
+        if self.location_combo is not None:
+            idx = self.location_combo.findData(self.employee.location_key)
+            self.location_combo.setCurrentIndex(idx if idx >= 0 else 0)
 
     def _save(self):
         ln = self.last_name.text().strip()
@@ -187,6 +199,8 @@ class EmployeeDialog(QDialog):
             else:
                 custom_roles[key] = checkbox.isChecked()
 
+        location_key = self.location_combo.currentData() if self.location_combo is not None else ""
+
         try:
             emp = Employee(
                 last_name=ln,
@@ -194,6 +208,7 @@ class EmployeeDialog(QDialog):
                 monthly_target_hours=self.monthly_target_hours.value(),
                 employment_fraction=self.employment_fraction.currentData(),
                 custom_roles=custom_roles,
+                location_key=location_key,
                 **legacy_roles,
             )
             emp.validate()
