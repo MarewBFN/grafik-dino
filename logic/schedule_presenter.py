@@ -36,6 +36,19 @@ class SchedulePresenter:
         if not s or not e:
             return CellView(bg=theme.BG_MAIN)
 
+        if ds.crosses_midnight():
+            # Zmiana nocna (Etap C/D planu zmian nocnych) - koniec leży w
+            # kolejnej dobie kalendarzowej, więc oznaczamy to wprost zamiast
+            # dawać złudzenie, że "06:00" jest tego samego dnia co "22:00".
+            tooltip = f"{s} → {e} (+1)\nSuma: {t}"
+            return CellView(
+                text_start=s,
+                text_end=f"{e} (+1)",
+                text_total=t,
+                bg=theme.SHIFT_NIGHT,
+                tooltip=tooltip,
+            )
+
         hours = self.shop_config.get_location(emp).get_open_hours_for_day(day)
         text_start = s
         text_end = e

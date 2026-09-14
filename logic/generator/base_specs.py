@@ -75,7 +75,8 @@ def _build_always_on_specs():
             "manual_shift",
             lambda ctx, soft: add_manual_shift_constraints(
                 ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
-                ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map, trace=ctx.trace,
+                ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
+                trace=ctx.trace, shift_night=ctx.shift_night,
             ),
             always_on=True,
         ),

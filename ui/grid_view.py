@@ -742,7 +742,9 @@ class ScheduleGrid(QTableWidget):
             if self.compact_mode:
                 text = ""
 
-                if ds.start:
+                if ds.start and ds.crosses_midnight():
+                    text = "N"
+                elif ds.start:
                     hours = self.shop_config.get_open_hours_for_day(day)
                     if hours:
                         shop_open_str, shop_close_str = hours

@@ -209,7 +209,8 @@ class AutoScheduleGenerator:
                 self.SHIFT_OPEN,
                 self.SHIFT_CLOSE,
                 self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP
+                self.END_SHIFT_MAP,
+                shift_night=self.SHIFT_NIGHT,
             )
             all_soft_violations.extend(fix_penalties)
 
