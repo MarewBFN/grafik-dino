@@ -37,6 +37,7 @@ from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import ScheduleGrid
+from ui.new_project_dialog import NewProjectDialog
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.loading_overlay import LoadingOverlay
@@ -531,6 +532,8 @@ class MainWindow(QMainWindow):
 
         help_menu.addAction("Samouczek", self._open_tutorial)
 
+        file_menu.addAction("Nowy projekt...", self._open_new_project)
+        file_menu.addSeparator()
         file_menu.addAction("Zapisz", self._save_project)
         file_menu.addAction("Wczytaj", self._load_project)
 
@@ -560,6 +563,40 @@ class MainWindow(QMainWindow):
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
         help_menu.addAction("Sprawdź aktualizacje", lambda: self._check_updates(manual=True))
         help_menu.addAction("O programie", self._about)
+
+    def _open_new_project(self):
+        if self.schedule is not None:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Nowy projekt")
+            msg_box.setText(
+                "Utworzenie nowego projektu usunie bieżący grafik, listę "
+                "pracowników i ustawienia konfiguracji. Kontynuować?"
+            )
+            btn_yes = msg_box.addButton("Tak", QMessageBox.YesRole)
+            msg_box.addButton("Anuluj", QMessageBox.RejectRole)
+            msg_box.exec()
+            if msg_box.clickedButton() != btn_yes:
+                return
+
+        dialog = NewProjectDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.year = dialog.result_year
+        self.month = dialog.result_month
+        self._set_date_controls(self.year, self.month)
+
+        # Świadomie nie dziedziczymy pracowników poprzedniego projektu -
+        # _init_state() normalnie przenosi ich (sensowne przy zwykłej zmianie
+        # miesiąca tej samej firmy), ale "Nowy projekt" może oznaczać inną
+        # branżę z innymi rolami.
+        self.schedule = None
+        self._init_state()
+        self.shop_config.business_type = dialog.result_business_type
+
+        self._update_nominal_hours_label()
+        self._sync_everything()
+        self.statusBar().showMessage("Utworzono nowy projekt.", 2500)
 
     def _init_state(self):
         old_employees = []
