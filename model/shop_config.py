@@ -46,6 +46,12 @@ class ShopConfig:
         self.year = year
         self.month = month
 
+        # Nazwa placówki/firmy nadawana w szybkiej konfiguracji (ui/first_run_wizard.py)
+        # albo w zakładce "Godziny otwarcia". Czysto opisowa - nie wpływa na
+        # generator. Puste domyślnie: stare projekty i te utworzone poza
+        # kreatorem po prostu nie mają nazwy.
+        self.name: str = ""
+
         # Jaki profil działalności (role, constrainty, etykiety UI) obowiązuje
         # dla tego projektu. Domyślnie Dino - stare projekty bez tego pola
         # zachowują się dokładnie jak dziś.
@@ -205,6 +211,7 @@ class ShopConfig:
         return {
             "year": self.year,
             "month": self.month,
+            "name": self.name,
             "business_type": self.business_type,
             "locations": {key: loc.to_dict() for key, loc in self.locations.items()},
             "open_hours": self.open_hours,
@@ -223,6 +230,7 @@ class ShopConfig:
     @classmethod
     def from_dict(cls, data):
         cfg = cls(data["year"], data["month"])
+        cfg.name = data.get("name", "")
         cfg.business_type = data.get("business_type", DEFAULT_BUSINESS_TYPE)
         cfg.locations = {
             key: LocationConfig.from_dict(loc_data)

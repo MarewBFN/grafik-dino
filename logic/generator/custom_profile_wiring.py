@@ -16,7 +16,7 @@ from logic.generator.objective import (
     add_work_balance_penalty,
     add_workload_balance_penalty,
 )
-from model.custom_profile import CustomBusinessProfile
+from model.custom_profile import RULE_TYPE_MIN_STAFF_WITH_ROLE, CustomBusinessProfile
 
 
 def setup_context(ctx) -> None:
@@ -32,9 +32,11 @@ def build_specs(custom: CustomBusinessProfile) -> list[ConstraintSpec]:
         builder = generic_rules.RULE_BUILDERS.get(rule.type)
         if builder is None:
             continue
+        rule_key = custom.rule_policy_key(rule)
+        extra = {"rule_key": rule_key} if rule.type == RULE_TYPE_MIN_STAFF_WITH_ROLE else {}
         specs.append(ConstraintSpec(
-            name=custom.rule_policy_key(rule),
-            build=functools.partial(builder, role_key=rule.role_key, **rule.params),
+            name=rule_key,
+            build=functools.partial(builder, role_key=rule.role_key, **rule.params, **extra),
         ))
 
     return specs

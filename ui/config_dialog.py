@@ -28,7 +28,7 @@ from ui.profile_wizard_dialog import ProfileWizardDialog
 from ui.slug import slugify
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import BUSINESS_PROFILES, DEFAULT_BUSINESS_TYPE, get_profile
-from model.location import LocationConfig
+from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
 
@@ -48,33 +48,79 @@ class _LocationRow(QFrame):
     """One editable location row in the "Lokalizacje" tab: name + a single
     open/close pair applied to every weekday for that location (full
     per-weekday-per-location hours are a possible future refinement, not
-    needed for the first usable version)."""
+    needed for the first usable version), plus per-location staffing
+    thresholds that actually override the generator (see
+    logic/generator/base_specs.py::_build_max_consecutive and
+    logic/generator/generic_rules.py::build_min_staff_with_role) - fields for
+    thresholds the generator doesn't read per-location (min_open_staff/
+    min_close_staff for the built-in dino_retail profile) are deliberately
+    NOT shown here, since they'd silently do nothing."""
 
-    def __init__(self, on_remove, name="", open_time="08:00", close_time="20:00"):
+    def __init__(
+        self, on_remove, name="", open_time="08:00", close_time="20:00",
+        max_consecutive_days=None, rule_defs=(), rule_overrides=None,
+    ):
         super().__init__()
         self.setObjectName("configCard")
-        layout = QHBoxLayout(self)
+        self.rule_defs = list(rule_defs)
+        rule_overrides = rule_overrides or {}
+        outer = QVBoxLayout(self)
 
+        top = QHBoxLayout()
         self.name_edit = QLineEdit(name)
         self.name_edit.setPlaceholderText("np. Galeria Płn")
-        layout.addWidget(self.name_edit, 1)
+        top.addWidget(self.name_edit, 1)
 
-        layout.addWidget(QLabel("Godziny:"))
+        top.addWidget(QLabel("Godziny:"))
         self.open_input = TimeInputWidget()
         self.open_input.set_time_str(open_time)
-        layout.addWidget(self.open_input)
-        layout.addWidget(QLabel("—"))
+        top.addWidget(self.open_input)
+        top.addWidget(QLabel("—"))
         self.close_input = TimeInputWidget()
         self.close_input.set_time_str(close_time)
-        layout.addWidget(self.close_input)
+        top.addWidget(self.close_input)
 
         remove_btn = QPushButton("Usuń")
         remove_btn.setObjectName("dangerButton")
         remove_btn.clicked.connect(lambda: on_remove(self))
-        layout.addWidget(remove_btn)
+        top.addWidget(remove_btn)
+        outer.addLayout(top)
+
+        thresholds = QHBoxLayout()
+        thresholds.addWidget(QLabel("Progi obsady dla tej lokalizacji:"))
+
+        self.max_consecutive_spin = QSpinBox()
+        self.max_consecutive_spin.setRange(1, 14)
+        self.max_consecutive_spin.setFixedWidth(60)
+        self.max_consecutive_spin.setValue(
+            max_consecutive_days or DEFAULT_LOCATION_CONSTRAINTS["max_consecutive_days"]
+        )
+        thresholds.addWidget(QLabel("Dni pod rząd:"))
+        thresholds.addWidget(self.max_consecutive_spin)
+
+        self.rule_spins: dict[str, QSpinBox] = {}
+        for rule_key, label, default_value in self.rule_defs:
+            spin = QSpinBox()
+            spin.setRange(0, 50)
+            spin.setSpecialValueText(f"domyślnie ({default_value})")
+            spin.setFixedWidth(120)
+            spin.setValue(rule_overrides.get(rule_key, 0))
+            thresholds.addWidget(QLabel(f"{label}:"))
+            thresholds.addWidget(spin)
+            self.rule_spins[rule_key] = spin
+
+        thresholds.addStretch()
+        outer.addLayout(thresholds)
 
     def name(self) -> str:
         return self.name_edit.text().strip()
+
+    def constraints_overrides(self) -> dict:
+        overrides = {"max_consecutive_days": self.max_consecutive_spin.value()}
+        for rule_key, spin in self.rule_spins.items():
+            if spin.value():
+                overrides[rule_key] = spin.value()
+        return overrides
 
 
 def _parse_time(value: str) -> QTime:
@@ -105,6 +151,13 @@ class ConfigDialog(QDialog):
         title = QLabel("Konfiguracja sklepu")
         title.setObjectName("sectionLabel")
         root.addWidget(title)
+
+        name_row = QHBoxLayout()
+        name_row.addWidget(QLabel("Nazwa placówki:"))
+        self.name_edit = QLineEdit(self.shop_config.name)
+        self.name_edit.setPlaceholderText("np. Dino Nowa Sól")
+        name_row.addWidget(self.name_edit, 1)
+        root.addLayout(name_row)
 
         profile_row = QHBoxLayout()
         profile_row.addWidget(QLabel("Profil działalności:"))
@@ -465,11 +518,30 @@ class ConfigDialog(QDialog):
             "zdefiniowanych lokalizacji projekt działa jak dziś - jedna, "
             "wspólna konfiguracja z zakładki \"Godziny otwarcia\".\n"
             "Działalność całodobowa: ustaw np. 00:00–23:45 (godziny "
-            "przechodzące przez północ nie są jeszcze wspierane)."
+            "przechodzące przez północ nie są jeszcze wspierane).\n"
+            "Progi obsady poniżej nadpisują wartości domyślne tylko dla "
+            "pracowników przypisanych do tej lokalizacji."
         )
         hint.setObjectName("mutedHint")
         hint.setWordWrap(True)
         outer.addWidget(hint)
+
+        # Progi z reguł "min. N osób z rolą X" bieżącego (custom) profilu -
+        # ta zakładka nie odświeża się na żywo po zmianie profilu w selektorze
+        # wyżej, tak samo jak "Zasady generatora" (patrz _on_business_type_changed).
+        from model.business_profile import get_custom_profile
+        from model.custom_profile import RULE_TYPE_MIN_STAFF_WITH_ROLE
+
+        self._location_rule_defs = []
+        custom = get_custom_profile(self.shop_config.business_type)
+        if custom is not None:
+            for rule in custom.rules:
+                if rule.type == RULE_TYPE_MIN_STAFF_WITH_ROLE:
+                    self._location_rule_defs.append((
+                        custom.rule_policy_key(rule),
+                        custom.rule_label(rule),
+                        rule.params.get("min_count", 1),
+                    ))
 
         self._location_rows: list[_LocationRow] = []
         self.locations_container = QVBoxLayout()
@@ -477,7 +549,11 @@ class ConfigDialog(QDialog):
 
         for loc in self.shop_config.locations.values():
             start, end = next(iter(loc.open_hours.values()), ("08:00", "20:00"))
-            self._add_location_row(loc.name, start, end)
+            self._add_location_row(
+                loc.name, start, end,
+                max_consecutive_days=loc.constraints.get("max_consecutive_days"),
+                rule_overrides=loc.constraints,
+            )
 
         add_btn = QPushButton("Dodaj lokalizację")
         add_btn.setObjectName("secondaryButton")
@@ -487,8 +563,16 @@ class ConfigDialog(QDialog):
         outer.addStretch()
         return page
 
-    def _add_location_row(self, name="", open_time="08:00", close_time="20:00"):
-        row = _LocationRow(self._remove_location_row, name, open_time, close_time)
+    def _add_location_row(
+        self, name="", open_time="08:00", close_time="20:00",
+        max_consecutive_days=None, rule_overrides=None,
+    ):
+        row = _LocationRow(
+            self._remove_location_row, name, open_time, close_time,
+            max_consecutive_days=max_consecutive_days,
+            rule_defs=self._location_rule_defs,
+            rule_overrides=rule_overrides,
+        )
         self._location_rows.append(row)
         self.locations_container.addWidget(row)
 
@@ -696,6 +780,7 @@ class ConfigDialog(QDialog):
 
     def _save(self):
         try:
+            self.shop_config.name = self.name_edit.text().strip()
             self.shop_config.business_type = self.business_type_selector.currentData()
 
             for wd, (start_input, end_input) in self.open_edits.items():
@@ -738,6 +823,7 @@ class ConfigDialog(QDialog):
                 new_locations[key] = LocationConfig(
                     key=key, name=name,
                     open_hours={wd: (start, end) for wd in range(7)},
+                    constraints=row.constraints_overrides(),
                 )
             self.shop_config.locations = new_locations
 

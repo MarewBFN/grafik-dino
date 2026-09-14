@@ -22,10 +22,17 @@ def _role_employee_indices(ctx, role_key):
     return [e for e, emp in enumerate(ctx.employees) if emp.has_role(role_key)]
 
 
-def build_min_staff_with_role(ctx, soft, role_key, min_count=1, scope="open"):
+def build_min_staff_with_role(ctx, soft, role_key, rule_key, min_count=1, scope="open"):
     """"At least `min_count` employees with role `role_key` [on open / on
     close / working at any point that day]." Generalizes the is_opener/
     is_meat >= 1 checks baked into constraints_staff.add_fixed_staff_shift_constraints.
+
+    A location can override the threshold for this specific rule via
+    LocationConfig.constraints[rule_key] (rule_key = the same "rule:<id>"
+    string used as this ConstraintSpec's policy name) - same per-location
+    override mechanism as max_consecutive_days
+    (base_specs._build_max_consecutive). Employees are grouped by their
+    resolved threshold so e.g. "min. 2 uzbrojonych" can differ per obiekt.
     """
     violations = []
     role_employees = _role_employee_indices(ctx, role_key)
@@ -37,17 +44,29 @@ def build_min_staff_with_role(ctx, soft, role_key, min_count=1, scope="open"):
     else:  # "any_shift"
         shifts_by_day = lambda d: ctx.all_shifts
 
-    for d in ctx.trade_days:
-        shifts = shifts_by_day(d)
-        terms = [ctx.x[e, d, s] for e in role_employees for s in shifts]
-        count = sum(terms) if terms else ctx.model.NewConstant(0)
+    if role_employees:
+        groups: dict[int, list[int]] = {}
+        for e in role_employees:
+            threshold = ctx.shop.get_location(ctx.employees[e]).constraints.get(rule_key, min_count)
+            groups.setdefault(threshold, []).append(e)
+    else:
+        # No employee has this role at all - still enforce (or flag) the
+        # base threshold against zero people, same as before per-location
+        # grouping existed.
+        groups = {min_count: []}
 
-        if not soft:
-            ctx.model.Add(count >= min_count)
-        else:
-            violation = ctx.model.NewIntVar(0, min_count, f"role_staff_v_{role_key}_{scope}_d{d}")
-            ctx.model.Add(count + violation >= min_count)
-            violations.append(violation)
+    for threshold, indices in groups.items():
+        for d in ctx.trade_days:
+            shifts = shifts_by_day(d)
+            terms = [ctx.x[e, d, s] for e in indices for s in shifts]
+            count = sum(terms) if terms else ctx.model.NewConstant(0)
+
+            if not soft:
+                ctx.model.Add(count >= threshold)
+            else:
+                violation = ctx.model.NewIntVar(0, threshold, f"role_staff_v_{role_key}_{scope}_d{d}_t{threshold}")
+                ctx.model.Add(count + violation >= threshold)
+                violations.append(violation)
 
     return violations
 

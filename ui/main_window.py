@@ -137,8 +137,9 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._init_state()
         self._sync_everything()
-        if not self._open_project_from_path(open_path):
-            self._try_load_last_project()
+        self._opened_existing_project = self._open_project_from_path(open_path)
+        if not self._opened_existing_project:
+            self._opened_existing_project = self._try_load_last_project()
         self.loading_overlay = LoadingOverlay(self)
 
         self.statusBar().showMessage("Gotowe")
@@ -642,7 +643,9 @@ class MainWindow(QMainWindow):
         self.grid.refresh()
 
     def _update_window_title(self):
-        self.setWindowTitle(f"Grafik Dino — {self.month:02d}.{self.year}")
+        name = self.shop_config.name if self.shop_config else ""
+        prefix = f"Grafik Dino — {name}" if name else "Grafik Dino"
+        self.setWindowTitle(f"{prefix} — {self.month:02d}.{self.year}")
 
     def _update_nominal_hours_label(self):
         if not self.shop_config:
@@ -1181,14 +1184,18 @@ class MainWindow(QMainWindow):
         if msg.clickedButton() == btn_open:
             QDesktopServices.openUrl(QUrl("https://madebykewin.pl"))
 
-    def _try_load_last_project(self):
+    def _try_load_last_project(self) -> bool:
+        """Returns whether a previously-saved project was actually loaded -
+        used at startup to tell a genuinely fresh install (see
+        _maybe_show_first_run_wizard) from a normal relaunch."""
         if not os.path.exists("last_project.json"):
-            return
+            return False
 
         try:
             self._apply_loaded_project(*load_project("last_project.json"))
         except Exception:
-            pass
+            return False
+        return True
 
     def _toggle_expanded_view(self, checked):
         self.grid.set_compact_mode(not checked)
@@ -1469,16 +1476,60 @@ class MainWindow(QMainWindow):
     def _check_first_run(self):
         flag_path = "first_run.flag"
 
-        if not os.path.exists(flag_path):
+        if os.path.exists(flag_path):
+            return
 
-            def mark_seen():
-                try:
-                    with open(flag_path, "w") as f:
-                        f.write("seen")
-                except OSError:
-                    pass
+        def mark_seen():
+            try:
+                with open(flag_path, "w") as f:
+                    f.write("seen")
+            except OSError:
+                pass
 
+        # Placówkę konfigurujemy tylko gdy naprawdę nie ma jeszcze żadnego
+        # zapisanego projektu (świeży instal) - _init_state() w __init__
+        # zawsze tworzy w pamięci pusty, domyślny dino_retail, więc
+        # self.schedule tu nigdy nie jest None; prawdziwy sygnał "świeży
+        # instal" to _opened_existing_project ustawione w __init__. Poradnik
+        # zawsze zamyka tę sekwencję, po kreatorze albo od razu, jeśli
+        # kreatora nie było czego pokazywać.
+        if not self._opened_existing_project:
+            self._maybe_show_first_run_wizard(
+                on_finished=lambda: self._start_tutorial(on_finished=mark_seen)
+            )
+        else:
             self._start_tutorial(on_finished=mark_seen)
+
+    def _maybe_show_first_run_wizard(self, on_finished):
+        from ui.first_run_wizard import FirstRunWizardDialog
+
+        wizard = FirstRunWizardDialog(self)
+        wizard.exec()
+        if wizard.completed:
+            self._apply_first_run_wizard_result(wizard)
+        on_finished()
+
+    def _apply_first_run_wizard_result(self, wizard):
+        self.year = wizard.result_year
+        self.month = wizard.result_month
+        self._set_date_controls(self.year, self.month)
+
+        self.schedule = None
+        self._init_state()
+        self.shop_config.name = wizard.result_name
+        self.shop_config.business_type = wizard.result_business_type
+
+        from model.business_profile import get_custom_profile
+        custom = get_custom_profile(wizard.result_business_type)
+        if custom is not None:
+            from logic.generator.custom_profile_wiring import default_policies
+            self.shop_config.constraint_policies.update(default_policies(custom))
+        self.shop_config.constraint_policies.update(wizard.result_policy_overrides)
+
+        self._update_nominal_hours_label()
+        self._sync_everything()
+        save_project("last_project.json", self.schedule, self.shop_config)
+        self.statusBar().showMessage("Utworzono placówkę.", 2500)
 
     def _clear_generated(self):
         if not self.schedule or not self.controller:

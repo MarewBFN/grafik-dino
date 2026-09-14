@@ -2,24 +2,19 @@ from datetime import date
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QButtonGroup,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QFrame,
-    QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
-    QRadioButton,
     QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from model.business_profile import BUSINESS_PROFILES, get_custom_profile
-from ui.profile_wizard_dialog import ProfileWizardDialog
+from ui.business_profile_picker import BusinessProfilePicker
 
 
 class NewProjectDialog(QDialog):
@@ -38,9 +33,6 @@ class NewProjectDialog(QDialog):
         self.result_business_type = None
         self.result_year = None
         self.result_month = None
-
-        self._profile_radios: dict[str, QRadioButton] = {}
-        self._button_group = QButtonGroup(self)
 
         self._build_ui()
 
@@ -82,14 +74,8 @@ class NewProjectDialog(QDialog):
         content_layout.addLayout(form)
 
         content_layout.addWidget(QLabel("Branża:"))
-        self.profiles_container = QVBoxLayout()
-        content_layout.addLayout(self.profiles_container)
-        self._reload_profile_radios()
-
-        new_branch_btn = QPushButton("+ Nowa branża...")
-        new_branch_btn.setObjectName("secondaryButton")
-        new_branch_btn.clicked.connect(self._open_profile_wizard)
-        content_layout.addWidget(new_branch_btn)
+        self.profile_picker = BusinessProfilePicker(self)
+        content_layout.addWidget(self.profile_picker)
 
         content_layout.addStretch()
 
@@ -104,94 +90,8 @@ class NewProjectDialog(QDialog):
         buttons.accepted.connect(self._confirm)
         root.addWidget(buttons)
 
-    def _reload_profile_radios(self, select_key: str | None = None):
-        select_key = select_key or self._selected_key() or next(iter(BUSINESS_PROFILES), None)
-
-        for radio in self._profile_radios.values():
-            self._button_group.removeButton(radio)
-            radio.setParent(None)
-            radio.deleteLater()
-        self._profile_radios.clear()
-
-        for profile in BUSINESS_PROFILES.values():
-            row = QFrame()
-            row.setObjectName("configCard")
-            row_layout = QHBoxLayout(row)
-            radio = QRadioButton(profile.display_name)
-            row_layout.addWidget(radio, 1)
-
-            custom = get_custom_profile(profile.key)
-            if custom is not None:
-                edit_btn = QPushButton("Edytuj...")
-                edit_btn.setObjectName("secondaryButton")
-                edit_btn.clicked.connect(lambda _=False, key=profile.key: self._open_profile_wizard_for_edit(key))
-                row_layout.addWidget(edit_btn)
-
-                delete_btn = QPushButton("Usuń...")
-                delete_btn.setObjectName("dangerButton")
-                delete_btn.clicked.connect(lambda _=False, key=profile.key: self._delete_profile(key))
-                row_layout.addWidget(delete_btn)
-
-            self._button_group.addButton(radio)
-            self._profile_radios[profile.key] = radio
-            self.profiles_container.addWidget(row)
-
-        if select_key in self._profile_radios:
-            self._profile_radios[select_key].setChecked(True)
-        elif self._profile_radios:
-            next(iter(self._profile_radios.values())).setChecked(True)
-
-    def _selected_key(self):
-        for key, radio in self._profile_radios.items():
-            if radio.isChecked():
-                return key
-        return None
-
-    def _open_profile_wizard(self):
-        wizard = ProfileWizardDialog(self)
-        if wizard.exec() != QDialog.Accepted or not wizard.new_profile_key:
-            return
-        self._reload_profile_radios(select_key=wizard.new_profile_key)
-
-    def _open_profile_wizard_for_edit(self, profile_key: str):
-        custom = get_custom_profile(profile_key)
-        if custom is None:
-            return
-        wizard = ProfileWizardDialog(self, existing=custom)
-        if wizard.exec() != QDialog.Accepted or not wizard.new_profile_key:
-            return
-        self._reload_profile_radios(select_key=wizard.new_profile_key)
-
-    def _delete_profile(self, profile_key: str):
-        from model.business_profile import unregister_custom_profile
-        from model.custom_profile_store import delete_custom_profile
-
-        custom = get_custom_profile(profile_key)
-        if custom is None:
-            return
-
-        reply = QMessageBox.question(
-            self,
-            "Usuń profil",
-            f"Usunąć profil \"{custom.display_name}\"? Projekty, które go już "
-            "używają, przy następnym otwarciu przełączą się na profil Dino "
-            "(nic w nich nie zostanie skasowane).",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
-            return
-
-        try:
-            delete_custom_profile(profile_key)
-        except OSError as exc:
-            QMessageBox.critical(self, "Błąd", f"Nie udało się usunąć profilu: {exc}")
-            return
-        unregister_custom_profile(profile_key)
-        self._reload_profile_radios()
-
     def _confirm(self):
-        self.result_business_type = self._selected_key()
+        self.result_business_type = self.profile_picker.selected_key()
         self.result_year = self.year_spin.value()
         self.result_month = self.month_spin.value()
         self.accept()

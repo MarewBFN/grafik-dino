@@ -8,7 +8,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from model.business_profile import register_custom_profile
-from model.custom_profile import CustomBusinessProfile, RoleDefinition
+from model.constraint_policy import ConstraintPolicy
+from model.custom_profile import (
+    RULE_TYPE_MIN_STAFF_WITH_ROLE,
+    CustomBusinessProfile,
+    RoleDefinition,
+    RuleInstance,
+)
 from logic.generator.custom_profile_wiring import default_policies
 from model.employee import Employee
 from model.location import LocationConfig
@@ -111,6 +117,47 @@ def test_max_consecutive_days_is_resolved_per_employee_location():
 
     assert build(2) is False, "3 locked consecutive days should conflict with a 2-day location limit"
     assert build(6) is True, "3 locked consecutive days should be fine under a 6-day location limit"
+
+
+def test_min_staff_with_role_rule_is_resolved_per_employee_location():
+    rule = RuleInstance(
+        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="guard",
+        policy="MANDATORY", params={"min_count": 1, "scope": "open"},
+    )
+    profile = CustomBusinessProfile(
+        key="custom_test_minstaff_loc",
+        display_name="Test MinStaffLoc",
+        roles=[RoleDefinition(key="guard", label="Ochroniarz")],
+        rules=[rule],
+    )
+    register_custom_profile(profile)
+    rule_key = profile.rule_policy_key(rule)
+
+    def build(location_min_count):
+        shop = ShopConfig(2026, 3)
+        shop.business_type = profile.key
+        shop.constraint_policies.update(default_policies(profile))
+        shop.constraint_policies[rule_key] = ConstraintPolicy.MANDATORY
+
+        loc = LocationConfig(
+            key="loc", name="Obiekt",
+            open_hours={i: ("08:00", "16:00") for i in range(7)},
+            constraints={rule_key: location_min_count},
+        )
+        shop.locations = {"loc": loc}
+
+        schedule = MonthSchedule(2026, 3)
+        emp = Employee(last_name="A", first_name="A", location_key="loc", custom_roles={"guard": True})
+        schedule.add_employee(emp)
+
+        with redirect_stdout(io.StringIO()):
+            result = AutoScheduleGenerator(schedule, shop).generate(
+                solver_time_limit_seconds=10, solver_workers=1
+            )
+        return result["success"]
+
+    assert build(1) is True, "one guard should satisfy a 1-guard location threshold"
+    assert build(2) is False, "one guard can never satisfy a 2-guard location threshold"
 
 
 def test_shop_config_get_location_falls_back_to_self_without_locations():
