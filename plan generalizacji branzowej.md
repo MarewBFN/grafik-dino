@@ -15,6 +15,20 @@ wersję Dingo, skonfigurowaną pod swoją działalność. Docelowo appka ma iś�
 w stronę wielobranżowego SaaS (`Dingo Online V2`) — ta generalizacja ma być
 fundamentem pod to przejście, nie tylko łatką pod jednego klienta.
 
+## Statystyki (2026-09-14)
+
+Kod faktycznego programu (`main.py`, `model/`, `logic/`, `ui/`,
+`persistence/`, `export/`, `utils.py`, `update_checker.py`,
+`version.py`) — bez `tests/`, bez danych/configów (JSON, obrazy, ikony,
+flagi, pliki builda `.spec`/`.iss`) i bez dwóch plików spoza normalnego
+działania appki: `tmp_debug.py` (skrypt zwiadowczy, nigdzie nieimportowany)
+i `key_generator.py` (osobne narzędzie deweloperskie do generowania
+kluczy licencji, appka go nie importuje):
+
+- **68 plików** `.py`
+- **12 856 linii** łącznie (z pustymi i komentarzami) / **~9 833 linii**
+  bez pustych i linii będących wyłącznie komentarzem
+
 ---
 
 ## Co zrobiliśmy
