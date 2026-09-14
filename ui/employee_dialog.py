@@ -10,12 +10,14 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QComboBox,
     QFrame,
     QSpacerItem,
-    QSizePolicy
+    QSizePolicy,
+    QWidget,
 )
 
 from model.employee import Employee
@@ -51,6 +53,21 @@ class EmployeeDialog(QDialog):
         title.setObjectName("sectionLabel")
         root.addWidget(title)
 
+        # Karta ról rośnie z liczbą ról custom profilu (kreator pozwala
+        # dodać dowolnie wiele) - bez scrolla treść (i przyciski Zapisz/
+        # Anuluj) wypadały poza okno. Wzorem sidebaru głównego okna
+        # (ui/main_window.py::_build_left_panel).
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        root.addWidget(scroll, 1)
+
+        content = QWidget()
+        scroll.setWidget(content)
+        content_layout = QVBoxLayout(content)
+        content_layout.setSpacing(15)
+
         # --- Formularz ---
         form = QFormLayout()
         form.setSpacing(10)
@@ -84,7 +101,7 @@ class EmployeeDialog(QDialog):
                 self.location_combo.addItem(loc.name, loc.key)
             form.addRow("Lokalizacja:", self.location_combo)
 
-        root.addLayout(form)
+        content_layout.addLayout(form)
 
         # --- Role i ograniczenia: jedna karta zamiast osobnej ramki na checkbox ---
         flags_card = QFrame()
@@ -112,8 +129,8 @@ class EmployeeDialog(QDialog):
         if manager_cb:
             manager_cb.toggled.connect(self._on_manager_toggled)
 
-        root.addWidget(flags_card)
-        root.addStretch()
+        content_layout.addWidget(flags_card)
+        content_layout.addStretch()
 
         # --- Dolny pasek przycisków ---
         button_row = QHBoxLayout()

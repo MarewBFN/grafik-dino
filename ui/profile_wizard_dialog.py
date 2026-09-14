@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QStackedWidget,
     QVBoxLayout,
@@ -49,9 +50,15 @@ SCOPE_OPTIONS = (
 
 
 class _RoleRow(QFrame):
-    def __init__(self, on_remove, on_changed, label="", show_summary_row=True, icon=""):
+    def __init__(self, on_remove, on_changed, label="", show_summary_row=True, icon="", key=None):
         super().__init__()
         self.setObjectName("configCard")
+        # Stable identity for a role that already existed before this edit
+        # session (so renaming its label doesn't silently break rules/
+        # employee assignments that reference it by key). None for a role
+        # added fresh in this session - its key is derived from the label
+        # only when actually saving.
+        self._existing_key = key
         layout = QHBoxLayout(self)
 
         self.label_edit = QLineEdit(label)
@@ -188,8 +195,13 @@ class _RuleRow(QFrame):
                 self.policy_combo.setCurrentIndex(idx)
             self.weight_spin.setValue(rule.weight)
             self._selected_role_key = rule.role_key
+            # Keep the original id stable across an edit+resave, so any
+            # shop.constraint_policies["rule:<id>"] override a project
+            # already set for this rule doesn't get silently orphaned.
+            self._existing_id = rule.id
         else:
             self._selected_role_key = None
+            self._existing_id = None
 
         self.params_widget.show_for_type(self.type_combo.currentData())
         self._sync_weight_enabled()
@@ -213,13 +225,16 @@ class _RuleRow(QFrame):
         if not role_key:
             return None
         rule_type = self.type_combo.currentData()
-        return RuleInstance(
+        kwargs = dict(
             type=rule_type,
             role_key=role_key,
             policy=self.policy_combo.currentData(),
             weight=self.weight_spin.value(),
             params=self.params_widget.params_for_type(rule_type),
         )
+        if self._existing_id:
+            kwargs["id"] = self._existing_id
+        return RuleInstance(**kwargs)
 
 
 class ProfileWizardDialog(QDialog):
@@ -227,9 +242,10 @@ class ProfileWizardDialog(QDialog):
     catalog of role/rule building blocks - no code, no Python file to write.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, existing=None):
         super().__init__(parent)
-        self.setWindowTitle("Nowy profil działalności")
+        self.existing_key = existing.key if existing else None
+        self.setWindowTitle("Edytuj profil działalności" if existing else "Nowy profil działalności")
         self.setModal(True)
         self.resize(640, 560)
         self.new_profile_key = None
@@ -237,52 +253,69 @@ class ProfileWizardDialog(QDialog):
         self._role_rows: list[_RoleRow] = []
         self._rule_rows: list[_RuleRow] = []
 
-        self._build_ui()
+        self._build_ui(existing)
 
-    def _build_ui(self):
+    def _build_ui(self, existing=None):
         root = QVBoxLayout(self)
 
-        title = QLabel("Nowy profil działalności")
+        title = QLabel("Edytuj profil działalności" if existing else "Nowy profil działalności")
         title.setObjectName("sectionLabel")
         root.addWidget(title)
 
+        # Role/reguły list rośnie bez ograniczeń (dowolna liczba pozycji) -
+        # bez scrolla treść i przyciski Zapisz/Anuluj wypadały poza okno na
+        # mniejszych ekranach. Wzorem sidebaru głównego okna
+        # (ui/main_window.py::_build_left_panel).
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        root.addWidget(scroll, 1)
+
+        content = QWidget()
+        scroll.setWidget(content)
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 4, 0)
+
         hint = QLabel(
+            "Zmiany zapiszesz pod tym samym profilem - projekty, które go już "
+            "używają, dostaną je od razu." if existing else
             "Zdefiniuj role pracowników i reguły generatora dla nowej branży. "
             "Profil zostanie zapisany i będzie można go wybrać dla dowolnego "
             "kolejnego projektu, tak jak dzisiejszy profil Dino."
         )
         hint.setWordWrap(True)
         hint.setObjectName("mutedHint")
-        root.addWidget(hint)
+        content_layout.addWidget(hint)
 
         form = QFormLayout()
-        self.name_edit = QLineEdit()
+        self.name_edit = QLineEdit(existing.display_name if existing else "")
         self.name_edit.setPlaceholderText("np. Ochrona Sp. z o.o.")
         form.addRow("Nazwa profilu:", self.name_edit)
-        root.addLayout(form)
+        content_layout.addLayout(form)
 
-        root.addWidget(QLabel("Role:"))
+        content_layout.addWidget(QLabel("Role:"))
         self.roles_container = QVBoxLayout()
-        root.addLayout(self.roles_container)
+        content_layout.addLayout(self.roles_container)
         add_role_btn = QPushButton("Dodaj rolę")
         add_role_btn.setObjectName("secondaryButton")
         add_role_btn.clicked.connect(lambda: self._add_role_row())
-        root.addWidget(add_role_btn)
+        content_layout.addWidget(add_role_btn)
 
-        root.addWidget(QLabel("Reguły generatora:"))
+        content_layout.addWidget(QLabel("Reguły generatora:"))
         self.rules_container = QVBoxLayout()
-        root.addLayout(self.rules_container)
+        content_layout.addLayout(self.rules_container)
         add_rule_btn = QPushButton("Dodaj regułę")
         add_rule_btn.setObjectName("secondaryButton")
         add_rule_btn.clicked.connect(lambda: self._add_rule_row())
-        root.addWidget(add_rule_btn)
+        content_layout.addWidget(add_rule_btn)
 
-        root.addStretch()
+        content_layout.addStretch()
 
         buttons = QDialogButtonBox()
         cancel_btn = QPushButton("Anuluj")
         cancel_btn.setObjectName("secondaryButton")
-        save_btn = QPushButton("Zapisz profil")
+        save_btn = QPushButton("Zapisz zmiany" if existing else "Zapisz profil")
         save_btn.setObjectName("primaryButton")
         buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
         buttons.addButton(save_btn, QDialogButtonBox.AcceptRole)
@@ -290,10 +323,16 @@ class ProfileWizardDialog(QDialog):
         buttons.accepted.connect(self._save)
         root.addWidget(buttons)
 
-        self._add_role_row()
+        if existing:
+            for role in existing.roles:
+                self._add_role_row(role.label, role.show_summary_row, role.icon, key=role.key)
+            for rule in existing.rules:
+                self._add_rule_row(rule)
+        else:
+            self._add_role_row()
 
-    def _add_role_row(self, label="", show_summary_row=True, icon=""):
-        row = _RoleRow(self._remove_role_row, self._on_roles_changed, label, show_summary_row, icon)
+    def _add_role_row(self, label="", show_summary_row=True, icon="", key=None):
+        row = _RoleRow(self._remove_role_row, self._on_roles_changed, label, show_summary_row, icon, key)
         self._role_rows.append(row)
         self.roles_container.addWidget(row)
 
@@ -317,7 +356,13 @@ class ProfileWizardDialog(QDialog):
             label = row.label()
             if not label:
                 continue
-            key = _slugify(label, taken)
+            # A role that already existed before this edit keeps its key
+            # even if the label changes, so rules/employee assignments
+            # referencing it don't silently break.
+            if row._existing_key and row._existing_key not in taken:
+                key = row._existing_key
+            else:
+                key = _slugify(label, taken)
             taken.add(key)
             result.append((key, label))
         return result
@@ -362,12 +407,15 @@ class ProfileWizardDialog(QDialog):
             if rule is not None and rule.role_key in role_keys:
                 rules.append(rule)
 
-        base_key = _slugify(display_name, set())
-        key = f"custom_{base_key}"
-        suffix = 2
-        while key in CUSTOM_PROFILES:
-            key = f"custom_{base_key}_{suffix}"
-            suffix += 1
+        if self.existing_key:
+            key = self.existing_key
+        else:
+            base_key = _slugify(display_name, set())
+            key = f"custom_{base_key}"
+            suffix = 2
+            while key in CUSTOM_PROFILES:
+                key = f"custom_{base_key}_{suffix}"
+                suffix += 1
 
         profile = CustomBusinessProfile(
             key=key, display_name=display_name, roles=roles, rules=rules,

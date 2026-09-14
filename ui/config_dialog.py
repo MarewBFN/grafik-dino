@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -118,6 +119,12 @@ class ConfigDialog(QDialog):
         new_profile_btn.clicked.connect(self._open_profile_wizard)
         profile_row.addWidget(new_profile_btn)
 
+        self.edit_profile_btn = QPushButton("Edytuj profil...")
+        self.edit_profile_btn.setObjectName("secondaryButton")
+        self.edit_profile_btn.clicked.connect(self._open_profile_wizard_for_edit)
+        profile_row.addWidget(self.edit_profile_btn)
+        self._sync_edit_profile_button()
+
         profile_row.addStretch()
         root.addLayout(profile_row)
 
@@ -165,6 +172,8 @@ class ConfigDialog(QDialog):
         # re-render live - reopen Config after switching to edit these.
         from model.business_profile import get_custom_profile
 
+        self._sync_edit_profile_button()
+
         business_type = self.business_type_selector.currentData()
         custom = get_custom_profile(business_type)
         if custom is None:
@@ -173,10 +182,34 @@ class ConfigDialog(QDialog):
         for key, policy in default_policies(custom).items():
             self.shop_config.constraint_policies.setdefault(key, policy)
 
+    def _sync_edit_profile_button(self):
+        from model.business_profile import get_custom_profile
+
+        business_type = self.business_type_selector.currentData()
+        self.edit_profile_btn.setEnabled(get_custom_profile(business_type) is not None)
+
     def _open_profile_wizard(self):
         wizard = ProfileWizardDialog(self)
         if wizard.exec() != QDialog.Accepted or not wizard.new_profile_key:
             return
+        self._reload_business_type_selector()
+        idx = self.business_type_selector.findData(wizard.new_profile_key)
+        if idx >= 0:
+            self.business_type_selector.setCurrentIndex(idx)
+
+    def _open_profile_wizard_for_edit(self):
+        from model.business_profile import get_custom_profile
+
+        business_type = self.business_type_selector.currentData()
+        custom = get_custom_profile(business_type)
+        if custom is None:
+            return
+
+        wizard = ProfileWizardDialog(self, existing=custom)
+        if wizard.exec() != QDialog.Accepted or not wizard.new_profile_key:
+            return
+        # Same key as before (the wizard reuses it on edit), so re-select it
+        # mainly to refresh the display name shown in the dropdown.
         self._reload_business_type_selector()
         idx = self.business_type_selector.findData(wizard.new_profile_key)
         if idx >= 0:
@@ -353,7 +386,22 @@ class ConfigDialog(QDialog):
 
     def _build_locations_tab(self):
         page = QWidget()
-        outer = QVBoxLayout(page)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Lista lokalizacji rośnie bez ograniczeń - bez scrolla treść tej
+        # zakładki (i przyciski Zapisz/Anuluj dialogu) wypadały poza okno
+        # przy kilku lokalizacjach naraz. Wzorem sidebaru głównego okna
+        # (ui/main_window.py::_build_left_panel).
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        page_layout.addWidget(scroll)
+
+        outer_host = QWidget()
+        scroll.setWidget(outer_host)
+        outer = QVBoxLayout(outer_host)
         outer.setContentsMargins(20, 20, 20, 20)
         outer.setSpacing(12)
 
@@ -397,7 +445,22 @@ class ConfigDialog(QDialog):
 
     def _build_generator_rules_tab(self):
         page = QWidget()
-        layout = QVBoxLayout(page)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+
+        # policy_grid poniżej rośnie z liczbą reguł custom profilu (kreator
+        # pozwala dodać dowolnie wiele) - bez scrolla ta zakładka (i przyciski
+        # dialogu) wypadały poza okno. Wzorem sidebaru głównego okna
+        # (ui/main_window.py::_build_left_panel).
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        page_layout.addWidget(scroll)
+
+        host = QWidget()
+        scroll.setWidget(host)
+        layout = QVBoxLayout(host)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
