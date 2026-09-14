@@ -144,12 +144,6 @@ class AutoScheduleGenerator:
 
         x = self._create_variables(model, employees, days)
 
-        # Only "dino_retail" has a constraint-wiring module today; a future
-        # business profile will get its own module of the same shape
-        # (setup_context/ALL_SPECS/CONSTRAINT_WEIGHTS/build_objective_terms),
-        # looked up by self.shop.business_type.
-        wiring = dino_retail_profile
-
         ctx = ConstraintContext(
             model=model,
             x=x,
@@ -166,9 +160,25 @@ class AutoScheduleGenerator:
             trace=trace,
         )
 
-        wiring.setup_context(ctx)
+        from model.business_profile import get_custom_profile
+        custom = get_custom_profile(self.shop.business_type)
 
-        all_soft_violations = apply_registry(ctx, wiring.ALL_SPECS, wiring.CONSTRAINT_WEIGHTS)
+        if custom is not None:
+            from logic.generator import custom_profile_wiring
+            wiring = custom_profile_wiring
+            wiring.setup_context(ctx)
+            specs = wiring.build_specs(custom)
+            weights = wiring.build_weights(custom)
+        else:
+            # Only "dino_retail" has its own hard-coded wiring module today;
+            # every user-authored profile goes through custom_profile_wiring
+            # above instead.
+            wiring = dino_retail_profile
+            wiring.setup_context(ctx)
+            specs = wiring.ALL_SPECS
+            weights = wiring.CONSTRAINT_WEIGHTS
+
+        all_soft_violations = apply_registry(ctx, specs, weights)
         all_soft_violations.extend(
             wiring.build_objective_terms(ctx, self.SHIFT_WORK_START_15, self.SHIFT_WORK_END_15)
         )

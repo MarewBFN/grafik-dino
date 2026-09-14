@@ -83,3 +83,56 @@ DINO_RETAIL_PROFILE = BusinessProfile(
 )
 
 register_profile(DINO_RETAIL_PROFILE)
+
+
+# --- User-authored (custom) profiles -----------------------------------
+#
+# Built at runtime by ui.profile_wizard_dialog and persisted via
+# model.custom_profile_store. CUSTOM_PROFILES keeps the full rule data
+# (needed by logic.generator.custom_profile_wiring to build constraints);
+# BUSINESS_PROFILES gets the UI-facing BusinessProfile derived from it, so
+# every screen that already reads get_profile()/BUSINESS_PROFILES works for
+# custom profiles without further changes.
+
+CUSTOM_PROFILES: dict = {}  # key -> CustomBusinessProfile
+
+
+def get_custom_profile(business_type: str | None):
+    return CUSTOM_PROFILES.get(business_type)
+
+
+def register_custom_profile(custom) -> None:
+    from logic.generator import custom_profile_wiring
+
+    CUSTOM_PROFILES[custom.key] = custom
+
+    summary_rows = [("Otwarcie", "open"), ("Zamknięcie", "close")]
+    summary_rows.extend(
+        (role.label, f"role:{role.key}") for role in custom.roles if role.show_summary_row
+    )
+
+    register_profile(BusinessProfile(
+        key=custom.key,
+        display_name=custom.display_name,
+        roles=tuple(RoleDef(role.key, role.label) for role in custom.roles),
+        policy_labels=custom_profile_wiring.build_policy_labels(custom),
+        summary_rows=tuple(summary_rows),
+    ))
+
+
+def _load_persisted_custom_profiles() -> None:
+    from model.custom_profile_store import load_custom_profiles
+
+    try:
+        profiles = load_custom_profiles()
+    except Exception:
+        # A missing/broken app-data location (e.g. no LOCALAPPDATA on this
+        # machine, or a corrupted store) must not break importing this
+        # module - every project still gets dino_retail.
+        return
+
+    for custom in profiles:
+        register_custom_profile(custom)
+
+
+_load_persisted_custom_profiles()

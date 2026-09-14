@@ -1,0 +1,123 @@
+"""Generic, data-driven constraint builders for custom (user-authored)
+business profiles - the fixed catalog of rule "templates" the profile wizard
+lets a client compose from. Each function has the same (ctx, soft, ...)
+shape as a ConstraintSpec.build callable (see constraint_registry.py) and is
+parameterized by role key / thresholds / time window instead of any
+hard-coded Dino role.
+
+These intentionally do NOT touch or reuse constraints_staff.py /
+night_constraint.py / afternoon_constraint.py, which stay Dino-only - keeping
+this module fully separate means nothing here can regress the already
+verified dino_retail behavior.
+"""
+
+from datetime import datetime, timedelta
+
+from logic.utils.time_utils import get_effective_daily_hours
+
+FMT = "%H:%M"
+
+
+def _role_employee_indices(ctx, role_key):
+    return [e for e, emp in enumerate(ctx.employees) if emp.has_role(role_key)]
+
+
+def build_min_staff_with_role(ctx, soft, role_key, min_count=1, scope="open"):
+    """"At least `min_count` employees with role `role_key` [on open / on
+    close / working at any point that day]." Generalizes the is_opener/
+    is_meat >= 1 checks baked into constraints_staff.add_fixed_staff_shift_constraints.
+    """
+    violations = []
+    role_employees = _role_employee_indices(ctx, role_key)
+
+    if scope == "open":
+        shifts_by_day = lambda d: (ctx.shift_open,)
+    elif scope == "close":
+        shifts_by_day = lambda d: (ctx.shift_close,)
+    else:  # "any_shift"
+        shifts_by_day = lambda d: ctx.all_shifts
+
+    for d in ctx.trade_days:
+        shifts = shifts_by_day(d)
+        terms = [ctx.x[e, d, s] for e in role_employees for s in shifts]
+        count = sum(terms) if terms else ctx.model.NewConstant(0)
+
+        if not soft:
+            ctx.model.Add(count >= min_count)
+        else:
+            violation = ctx.model.NewIntVar(0, min_count, f"role_staff_v_{role_key}_{scope}_d{d}")
+            ctx.model.Add(count + violation >= min_count)
+            violations.append(violation)
+
+    return violations
+
+
+def _shift_touches_window(start_dt, end_dt, window_start_hour, window_end_hour):
+    # Same "start.hour <= X or end.hour >= Y" heuristic the built-in no_night
+    # constraint already uses (logic/generator/night_constraint.py) -
+    # adequate given every shift here is computed within one day's open/close
+    # window (see ShopConfig.get_open_hours_for_day), not a true 24h
+    # continuous roster; a shift genuinely spanning midnight is outside what
+    # this app's shift model represents today, for any profile.
+    return end_dt.hour >= window_end_hour or start_dt.hour <= window_start_hour
+
+
+def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, window_end_hour=6):
+    """Employees with role `role_key` can't be scheduled on a shift that
+    touches [window_start_hour, window_end_hour) o'clock. Generalizes
+    no_night/no_afternoon (night_constraint.py/afternoon_constraint.py)."""
+    violations = []
+    role_employees = set(_role_employee_indices(ctx, role_key))
+    if not role_employees:
+        return violations
+
+    for e in role_employees:
+        emp = ctx.employees[e]
+        eff_hours = get_effective_daily_hours(emp, ctx.shop)
+        shift_delta = timedelta(hours=eff_hours)
+
+        for d in ctx.days:
+            hours = ctx.shop.get_open_hours_for_day(d)
+            if not hours:
+                continue
+            open_time, close_time = hours
+            open_dt = datetime.strptime(open_time, FMT)
+            close_dt = datetime.strptime(close_time, FMT)
+
+            forbidden_shifts = set()
+
+            start, end = open_dt, open_dt + shift_delta
+            if _shift_touches_window(start, end, window_start_hour, window_end_hour):
+                forbidden_shifts.add(ctx.shift_open)
+
+            start, end = close_dt - shift_delta, close_dt
+            if _shift_touches_window(start, end, window_start_hour, window_end_hour):
+                forbidden_shifts.add(ctx.shift_close)
+
+            for shift, offset in ctx.start_shift_map.items():
+                start = open_dt + timedelta(minutes=offset)
+                end = start + shift_delta
+                if _shift_touches_window(start, end, window_start_hour, window_end_hour):
+                    forbidden_shifts.add(shift)
+
+            for shift, offset in ctx.end_shift_map.items():
+                end = close_dt - timedelta(minutes=offset)
+                start = end - shift_delta
+                if _shift_touches_window(start, end, window_start_hour, window_end_hour):
+                    forbidden_shifts.add(shift)
+
+            for s in forbidden_shifts:
+                if soft:
+                    v = ctx.model.NewBoolVar(f"role_time_v_{role_key}_e{e}_d{d}_s{s}")
+                    ctx.model.Add(ctx.x[e, d, s] <= v)
+                    violations.append(v)
+                else:
+                    ctx.model.Add(ctx.x[e, d, s] == 0)
+
+    return violations
+
+
+RULE_BUILDERS = {
+    "min_staff_with_role": build_min_staff_with_role,
+    "role_time_restriction": build_role_time_restriction,
+}

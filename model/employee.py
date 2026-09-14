@@ -2,6 +2,10 @@ from dataclasses import dataclass, field
 import uuid
 from typing import Dict
 
+_ROLE_FIELDS = {
+    "is_opener", "is_meat", "is_meat_light", "is_manager", "no_night", "no_afternoon",
+}
+
 @dataclass(order=True, frozen=True)
 class Employee:
     """
@@ -38,6 +42,14 @@ class Employee:
 
     def display_name(self) -> str:
         return f"{self.last_name} {self.first_name}"
+
+    def has_role(self, key: str) -> bool:
+        """True if this employee carries role `key`, whether it's one of the
+        six legacy Dino fields (is_opener, is_meat, ...) or a custom_roles
+        entry from another business profile."""
+        if key in _ROLE_FIELDS:
+            return bool(getattr(self, key))
+        return bool(self.custom_roles.get(key, False))
 
     def validate(self) -> None:
         if not self.last_name.strip():

@@ -801,6 +801,8 @@ class ScheduleGrid(QTableWidget):
                 total_morning = 0
                 total_afternoon = 0
                 count_meat = 0
+                count_role = 0
+                role_key = key[len("role:"):] if key.startswith("role:") else None
 
                 # Pobieramy godziny pracy sklepu z konfiguracji
                 hours = self.shop_config.get_open_hours_for_day(day)
@@ -849,6 +851,10 @@ class ScheduleGrid(QTableWidget):
                         # 3. Mięso (w tym zastępczo "mooooże stanąć na chwilę na mięsie")
                         if (emp.is_meat or emp.is_meat_light) and ds.start and not ds.is_leave and not getattr(ds, "is_sick", False):
                             count_meat += 1
+
+                        # 4. Generyczna rola custom profilu (patrz "role:" wiersze)
+                        if role_key and emp.has_role(role_key) and not ds.is_leave and not getattr(ds, "is_sick", False):
+                            count_role += 1
                     except ValueError:
                         continue
 
@@ -869,6 +875,8 @@ class ScheduleGrid(QTableWidget):
                         display_text = "⚠️"
                     else:
                         display_text = "✅"
+                elif role_key:
+                    display_text = str(count_role)
 
                 item = QTableWidgetItem(display_text)
                 item.setTextAlignment(Qt.AlignCenter)

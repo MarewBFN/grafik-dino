@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
+from ui.profile_wizard_dialog import ProfileWizardDialog
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import BUSINESS_PROFILES, get_profile
 
@@ -71,16 +72,15 @@ class ConfigDialog(QDialog):
         profile_row.addWidget(QLabel("Profil działalności:"))
         self.business_type_selector = QComboBox()
         self.business_type_selector.setMinimumWidth(220)
-        for profile in BUSINESS_PROFILES.values():
-            self.business_type_selector.addItem(profile.display_name, profile.key)
-        idx = self.business_type_selector.findData(self.shop_config.business_type)
-        self.business_type_selector.setCurrentIndex(idx if idx >= 0 else 0)
-        if self.business_type_selector.count() <= 1:
-            self.business_type_selector.setEnabled(False)
-            self.business_type_selector.setToolTip(
-                "Na razie dostępny jest tylko jeden profil działalności."
-            )
+        self._reload_business_type_selector()
+        self.business_type_selector.currentIndexChanged.connect(self._on_business_type_changed)
         profile_row.addWidget(self.business_type_selector)
+
+        new_profile_btn = QPushButton("Nowy profil...")
+        new_profile_btn.setObjectName("secondaryButton")
+        new_profile_btn.clicked.connect(self._open_profile_wizard)
+        profile_row.addWidget(new_profile_btn)
+
         profile_row.addStretch()
         root.addLayout(profile_row)
 
@@ -107,6 +107,42 @@ class ConfigDialog(QDialog):
         buttons.accepted.connect(self._save)
         help_btn.clicked.connect(self._open_tutorial)
         root.addWidget(buttons)
+
+    def _reload_business_type_selector(self):
+        current = self.business_type_selector.currentData() or self.shop_config.business_type
+        self.business_type_selector.blockSignals(True)
+        self.business_type_selector.clear()
+        for profile in BUSINESS_PROFILES.values():
+            self.business_type_selector.addItem(profile.display_name, profile.key)
+        idx = self.business_type_selector.findData(current)
+        self.business_type_selector.setCurrentIndex(idx if idx >= 0 else 0)
+        self.business_type_selector.blockSignals(False)
+        self.business_type_selector.setEnabled(self.business_type_selector.count() > 1)
+
+    def _on_business_type_changed(self):
+        # Seed sensible default policies for a just-picked profile's rules,
+        # without clobbering anything the user already tuned in a previous
+        # session for it. The "Zasady generatora" tab itself was built for
+        # whichever profile was active when this dialog opened and doesn't
+        # re-render live - reopen Config after switching to edit these.
+        from model.business_profile import get_custom_profile
+
+        business_type = self.business_type_selector.currentData()
+        custom = get_custom_profile(business_type)
+        if custom is None:
+            return
+        from logic.generator.custom_profile_wiring import default_policies
+        for key, policy in default_policies(custom).items():
+            self.shop_config.constraint_policies.setdefault(key, policy)
+
+    def _open_profile_wizard(self):
+        wizard = ProfileWizardDialog(self)
+        if wizard.exec() != QDialog.Accepted or not wizard.new_profile_key:
+            return
+        self._reload_business_type_selector()
+        idx = self.business_type_selector.findData(wizard.new_profile_key)
+        if idx >= 0:
+            self.business_type_selector.setCurrentIndex(idx)
 
     def _build_hours_tab(self):
         page = QWidget()
