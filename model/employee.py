@@ -40,6 +40,11 @@ class Employee:
     # Dino), trzymane jako słownik zamiast kolejnych pól dataclass.
     custom_roles: Dict[str, bool] = field(default_factory=dict, compare=False)
 
+    # Klucz lokalizacji (model.location.LocationConfig) do której przypisany
+    # jest pracownik. Puste = brak przypisania (dzisiejsze, jednolokalizacyjne
+    # zachowanie) - patrz ShopConfig.locations.
+    location_key: str = field(default="", compare=False)
+
     def display_name(self) -> str:
         return f"{self.last_name} {self.first_name}"
 

@@ -1,6 +1,7 @@
 import calendar
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import DEFAULT_BUSINESS_TYPE
+from model.location import LocationConfig
 
 class ShopConfig:
     """
@@ -19,6 +20,13 @@ class ShopConfig:
         # dla tego projektu. Domyślnie Dino - stare projekty bez tego pola
         # zachowują się dokładnie jak dziś.
         self.business_type: str = DEFAULT_BUSINESS_TYPE
+
+        # Lokalizacje/obiekty w ramach tego projektu (Etap 3a - sam model
+        # danych). Puste domyślnie: projekt bez zdefiniowanych lokalizacji
+        # zachowuje się dokładnie jak dziś, jedna, niejawna lokalizacja to
+        # pola bezpośrednio na tym ShopConfig (open_hours, trade_sundays,
+        # itd. poniżej). Generator i UI nie czytają tego pola jeszcze.
+        self.locations: dict[str, LocationConfig] = {}
 
         # Toggle dla constraintów z model.constraint_policy
         self.constraint_policies = {
@@ -148,6 +156,7 @@ class ShopConfig:
             "year": self.year,
             "month": self.month,
             "business_type": self.business_type,
+            "locations": {key: loc.to_dict() for key, loc in self.locations.items()},
             "open_hours": self.open_hours,
             "trade_sundays": list(self.trade_sundays),
             "day_overrides": self.day_overrides,
@@ -165,6 +174,10 @@ class ShopConfig:
     def from_dict(cls, data):
         cfg = cls(data["year"], data["month"])
         cfg.business_type = data.get("business_type", DEFAULT_BUSINESS_TYPE)
+        cfg.locations = {
+            key: LocationConfig.from_dict(loc_data)
+            for key, loc_data in data.get("locations", {}).items()
+        }
 
         # open_hours
         cfg.open_hours = {
