@@ -4,9 +4,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import MagicMock, patch
 
 from ortools.sat.python import cp_model
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -16,6 +17,7 @@ _app = QApplication.instance() or QApplication([])
 
 from logic.generator.fix import setup_fix_hints_and_penalties
 from logic.generator.manual_constraint import add_manual_shift_constraints
+from logic.generator.night_constraint import add_no_night_constraint
 from logic.schedule_controller import ScheduleController
 from logic.schedule_presenter import SchedulePresenter
 from model.employee import Employee
@@ -24,6 +26,7 @@ from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from ui import theme
 from ui.day_edit_dialog import DayEditDialog
+from ui.main_window import MainWindow
 
 SHIFT_OPEN, SHIFT_CLOSE = 0, 1
 START_SHIFT_MAP = {2: 15}
@@ -148,6 +151,111 @@ class ManualConstraintNightShiftTests(unittest.TestCase):
         self.assertEqual(solver.Value(x[0, 3, SHIFT_NIGHT]), 1)
 
 
+class NoNightConstraintShiftNightTests(unittest.TestCase):
+    """Codex review finding on PR #2: manual_constraint.py recognizes and
+    hard-pins a manually-entered night shift purely by matching the
+    location's configured window - it never checked no_night. Meanwhile
+    add_no_night_constraint never touched SHIFT_NIGHT at all (it only knew
+    about OPEN/CLOSE/START/END). Combined, a no_night=True employee could be
+    manually locked into the night shift with the model still solving
+    "successfully", silently violating their restriction instead of the
+    generator reporting infeasible."""
+
+    def test_no_night_employee_cannot_be_manually_locked_into_night_shift(self):
+        shop = _shop_with_night()
+        emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1", no_night=True)
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
+        schedule.set_day_hours(emp, 3, *NIGHT_HOURS)
+        schedule.get_day(emp, 3).is_locked = True
+
+        model = cp_model.CpModel()
+        x = {(0, 3, s): model.NewBoolVar(f"x_{s}") for s in ALL_SHIFTS}
+
+        add_manual_shift_constraints(
+            model, x, [emp], [3], schedule, shop, ALL_SHIFTS,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+            shift_night=SHIFT_NIGHT,
+        )
+        add_no_night_constraint(
+            model, x, [emp], [3], shop, ALL_SHIFTS,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+            soft=False, shift_night=SHIFT_NIGHT,
+        )
+
+        status = cp_model.CpSolver().Solve(model)
+        self.assertEqual(status, cp_model.INFEASIBLE)
+
+    def test_no_night_employee_is_blocked_from_night_shift_even_without_manual_lock(self):
+        shop = _shop_with_night()
+        emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1", no_night=True)
+
+        model = cp_model.CpModel()
+        x = {(0, 3, s): model.NewBoolVar(f"x_{s}") for s in ALL_SHIFTS}
+
+        add_no_night_constraint(
+            model, x, [emp], [3], shop, ALL_SHIFTS,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+            soft=False, shift_night=SHIFT_NIGHT,
+        )
+        model.Add(x[0, 3, SHIFT_NIGHT] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        self.assertEqual(status, cp_model.INFEASIBLE)
+
+    def test_employee_without_no_night_flag_can_still_be_locked_into_night_shift(self):
+        """Regression: the fix must not block an ordinary (non no_night)
+        employee's manual night lock - this worked before and must keep
+        working."""
+        shop = _shop_with_night()
+        emp = _employee()  # no_night defaults to False
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
+        schedule.set_day_hours(emp, 3, *NIGHT_HOURS)
+        schedule.get_day(emp, 3).is_locked = True
+
+        model = cp_model.CpModel()
+        x = {(0, 3, s): model.NewBoolVar(f"x_{s}") for s in ALL_SHIFTS}
+
+        add_manual_shift_constraints(
+            model, x, [emp], [3], schedule, shop, ALL_SHIFTS,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+            shift_night=SHIFT_NIGHT,
+        )
+        add_no_night_constraint(
+            model, x, [emp], [3], shop, ALL_SHIFTS,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+            soft=False, shift_night=SHIFT_NIGHT,
+        )
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        self.assertIn(status, (cp_model.OPTIMAL, cp_model.FEASIBLE))
+        self.assertEqual(solver.Value(x[0, 3, SHIFT_NIGHT]), 1)
+
+    def test_no_night_soft_policy_adds_violation_instead_of_hard_block(self):
+        shop = _shop_with_night()
+        emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1", no_night=True)
+
+        model = cp_model.CpModel()
+        x = {(0, 3, s): model.NewBoolVar(f"x_{s}") for s in ALL_SHIFTS}
+        model.Add(sum(x[0, 3, s] for s in ALL_SHIFTS) <= 1)
+
+        violations = add_no_night_constraint(
+            model, x, [emp], [3], shop, ALL_SHIFTS,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+            soft=True, shift_night=SHIFT_NIGHT,
+        )
+        night_violation = next(v for v in violations if v.Name() == f"night_violation_e0_d3_s{SHIFT_NIGHT}")
+        model.Add(x[0, 3, SHIFT_NIGHT] == 1)
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        self.assertIn(status, (cp_model.OPTIMAL, cp_model.FEASIBLE))
+        self.assertEqual(solver.Value(x[0, 3, SHIFT_NIGHT]), 1)
+        self.assertEqual(solver.Value(night_violation), 1)
+
+
 class FixModeNightShiftTests(unittest.TestCase):
     def test_nominal_hours_count_night_duration_not_standard_shift(self):
         shop = _shop_with_night()  # 8h window
@@ -236,6 +344,76 @@ class DayEditDialogNightShiftTests(unittest.TestCase):
 
         self.assertTrue(dialog.start_edit.isEnabled())
         self.assertTrue(dialog.end_edit.isEnabled())
+
+
+class MainWindowNoNightWarningTests(unittest.TestCase):
+    """Codex review finding on PR #2: ui/day_edit_dialog.py showed the
+    "Zmiana nocna" checkbox to a no_night=True employee with no warning at
+    all - the conflict only ever surfaced later as a generic, hard-to-trace
+    "infeasible" from the generator. _edit_day() now asks for confirmation
+    before saving. Constructs MainWindow via __new__ to skip its heavy
+    __init__ (menus/toolbars/last-project loading) - only the attributes
+    _edit_day actually touches are set by hand."""
+
+    def _make_window(self, shop, schedule):
+        window = MainWindow.__new__(MainWindow)
+        window.shop_config = shop
+        window.schedule = schedule
+        window.controller = MagicMock()
+        window.controller.get_day = schedule.get_day
+        window.controller.schedule = schedule
+        window._sync_everything = MagicMock()
+        window.statusBar = MagicMock(return_value=MagicMock())
+        return window
+
+    def _fake_dialog(self):
+        dialog = MagicMock()
+        dialog.exec.return_value = QDialog.Accepted
+        dialog.result_mode = "hours"
+        dialog.result_start, dialog.result_end = NIGHT_HOURS
+        return dialog
+
+    def test_warns_before_saving_night_shift_for_no_night_employee(self):
+        shop = _shop_with_night()
+        emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1", no_night=True)
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
+        window = self._make_window(shop, schedule)
+
+        with patch("ui.main_window.DayEditDialog", return_value=self._fake_dialog()), \
+             patch("ui.main_window.QMessageBox.question", return_value=QMessageBox.No) as mock_question:
+            window._edit_day(emp, 3)
+
+        mock_question.assert_called_once()
+        window.controller.set_day_hours.assert_not_called()
+
+    def test_proceeds_to_save_when_user_confirms_the_warning(self):
+        shop = _shop_with_night()
+        emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1", no_night=True)
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
+        window = self._make_window(shop, schedule)
+
+        with patch("ui.main_window.DayEditDialog", return_value=self._fake_dialog()), \
+             patch("ui.main_window.QMessageBox.question", return_value=QMessageBox.Yes) as mock_question:
+            window._edit_day(emp, 3)
+
+        mock_question.assert_called_once()
+        window.controller.set_day_hours.assert_called_once_with(emp, 3, *NIGHT_HOURS)
+
+    def test_no_warning_for_employee_without_no_night_flag(self):
+        shop = _shop_with_night()
+        emp = _employee()  # no_night defaults to False
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
+        window = self._make_window(shop, schedule)
+
+        with patch("ui.main_window.DayEditDialog", return_value=self._fake_dialog()), \
+             patch("ui.main_window.QMessageBox.question") as mock_question:
+            window._edit_day(emp, 3)
+
+        mock_question.assert_not_called()
+        window.controller.set_day_hours.assert_called_once_with(emp, 3, *NIGHT_HOURS)
 
 
 if __name__ == "__main__":
