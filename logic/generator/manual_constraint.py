@@ -93,7 +93,7 @@ def add_manual_shift_constraints(
                     model.Add(x[e, d, s] == 0)
                 continue
 
-            hours = shop.get_open_hours_for_day(d)
+            hours = shop.get_location(emp).get_open_hours_for_day(d)
             if not hours:
                 continue
 

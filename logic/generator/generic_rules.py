@@ -75,9 +75,10 @@ def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, windo
         emp = ctx.employees[e]
         eff_hours = get_effective_daily_hours(emp, ctx.shop)
         shift_delta = timedelta(hours=eff_hours)
+        location = ctx.shop.get_location(emp)
 
         for d in ctx.days:
-            hours = ctx.shop.get_open_hours_for_day(d)
+            hours = location.get_open_hours_for_day(d)
             if not hours:
                 continue
             open_time, close_time = hours

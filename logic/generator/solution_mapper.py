@@ -76,7 +76,7 @@ def save_solution(
                     print(f"[SKIP LOCKED] emp={e} day={d}")
                 continue
 
-            hours = shop.get_open_hours_for_day(d)
+            hours = shop.get_location(emp).get_open_hours_for_day(d)
             if not hours:
                 continue
 

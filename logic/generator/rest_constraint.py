@@ -54,13 +54,13 @@ def add_rest_11h_constraint(
     rest_constraints = 0
     windows_cache = {}
 
-    def windows_for(day, eff_hours):
-        key = (day, eff_hours)
+    def windows_for(location, location_key, day, eff_hours):
+        key = (location_key, day, eff_hours)
         cached = windows_cache.get(key)
         if cached is not None:
             return cached
 
-        hours = shop.get_open_hours_for_day(day)
+        hours = location.get_open_hours_for_day(day)
         if not hours:
             windows_cache[key] = None
             return None
@@ -77,6 +77,7 @@ def add_rest_11h_constraint(
     for e in range(len(employees)):
         emp = employees[e]
         eff_hours = get_effective_daily_hours(emp, shop)
+        location = shop.get_location(emp)
 
         for i in range(len(days) - 1):
             d = days[i]
@@ -85,8 +86,8 @@ def add_rest_11h_constraint(
             if d not in trade_days or d_next not in trade_days:
                 continue
 
-            shifts_today = windows_for(d, eff_hours)
-            shifts_next = windows_for(d_next, eff_hours)
+            shifts_today = windows_for(location, emp.location_key, d, eff_hours)
+            shifts_next = windows_for(location, emp.location_key, d_next, eff_hours)
 
             if not shifts_today or not shifts_next:
                 continue

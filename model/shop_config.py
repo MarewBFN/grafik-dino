@@ -3,6 +3,26 @@ from model.constraint_policy import ConstraintPolicy
 from model.business_profile import DEFAULT_BUSINESS_TYPE
 from model.location import LocationConfig
 
+
+class _LocationView:
+    """Duck-types the day-hours subset of ShopConfig's API (weekday /
+    get_open_hours_for_day) against one LocationConfig, bound to the parent
+    project's year/month - so constraint code can call
+    shop.get_location(emp).get_open_hours_for_day(d) the same way it calls
+    shop.get_open_hours_for_day(d) today, regardless of which one it got."""
+
+    def __init__(self, location: LocationConfig, year: int, month: int):
+        self._location = location
+        self._year = year
+        self._month = month
+
+    def weekday(self, day: int) -> int:
+        return self._location.weekday(self._year, self._month, day)
+
+    def get_open_hours_for_day(self, day: int):
+        return self._location.get_open_hours_for_day(self._year, self._month, day)
+
+
 class ShopConfig:
     """
     Konfiguracja sklepu:
@@ -146,6 +166,21 @@ class ShopConfig:
 
     def set_open_hours_for_weekday(self, weekday: int, start: str, end: str):
         self.open_hours[weekday] = (start, end)
+
+    # ==========================================================
+    # LOKALIZACJE (Etap 3b)
+    # ==========================================================
+
+    def get_location(self, employee):
+        """Godzinowy "widok" dla tego pracownika: jeśli ma przypisaną
+        lokalizację (employee.location_key) i projekt ją definiuje, zwraca
+        obiekt z tym samym API co ShopConfig (`weekday`/`get_open_hours_for_day`)
+        wspierający się o tę lokalizację; w przeciwnym razie zwraca `self` -
+        dokładnie dzisiejsza, jednolokalizacyjna ścieżka.
+        """
+        if self.locations and employee.location_key in self.locations:
+            return _LocationView(self.locations[employee.location_key], self.year, self.month)
+        return self
 
     # ==========================================================
     # SERIALIZACJA
