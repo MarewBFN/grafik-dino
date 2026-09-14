@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from model.constraint_policy import ConstraintPolicy
+from model.business_profile import get_profile
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
 
@@ -37,20 +38,6 @@ REST_11H_MODE_OPTIONS = (
     ("Uproszczony (2 zmiany — szybszy)", "simplified"),
 )
 
-POLICY_LABELS = (
-    ("rest_11h", "Odpoczynek 11 h"),
-    ("open", "Obsada otwarcia"),
-    ("close", "Obsada zamknięcia"),
-    ("meat", "Mięso na zmianach"),
-    ("meat_coverage", "Mięso przez cały dzień"),
-    ("availability", "Dostępność pracownika"),
-    ("no_night", "Zakaz pracy nocnej"),
-    ("no_afternoon", "Zakaz pracy popołudniami"),
-    ("monthly_hours", "Godziny miesięczne"),
-    ("balance", "Bilans godzin"),
-    ("max_consecutive", "Dni pod rząd"),
-)
-
 def _parse_time(value: str) -> QTime:
     if not value:
         return QTime(0, 0)
@@ -62,6 +49,7 @@ class ConfigDialog(QDialog):
     def __init__(self, parent, shop_config):
         super().__init__(parent)
         self.shop_config = shop_config
+        self.profile = get_profile(shop_config.business_type)
         self.setWindowTitle("Konfiguracja")
         self.setModal(True)
         self.resize(720, 560)
@@ -293,9 +281,10 @@ class ConfigDialog(QDialog):
         policy_grid.setHorizontalSpacing(12)
         policy_grid.setVerticalSpacing(7)
         self.policy_selectors = {}
-        split_at = (len(POLICY_LABELS) + 1) // 2
+        policy_labels = self.profile.policy_labels
+        split_at = (len(policy_labels) + 1) // 2
 
-        for index, (policy_name, label) in enumerate(POLICY_LABELS):
+        for index, (policy_name, label) in enumerate(policy_labels):
             row = index % split_at
             column = (index // split_at) * 2
             selector = QComboBox()
@@ -315,8 +304,8 @@ class ConfigDialog(QDialog):
             policy_grid.addWidget(selector, row, column + 1)
             self.policy_selectors[policy_name] = selector
 
-        rest_row = len(POLICY_LABELS) % split_at
-        rest_column = (len(POLICY_LABELS) // split_at) * 2
+        rest_row = len(policy_labels) % split_at
+        rest_column = (len(policy_labels) // split_at) * 2
         self.rest_11h_mode_selector = QComboBox()
         self.rest_11h_mode_selector.setMinimumWidth(125)
         for text, value in REST_11H_MODE_OPTIONS:

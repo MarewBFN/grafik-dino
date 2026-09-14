@@ -25,18 +25,9 @@ from PySide6.QtWidgets import (
 from logic.constraint_presenter import ConstraintPresenter
 from logic.schedule_presenter import SchedulePresenter
 from logic.utils.time_utils import classify_shift_as_morning_or_afternoon
+from model.business_profile import get_profile
 from utils import resource_path
 from ui import theme
-
-
-# Edit this tuple to add, remove or reorder the summary rows at the bottom.
-SUMMARY_ROWS = (
-    ("Otwarcie", "open"),
-    ("Zamknięcie", "close"),
-    ("Rano", "morning"),
-    ("Popo", "afternoon"),
-    ("Mięso", "meat"),
-)
 
 
 def _grayed_icon(icon: QIcon, size: int = 64, opacity: float = 0.55) -> QIcon:
@@ -480,6 +471,10 @@ class ScheduleGrid(QTableWidget):
         self.viewport().update()
         super().leaveEvent(event)
 
+    def _summary_rows(self):
+        business_type = self.shop_config.business_type if self.shop_config else None
+        return get_profile(business_type).summary_rows
+
     def set_data(
         self,
         schedule,
@@ -522,7 +517,7 @@ class ScheduleGrid(QTableWidget):
 
         self.setColumnCount(len(headers))
         self.setHorizontalHeaderLabels(headers)
-        self.setRowCount(len(self.schedule.employees) + len(SUMMARY_ROWS))
+        self.setRowCount(len(self.schedule.employees) + len(self._summary_rows()))
 
         for day in range(1, days + 1):
             header_item = self.horizontalHeaderItem(day)
@@ -790,7 +785,7 @@ class ScheduleGrid(QTableWidget):
 
     def _fill_validation_rows(self, emp_count, days, constraint_presenter):
         # Definiujemy wiersze podsumowania
-        for offset, (label, key) in enumerate(SUMMARY_ROWS):
+        for offset, (label, key) in enumerate(self._summary_rows()):
             row = emp_count + offset
 
             # Etykieta wiersza (lewa kolumna)

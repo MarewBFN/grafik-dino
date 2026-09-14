@@ -1,5 +1,6 @@
 import calendar
 from model.constraint_policy import ConstraintPolicy
+from model.business_profile import DEFAULT_BUSINESS_TYPE
 
 class ShopConfig:
     """
@@ -13,6 +14,11 @@ class ShopConfig:
     def __init__(self, year: int, month: int):
         self.year = year
         self.month = month
+
+        # Jaki profil działalności (role, constrainty, etykiety UI) obowiązuje
+        # dla tego projektu. Domyślnie Dino - stare projekty bez tego pola
+        # zachowują się dokładnie jak dziś.
+        self.business_type: str = DEFAULT_BUSINESS_TYPE
 
         # Toggle dla constraintów z model.constraint_policy
         self.constraint_policies = {
@@ -141,6 +147,7 @@ class ShopConfig:
         return {
             "year": self.year,
             "month": self.month,
+            "business_type": self.business_type,
             "open_hours": self.open_hours,
             "trade_sundays": list(self.trade_sundays),
             "day_overrides": self.day_overrides,
@@ -157,6 +164,7 @@ class ShopConfig:
     @classmethod
     def from_dict(cls, data):
         cfg = cls(data["year"], data["month"])
+        cfg.business_type = data.get("business_type", DEFAULT_BUSINESS_TYPE)
 
         # open_hours
         cfg.open_hours = {

@@ -32,6 +32,10 @@ class Employee:
     id: str = field(default_factory=lambda: str(uuid.uuid4()), compare=False)
     availability: Dict[int, dict] = field(default_factory=dict, compare=False)
 
+    # Role spoza sześciu pól powyżej (np. dla innych profili działalności niż
+    # Dino), trzymane jako słownik zamiast kolejnych pól dataclass.
+    custom_roles: Dict[str, bool] = field(default_factory=dict, compare=False)
+
     def display_name(self) -> str:
         return f"{self.last_name} {self.first_name}"
 

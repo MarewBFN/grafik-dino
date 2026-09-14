@@ -1,3 +1,5 @@
+import dataclasses
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -17,12 +19,20 @@ from PySide6.QtWidgets import (
 )
 
 from model.employee import Employee
+from model.business_profile import get_profile
+
+# RoleDef.key values that map directly onto an Employee dataclass field
+# (the six legacy Dino flags). Any other key lives in Employee.custom_roles
+# instead, so new business profiles don't need new Employee fields.
+_EMPLOYEE_FIELDS = {f.name for f in dataclasses.fields(Employee)}
 
 
 class EmployeeDialog(QDialog):
-    def __init__(self, parent=None, employee=None):
+    def __init__(self, parent=None, employee=None, business_type=None):
         super().__init__(parent)
         self.employee = employee
+        self.profile = get_profile(business_type)
+        self.role_checkboxes: dict[str, QCheckBox] = {}
         self.setWindowTitle("Edytuj pracownika" if employee else "Dodaj pracownika")
         self.setModal(True)
         self.setMinimumWidth(460)
@@ -73,29 +83,25 @@ class EmployeeDialog(QDialog):
         flags_layout = QVBoxLayout(flags_card)
         flags_layout.setSpacing(10)
 
-        self.is_opener = QCheckBox("Pracownik otwarcia")
-        flags_layout.addWidget(self.is_opener)
+        for role in self.profile.roles:
+            checkbox = QCheckBox(role.label)
+            if role.description:
+                checkbox.setToolTip(role.description)
+            flags_layout.addWidget(checkbox)
+            self.role_checkboxes[role.key] = checkbox
 
-        self.is_meat = QCheckBox("Obsługa stoiska mięsnego")
-        flags_layout.addWidget(self.is_meat)
+        # Zachowania specyficzne dla konkretnych ról (wykluczanie się mięsa/
+        # mięsa-lekkiego, wymuszanie wymiaru etatu kierowniczki) są pinowane
+        # po kluczu roli, nie generyczną regułą - inne profile ich nie mają.
+        meat_cb = self.role_checkboxes.get("is_meat")
+        meat_light_cb = self.role_checkboxes.get("is_meat_light")
+        if meat_cb and meat_light_cb:
+            meat_cb.toggled.connect(self._on_meat_toggled)
+            meat_light_cb.toggled.connect(self._on_meat_light_toggled)
 
-        self.is_meat_light = QCheckBox("mooooże stanąć na chwilę na mięsie")
-        flags_layout.addWidget(self.is_meat_light)
-
-        self.is_meat.toggled.connect(self._on_meat_toggled)
-        self.is_meat_light.toggled.connect(self._on_meat_light_toggled)
-
-        self.is_manager = QCheckBox(
-            "Kierowniczka (sztywny grafik: pon. wolne, wt-pt 7:00-15:00, sob 6:00-14:00)"
-        )
-        flags_layout.addWidget(self.is_manager)
-        self.is_manager.toggled.connect(self._on_manager_toggled)
-
-        self.no_night = QCheckBox("Nie pracuje w godzinach nocnych (przed 6:00 i po 22:00)")
-        flags_layout.addWidget(self.no_night)
-
-        self.no_afternoon = QCheckBox("Nie pracuje na popołudniu (tylko zmiany poranne)")
-        flags_layout.addWidget(self.no_afternoon)
+        manager_cb = self.role_checkboxes.get("is_manager")
+        if manager_cb:
+            manager_cb.toggled.connect(self._on_manager_toggled)
 
         root.addWidget(flags_card)
         root.addStretch()
@@ -133,12 +139,14 @@ class EmployeeDialog(QDialog):
         root.addLayout(button_row)
 
     def _on_meat_toggled(self, checked):
-        if checked and self.is_meat_light.isChecked():
-            self.is_meat_light.setChecked(False)
+        meat_light_cb = self.role_checkboxes["is_meat_light"]
+        if checked and meat_light_cb.isChecked():
+            meat_light_cb.setChecked(False)
 
     def _on_meat_light_toggled(self, checked):
-        if checked and self.is_meat.isChecked():
-            self.is_meat.setChecked(False)
+        meat_cb = self.role_checkboxes["is_meat"]
+        if checked and meat_cb.isChecked():
+            meat_cb.setChecked(False)
 
     def _on_manager_toggled(self, checked):
         # Jej zmiany są zawsze dokładnie 8h - "1/1 max 8:00" jest jedynym
@@ -153,12 +161,11 @@ class EmployeeDialog(QDialog):
             return
         self.last_name.setText(self.employee.last_name)
         self.first_name.setText(self.employee.first_name)
-        self.is_opener.setChecked(self.employee.is_opener)
-        self.is_meat.setChecked(self.employee.is_meat)
-        self.is_meat_light.setChecked(getattr(self.employee, "is_meat_light", False))
-        self.is_manager.setChecked(getattr(self.employee, "is_manager", False))
-        self.no_night.setChecked(getattr(self.employee, "no_night", False))
-        self.no_afternoon.setChecked(getattr(self.employee, "no_afternoon", False))
+        for key, checkbox in self.role_checkboxes.items():
+            if key in _EMPLOYEE_FIELDS:
+                checkbox.setChecked(getattr(self.employee, key, False))
+            else:
+                checkbox.setChecked(self.employee.custom_roles.get(key, False))
         self.monthly_target_hours.setValue(self.employee.monthly_target_hours)
         idx = self.employment_fraction.findData(self.employee.employment_fraction)
         if idx >= 0:
@@ -172,18 +179,22 @@ class EmployeeDialog(QDialog):
             QMessageBox.critical(self, "Błąd", "Imię i nazwisko nie mogą być puste.")
             return
 
+        legacy_roles = {}
+        custom_roles = {}
+        for key, checkbox in self.role_checkboxes.items():
+            if key in _EMPLOYEE_FIELDS:
+                legacy_roles[key] = checkbox.isChecked()
+            else:
+                custom_roles[key] = checkbox.isChecked()
+
         try:
             emp = Employee(
                 last_name=ln,
                 first_name=fn,
-                is_opener=self.is_opener.isChecked(),
-                is_meat=self.is_meat.isChecked(),
-                is_meat_light=self.is_meat_light.isChecked(),
-                is_manager=self.is_manager.isChecked(),
-                no_night=self.no_night.isChecked(),
-                no_afternoon=self.no_afternoon.isChecked(),
                 monthly_target_hours=self.monthly_target_hours.value(),
                 employment_fraction=self.employment_fraction.currentData(),
+                custom_roles=custom_roles,
+                **legacy_roles,
             )
             emp.validate()
         except Exception as exc:
