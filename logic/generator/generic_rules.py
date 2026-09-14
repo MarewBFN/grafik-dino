@@ -41,6 +41,13 @@ def build_min_staff_with_role(ctx, soft, role_key, rule_key, min_count=1, scope=
         shifts_by_day = lambda d: (ctx.shift_open,)
     elif scope == "close":
         shifts_by_day = lambda d: (ctx.shift_close,)
+    elif scope == "night":
+        # Etap F planu zmian nocnych - liczy wyłącznie SHIFT_NIGHT, nie
+        # "any_shift" (który już i tak liczy noc razem z dniem). Dla
+        # lokalizacji bez skonfigurowanego night_shift SHIFT_NIGHT jest
+        # zawsze 0 (bramka z Etapu C) - reguła wtedy słusznie sygnalizuje
+        # niespełnialność zamiast cicho nic nie sprawdzać.
+        shifts_by_day = lambda d: (ctx.shift_night,)
     else:  # "any_shift"
         shifts_by_day = lambda d: ctx.all_shifts
 
