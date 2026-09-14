@@ -88,6 +88,41 @@ def _shift_touches_window(start_dt, end_dt, window_start_hour, window_end_hour):
     return end_dt.hour >= window_end_hour or start_dt.hour <= window_start_hour
 
 
+def _daily_subintervals(start_minutes, end_minutes):
+    """Splits a possibly midnight-crossing, recurring-daily [start, end)
+    window (minutes-of-day) into 1 or 2 non-wrapping sub-intervals within
+    [0, 1440) - the building block for comparing two such recurring windows
+    (a role_time_restriction window and a location's night_shift window)
+    for overlap without anchoring either to a specific calendar date."""
+    start_minutes %= 1440
+    length = (end_minutes - start_minutes) % 1440 or 1440
+    end = start_minutes + length
+    if end <= 1440:
+        return [(start_minutes, end)]
+    return [(start_minutes, 1440), (0, end - 1440)]
+
+
+def _daily_windows_overlap(a_start_minutes, a_end_minutes, b_start_minutes, b_end_minutes):
+    a_parts = _daily_subintervals(a_start_minutes, a_end_minutes)
+    b_parts = _daily_subintervals(b_start_minutes, b_end_minutes)
+    return any(a[0] < b[1] and b[0] < a[1] for a in a_parts for b in b_parts)
+
+
+def _restriction_overlaps_night_shift(window_start_hour, window_end_hour, night_hours):
+    """True gdy [window_start_hour, window_end_hour) (godzinowe okno zakazu)
+    pokrywa się choć częściowo ze skonfigurowanym oknem night_shift danej
+    lokalizacji - obie strony to okna powtarzające się codziennie, więc
+    porównanie idzie w minutach dnia (0-1439), nie na konkretnej dacie."""
+    night_start_str, night_end_str = night_hours
+    night_start = datetime.strptime(night_start_str, FMT)
+    night_end = datetime.strptime(night_end_str, FMT)
+
+    return _daily_windows_overlap(
+        window_start_hour * 60, window_end_hour * 60,
+        night_start.hour * 60 + night_start.minute, night_end.hour * 60 + night_end.minute,
+    )
+
+
 def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, window_end_hour=6):
     """Employees with role `role_key` can't be scheduled on a shift that
     touches [window_start_hour, window_end_hour) o'clock. Generalizes
@@ -103,35 +138,46 @@ def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, windo
         shift_delta = timedelta(hours=eff_hours)
         location = ctx.shop.get_location(emp)
 
-        for d in ctx.days:
-            hours = location.get_open_hours_for_day(d)
-            if not hours:
-                continue
-            open_time, close_time = hours
-            open_dt = datetime.strptime(open_time, FMT)
-            close_dt = datetime.strptime(close_time, FMT)
+        # SHIFT_NIGHT (Etap C planu zmian nocnych) ma własne, stałe okno
+        # niezależne od godzin otwarcia konkretnego dnia (w odróżnieniu od
+        # OPEN/CLOSE/START/END poniżej) - sprawdzane raz, poza pętlą po
+        # dniach, tak jak w add_no_night_constraint.
+        night_hours = ctx.shop.get_location(emp).get_night_shift_hours() if ctx.shift_night is not None else None
+        night_restricted = night_hours is not None and _restriction_overlaps_night_shift(
+            window_start_hour, window_end_hour, night_hours
+        )
 
+        for d in ctx.days:
             forbidden_shifts = set()
 
-            start, end = open_dt, open_dt + shift_delta
-            if _shift_touches_window(start, end, window_start_hour, window_end_hour):
-                forbidden_shifts.add(ctx.shift_open)
+            if night_restricted:
+                forbidden_shifts.add(ctx.shift_night)
 
-            start, end = close_dt - shift_delta, close_dt
-            if _shift_touches_window(start, end, window_start_hour, window_end_hour):
-                forbidden_shifts.add(ctx.shift_close)
+            hours = location.get_open_hours_for_day(d)
+            if hours:
+                open_time, close_time = hours
+                open_dt = datetime.strptime(open_time, FMT)
+                close_dt = datetime.strptime(close_time, FMT)
 
-            for shift, offset in ctx.start_shift_map.items():
-                start = open_dt + timedelta(minutes=offset)
-                end = start + shift_delta
+                start, end = open_dt, open_dt + shift_delta
                 if _shift_touches_window(start, end, window_start_hour, window_end_hour):
-                    forbidden_shifts.add(shift)
+                    forbidden_shifts.add(ctx.shift_open)
 
-            for shift, offset in ctx.end_shift_map.items():
-                end = close_dt - timedelta(minutes=offset)
-                start = end - shift_delta
+                start, end = close_dt - shift_delta, close_dt
                 if _shift_touches_window(start, end, window_start_hour, window_end_hour):
-                    forbidden_shifts.add(shift)
+                    forbidden_shifts.add(ctx.shift_close)
+
+                for shift, offset in ctx.start_shift_map.items():
+                    start = open_dt + timedelta(minutes=offset)
+                    end = start + shift_delta
+                    if _shift_touches_window(start, end, window_start_hour, window_end_hour):
+                        forbidden_shifts.add(shift)
+
+                for shift, offset in ctx.end_shift_map.items():
+                    end = close_dt - timedelta(minutes=offset)
+                    start = end - shift_delta
+                    if _shift_touches_window(start, end, window_start_hour, window_end_hour):
+                        forbidden_shifts.add(shift)
 
             for s in forbidden_shifts:
                 if soft:
