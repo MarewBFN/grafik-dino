@@ -53,11 +53,16 @@ class DaySchedule:
         """
         Ustawia godziny pracy.
         Format: 'HH:MM'
+
+        end == start pozostaje błędem (nierozróżnialne od pustej/24h
+        zmiany). end < start jest dozwolone i oznacza zmianę nocną,
+        przechodzącą przez północ (np. "22:00" -> "06:00") - patrz
+        crosses_midnight().
         """
         start_dt = _parse_time(start)
         end_dt = _parse_time(end)
 
-        if end_dt <= start_dt:
+        if end_dt == start_dt:
             raise ValueError("Godzina zakończenia musi być późniejsza niż rozpoczęcia")
 
         self.start = start
@@ -65,6 +70,13 @@ class DaySchedule:
         self.is_leave = False
         self.is_sick = False
         self.is_day_off = False
+
+    def crosses_midnight(self) -> bool:
+        """Czy to zmiana nocna, kończąca się w kolejnej dobie kalendarzowej."""
+        if self.is_empty() or self.start is None or self.end is None:
+            return False
+
+        return _parse_time(self.end) < _parse_time(self.start)
 
     def total_duration(self) -> timedelta | None:
         """
@@ -76,7 +88,11 @@ class DaySchedule:
         start_dt = _parse_time(self.start)
         end_dt = _parse_time(self.end)
 
-        return end_dt - start_dt
+        duration = end_dt - start_dt
+        if duration < timedelta(0):
+            duration += timedelta(days=1)
+
+        return duration
 
     def total_as_str(self) -> str | None:
         """
