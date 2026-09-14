@@ -799,6 +799,7 @@ class MainWindow(QMainWindow):
             return
 
         ds = self.controller.get_day(emp, day)
+        night_hours = self.shop_config.get_location(emp).get_night_shift_hours()
         dialog = DayEditDialog(
             self,
             start=None if ds.is_leave else ds.start,
@@ -806,6 +807,7 @@ class MainWindow(QMainWindow):
             open_start=hours[0],
             open_end=hours[1],
             daily_hours=emp.daily_hours,
+            night_hours=night_hours,
         )
 
         if dialog.exec() != QDialog.Accepted:
@@ -828,7 +830,10 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Błąd", "Niepoprawny format godziny.")
                 return
 
-            if end_dt <= start_dt:
+            is_configured_night_shift = (
+                night_hours is not None and (dialog.result_start, dialog.result_end) == night_hours
+            )
+            if end_dt <= start_dt and not is_configured_night_shift:
                 QMessageBox.warning(self, "Błąd", "Godzina zakończenia musi być późniejsza niż rozpoczęcia.")
                 return
 

@@ -46,6 +46,7 @@ SCOPE_OPTIONS = (
     ("na otwarciu", "open"),
     ("na zamknięciu", "close"),
     ("w dowolnym momencie dnia", "any_shift"),
+    ("na zmianie nocnej", "night"),
 )
 
 

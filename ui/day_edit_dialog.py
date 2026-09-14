@@ -1,5 +1,6 @@
 from PySide6.QtCore import QTime
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -20,13 +21,20 @@ def _parse_time(value: str) -> QTime:
 
 
 class DayEditDialog(QDialog):
-    def __init__(self, parent=None, start=None, end=None, open_start="05:30", open_end="22:45", daily_hours=8):
+    def __init__(
+        self, parent=None, start=None, end=None, open_start="05:30", open_end="22:45",
+        daily_hours=8, night_hours=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle("Edycja dnia")
         self.setModal(True)
         self.setMinimumWidth(420)
 
         self.daily_hours = daily_hours
+        # Sztywny blok zmiany nocnej tej lokalizacji, o ile skonfigurowany
+        # (Etap B/D planu zmian nocnych) - jedyny wariant "przez północ",
+        # jaki ten dialog w ogóle pozwala wybrać (patrz _on_night_toggled).
+        self.night_hours = night_hours
         self._manual_end = False
         self._updating = False
         self._open_start_qt = _parse_time(open_start)
@@ -61,6 +69,13 @@ class DayEditDialog(QDialog):
         form.addRow("Koniec", self.end_edit)
 
         root.addLayout(form)
+
+        self.night_check = None
+        if self.night_hours:
+            night_start, night_end = self.night_hours
+            self.night_check = QCheckBox(f"Zmiana nocna ({night_start}–{night_end})")
+            self.night_check.toggled.connect(self._on_night_toggled)
+            root.addWidget(self.night_check)
 
         self.duration_label = QLabel("Czas pracy: 0:00")
         self.duration_label.setObjectName("metricValue")
@@ -99,6 +114,24 @@ class DayEditDialog(QDialog):
             self._manual_end = True
             self.end_edit.set_time_str(end)
 
+        if self.night_check is not None and self.night_hours and (start, end) == self.night_hours:
+            self.night_check.setChecked(True)
+
+    def _on_night_toggled(self, checked):
+        if checked:
+            night_start, night_end = self.night_hours
+            self._updating = True
+            self.start_edit.set_time_str(night_start)
+            self.end_edit.set_time_str(night_end)
+            self._updating = False
+            self._manual_end = True
+            self.start_edit.setEnabled(False)
+            self.end_edit.setEnabled(False)
+        else:
+            self.start_edit.setEnabled(True)
+            self.end_edit.setEnabled(True)
+        self._update_duration()
+
     def _suggest_end(self):
         if self._manual_end:
             self._update_duration()
@@ -132,10 +165,18 @@ class DayEditDialog(QDialog):
     def _update_duration(self):
         start_qt = _parse_time(self.start_edit.get_time_str())
         end_qt = _parse_time(self.end_edit.get_time_str())
-        
-        minutes = start_qt.secsTo(end_qt) // 60
-        if minutes < 0:
-            minutes = 0
+
+        secs = start_qt.secsTo(end_qt)
+        if secs < 0:
+            # Tylko zmiana nocna (patrz _on_night_toggled) legalnie kończy
+            # się "wcześniej" niż zaczyna - w tym jednym przypadku to
+            # przejście przez północ, nie błąd.
+            if self.night_check is not None and self.night_check.isChecked():
+                secs += 24 * 3600
+            else:
+                secs = 0
+
+        minutes = secs // 60
         hours = minutes // 60
         mins = minutes % 60
         self.duration_label.setText(f"Czas pracy: {hours}:{mins:02d}")
@@ -153,9 +194,18 @@ class DayEditDialog(QDialog):
         self.accept()
 
     def _save(self):
+        if self.night_check is not None and self.night_check.isChecked():
+            # Sztywny blok - zapisujemy dokładnie skonfigurowane okno,
+            # niezależnie od tego, co zostało w polach start/end (są i tak
+            # wyłączone w tym trybie, patrz _on_night_toggled).
+            self.result_mode = "hours"
+            self.result_start, self.result_end = self.night_hours
+            self.accept()
+            return
+
         start_str = self.start_edit.get_time_str()
         end_str = self.end_edit.get_time_str()
-        
+
         start_qt = _parse_time(start_str)
         end_qt = _parse_time(end_str)
 

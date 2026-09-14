@@ -48,7 +48,8 @@ def add_manual_shift_constraints(
     SHIFT_CLOSE,
     START_SHIFT_MAP,
     END_SHIFT_MAP,
-    trace=None
+    trace=None,
+    shift_night=None,
 ):
     if trace is not None:
         trace.log_constraint("manual_shift", "apply locked/manual day assignments")
@@ -93,25 +94,38 @@ def add_manual_shift_constraints(
                     model.Add(x[e, d, s] == 0)
                 continue
 
-            hours = shop.get_location(emp).get_open_hours_for_day(d)
-            if not hours:
-                continue
+            # 🌙 zmiana nocna (Etap D planu zmian nocnych) - rozpoznawana po
+            # dokładnym dopasowaniu do skonfigurowanego okna tej lokalizacji
+            # (jedyny wariant, jaki UI w ogóle pozwala zablokować, patrz
+            # logic/schedule_controller.py). Sprawdzana przed
+            # get_open_hours_for_day, bo okno nocne nie zależy od zwykłych
+            # godzin otwarcia i dzień bez nich nie powinien tracić locka.
+            shift = None
+            if shift_night is not None:
+                night_hours = shop.get_location(emp).get_night_shift_hours()
+                if night_hours and (start, end) == night_hours:
+                    shift = shift_night
 
-            open_time, close_time = hours
+            if shift is None:
+                hours = shop.get_location(emp).get_open_hours_for_day(d)
+                if not hours:
+                    continue
 
-            shift = resolve_manual_shift(
-                start,
-                end,
-                open_time,
-                close_time,
-                {v: k for k, v in START_SHIFT_MAP.items()},
-                {v: k for k, v in END_SHIFT_MAP.items()}
-            )
+                open_time, close_time = hours
 
-            if shift == "OPEN":
-                shift = SHIFT_OPEN
-            elif shift == "CLOSE":
-                shift = SHIFT_CLOSE
+                shift = resolve_manual_shift(
+                    start,
+                    end,
+                    open_time,
+                    close_time,
+                    {v: k for k, v in START_SHIFT_MAP.items()},
+                    {v: k for k, v in END_SHIFT_MAP.items()}
+                )
+
+                if shift == "OPEN":
+                    shift = SHIFT_OPEN
+                elif shift == "CLOSE":
+                    shift = SHIFT_CLOSE
 
             # 🔥 KLUCZOWA POPRAWKA:
             # jeśli nie umiemy dopasować zmiany → blokujemy wszystko

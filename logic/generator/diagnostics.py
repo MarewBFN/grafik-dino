@@ -125,7 +125,12 @@ def audit_schedule(schedule, shop) -> dict[str, Any]:
             tomorrow = schedule.get_day(employee, day + 1)
             if not (today.end and tomorrow.start):
                 continue
-            rest = _minutes_between(day, today.end, day + 1, tomorrow.start, schedule.year, schedule.month)
+            # Zmiana nocna kończy się w kolejnej dobie kalendarzowej z
+            # definicji - bez tego przesunięcia _minutes_between liczyłby
+            # odpoczynek o 24h za dużo i nigdy nie wykryłby realnego
+            # naruszenia po zmianie nocnej.
+            end_day = day + 1 if today.crosses_midnight() else day
+            rest = _minutes_between(end_day, today.end, day + 1, tomorrow.start, schedule.year, schedule.month)
             if rest < 11 * 60:
                 rest_violations.append({
                     "employee": employee.display_name(),

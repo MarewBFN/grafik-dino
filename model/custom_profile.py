@@ -117,6 +117,7 @@ class CustomBusinessProfile:
                 "open": "na otwarciu",
                 "close": "na zamknięciu",
                 "any_shift": "w ciągu dnia",
+                "night": "na zmianie nocnej",
             }
             scope = scope_labels.get(rule.params.get("scope"), rule.params.get("scope", ""))
             min_count = rule.params.get("min_count", 1)

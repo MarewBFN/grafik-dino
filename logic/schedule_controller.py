@@ -44,9 +44,16 @@ class ScheduleController:
         except:
             return  # nieprawidłowy format → ignoruj
 
-        # ❌ BLOKADA: koniec <= start
+        # ❌ BLOKADA: koniec <= start, chyba że to dokładnie skonfigurowana
+        # zmiana nocna tej lokalizacji (Etap D planu zmian nocnych) - inne
+        # dowolne zakresy przez północ i tak nie są rozpoznawane przez
+        # generator (logic/generator/night_shift_constraint.py), więc
+        # przepuszczanie ich tutaj tylko tworzyłoby martwe, niezrozumiałe
+        # dla generatora wpisy.
         if end_dt <= start_dt:
-            return
+            night_hours = self.shop_config.get_location(emp).get_night_shift_hours()
+            if night_hours != (start, end):
+                return
 
         ds = self.schedule.get_day(emp, day)
 
@@ -166,7 +173,9 @@ class ScheduleController:
                     return
 
                 if end_dt <= start_dt:
-                    return
+                    night_hours = self.shop_config.get_location(emp).get_night_shift_hours()
+                    if night_hours != (start, end):
+                        return
 
                 ds.start = start
                 ds.end = end
