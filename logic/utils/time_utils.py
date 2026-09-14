@@ -11,7 +11,7 @@ def get_effective_daily_hours(emp, shop):
         hours = 8.50
 
     else:
-        hours = 8.0 * emp.employment_fraction
+        hours = shop.standard_daily_hours * emp.employment_fraction
 
     minutes = int(hours * 60)
     minutes = (minutes // 15) * 15

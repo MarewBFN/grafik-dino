@@ -23,9 +23,15 @@ class RoleDefinition:
     key: str
     label: str
     show_summary_row: bool = True
+    icon: str = ""
 
     def to_dict(self):
-        return {"key": self.key, "label": self.label, "show_summary_row": self.show_summary_row}
+        return {
+            "key": self.key,
+            "label": self.label,
+            "show_summary_row": self.show_summary_row,
+            "icon": self.icon,
+        }
 
     @classmethod
     def from_dict(cls, data):
@@ -33,6 +39,7 @@ class RoleDefinition:
             key=data["key"],
             label=data["label"],
             show_summary_row=data.get("show_summary_row", True),
+            icon=data.get("icon", ""),
         )
 
 

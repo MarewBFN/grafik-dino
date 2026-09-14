@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFormLayout,
     QGridLayout,
     QLabel,
@@ -220,7 +221,9 @@ class ConfigDialog(QDialog):
 
         hint = QLabel(
             "Godziny pracy dla pojedynczego dnia możesz zmienić ręcznie, "
-            "klikając dwukrotnie na nagłówek tego dnia w grafiku (np. „Wt 22”)."
+            "klikając dwukrotnie na nagłówek tego dnia w grafiku (np. „Wt 22”).\n"
+            "Działalność całodobowa: ustaw np. 00:00–23:45 (godziny "
+            "przechodzące przez północ nie są jeszcze wspierane)."
         )
         hint.setObjectName("mutedHint")
         hint.setWordWrap(True)
@@ -285,6 +288,22 @@ class ConfigDialog(QDialog):
         self.max_consecutive.setFixedWidth(70)
         self.max_consecutive.setValue(self.shop_config.constraints.get("max_consecutive_days", 4))
         form_gen.addRow("Maksymalna liczba dni pod rząd:", self.max_consecutive)
+
+        self.standard_daily_hours = QDoubleSpinBox()
+        # 23.75h zamiast 24h: przy dosłownych 24h "koniec zmiany" liczony
+        # jako godzina zegarowa wychodzi identyczny z "początkiem" (traci się
+        # przeniesienie na kolejny dzień), więc zmiana byłaby nierozróżnialna
+        # od pustej - patrz get_effective_daily_hours.
+        self.standard_daily_hours.setRange(1.0, 23.75)
+        self.standard_daily_hours.setSingleStep(0.25)
+        self.standard_daily_hours.setSuffix(" h")
+        self.standard_daily_hours.setFixedWidth(80)
+        self.standard_daily_hours.setValue(self.shop_config.standard_daily_hours)
+        self.standard_daily_hours.setToolTip(
+            "Bazowy wymiar zmiany dla pracownika na pełnym etacie (1/1). "
+            "Inne wymiary etatu to ułamek tej wartości."
+        )
+        form_gen.addRow("Standardowy wymiar zmiany (pełny etat):", self.standard_daily_hours)
         layout.addLayout(form_gen)
 
         # Jedna karta na obie flagi zamiast osobnej ramki na każdy checkbox.
@@ -342,7 +361,9 @@ class ConfigDialog(QDialog):
             "Osobne obiekty/placówki w ramach tego projektu (np. kilka "
             "chronionych lokalizacji), każdy z własnymi godzinami. Bez "
             "zdefiniowanych lokalizacji projekt działa jak dziś - jedna, "
-            "wspólna konfiguracja z zakładki \"Godziny otwarcia\"."
+            "wspólna konfiguracja z zakładki \"Godziny otwarcia\".\n"
+            "Działalność całodobowa: ustaw np. 00:00–23:45 (godziny "
+            "przechodzące przez północ nie są jeszcze wspierane)."
         )
         hint.setObjectName("mutedHint")
         hint.setWordWrap(True)
@@ -551,7 +572,11 @@ class ConfigDialog(QDialog):
 
                 if end_qt <= start_qt:
                     day_names = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
-                    raise ValueError(f"Zamknięcie musi być później niż otwarcie w dniu: {day_names[wd]}.")
+                    raise ValueError(
+                        f"Zamknięcie musi być później niż otwarcie tego samego dnia ({day_names[wd]}). "
+                        "Zmiany przechodzące przez północ nie są jeszcze wspierane — dla działalności "
+                        "całodobowej ustaw np. 00:00–23:45."
+                    )
                 
                 self.shop_config.open_hours[wd] = (start_str, end_str)
 
@@ -570,7 +595,11 @@ class ConfigDialog(QDialog):
                 start = row.open_input.get_time_str()
                 end = row.close_input.get_time_str()
                 if _parse_time(end) <= _parse_time(start):
-                    raise ValueError(f"Zamknięcie musi być później niż otwarcie dla lokalizacji: {name}.")
+                    raise ValueError(
+                        f"Zamknięcie musi być później niż otwarcie tego samego dnia dla lokalizacji: {name}. "
+                        "Zmiany przechodzące przez północ nie są jeszcze wspierane — dla działalności "
+                        "całodobowej ustaw np. 00:00–23:45."
+                    )
                 new_locations[key] = LocationConfig(
                     key=key, name=name,
                     open_hours={wd: (start, end) for wd in range(7)},
@@ -578,6 +607,7 @@ class ConfigDialog(QDialog):
             self.shop_config.locations = new_locations
 
             self.shop_config.constraints["max_consecutive_days"] = self.max_consecutive.value()
+            self.shop_config.standard_daily_hours = self.standard_daily_hours.value()
             self.shop_config.constraints["min_open_staff"] = self.min_open.value()
             self.shop_config.constraints["min_close_staff"] = self.min_close.value()
             self.shop_config.constraints["enforce_11h_rest"] = True

@@ -22,6 +22,7 @@ class RoleDef:
     key: str
     label: str
     description: str = ""
+    icon: str = ""
 
 
 @dataclass(frozen=True)
@@ -114,7 +115,7 @@ def register_custom_profile(custom) -> None:
     register_profile(BusinessProfile(
         key=custom.key,
         display_name=custom.display_name,
-        roles=tuple(RoleDef(role.key, role.label) for role in custom.roles),
+        roles=tuple(RoleDef(role.key, role.label, icon=role.icon) for role in custom.roles),
         policy_labels=custom_profile_wiring.build_policy_labels(custom),
         summary_rows=tuple(summary_rows),
     ))

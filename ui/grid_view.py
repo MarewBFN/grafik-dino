@@ -1,6 +1,7 @@
 import calendar
 import math
 from datetime import datetime
+from functools import lru_cache
 
 from PySide6.QtCore import Qt, QPointF, QRectF, QSize, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QImage, QKeySequence, QPainter, QPixmap, QPen, QPolygonF, qGray
@@ -139,8 +140,28 @@ def _build_no_afternoon_icon(size: int = 32) -> QIcon:
     return QIcon(pixmap)
 
 
+@lru_cache(maxsize=128)
+def _emoji_icon(emoji: str, size: int = 64) -> QIcon:
+    """Render one emoji character as a badge icon (no asset file), for
+    custom-profile roles picked in the profile wizard (ui/emoji_palette.py)."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    font = QFont()
+    font.setPointSize(int(size * 0.6))
+    painter.setFont(font)
+    painter.drawText(QRectF(0, 0, size, size), Qt.AlignCenter, emoji)
+    painter.end()
+
+    return QIcon(pixmap)
+
+
 def _employee_badges(table, employee):
-    """Large corner-role badges (opener/meat/manager) shown for an employee."""
+    """Large corner-role badges shown for an employee: Dino's hand-drawn
+    opener/meat/manager icons, plus one emoji badge per custom-profile role
+    that has an icon set and this employee carries."""
     badges = []
     if employee.is_opener:
         badges.append(table.icon_open)
@@ -150,6 +171,13 @@ def _employee_badges(table, employee):
         badges.append(table.icon_meat_light)
     if employee.is_manager:
         badges.append(table.icon_manager)
+
+    if table.shop_config is not None:
+        profile = get_profile(table.shop_config.business_type)
+        for role in profile.roles:
+            if role.icon and employee.has_role(role.key):
+                badges.append(_emoji_icon(role.icon))
+
     return badges
 
 

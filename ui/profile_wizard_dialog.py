@@ -27,6 +27,7 @@ from model.custom_profile import (
     RULE_TYPE_ROLE_TIME_RESTRICTION,
 )
 from model.custom_profile_store import save_custom_profile
+from ui.emoji_palette import ROLE_ICON_PALETTE
 from ui.slug import slugify as _slugify
 
 POLICY_OPTIONS = (
@@ -48,7 +49,7 @@ SCOPE_OPTIONS = (
 
 
 class _RoleRow(QFrame):
-    def __init__(self, on_remove, on_changed, label="", show_summary_row=True):
+    def __init__(self, on_remove, on_changed, label="", show_summary_row=True, icon=""):
         super().__init__()
         self.setObjectName("configCard")
         layout = QHBoxLayout(self)
@@ -57,6 +58,15 @@ class _RoleRow(QFrame):
         self.label_edit.setPlaceholderText("np. Uzbrojony")
         self.label_edit.textChanged.connect(on_changed)
         layout.addWidget(self.label_edit, 1)
+
+        layout.addWidget(QLabel("Ikona:"))
+        self.icon_combo = QComboBox()
+        self.icon_combo.addItem("Brak", "")
+        for emoji, description in ROLE_ICON_PALETTE:
+            self.icon_combo.addItem(f"{emoji}  {description}", emoji)
+        idx = self.icon_combo.findData(icon)
+        self.icon_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        layout.addWidget(self.icon_combo)
 
         self.summary_row_check = QCheckBox("Pokaż wiersz podsumowania")
         self.summary_row_check.setChecked(show_summary_row)
@@ -69,6 +79,9 @@ class _RoleRow(QFrame):
 
     def label(self) -> str:
         return self.label_edit.text().strip()
+
+    def icon(self) -> str:
+        return self.icon_combo.currentData() or ""
 
 
 class _RuleParamsWidget(QStackedWidget):
@@ -279,8 +292,8 @@ class ProfileWizardDialog(QDialog):
 
         self._add_role_row()
 
-    def _add_role_row(self, label="", show_summary_row=True):
-        row = _RoleRow(self._remove_role_row, self._on_roles_changed, label, show_summary_row)
+    def _add_role_row(self, label="", show_summary_row=True, icon=""):
+        row = _RoleRow(self._remove_role_row, self._on_roles_changed, label, show_summary_row, icon)
         self._role_rows.append(row)
         self.roles_container.addWidget(row)
 
@@ -339,7 +352,8 @@ class ProfileWizardDialog(QDialog):
             (r for r in self._role_rows if r.label()), role_labels
         ):
             roles.append(RoleDefinition(
-                key=key, label=label, show_summary_row=row.summary_row_check.isChecked()
+                key=key, label=label, show_summary_row=row.summary_row_check.isChecked(),
+                icon=row.icon(),
             ))
 
         rules = []
