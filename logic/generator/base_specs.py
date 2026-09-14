@@ -25,6 +25,10 @@ from logic.generator.hours_constraint import add_monthly_hours_constraint, add_b
 from logic.generator.manual_constraint import add_manual_shift_constraints
 from logic.generator.constraints_logic import add_work_dependency_constraint
 from logic.generator.availability_constraint import add_availability_constraint
+from logic.generator.night_shift_constraint import (
+    add_night_shift_gate_constraint,
+    add_night_shift_adjacency_constraint,
+)
 
 
 GENERIC_WEIGHTS = {
@@ -79,7 +83,7 @@ def _build_always_on_specs():
             "work_dependency",
             lambda ctx, soft: add_work_dependency_constraint(
                 ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shift_open, ctx.shift_close, ctx.all_shifts,
-                trace=ctx.trace,
+                trace=ctx.trace, shift_night=ctx.shift_night,
             ),
             always_on=True,
         ),
@@ -90,27 +94,53 @@ def _build_always_on_specs():
             ),
             always_on=True,
         ),
+        ConstraintSpec(
+            # Structural fact ("this shift doesn't exist here"), not a
+            # business preference - always hard, like non_trade_day above.
+            # Etap C planu zmian nocnych.
+            "night_shift_gate",
+            lambda ctx, soft: add_night_shift_gate_constraint(
+                ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.shift_night, trace=ctx.trace
+            ) if ctx.shift_night is not None else None,
+            always_on=True,
+        ),
     ]
 
 
 def _build_rest_11h(ctx, soft):
     mode = ctx.shop.constraints.get("rest_11h_mode", "standard")
     if mode == "simplified":
-        return add_rest_11h_constraint_simplified(
+        violations = add_rest_11h_constraint_simplified(
             ctx.model, ctx.x, ctx.employees, ctx.days, ctx.trade_days,
             ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
             soft=soft, trace=ctx.trace,
         )
-    return add_rest_11h_constraint(
-        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.trade_days, ctx.shop,
-        ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
-        soft=soft, trace=ctx.trace,
-    )
+    else:
+        violations = add_rest_11h_constraint(
+            ctx.model, ctx.x, ctx.employees, ctx.days, ctx.trade_days, ctx.shop,
+            ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
+            soft=soft, trace=ctx.trace,
+        )
+
+    # add_rest_11h_constraint(_simplified) builds its windows purely from
+    # open/close hours (START/END_SHIFT_MAP) and has no idea SHIFT_NIGHT
+    # exists, so it never constrains any pair involving it. This covers
+    # exactly those pairs, alongside (not instead of) the above - see
+    # logic/generator/night_shift_constraint.py.
+    if ctx.shift_night is not None:
+        violations = list(violations) + add_night_shift_adjacency_constraint(
+            ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.shift_night,
+            ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
+            soft=soft, trace=ctx.trace,
+        )
+
+    return violations
 
 
 def _build_balance(ctx, soft):
     return add_balance_constraint(
-        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts, soft=soft, trace=ctx.trace
+        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts,
+        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night,
     )
 
 
@@ -118,7 +148,7 @@ def _build_availability(ctx, soft):
     return add_availability_constraint(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts,
         ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
-        soft=soft, trace=ctx.trace,
+        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night,
     )
 
 
@@ -144,7 +174,8 @@ def _build_max_consecutive(ctx, soft):
 
 def _build_monthly_hours(ctx, soft):
     return add_monthly_hours_constraint(
-        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts, soft=soft, trace=ctx.trace
+        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
+        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night,
     )
 
 

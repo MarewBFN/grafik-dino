@@ -54,6 +54,16 @@ class AutoScheduleGenerator:
             self.SHIFT_WORK_END_60: 60,
             self.SHIFT_WORK_END_75: 75,
         }
+
+        # Sztywny blok zmiany nocnej (Etap C planu zmian nocnych) - istnieje
+        # w tej samej, wspólnej przestrzeni zmiennych x[e,d,s] dla KAŻDEGO
+        # profilu (tak jak SHIFT_OPEN/CLOSE), ale logic/generator/night_shift_constraint.py
+        # blokuje ją twardo (x[e,d,SHIFT_NIGHT]==0) dla każdego pracownika,
+        # którego lokalizacja nie ma skonfigurowanego night_shift (Etap B) -
+        # więc dla dzisiejszych projektów (żadna lokalizacja go nie ma) to
+        # zero zmiany zachowania, tylko nieużywane zmienne w modelu.
+        self.SHIFT_NIGHT = 14
+
         # wszystkie zmiany (tu można dodawać kolejne typy zmian)
         self.ALL_SHIFTS = (
             self.SHIFT_OPEN,
@@ -71,6 +81,8 @@ class AutoScheduleGenerator:
             self.SHIFT_WORK_END_45,
             self.SHIFT_WORK_END_60,
             self.SHIFT_WORK_END_75,
+
+            self.SHIFT_NIGHT,
         )
 
     # ==================================================
@@ -158,6 +170,7 @@ class AutoScheduleGenerator:
             start_shift_map=self.START_SHIFT_MAP,
             end_shift_map=self.END_SHIFT_MAP,
             trace=trace,
+            shift_night=self.SHIFT_NIGHT,
         )
 
         from model.business_profile import get_custom_profile
@@ -218,7 +231,8 @@ class AutoScheduleGenerator:
             self.SHIFT_CLOSE,
             self.START_SHIFT_MAP,
             self.END_SHIFT_MAP,
-            trace=trace
+            trace=trace,
+            shift_night=self.SHIFT_NIGHT,
         )
 
         # SPRZĄTANIE: Przywracamy oryginalne daily_hours, żeby UI i zapisy nie świrowały

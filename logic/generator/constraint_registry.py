@@ -30,6 +30,10 @@ class ConstraintContext:
     start_shift_map: dict
     end_shift_map: dict
     trace: object
+    # SHIFT_NIGHT (patrz logic/generator/night_shift_constraint.py) - None
+    # dla dowolny kod konstruujący ConstraintContext sprzed Etapu C zmian
+    # nocnych; AutoScheduleGenerator zawsze przekazuje tu konkretną wartość.
+    shift_night: int | None = None
     # Shared state a profile's constraints pass between each other (e.g. Dino's
     # meat-light duty budget). Empty/unused for profiles that don't need it.
     extra: dict = field(default_factory=dict)
