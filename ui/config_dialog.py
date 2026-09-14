@@ -27,7 +27,7 @@ from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.profile_wizard_dialog import ProfileWizardDialog
 from ui.slug import slugify
 from model.constraint_policy import ConstraintPolicy
-from model.business_profile import BUSINESS_PROFILES, get_profile
+from model.business_profile import BUSINESS_PROFILES, DEFAULT_BUSINESS_TYPE, get_profile
 from model.location import LocationConfig
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
@@ -123,6 +123,12 @@ class ConfigDialog(QDialog):
         self.edit_profile_btn.setObjectName("secondaryButton")
         self.edit_profile_btn.clicked.connect(self._open_profile_wizard_for_edit)
         profile_row.addWidget(self.edit_profile_btn)
+
+        self.delete_profile_btn = QPushButton("Usuń profil...")
+        self.delete_profile_btn.setObjectName("dangerButton")
+        self.delete_profile_btn.clicked.connect(self._delete_current_profile)
+        profile_row.addWidget(self.delete_profile_btn)
+
         self._sync_edit_profile_button()
 
         profile_row.addStretch()
@@ -182,11 +188,19 @@ class ConfigDialog(QDialog):
         for key, policy in default_policies(custom).items():
             self.shop_config.constraint_policies.setdefault(key, policy)
 
+    def _on_advanced_toggled(self, checked):
+        self.advanced_container.setVisible(checked)
+        self.advanced_toggle_btn.setText(
+            "Ukryj ustawienia zaawansowane" if checked else "Pokaż ustawienia zaawansowane"
+        )
+
     def _sync_edit_profile_button(self):
         from model.business_profile import get_custom_profile
 
         business_type = self.business_type_selector.currentData()
-        self.edit_profile_btn.setEnabled(get_custom_profile(business_type) is not None)
+        is_custom = get_custom_profile(business_type) is not None
+        self.edit_profile_btn.setEnabled(is_custom)
+        self.delete_profile_btn.setEnabled(is_custom)
 
     def _open_profile_wizard(self):
         wizard = ProfileWizardDialog(self)
@@ -214,6 +228,40 @@ class ConfigDialog(QDialog):
         idx = self.business_type_selector.findData(wizard.new_profile_key)
         if idx >= 0:
             self.business_type_selector.setCurrentIndex(idx)
+
+    def _delete_current_profile(self):
+        from model.business_profile import get_custom_profile, unregister_custom_profile
+        from model.custom_profile_store import delete_custom_profile
+
+        business_type = self.business_type_selector.currentData()
+        custom = get_custom_profile(business_type)
+        if custom is None:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Usuń profil",
+            f"Usunąć profil \"{custom.display_name}\"? Projekty, które go już "
+            "używają, przy następnym otwarciu przełączą się na profil Dino "
+            "(nic w nich nie zostanie skasowane).",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            delete_custom_profile(business_type)
+        except OSError as exc:
+            QMessageBox.critical(self, "Błąd", f"Nie udało się usunąć profilu: {exc}")
+            return
+        unregister_custom_profile(business_type)
+
+        if self.shop_config.business_type == business_type:
+            self.shop_config.business_type = DEFAULT_BUSINESS_TYPE
+
+        self._reload_business_type_selector()
+        self._sync_edit_profile_button()
 
     def _build_hours_tab(self):
         page = QWidget()
@@ -469,13 +517,31 @@ class ConfigDialog(QDialog):
         policy_label.setObjectName("groupLabel")
         layout.addWidget(policy_label)
 
+        # Strojenie polityk/wag to coś, czego nowy użytkownik zwykle nie
+        # potrzebuje na starcie (sensowne domyślne wartości już tam są) -
+        # schowane za przełącznik, żeby zakładka nie przytłaczała przy
+        # pierwszym otwarciu.
+        self.advanced_toggle_btn = QPushButton("Pokaż ustawienia zaawansowane")
+        self.advanced_toggle_btn.setObjectName("secondaryButton")
+        self.advanced_toggle_btn.setCheckable(True)
+        self.advanced_toggle_btn.setChecked(False)
+        self.advanced_toggle_btn.toggled.connect(self._on_advanced_toggled)
+        layout.addWidget(self.advanced_toggle_btn)
+
+        self.advanced_container = QWidget()
+        advanced_layout = QVBoxLayout(self.advanced_container)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_layout.setSpacing(15)
+        self.advanced_container.setVisible(False)
+        layout.addWidget(self.advanced_container)
+
         policy_info = QLabel(
             "Wymagane: reguła musi być spełniona. "
             "Preferowane: solver może ją naruszyć za karę."
         )
         policy_info.setStyleSheet("color: #6b7280; font-size: 11px;")
         policy_info.setWordWrap(True)
-        layout.addWidget(policy_info)
+        advanced_layout.addWidget(policy_info)
 
         form_solver = QFormLayout()
         self.solver_time_limit = QSpinBox()
@@ -491,7 +557,7 @@ class ConfigDialog(QDialog):
             "generowanie — przydatne do zwiększenia na słabszym sprzęcie."
         )
         form_solver.addRow("Limit czasu generatora:", self.solver_time_limit)
-        layout.addLayout(form_solver)
+        advanced_layout.addLayout(form_solver)
 
         policy_grid = QGridLayout()
         policy_grid.setHorizontalSpacing(12)
@@ -540,7 +606,7 @@ class ConfigDialog(QDialog):
         policy_grid.addWidget(QLabel("Tryb liczenia odpoczynku 11h:"), rest_row, rest_column)
         policy_grid.addWidget(self.rest_11h_mode_selector, rest_row, rest_column + 1)
 
-        layout.addLayout(policy_grid)
+        advanced_layout.addLayout(policy_grid)
 
         hint = QLabel(
             "Te reguły możesz swobodnie zmieniać i testować, jak zachowuje się "

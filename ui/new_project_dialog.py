@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -126,6 +127,11 @@ class NewProjectDialog(QDialog):
                 edit_btn.clicked.connect(lambda _=False, key=profile.key: self._open_profile_wizard_for_edit(key))
                 row_layout.addWidget(edit_btn)
 
+                delete_btn = QPushButton("Usuń...")
+                delete_btn.setObjectName("dangerButton")
+                delete_btn.clicked.connect(lambda _=False, key=profile.key: self._delete_profile(key))
+                row_layout.addWidget(delete_btn)
+
             self._button_group.addButton(radio)
             self._profile_radios[profile.key] = radio
             self.profiles_container.addWidget(row)
@@ -155,6 +161,34 @@ class NewProjectDialog(QDialog):
         if wizard.exec() != QDialog.Accepted or not wizard.new_profile_key:
             return
         self._reload_profile_radios(select_key=wizard.new_profile_key)
+
+    def _delete_profile(self, profile_key: str):
+        from model.business_profile import unregister_custom_profile
+        from model.custom_profile_store import delete_custom_profile
+
+        custom = get_custom_profile(profile_key)
+        if custom is None:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Usuń profil",
+            f"Usunąć profil \"{custom.display_name}\"? Projekty, które go już "
+            "używają, przy następnym otwarciu przełączą się na profil Dino "
+            "(nic w nich nie zostanie skasowane).",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            delete_custom_profile(profile_key)
+        except OSError as exc:
+            QMessageBox.critical(self, "Błąd", f"Nie udało się usunąć profilu: {exc}")
+            return
+        unregister_custom_profile(profile_key)
+        self._reload_profile_radios()
 
     def _confirm(self):
         self.result_business_type = self._selected_key()

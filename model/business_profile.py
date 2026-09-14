@@ -121,6 +121,15 @@ def register_custom_profile(custom) -> None:
     ))
 
 
+def unregister_custom_profile(key: str) -> None:
+    """Drop a custom profile from the in-memory registries. Projects that
+    already reference this key are untouched - get_profile() already falls
+    back to dino_retail for any unknown key, so they just start doing that
+    the next time they're opened."""
+    CUSTOM_PROFILES.pop(key, None)
+    BUSINESS_PROFILES.pop(key, None)
+
+
 def _load_persisted_custom_profiles() -> None:
     from model.custom_profile_store import load_custom_profiles
 
