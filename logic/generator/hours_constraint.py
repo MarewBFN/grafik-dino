@@ -1,4 +1,15 @@
 from logic.utils.time_utils import get_effective_daily_hours
+from logic.generator.night_shift_constraint import night_shift_minutes_for_employee
+
+
+def _shift_minutes_by_type(all_shifts, standard_minutes, shift_night, night_minutes):
+    """Minuty przypisane każdej zmianie z all_shifts - stała, wspólna
+    wartość dla wszystkich zwykłych zmian (tak jak dziś), a dla SHIFT_NIGHT
+    jego własny czas trwania (Etap C planu zmian nocnych - zmiana nocna to
+    sztywny blok, niezależny od get_effective_daily_hours pracownika)."""
+    if shift_night is None:
+        return {s: standard_minutes for s in all_shifts}
+    return {s: (night_minutes if s == shift_night else standard_minutes) for s in all_shifts}
 
 
 def add_monthly_hours_constraint(
@@ -10,7 +21,8 @@ def add_monthly_hours_constraint(
     shop,
     all_shifts,
     soft=False,
-    trace=None
+    trace=None,
+    shift_night=None,
 ):
     violations = []
 
@@ -44,10 +56,15 @@ def add_monthly_hours_constraint(
 
         total_minutes = model.NewIntVar(0, 50000, f"month_total_e{e}")
 
+        minutes_by_shift = _shift_minutes_by_type(
+            all_shifts, shift_minutes, shift_night,
+            night_shift_minutes_for_employee(shop, emp) if shift_night is not None else 0,
+        )
+
         model.Add(
             total_minutes ==
             sum(
-                x[e, d, s] * shift_minutes
+                x[e, d, s] * minutes_by_shift[s]
                 for d in days
                 for s in all_shifts
             )
@@ -93,7 +110,8 @@ def add_balance_constraint(
     shop,
     all_shifts,
     soft=True,
-    trace=None
+    trace=None,
+    shift_night=None,
 ):
     if trace is not None:
         trace.log_constraint("balance", f"soft={soft}")
@@ -112,12 +130,17 @@ def add_balance_constraint(
         nominal_minutes = int(nominal * 60 * emp.employment_fraction)
         shift_minutes = int(get_effective_daily_hours(emp, shop) * 60)
 
+        minutes_by_shift = _shift_minutes_by_type(
+            all_shifts, shift_minutes, shift_night,
+            night_shift_minutes_for_employee(shop, emp) if shift_night is not None else 0,
+        )
+
         total_minutes = model.NewIntVar(0, 20000, f"total_minutes_e{e}")
 
         model.Add(
             total_minutes ==
             sum(
-                sum(x[e, d, s] for s in all_shifts) * shift_minutes
+                sum(x[e, d, s] * minutes_by_shift[s] for s in all_shifts)
                 for d in days
             )
         )

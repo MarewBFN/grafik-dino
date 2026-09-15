@@ -15,7 +15,8 @@ def save_solution(
     SHIFT_CLOSE,
     START_SHIFTS,
     END_SHIFTS,
-    trace=None
+    trace=None,
+    shift_night=None,
 ):
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         print("❌ BRAK ROZWIĄZANIA")
@@ -49,7 +50,14 @@ def save_solution(
         solver_open_per_day[d] = open_count
         solver_close_per_day[d] = close_count
 
-        print(f"Dzień {d}: OPEN={open_count} CLOSE={close_count} WORK={work_count}")
+        night_count = 0
+        if shift_night is not None:
+            night_count = sum(
+                solver.Value(x[e, d, shift_night])
+                for e in range(len(employees))
+            )
+
+        print(f"Dzień {d}: OPEN={open_count} CLOSE={close_count} WORK={work_count} NIGHT={night_count}")
 
     for e in range(len(employees)):
         emp = employees[e]
@@ -76,7 +84,21 @@ def save_solution(
                     print(f"[SKIP LOCKED] emp={e} day={d}")
                 continue
 
-            hours = shop.get_open_hours_for_day(d)
+            # SHIFT_NIGHT (Etap C planu zmian nocnych) ma własne, stałe
+            # godziny niezależne od open_hours dnia - sprawdzane przed
+            # get_open_hours_for_day poniżej, żeby dzień bez zwykłych godzin
+            # otwarcia (np. przyszły profil 24/7 bez "dnia handlowego") nie
+            # gubił cicho przypisanej zmiany nocnej.
+            if shift_night is not None and solver.Value(x[e, d, shift_night]) == 1:
+                night_hours = shop.get_location(emp).get_night_shift_hours()
+                if night_hours:
+                    night_start, night_end = night_hours
+                    schedule.set_day_hours(emp, d, night_start, night_end)
+                    if trace is not None:
+                        trace.log_assignment(e, d, shift_night, "solver_assignment")
+                continue
+
+            hours = shop.get_location(emp).get_open_hours_for_day(d)
             if not hours:
                 continue
 

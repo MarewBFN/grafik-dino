@@ -1,5 +1,40 @@
 import calendar
 from model.constraint_policy import ConstraintPolicy
+from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
+from model.location import LocationConfig, normalize_night_shift
+
+
+class _LocationView:
+    """Duck-types the day-hours subset of ShopConfig's API (weekday /
+    get_open_hours_for_day) against one LocationConfig, bound to the parent
+    project's year/month - so constraint code can call
+    shop.get_location(emp).get_open_hours_for_day(d) the same way it calls
+    shop.get_open_hours_for_day(d) today, regardless of which one it got."""
+
+    def __init__(self, location: LocationConfig, year: int, month: int, fallback_constraints: dict):
+        self._location = location
+        self._year = year
+        self._month = month
+        self._fallback_constraints = fallback_constraints
+
+    def weekday(self, day: int) -> int:
+        return self._location.weekday(self._year, self._month, day)
+
+    def get_open_hours_for_day(self, day: int):
+        return self._location.get_open_hours_for_day(self._year, self._month, day)
+
+    def get_night_shift_hours(self):
+        return self._location.get_night_shift_hours()
+
+    @property
+    def constraints(self) -> dict:
+        # LocationConfig always carries all of DEFAULT_LOCATION_CONSTRAINTS
+        # today, so this merge only matters for a location saved before a
+        # future key gets added there.
+        merged = dict(self._fallback_constraints)
+        merged.update(self._location.constraints)
+        return merged
+
 
 class ShopConfig:
     """
@@ -13,6 +48,24 @@ class ShopConfig:
     def __init__(self, year: int, month: int):
         self.year = year
         self.month = month
+
+        # Nazwa placówki/firmy nadawana w szybkiej konfiguracji (ui/first_run_wizard.py)
+        # albo w zakładce "Godziny otwarcia". Czysto opisowa - nie wpływa na
+        # generator. Puste domyślnie: stare projekty i te utworzone poza
+        # kreatorem po prostu nie mają nazwy.
+        self.name: str = ""
+
+        # Jaki profil działalności (role, constrainty, etykiety UI) obowiązuje
+        # dla tego projektu. Domyślnie Dino - stare projekty bez tego pola
+        # zachowują się dokładnie jak dziś.
+        self.business_type: str = DEFAULT_BUSINESS_TYPE
+
+        # Lokalizacje/obiekty w ramach tego projektu (Etap 3a - sam model
+        # danych). Puste domyślnie: projekt bez zdefiniowanych lokalizacji
+        # zachowuje się dokładnie jak dziś, jedna, niejawna lokalizacja to
+        # pola bezpośrednio na tym ShopConfig (open_hours, trade_sundays,
+        # itd. poniżej). Generator i UI nie czytają tego pola jeszcze.
+        self.locations: dict[str, LocationConfig] = {}
 
         # Toggle dla constraintów z model.constraint_policy
         self.constraint_policies = {
@@ -76,6 +129,12 @@ class ShopConfig:
             6: ("05:30", "22:45"),  # Nd (jeśli handlowa)
         }
 
+        # Opcjonalny, sztywny blok zmiany nocnej dla projektów bez
+        # zdefiniowanych lokalizacji (patrz LocationConfig.night_shift w
+        # model/location.py - to jest dokładnie ten sam mechanizm, tylko na
+        # poziomie całego projektu). None = brak zmiany nocnej (domyślne).
+        self.night_shift: dict | None = None
+
     # ==========================================================
     # PODSTAWOWE METODY
     # ==========================================================
@@ -87,6 +146,11 @@ class ShopConfig:
         return self.weekday(day) == 6
 
     def is_trade_day(self, day: int) -> bool:
+        # "Dni handlowe" is a Dino/retail-specific concept - businesses
+        # whose profile doesn't use it (see BusinessProfile.uses_trade_calendar)
+        # treat every day as a normal potential working day.
+        if not get_profile(self.business_type).uses_trade_calendar:
+            return True
 
         if day in self.public_holidays:
             return False
@@ -133,6 +197,34 @@ class ShopConfig:
     def set_open_hours_for_weekday(self, weekday: int, start: str, end: str):
         self.open_hours[weekday] = (start, end)
 
+    def get_night_shift_hours(self) -> tuple[str, str] | None:
+        """(start, end) zmiany nocnej projektu, albo None gdy jej nie ma."""
+        if not self.night_shift:
+            return None
+        start = self.night_shift.get("start")
+        end = self.night_shift.get("end")
+        if not start or not end:
+            return None
+        return start, end
+
+    def set_night_shift(self, start: str | None, end: str | None) -> None:
+        self.night_shift = normalize_night_shift(start, end)
+
+    # ==========================================================
+    # LOKALIZACJE (Etap 3b)
+    # ==========================================================
+
+    def get_location(self, employee):
+        """Godzinowy "widok" dla tego pracownika: jeśli ma przypisaną
+        lokalizację (employee.location_key) i projekt ją definiuje, zwraca
+        obiekt z tym samym API co ShopConfig (`weekday`/`get_open_hours_for_day`/
+        `constraints`) wspierający się o tę lokalizację; w przeciwnym razie
+        zwraca `self` - dokładnie dzisiejsza, jednolokalizacyjna ścieżka.
+        """
+        if self.locations and employee.location_key in self.locations:
+            return _LocationView(self.locations[employee.location_key], self.year, self.month, self.constraints)
+        return self
+
     # ==========================================================
     # SERIALIZACJA
     # ==========================================================
@@ -141,7 +233,11 @@ class ShopConfig:
         return {
             "year": self.year,
             "month": self.month,
+            "name": self.name,
+            "business_type": self.business_type,
+            "locations": {key: loc.to_dict() for key, loc in self.locations.items()},
             "open_hours": self.open_hours,
+            "night_shift": self.night_shift,
             "trade_sundays": list(self.trade_sundays),
             "day_overrides": self.day_overrides,
             "constraints": self.constraints,
@@ -157,6 +253,14 @@ class ShopConfig:
     @classmethod
     def from_dict(cls, data):
         cfg = cls(data["year"], data["month"])
+        cfg.name = data.get("name", "")
+        cfg.business_type = data.get("business_type", DEFAULT_BUSINESS_TYPE)
+        cfg.locations = {
+            key: LocationConfig.from_dict(loc_data)
+            for key, loc_data in data.get("locations", {}).items()
+        }
+        night_shift = data.get("night_shift")
+        cfg.night_shift = dict(night_shift) if night_shift else None
 
         # open_hours
         cfg.open_hours = {

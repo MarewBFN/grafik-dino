@@ -37,6 +37,7 @@ from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import ScheduleGrid
+from ui.new_project_dialog import NewProjectDialog
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.loading_overlay import LoadingOverlay
@@ -136,8 +137,9 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._init_state()
         self._sync_everything()
-        if not self._open_project_from_path(open_path):
-            self._try_load_last_project()
+        self._opened_existing_project = self._open_project_from_path(open_path)
+        if not self._opened_existing_project:
+            self._opened_existing_project = self._try_load_last_project()
         self.loading_overlay = LoadingOverlay(self)
 
         self.statusBar().showMessage("Gotowe")
@@ -531,6 +533,8 @@ class MainWindow(QMainWindow):
 
         help_menu.addAction("Samouczek", self._open_tutorial)
 
+        file_menu.addAction("Nowy projekt...", self._open_new_project)
+        file_menu.addSeparator()
         file_menu.addAction("Zapisz", self._save_project)
         file_menu.addAction("Wczytaj", self._load_project)
 
@@ -560,6 +564,52 @@ class MainWindow(QMainWindow):
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
         help_menu.addAction("Sprawdź aktualizacje", lambda: self._check_updates(manual=True))
         help_menu.addAction("O programie", self._about)
+
+    def _open_new_project(self):
+        if self.schedule is not None:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Nowy projekt")
+            msg_box.setText(
+                "Utworzenie nowego projektu usunie bieżący grafik, listę "
+                "pracowników i ustawienia konfiguracji. Kontynuować?"
+            )
+            btn_yes = msg_box.addButton("Tak", QMessageBox.YesRole)
+            msg_box.addButton("Anuluj", QMessageBox.RejectRole)
+            msg_box.exec()
+            if msg_box.clickedButton() != btn_yes:
+                return
+
+        dialog = NewProjectDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.year = dialog.result_year
+        self.month = dialog.result_month
+        self._set_date_controls(self.year, self.month)
+
+        # Świadomie nie dziedziczymy pracowników poprzedniego projektu -
+        # _init_state() normalnie przenosi ich (sensowne przy zwykłej zmianie
+        # miesiąca tej samej firmy), ale "Nowy projekt" może oznaczać inną
+        # branżę z innymi rolami.
+        self.schedule = None
+        self._init_state()
+        self.shop_config.business_type = dialog.result_business_type
+
+        # Codex review finding on this PR: unlike _apply_first_run_wizard_result,
+        # this path never applied a fresh custom profile's default policies -
+        # apply_registry skips a spec whose policy key is absent from
+        # shop.constraint_policies, so every rule of a custom profile
+        # selected here (including ones configured as MANDATORY in the
+        # wizard) stayed silently DISABLED until Config was opened and saved.
+        from model.business_profile import get_custom_profile
+        custom = get_custom_profile(dialog.result_business_type)
+        if custom is not None:
+            from logic.generator.custom_profile_wiring import default_policies
+            self.shop_config.constraint_policies.update(default_policies(custom))
+
+        self._update_nominal_hours_label()
+        self._sync_everything()
+        self.statusBar().showMessage("Utworzono nowy projekt.", 2500)
 
     def _init_state(self):
         old_employees = []
@@ -605,7 +655,9 @@ class MainWindow(QMainWindow):
         self.grid.refresh()
 
     def _update_window_title(self):
-        self.setWindowTitle(f"Grafik Dino — {self.month:02d}.{self.year}")
+        name = self.shop_config.name if self.shop_config else ""
+        prefix = f"Grafik Dino — {name}" if name else "Grafik Dino"
+        self.setWindowTitle(f"{prefix} — {self.month:02d}.{self.year}")
 
     def _update_nominal_hours_label(self):
         if not self.shop_config:
@@ -726,7 +778,7 @@ class MainWindow(QMainWindow):
             )
 
     def _open_add_employee(self):
-        dialog = EmployeeDialog(self)
+        dialog = EmployeeDialog(self, shop_config=self.shop_config)
 
         if dialog.exec() != QDialog.Accepted:
             return
@@ -737,7 +789,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Dodano pracownika.", 2500)
 
     def _edit_employee(self, emp):
-        dialog = EmployeeDialog(self, employee=emp)
+        dialog = EmployeeDialog(self, employee=emp, shop_config=self.shop_config)
         if dialog.exec() != QDialog.Accepted:
             return
 
@@ -754,11 +806,18 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Zapisano pracownika.", 2500)
 
     def _edit_day(self, emp, day):
-        hours = self.shop_config.get_open_hours_for_day(day)
+        # Codex review finding on this PR: this read project-wide hours even
+        # for an employee assigned to a location with its own, different
+        # hours, while night_hours just below was already resolved per
+        # location - the dialog validated/bounded a manual entry against the
+        # wrong open/close window for such an employee.
+        location = self.shop_config.get_location(emp)
+        hours = location.get_open_hours_for_day(day)
         if not hours:
             return
 
         ds = self.controller.get_day(emp, day)
+        night_hours = location.get_night_shift_hours()
         dialog = DayEditDialog(
             self,
             start=None if ds.is_leave else ds.start,
@@ -766,6 +825,7 @@ class MainWindow(QMainWindow):
             open_start=hours[0],
             open_end=hours[1],
             daily_hours=emp.daily_hours,
+            night_hours=night_hours,
         )
 
         if dialog.exec() != QDialog.Accepted:
@@ -788,9 +848,32 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Błąd", "Niepoprawny format godziny.")
                 return
 
-            if end_dt <= start_dt:
+            is_configured_night_shift = (
+                night_hours is not None and (dialog.result_start, dialog.result_end) == night_hours
+            )
+            if end_dt <= start_dt and not is_configured_night_shift:
                 QMessageBox.warning(self, "Błąd", "Godzina zakończenia musi być późniejsza niż rozpoczęcia.")
                 return
+
+            # Generator już to wykrywa (add_no_night_constraint teraz zna
+            # SHIFT_NIGHT) i zgłosi sprzeczność przy generowaniu, jeśli
+            # polityka "Zakaz pracy nocnej" jest Wymagana - ale wtedy
+            # użytkownik dostaje ogólny komunikat o niespełnialnych
+            # regułach, bez wskazania które dnia/pracownika. Ostrzegamy
+            # od razu przy zapisie, zamiast wyłącznie po fakcie.
+            if is_configured_night_shift and getattr(emp, "no_night", False):
+                reply = QMessageBox.question(
+                    self,
+                    "Zakaz pracy nocnej",
+                    f"{emp.display_name()} ma zaznaczony zakaz pracy nocnej. "
+                    "Ręczne przypisanie zmiany nocnej może uniemożliwić wygenerowanie "
+                    "grafiku (jeśli ta reguła jest ustawiona jako Wymagana) albo zostać "
+                    "ukarane jako naruszenie preferencji. Kontynuować mimo to?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if reply != QMessageBox.Yes:
+                    return
 
             self.controller.set_day_hours(emp, day, dialog.result_start, dialog.result_end)
 
@@ -1144,14 +1227,18 @@ class MainWindow(QMainWindow):
         if msg.clickedButton() == btn_open:
             QDesktopServices.openUrl(QUrl("https://madebykewin.pl"))
 
-    def _try_load_last_project(self):
+    def _try_load_last_project(self) -> bool:
+        """Returns whether a previously-saved project was actually loaded -
+        used at startup to tell a genuinely fresh install (see
+        _maybe_show_first_run_wizard) from a normal relaunch."""
         if not os.path.exists("last_project.json"):
-            return
+            return False
 
         try:
             self._apply_loaded_project(*load_project("last_project.json"))
         except Exception:
-            pass
+            return False
+        return True
 
     def _toggle_expanded_view(self, checked):
         self.grid.set_compact_mode(not checked)
@@ -1432,16 +1519,60 @@ class MainWindow(QMainWindow):
     def _check_first_run(self):
         flag_path = "first_run.flag"
 
-        if not os.path.exists(flag_path):
+        if os.path.exists(flag_path):
+            return
 
-            def mark_seen():
-                try:
-                    with open(flag_path, "w") as f:
-                        f.write("seen")
-                except OSError:
-                    pass
+        def mark_seen():
+            try:
+                with open(flag_path, "w") as f:
+                    f.write("seen")
+            except OSError:
+                pass
 
+        # Placówkę konfigurujemy tylko gdy naprawdę nie ma jeszcze żadnego
+        # zapisanego projektu (świeży instal) - _init_state() w __init__
+        # zawsze tworzy w pamięci pusty, domyślny dino_retail, więc
+        # self.schedule tu nigdy nie jest None; prawdziwy sygnał "świeży
+        # instal" to _opened_existing_project ustawione w __init__. Poradnik
+        # zawsze zamyka tę sekwencję, po kreatorze albo od razu, jeśli
+        # kreatora nie było czego pokazywać.
+        if not self._opened_existing_project:
+            self._maybe_show_first_run_wizard(
+                on_finished=lambda: self._start_tutorial(on_finished=mark_seen)
+            )
+        else:
             self._start_tutorial(on_finished=mark_seen)
+
+    def _maybe_show_first_run_wizard(self, on_finished):
+        from ui.first_run_wizard import FirstRunWizardDialog
+
+        wizard = FirstRunWizardDialog(self)
+        wizard.exec()
+        if wizard.completed:
+            self._apply_first_run_wizard_result(wizard)
+        on_finished()
+
+    def _apply_first_run_wizard_result(self, wizard):
+        self.year = wizard.result_year
+        self.month = wizard.result_month
+        self._set_date_controls(self.year, self.month)
+
+        self.schedule = None
+        self._init_state()
+        self.shop_config.name = wizard.result_name
+        self.shop_config.business_type = wizard.result_business_type
+
+        from model.business_profile import get_custom_profile
+        custom = get_custom_profile(wizard.result_business_type)
+        if custom is not None:
+            from logic.generator.custom_profile_wiring import default_policies
+            self.shop_config.constraint_policies.update(default_policies(custom))
+        self.shop_config.constraint_policies.update(wizard.result_policy_overrides)
+
+        self._update_nominal_hours_label()
+        self._sync_everything()
+        save_project("last_project.json", self.schedule, self.shop_config)
+        self.statusBar().showMessage("Utworzono placówkę.", 2500)
 
     def _clear_generated(self):
         if not self.schedule or not self.controller:

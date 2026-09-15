@@ -102,7 +102,9 @@ def export_schedule_to_excel(schedule, year, month, path):
                 cells[0].font = Font(bold=True)
             elif not ds.is_empty():
                 cells[0].value = _format_hour(ds.start)
-                cells[1].value = _format_hour(ds.end)
+                cells[1].value = (
+                    f"{_format_hour(ds.end)} (+1)" if ds.crosses_midnight() else _format_hour(ds.end)
+                )
                 cells[2].value = ds.total_as_str()
 
         # PODSUMOWANIE W WIERSZU (na prawo)
