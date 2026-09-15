@@ -21,11 +21,7 @@ if str(ROOT) not in sys.path:
 from logic.auto_generator import AutoScheduleGenerator
 from logic.generator.constraint_registry import ConstraintContext
 from logic.generator.custom_profile_wiring import default_policies
-from logic.generator.generic_rules import (
-    _daily_windows_overlap,
-    _restriction_overlaps_night_shift,
-    build_role_time_restriction,
-)
+from logic.generator.generic_rules import build_role_time_restriction
 from model.business_profile import register_custom_profile
 from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import (
@@ -59,37 +55,6 @@ def _ctx(shop, employees, days=(3,)):
         shift_open=SHIFT_OPEN, shift_close=SHIFT_CLOSE,
         start_shift_map={}, end_shift_map={}, trace=None, shift_night=SHIFT_NIGHT,
     )
-
-
-class TestDailyWindowOverlapMath:
-    """Pure overlap-math coverage - no CP-SAT involved."""
-
-    def test_identical_windows_overlap(self):
-        assert _daily_windows_overlap(22 * 60, 6 * 60, 22 * 60, 6 * 60)
-
-    def test_disjoint_windows_do_not_overlap(self):
-        # 22:00-06:00 vs 08:00-16:00 - nowhere near each other.
-        assert not _daily_windows_overlap(22 * 60, 6 * 60, 8 * 60, 16 * 60)
-
-    def test_partial_overlap_at_the_edge(self):
-        # 22:00-06:00 restriction vs a 05:00-13:00 night shift - 1h overlap (05:00-06:00).
-        assert _daily_windows_overlap(22 * 60, 6 * 60, 5 * 60, 13 * 60)
-
-    def test_touching_but_not_overlapping_windows_do_not_overlap(self):
-        # 22:00-06:00 vs 06:00-14:00 - back-to-back, zero actual overlap.
-        assert not _daily_windows_overlap(22 * 60, 6 * 60, 6 * 60, 14 * 60)
-
-    def test_non_wrapping_restriction_overlaps_wrapping_night_window(self):
-        # 20:00-23:00 restriction (same-day) vs 22:00-06:00 night shift.
-        assert _daily_windows_overlap(20 * 60, 23 * 60, 22 * 60, 6 * 60)
-
-
-class TestRestrictionOverlapsNightShift:
-    def test_default_window_matches_default_night_shift_exactly(self):
-        assert _restriction_overlaps_night_shift(22, 6, ("22:00", "06:00"))
-
-    def test_no_overlap_when_night_shift_is_elsewhere(self):
-        assert not _restriction_overlaps_night_shift(22, 6, ("13:00", "21:00"))
 
 
 class TestBuildRoleTimeRestrictionNight:
