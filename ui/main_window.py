@@ -837,6 +837,26 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Błąd", "Godzina zakończenia musi być późniejsza niż rozpoczęcia.")
                 return
 
+            # Generator już to wykrywa (add_no_night_constraint teraz zna
+            # SHIFT_NIGHT) i zgłosi sprzeczność przy generowaniu, jeśli
+            # polityka "Zakaz pracy nocnej" jest Wymagana - ale wtedy
+            # użytkownik dostaje ogólny komunikat o niespełnialnych
+            # regułach, bez wskazania które dnia/pracownika. Ostrzegamy
+            # od razu przy zapisie, zamiast wyłącznie po fakcie.
+            if is_configured_night_shift and getattr(emp, "no_night", False):
+                reply = QMessageBox.question(
+                    self,
+                    "Zakaz pracy nocnej",
+                    f"{emp.display_name()} ma zaznaczony zakaz pracy nocnej. "
+                    "Ręczne przypisanie zmiany nocnej może uniemożliwić wygenerowanie "
+                    "grafiku (jeśli ta reguła jest ustawiona jako Wymagana) albo zostać "
+                    "ukarane jako naruszenie preferencji. Kontynuować mimo to?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if reply != QMessageBox.Yes:
+                    return
+
             self.controller.set_day_hours(emp, day, dialog.result_start, dialog.result_end)
 
         self.schedule = self.controller.schedule
