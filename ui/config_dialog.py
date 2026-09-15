@@ -59,10 +59,20 @@ class _LocationRow(QFrame):
     def __init__(
         self, on_remove, name="", open_time="08:00", close_time="20:00",
         max_consecutive_days=None, rule_defs=(), rule_overrides=None,
-        night_shift=None,
+        night_shift=None, original_key=None,
     ):
         super().__init__()
         self.setObjectName("configCard")
+        # Stabilny klucz tej lokalizacji z chwili załadowania (None dla
+        # świeżo dodanego wiersza) - _save() musi go zachować niezmieniony
+        # nawet gdy użytkownik zmieni nazwę, bo to on (nie nazwa) jest tym,
+        # co Employee.location_key faktycznie przechowuje. Codex review
+        # finding on this PR: _save() dotąd zawsze przeliczał klucz na nowo
+        # ze slugify(name), więc zmiana nazwy istniejącej lokalizacji cicho
+        # gubiła jej powiązanie z przypisanymi pracownikami (ShopConfig.get_location
+        # nie znajdowała starego klucza i milcząco spadała na ustawienia
+        # całego projektu).
+        self.original_key = original_key
         self.rule_defs = list(rule_defs)
         rule_overrides = rule_overrides or {}
         outer = QVBoxLayout(self)
@@ -590,6 +600,7 @@ class ConfigDialog(QDialog):
                 max_consecutive_days=loc.constraints.get("max_consecutive_days"),
                 rule_overrides=loc.constraints,
                 night_shift=loc.night_shift,
+                original_key=loc.key,
             )
 
         add_btn = QPushButton("Dodaj lokalizację")
@@ -603,6 +614,7 @@ class ConfigDialog(QDialog):
     def _add_location_row(
         self, name="", open_time="08:00", close_time="20:00",
         max_consecutive_days=None, rule_overrides=None, night_shift=None,
+        original_key=None,
     ):
         row = _LocationRow(
             self._remove_location_row, name, open_time, close_time,
@@ -610,6 +622,7 @@ class ConfigDialog(QDialog):
             rule_defs=self._location_rule_defs,
             rule_overrides=rule_overrides,
             night_shift=night_shift,
+            original_key=original_key,
         )
         self._location_rows.append(row)
         self.locations_container.addWidget(row)
@@ -843,13 +856,20 @@ class ConfigDialog(QDialog):
             }
 
             new_locations = {}
-            taken_keys = set()
+            # Reserve every existing location's key up front (before
+            # assigning fresh ones below) so a renamed location keeps its
+            # original key - the one Employee.location_key actually stores -
+            # instead of it being regenerated from the new name every save.
+            taken_keys = {row.original_key for row in self._location_rows if row.original_key}
             for row in self._location_rows:
                 name = row.name()
                 if not name:
                     continue
-                key = slugify(name, taken_keys)
-                taken_keys.add(key)
+                if row.original_key:
+                    key = row.original_key
+                else:
+                    key = slugify(name, taken_keys)
+                    taken_keys.add(key)
                 start = row.open_input.get_time_str()
                 end = row.close_input.get_time_str()
                 if _parse_time(end) <= _parse_time(start):

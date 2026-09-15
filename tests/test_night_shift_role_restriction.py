@@ -126,6 +126,25 @@ class TestShiftTouchesWindow:
         assert _shift_touches_window(start, end, window_start_hour=22, window_end_hour=6) is True
 
 
+class TestShiftTouchesWindowNonWrapping:
+    """Codex review finding on this PR: the fix above only handled a window
+    that wraps midnight (start hour > end hour, like 22-6). For a
+    non-wrapping custom window (e.g. "no work 10:00-12:00", start < end),
+    `end.hour >= 10 or start.hour <= 12` is true for virtually every normal
+    shift, so the rule forbade the role from working at all instead of just
+    10:00-12:00."""
+
+    def test_shift_entirely_outside_a_non_wrapping_window_is_not_forbidden(self):
+        start = datetime.strptime("14:00", "%H:%M")
+        end = datetime.strptime("18:00", "%H:%M")
+        assert _shift_touches_window(start, end, window_start_hour=10, window_end_hour=12) is False
+
+    def test_shift_overlapping_a_non_wrapping_window_is_forbidden(self):
+        start = datetime.strptime("09:00", "%H:%M")
+        end = datetime.strptime("13:00", "%H:%M")
+        assert _shift_touches_window(start, end, window_start_hour=10, window_end_hour=12) is True
+
+
 class TestBuildRoleTimeRestrictionDaytime:
     """End-to-end companion to TestShiftTouchesWindow above, through
     build_role_time_restriction's actual OPEN/CLOSE forbidding (not just the

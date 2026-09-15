@@ -13,7 +13,11 @@ verified dino_retail behavior.
 
 from datetime import datetime, timedelta
 
-from logic.utils.time_utils import get_effective_daily_hours, hour_window_overlaps_time_range
+from logic.utils.time_utils import (
+    daily_windows_overlap,
+    get_effective_daily_hours,
+    hour_window_overlaps_time_range,
+)
 
 FMT = "%H:%M"
 
@@ -79,23 +83,28 @@ def build_min_staff_with_role(ctx, soft, role_key, rule_key, min_count=1, scope=
 
 
 def _shift_touches_window(start_dt, end_dt, window_start_hour, window_end_hour):
-    # "shift ends at/after the window opens (e.g. 22:00) or starts at/before
-    # the window closes (e.g. 6:00)" - the same heuristic the built-in
-    # no_night constraint uses (logic/generator/night_constraint.py),
-    # adequate given every shift here is computed within one day's
-    # open/close window (see ShopConfig.get_open_hours_for_day), not a true
-    # 24h continuous roster; a shift genuinely spanning midnight is outside
-    # what this app's shift model represents today, for any profile.
-    #
-    # FIX: window_start_hour/window_end_hour were swapped here (compared
-    # end.hour against window_end_hour and start.hour against
-    # window_start_hour) - with the default 22/6 window that made
-    # `end.hour >= 6 or start.hour <= 22` true for virtually every shift in
-    # the day, so build_role_time_restriction forbade the role from working
-    # at all, not just during the configured window. No existing test
-    # exercised this path with real open/close hours (test_night_shift_role_restriction.py
-    # only asserts on SHIFT_NIGHT), so it went unnoticed.
-    return end_dt.hour >= window_start_hour or start_dt.hour <= window_end_hour
+    """True gdy zmiana [start_dt, end_dt) (bez zawijania - zob. moduł
+    time_utils.py) pokrywa się choć trochę z powtarzającym się codziennie
+    oknem [window_start_hour, window_end_hour) - poprawne niezależnie od
+    tego, czy TO okno zawija się przez północ (np. 22-6, jak domyślne
+    no_night) czy nie (np. 10-12, dowolne okno z kreatora profili custom).
+    Deleguje do daily_windows_overlap (tej samej pary funkcji co
+    hour_window_overlaps_time_range używane niżej dla SHIFT_NIGHT) zamiast
+    osobnej heurystyki godzinowej.
+
+    Codex review finding on this PR: poprzednia wersja porównywała tylko
+    end.hour/start.hour względem progów (nawet po naprawieniu zamienionych
+    miejscami progów) - poprawna wyłącznie dla okien zawijających się przez
+    północ. Dla niezawijającego się okna (np. "brak pracy 10:00-12:00")
+    `end.hour >= 10 or start.hour <= 12` jest prawdą dla niemal każdej
+    normalnej zmiany, więc reguła zabraniałaby roli pracy w ogóle.
+    """
+    start_minutes = start_dt.hour * 60 + start_dt.minute
+    end_minutes = end_dt.hour * 60 + end_dt.minute
+    return daily_windows_overlap(
+        start_minutes, end_minutes,
+        window_start_hour * 60, window_end_hour * 60,
+    )
 
 
 def forbidden_shifts_for_time_window(

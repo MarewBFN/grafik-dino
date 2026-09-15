@@ -6,9 +6,8 @@ from logic.utils.time_utils import get_effective_daily_hours, hour_window_overla
 
 # Godziny, które ten checkbox opisuje użytkownikowi wprost (patrz
 # ui/employee_dialog.py): "przed 6:00 i po 22:00". Te same wartości steruje
-# już heurystyka OPEN/CLOSE/START/END poniżej (end.hour >= 22 lub
-# start.hour <= 6) - wydzielone jako stałe tylko dla sprawdzenia SHIFT_NIGHT,
-# żeby nie hardkodować ich osobno drugi raz.
+# już generic_rules.py::forbidden_shifts_for_time_window poniżej -
+# wydzielone jako stałe, żeby nie hardkodować ich osobno drugi raz.
 NIGHT_WINDOW_START_HOUR = 22
 NIGHT_WINDOW_END_HOUR = 6
 
@@ -42,6 +41,7 @@ def add_no_night_constraint(
 
         eff_hours = get_effective_daily_hours(emp, shop)
         shift_delta = timedelta(hours=eff_hours)
+        location = shop.get_location(emp)
 
         # 🌙 SHIFT_NIGHT (Etap C/D planu zmian nocnych) ma własne, stałe okno
         # niezależne od godzin otwarcia konkretnego dnia (w odróżnieniu od
@@ -52,7 +52,7 @@ def add_no_night_constraint(
         # (normalize_night_shift przyjmuje dowolną parę godzin), więc
         # lokalizacja mogłaby w zasadzie użyć go pod dowolny, stały blok w
         # środku dnia; taki blok nie powinien być objęty tym zakazem.
-        night_hours = shop.get_location(emp).get_night_shift_hours() if shift_night is not None else None
+        night_hours = location.get_night_shift_hours() if shift_night is not None else None
         night_restricted = night_hours is not None and hour_window_overlaps_time_range(
             NIGHT_WINDOW_START_HOUR, NIGHT_WINDOW_END_HOUR, night_hours
         )
@@ -63,11 +63,14 @@ def add_no_night_constraint(
             # generic_rules.py::build_role_time_restriction (see that
             # module's _shift_touches_window for why this used to be a
             # second, independently-buggy copy of the same computation).
-            # Uses shop-level hours (not shop.get_location(emp)), same as
-            # this function always has - unlike the SHIFT_NIGHT check above,
-            # this was never made location-aware.
+            # Codex review finding on this PR: this used to read shop-level
+            # hours unconditionally, ignoring a location's own hours (unlike
+            # the SHIFT_NIGHT check above, already location-aware) - an
+            # employee whose location's hours differ from the project
+            # default got no_night evaluated against the wrong hours, which
+            # could falsely flag (or miss) an actual night-touching shift.
             forbidden_shifts = forbidden_shifts_for_time_window(
-                shop, d, shift_delta, NIGHT_WINDOW_START_HOUR, NIGHT_WINDOW_END_HOUR,
+                location, d, shift_delta, NIGHT_WINDOW_START_HOUR, NIGHT_WINDOW_END_HOUR,
                 SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
             )
 
