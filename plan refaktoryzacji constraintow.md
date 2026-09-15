@@ -172,3 +172,47 @@ Zgodnie z `.ai/AGENTS.md` ("nie zmieniaj kilku constraintów jednocześnie")
 proponuję realizować jeden priorytet na raz, z testem i podsumowaniem
 wpływu na generator po każdym. Ten plik warto zaktualizować (albo
 poprosić o świeże podsumowanie) po ukończeniu każdego priorytetu.
+
+## 6. Priorytet 1 — zrobiony (ta sesja)
+
+`add_no_night_constraint` (`night_constraint.py`) i `build_role_time_restriction`
+(`generic_rules.py`) dzielą teraz jedną implementację liczenia "które
+zmiany OPEN/CLOSE/START/END dotykają zadanego okna godzinowego"
+(`generic_rules.py::forbidden_shifts_for_time_window`). `no_night` dalej
+sprawdza własną flagę pracownika (nie rolę) i dalej liczy godziny
+sklepowe globalnie (nie per lokalizacja jak `build_role_time_restriction`)
+— to świadomie zachowane bez zmian, żeby nie dotykać zachowania Dino poza
+zakresem tego priorytetu (patrz sekcja 4 wyżej — "wspólny helper", nie
+"identyczna funkcja"). `no_afternoon` (`afternoon_constraint.py`) **nie**
+został przepięty — jego zakaz to statyczny zbiór zmian (CLOSE + warianty
+END), bez żadnej matematyki okna godzinowego ani świadomości SHIFT_NIGHT,
+więc nie dzielił z resztą tej samej, dwukrotnie już naprawianej logiki;
+wymuszanie go przez `build_role_time_restriction` byłoby na siłę, nie
+usuwaniem realnego duplikatu.
+
+Przy okazji przeglądu tej wspólnej logiki wyszły na jaw dwa realne bugi
+(oba naprawione, oba z testem regresyjnym udowadniającym, że failują na
+starym kodzie):
+
+- **`generic_rules.py::_shift_touches_window` miał zamienione progi
+  miejscami** — `end.hour >= window_end_hour or start.hour <= window_start_hour`
+  zamiast `end.hour >= window_start_hour or start.hour <= window_end_hour`.
+  Dla domyślnego okna 22–6 dawało to `end.hour >= 6 or start.hour <= 22`,
+  czyli prawdę dla praktycznie każdej zmiany w ciągu dnia —
+  `build_role_time_restriction` (jedyny użytkownik tej funkcji, czyli
+  reguła `role_time_restriction` z kreatora profili custom) realnie
+  zabraniał danej roli pracy w ogóle, a nie tylko w oknie 22–6. Żaden
+  istniejący test tego nie łapał — `tests/test_night_shift_role_restriction.py`
+  sprawdzał dotąd wyłącznie SHIFT_NIGHT, nigdy prawdziwej zmiany
+  OPEN/CLOSE/START/END liczonej z godzin otwarcia. Test regresyjny:
+  `TestShiftTouchesWindow`, `TestBuildRoleTimeRestrictionDaytime`.
+- **`add_no_night_constraint` liczył próg zmiany CLOSE względem
+  nieaktualnej zmiennej `start`** (pozostałość po sprawdzeniu OPEN wyżej)
+  zamiast rzeczywistej godziny rozpoczęcia zmiany CLOSE — dla każdego
+  sklepu otwieranego o/przed 6:00 blokowało to zmianę CLOSE każdemu
+  pracownikowi z `no_night`, niezależnie od faktycznej godziny jej
+  zakończenia. Test regresyjny: `NoNightConstraintCloseShiftBugTests`
+  w `tests/test_night_shift_manual_editing.py`.
+
+`pytest tests/` → 179 passed (172 sprzed tej zmiany + 7 nowych testów
+regresyjnych), zero regresji.

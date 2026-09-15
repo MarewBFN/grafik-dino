@@ -305,6 +305,62 @@ class NoNightConstraintShiftNightTests(unittest.TestCase):
         self.assertEqual(status, cp_model.INFEASIBLE)
 
 
+class NoNightConstraintCloseShiftBugTests(unittest.TestCase):
+    """Refactoring finding (constraint plan, priority 1): add_no_night_constraint
+    computed the CLOSE shift's forbidden-window check against a stale `start`
+    variable left over from the OPEN check above it, instead of the CLOSE
+    shift's own start time. For any shop opening at/before 6:00, that stale
+    `start.hour <= 6` was always true, so the CLOSE shift was forbidden for
+    every no_night employee regardless of when it actually ended - even on a
+    shop that closes well before 22:00. Fixed by sharing the (now also
+    corrected) window computation with
+    generic_rules.py::build_role_time_restriction instead of a second,
+    independently-maintained copy."""
+
+    def _early_opening_shop(self):
+        shop = ShopConfig(2026, 8)
+        for wd in range(7):
+            shop.open_hours[wd] = ("05:00", "20:00")  # opens early, closes well before 22:00
+        return shop
+
+    def test_no_night_does_not_forbid_a_close_shift_that_never_touches_night_hours(self):
+        shop = self._early_opening_shop()
+        emp = Employee(last_name="Kowalski", first_name="Jan", no_night=True)
+
+        model = cp_model.CpModel()
+        x = {(0, 3, s): model.NewBoolVar(f"x_{s}") for s in ALL_SHIFTS}
+
+        add_no_night_constraint(
+            model, x, [emp], [3], shop, ALL_SHIFTS,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+            soft=False, shift_night=SHIFT_NIGHT,
+        )
+        model.Add(x[0, 3, SHIFT_CLOSE] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        self.assertIn(status, (cp_model.OPTIMAL, cp_model.FEASIBLE))
+
+    def test_no_night_still_forbids_a_close_shift_that_genuinely_ends_at_night(self):
+        """Regression companion: a shop that actually closes late (touching
+        22:00-06:00) must still block the CLOSE shift for no_night employees."""
+        shop = ShopConfig(2026, 8)  # default open hours close at 22:45/23:00
+
+        emp = Employee(last_name="Kowalski", first_name="Jan", no_night=True)
+
+        model = cp_model.CpModel()
+        x = {(0, 3, s): model.NewBoolVar(f"x_{s}") for s in ALL_SHIFTS}
+
+        add_no_night_constraint(
+            model, x, [emp], [3], shop, ALL_SHIFTS,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+            soft=False, shift_night=SHIFT_NIGHT,
+        )
+        model.Add(x[0, 3, SHIFT_CLOSE] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        self.assertEqual(status, cp_model.INFEASIBLE)
+
+
 class FixModeNightShiftTests(unittest.TestCase):
     def test_nominal_hours_count_night_duration_not_standard_shift(self):
         shop = _shop_with_night()  # 8h window

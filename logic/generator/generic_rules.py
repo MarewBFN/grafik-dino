@@ -79,13 +79,75 @@ def build_min_staff_with_role(ctx, soft, role_key, rule_key, min_count=1, scope=
 
 
 def _shift_touches_window(start_dt, end_dt, window_start_hour, window_end_hour):
-    # Same "start.hour <= X or end.hour >= Y" heuristic the built-in no_night
-    # constraint already uses (logic/generator/night_constraint.py) -
-    # adequate given every shift here is computed within one day's open/close
-    # window (see ShopConfig.get_open_hours_for_day), not a true 24h
-    # continuous roster; a shift genuinely spanning midnight is outside what
-    # this app's shift model represents today, for any profile.
-    return end_dt.hour >= window_end_hour or start_dt.hour <= window_start_hour
+    # "shift ends at/after the window opens (e.g. 22:00) or starts at/before
+    # the window closes (e.g. 6:00)" - the same heuristic the built-in
+    # no_night constraint uses (logic/generator/night_constraint.py),
+    # adequate given every shift here is computed within one day's
+    # open/close window (see ShopConfig.get_open_hours_for_day), not a true
+    # 24h continuous roster; a shift genuinely spanning midnight is outside
+    # what this app's shift model represents today, for any profile.
+    #
+    # FIX: window_start_hour/window_end_hour were swapped here (compared
+    # end.hour against window_end_hour and start.hour against
+    # window_start_hour) - with the default 22/6 window that made
+    # `end.hour >= 6 or start.hour <= 22` true for virtually every shift in
+    # the day, so build_role_time_restriction forbade the role from working
+    # at all, not just during the configured window. No existing test
+    # exercised this path with real open/close hours (test_night_shift_role_restriction.py
+    # only asserts on SHIFT_NIGHT), so it went unnoticed.
+    return end_dt.hour >= window_start_hour or start_dt.hour <= window_end_hour
+
+
+def forbidden_shifts_for_time_window(
+    hours_source, day, shift_delta, window_start_hour, window_end_hour,
+    shift_open, shift_close, start_shift_map, end_shift_map,
+):
+    """Which OPEN/CLOSE/START/END shift ids on `day` touch the
+    [window_start_hour, window_end_hour) o'clock window, for an employee
+    whose shift lasts `shift_delta`. SHIFT_NIGHT is deliberately not handled
+    here - it has its own fixed window independent of `day`/`hours_source`,
+    so each caller adds it separately (see build_role_time_restriction below
+    and logic/generator/night_constraint.py::add_no_night_constraint).
+
+    Shared by both of those - before this, each carried its own copy of this
+    exact computation, and the same conceptual bug ("does this constraint
+    know about SHIFT_NIGHT / a locked manual shift") had to be found and
+    fixed independently in each (see night_constraint.py's module history).
+    `hours_source` is duck-typed (`shop` or `shop.get_location(emp)`, see
+    model.shop_config._LocationView) so each caller keeps its own choice of
+    whether the restriction is location-aware.
+    """
+    forbidden = set()
+
+    hours = hours_source.get_open_hours_for_day(day)
+    if not hours:
+        return forbidden
+
+    open_time, close_time = hours
+    open_dt = datetime.strptime(open_time, FMT)
+    close_dt = datetime.strptime(close_time, FMT)
+
+    start, end = open_dt, open_dt + shift_delta
+    if _shift_touches_window(start, end, window_start_hour, window_end_hour):
+        forbidden.add(shift_open)
+
+    start, end = close_dt - shift_delta, close_dt
+    if _shift_touches_window(start, end, window_start_hour, window_end_hour):
+        forbidden.add(shift_close)
+
+    for shift, offset in start_shift_map.items():
+        start = open_dt + timedelta(minutes=offset)
+        end = start + shift_delta
+        if _shift_touches_window(start, end, window_start_hour, window_end_hour):
+            forbidden.add(shift)
+
+    for shift, offset in end_shift_map.items():
+        end = close_dt - timedelta(minutes=offset)
+        start = end - shift_delta
+        if _shift_touches_window(start, end, window_start_hour, window_end_hour):
+            forbidden.add(shift)
+
+    return forbidden
 
 
 def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, window_end_hour=6):
@@ -107,42 +169,19 @@ def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, windo
         # niezależne od godzin otwarcia konkretnego dnia (w odróżnieniu od
         # OPEN/CLOSE/START/END poniżej) - sprawdzane raz, poza pętlą po
         # dniach, tak jak w add_no_night_constraint.
-        night_hours = ctx.shop.get_location(emp).get_night_shift_hours() if ctx.shift_night is not None else None
+        night_hours = location.get_night_shift_hours() if ctx.shift_night is not None else None
         night_restricted = night_hours is not None and hour_window_overlaps_time_range(
             window_start_hour, window_end_hour, night_hours
         )
 
         for d in ctx.days:
-            forbidden_shifts = set()
+            forbidden_shifts = forbidden_shifts_for_time_window(
+                location, d, shift_delta, window_start_hour, window_end_hour,
+                ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
+            )
 
             if night_restricted:
                 forbidden_shifts.add(ctx.shift_night)
-
-            hours = location.get_open_hours_for_day(d)
-            if hours:
-                open_time, close_time = hours
-                open_dt = datetime.strptime(open_time, FMT)
-                close_dt = datetime.strptime(close_time, FMT)
-
-                start, end = open_dt, open_dt + shift_delta
-                if _shift_touches_window(start, end, window_start_hour, window_end_hour):
-                    forbidden_shifts.add(ctx.shift_open)
-
-                start, end = close_dt - shift_delta, close_dt
-                if _shift_touches_window(start, end, window_start_hour, window_end_hour):
-                    forbidden_shifts.add(ctx.shift_close)
-
-                for shift, offset in ctx.start_shift_map.items():
-                    start = open_dt + timedelta(minutes=offset)
-                    end = start + shift_delta
-                    if _shift_touches_window(start, end, window_start_hour, window_end_hour):
-                        forbidden_shifts.add(shift)
-
-                for shift, offset in ctx.end_shift_map.items():
-                    end = close_dt - timedelta(minutes=offset)
-                    start = end - shift_delta
-                    if _shift_touches_window(start, end, window_start_hour, window_end_hour):
-                        forbidden_shifts.add(shift)
 
             for s in forbidden_shifts:
                 if soft:
