@@ -13,7 +13,7 @@ verified dino_retail behavior.
 
 from datetime import datetime, timedelta
 
-from logic.utils.time_utils import get_effective_daily_hours
+from logic.utils.time_utils import get_effective_daily_hours, hour_window_overlaps_time_range
 
 FMT = "%H:%M"
 
@@ -88,41 +88,6 @@ def _shift_touches_window(start_dt, end_dt, window_start_hour, window_end_hour):
     return end_dt.hour >= window_end_hour or start_dt.hour <= window_start_hour
 
 
-def _daily_subintervals(start_minutes, end_minutes):
-    """Splits a possibly midnight-crossing, recurring-daily [start, end)
-    window (minutes-of-day) into 1 or 2 non-wrapping sub-intervals within
-    [0, 1440) - the building block for comparing two such recurring windows
-    (a role_time_restriction window and a location's night_shift window)
-    for overlap without anchoring either to a specific calendar date."""
-    start_minutes %= 1440
-    length = (end_minutes - start_minutes) % 1440 or 1440
-    end = start_minutes + length
-    if end <= 1440:
-        return [(start_minutes, end)]
-    return [(start_minutes, 1440), (0, end - 1440)]
-
-
-def _daily_windows_overlap(a_start_minutes, a_end_minutes, b_start_minutes, b_end_minutes):
-    a_parts = _daily_subintervals(a_start_minutes, a_end_minutes)
-    b_parts = _daily_subintervals(b_start_minutes, b_end_minutes)
-    return any(a[0] < b[1] and b[0] < a[1] for a in a_parts for b in b_parts)
-
-
-def _restriction_overlaps_night_shift(window_start_hour, window_end_hour, night_hours):
-    """True gdy [window_start_hour, window_end_hour) (godzinowe okno zakazu)
-    pokrywa się choć częściowo ze skonfigurowanym oknem night_shift danej
-    lokalizacji - obie strony to okna powtarzające się codziennie, więc
-    porównanie idzie w minutach dnia (0-1439), nie na konkretnej dacie."""
-    night_start_str, night_end_str = night_hours
-    night_start = datetime.strptime(night_start_str, FMT)
-    night_end = datetime.strptime(night_end_str, FMT)
-
-    return _daily_windows_overlap(
-        window_start_hour * 60, window_end_hour * 60,
-        night_start.hour * 60 + night_start.minute, night_end.hour * 60 + night_end.minute,
-    )
-
-
 def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, window_end_hour=6):
     """Employees with role `role_key` can't be scheduled on a shift that
     touches [window_start_hour, window_end_hour) o'clock. Generalizes
@@ -143,7 +108,7 @@ def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, windo
         # OPEN/CLOSE/START/END poniżej) - sprawdzane raz, poza pętlą po
         # dniach, tak jak w add_no_night_constraint.
         night_hours = ctx.shop.get_location(emp).get_night_shift_hours() if ctx.shift_night is not None else None
-        night_restricted = night_hours is not None and _restriction_overlaps_night_shift(
+        night_restricted = night_hours is not None and hour_window_overlaps_time_range(
             window_start_hour, window_end_hour, night_hours
         )
 
