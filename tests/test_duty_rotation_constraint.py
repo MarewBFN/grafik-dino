@@ -101,6 +101,30 @@ class TestDutyRotationGate:
         status = cp_model.CpSolver().Solve(model)
         assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
 
+    def test_weekend_shift_types_forbidden_on_a_weekday(self):
+        shop = ShopConfig(2026, 8)
+        shop.locations["site1"] = _location_with_rotation()
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1")
+        model, x = _model_and_x([emp], [WEEKDAY])
+
+        add_duty_rotation_gate_constraint(model, x, [emp], [WEEKDAY], shop, DUTY_SHIFTS, ALL_SHIFTS)
+        model.Add(x[0, WEEKDAY, WEEKEND_FULL] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        assert status == cp_model.INFEASIBLE
+
+    def test_weekday_shift_types_forbidden_on_a_weekend_day(self):
+        shop = ShopConfig(2026, 8)
+        shop.locations["site1"] = _location_with_rotation()
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1")
+        model, x = _model_and_x([emp], [SATURDAY])
+
+        add_duty_rotation_gate_constraint(model, x, [emp], [SATURDAY], shop, DUTY_SHIFTS, ALL_SHIFTS)
+        model.Add(x[0, SATURDAY, WEEKDAY_LONG] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        assert status == cp_model.INFEASIBLE
+
 
 class TestDutyRotationNo24hGate:
     def test_nie_chce_24h_employee_cannot_get_weekend_full(self):

@@ -72,21 +72,39 @@ def _group_employees_with_duty_rotation(employees, shop):
     return groups
 
 
+_WEEKDAY_KEYS = ("weekday_long", "weekday_short")
+_WEEKEND_KEYS = ("weekend_full", "weekend_half_a", "weekend_half_b")
+
+
 def add_duty_rotation_gate_constraint(model, x, employees, days, shop, duty_shifts, all_shifts, trace=None):
     if trace is not None:
         trace.log_constraint(
             "duty_rotation_gate",
-            "duty-rotation shift types and the old OPEN/CLOSE/START/END/NIGHT model are mutually exclusive per employee",
+            "duty-rotation shift types and the old OPEN/CLOSE/START/END/NIGHT model are mutually exclusive per "
+            "employee, and weekday/weekend duty shift types can't be assigned on the wrong kind of day",
         )
 
     duty_shift_ids = set(duty_shifts.values())
     other_shift_ids = [s for s in all_shifts if s not in duty_shift_ids]
+    weekday_ids = {duty_shifts[k] for k in _WEEKDAY_KEYS}
+    weekend_ids = {duty_shifts[k] for k in _WEEKEND_KEYS}
 
     for e, emp in enumerate(employees):
         has_rotation = bool(shop.get_location(emp).get_duty_rotation())
-        blocked = other_shift_ids if has_rotation else duty_shift_ids
+
         for d in days:
-            for s in blocked:
+            if not has_rotation:
+                for s in duty_shift_ids:
+                    model.Add(x[e, d, s] == 0)
+                continue
+
+            for s in other_shift_ids:
+                model.Add(x[e, d, s] == 0)
+
+            # Zmiany dnia roboczego nie istnieją w weekend i odwrotnie - to
+            # fakt strukturalny (kalendarzowy), nie preferencja biznesowa.
+            wrong_kind = weekend_ids if shop.weekday(d) < 5 else weekday_ids
+            for s in wrong_kind:
                 model.Add(x[e, d, s] == 0)
 
 
