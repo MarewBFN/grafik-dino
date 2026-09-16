@@ -559,7 +559,7 @@ class ScheduleGrid(QTableWidget):
         for day in range(1, days + 1):
             wd = calendar.weekday(self.schedule.year, self.schedule.month, day)
             headers.append(f"{weekday_names[wd]}\n{day}")
-        headers.extend(["Praca\n(h)", "Urlop\n(h)", "L4\n(h)", "Razem\n(h)"])
+        headers.extend(["Praca\n(h)", "Urlop\n(h)", "L4\n(h)", "Razem\n(h)", "Nadgodziny\n(h)"])
         if self.settlement_mode:
             headers.append("Cel\n(h)")
 
@@ -578,7 +578,7 @@ class ScheduleGrid(QTableWidget):
             header.update()
 
         if self.settlement_mode:
-            target_header_item = self.horizontalHeaderItem(days + 5)
+            target_header_item = self.horizontalHeaderItem(days + 6)
             if target_header_item:
                 target_header_item.setToolTip(
                     "Docelowa liczba godzin w miesiącu dla tego pracownika.\n"
@@ -823,14 +823,25 @@ class ScheduleGrid(QTableWidget):
         # miesięcznego limitu pełnego etatu, dokładnie tego samego, którego
         # pilnuje generator (logic/monthly_hours_status.py).
         hours_status = monthly_hours_status(self.schedule, self.shop_config, emp)
+        over_h = hours_status["over_minutes"] // 60
+        over_m = hours_status["over_minutes"] % 60
         if hours_status["is_over"]:
             work_item = items[0]
             work_item.setBackground(QBrush(QColor(theme.ERR_RED)))
-            over_h = hours_status["over_minutes"] // 60
-            over_m = hours_status["over_minutes"] % 60
             work_item.setToolTip(
                 f"Przekroczony miesięczny limit godzin pełnego etatu o {over_h}:{over_m:02d}."
             )
+
+        # Osobna kolumna "Nadgodziny" obok "Razem" - ta sama liczba co w
+        # tooltipie wyżej, ale zawsze widoczna wprost, nie tylko po najechaniu.
+        overtime_item = QTableWidgetItem(f"{over_h}:{over_m:02d}")
+        overtime_item.setTextAlignment(Qt.AlignCenter)
+        if hours_status["is_over"]:
+            overtime_item.setBackground(QBrush(QColor(theme.ERR_RED)))
+            overtime_item.setToolTip("Nadgodziny ponad miesięczny limit godzin pełnego etatu.")
+        else:
+            overtime_item.setBackground(QBrush(QColor(theme.BG_PANEL)))
+        self.setItem(row, days + 5, overtime_item)
 
         if self.settlement_mode:
             target_minutes = self.schedule.get_settlement_target(emp)
@@ -844,7 +855,7 @@ class ScheduleGrid(QTableWidget):
             target_item.setBackground(QBrush(QColor(theme.ACCENT_SOFT)))
             target_item.setData(Qt.UserRole, (emp, "settlement_target"))
             target_item.setToolTip("Dwuklik, aby ustawić docelową liczbę godzin w miesiącu.")
-            self.setItem(row, days + 5, target_item)
+            self.setItem(row, days + 6, target_item)
 
     def _fill_validation_rows(self, emp_count, days, constraint_presenter):
         # Definiujemy wiersze podsumowania
@@ -955,8 +966,8 @@ class ScheduleGrid(QTableWidget):
 
                 self.setItem(row, day, item)
 
-            # Wypełnienie komórek sumarycznych (ostatnie 4 kolumny) szarym kolorem
-            for col in range(days + 1, days + 5):
+            # Wypełnienie komórek sumarycznych (ostatnie 5 kolumn) szarym kolorem
+            for col in range(days + 1, days + 6):
                 filler = QTableWidgetItem("")
                 filler.setBackground(QBrush(QColor(theme.BG_PANEL)))
                 self.setItem(row, col, filler)
@@ -1079,7 +1090,7 @@ class ScheduleGrid(QTableWidget):
         emp_count = len(self.schedule.employees)
         days = self.schedule.days_in_month
 
-        if self.settlement_mode and row < emp_count and col == days + 5:
+        if self.settlement_mode and row < emp_count and col == days + 6:
             self._edit_settlement_target(self.schedule.employees[row])
             return
 
