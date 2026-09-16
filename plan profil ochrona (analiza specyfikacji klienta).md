@@ -652,3 +652,130 @@ nie padła wprost w odpowiedziach klienta:
 Rekomendacja: zacząć od Etapu A (fundament, zero ryzyka), potwierdzić
 konkretne godziny startowe zmian i założenie o N w odpoczynku przed
 Etapem C.
+
+---
+
+## 13. Stan wdrożenia (2026-09-16, cd.) — Etapy A, B, C zrobione
+
+Branch: `claude/night-shift-generator-support-ex6pqc`. Klient potwierdził
+kierunek ("tak, jedziemy") i założenie o N w odpoczynku (tylko pracownicy
+bez `nie_chce_24h`). `pytest tests/` → **218 passed, zero regresji** po
+każdym z trzech etapów. Nazwy w kodzie różnią się nieco od roboczych
+nazw z sekcji 12 (`SHIFT_16H` → `SHIFT_DUTY_WEEKDAY_LONG` itd.) — sam
+mechanizm jest identyczny z propozycją.
+
+### Etap A — fundament danych (commit `3348695`)
+
+- `model/day_schedule.py`: `DaySchedule.set_full_day_shift(start)` — nowe
+  pole `is_full_day: bool`. `end == start` w `set_hours()` **nadal**
+  pozostaje błędem (niejednoznaczne z pustym dniem) — zmiana 24h
+  wymaga tego dedykowanego settera. `crosses_midnight()`/`total_duration()`
+  rozumieją nową flagę; wszystkie pozostałe settery (`set_free`/
+  `set_leave`/`set_sick`/`set_shift_class`/`set_hours`) ją czyszczą.
+  Świadomie **nie dotknięte**: ok. 9 miejsc w `logic/`/`ui/`, które
+  czyszczą `start`/`end` wprost bez przechodzenia przez te settery —
+  bezpieczne, bo `crosses_midnight()`/`total_duration()` sprawdzają
+  `is_empty()`/`start is not None` przed `is_full_day`.
+- `model/location.py` / `model/shop_config.py`: `LocationConfig.duty_rotation`
+  (+ ten sam mechanizm na `ShopConfig`, jak `night_shift`) — pięć okien:
+  `weekday_long`/`weekday_short`/`weekend_full`/`weekend_half_a`/
+  `weekend_half_b`. `normalize_duty_rotation()` wymaga albo wszystkich
+  pięciu okien naraz, albo żadnego.
+- Testy: `tests/test_full_day_shift.py` (8), `tests/test_duty_rotation.py` (15).
+
+### Etap B — reguła pokrycia + brama w generatorze (commity `27a6dc0`, `1154e8b`)
+
+- `logic/auto_generator.py`: pięć nowych stałych zmian
+  (`SHIFT_DUTY_WEEKDAY_LONG/SHORT/WEEKEND_FULL/WEEKEND_HALF_A/B` = 15-19,
+  słownik `DUTY_SHIFTS`), analogicznie do `SHIFT_NIGHT`.
+- `logic/generator/duty_rotation_constraint.py` (nowy plik):
+  - `add_duty_rotation_gate_constraint` (always_on) — duty-rotation i stary
+    model zmian (OPEN/CLOSE/START/END/NIGHT) wzajemnie wyłączne per
+    pracownik; **do tego dołączone** (po odkryciu luki) zablokowanie
+    zmian dnia roboczego w weekend i odwrotnie — fakt kalendarzowy, nie
+    preferencja.
+  - `add_duty_rotation_coverage_constraint` (polityka `duty_rotation_coverage`,
+    domyślnie MANDATORY) — dokładnie 1 osoba na `weekday_long`/
+    `weekday_short` w dni robocze (grupowane per lokalizacja); w weekend
+    zmienna `use_24h` przełącza między dokładnie-1-na-`weekend_full` a
+    dokładnie-po-1-na-obu-połówkach, nigdy mix.
+  - `add_duty_rotation_no24h_gate_constraint` (polityka `duty_rotation_no24h`,
+    domyślnie MANDATORY) — `nie_chce_24h` blokuje `weekend_full` na twardo.
+- `model/shop_config.py`: obie nowe polityki wpięte w domyślny
+  `constraint_policies` (MANDATORY) dla **każdego** profilu (w tym Dino) —
+  no-opy dopóki żadna lokalizacja nie ma `duty_rotation`, więc zero
+  zmiany zachowania istniejących projektów. Świadomie **nie dodane** do
+  `GENERIC_POLICY_LABELS` (pokazywałyby się w "Zasadach generatora"
+  KAŻDEGO profilu, myląc UI Dino czymś nieistotnym) — ekran do edycji
+  tych dwóch polityk to zadanie Etapu D/E, dziś edytowalne tylko
+  programowo.
+- **Dwa realne bugi znalezione i naprawione po drodze** (nie zgadywane —
+  wykryte przez testy end-to-end, ta sama kategoria pułapki co przy
+  SHIFT_NIGHT: kod, który iteruje `all_shifts` z założeniem "każda
+  nienazwana zmiana to zwykła zmiana"):
+  - `logic/generator/availability_constraint.py` — dostępność blokowałaby
+    zmiany rotacji każdemu pracownikowi z jakimikolwiek ograniczeniami
+    dostępności (nieaktualne dziś w praktyce, bo `availability` i tak nie
+    ma UI, ale realny bug w kodzie).
+  - `logic/generator/constraints_logic.py::add_work_dependency_constraint` —
+    **to faktycznie blokowało pierwszy test end-to-end** (natychmiastowy
+    INFEASIBLE, 0 konfliktów solvera): wymuszało `x[e,d,s] <= 0` na każdej
+    zmianie rotacji dla lokalizacji bez obsady OPEN/CLOSE, wprost
+    sprzeczne z "dokładnie 1 osoba" z coverage constraint.
+  - Przy okazji: `logic/generator/hours_constraint.py::_shift_minutes_by_type`
+    przebudowane z dwóch pozycyjnych argumentów na słownik `overrides` (bo
+    inaczej monthly_hours/balance liczyłyby zmiany rotacji jako standardowe
+    8h zamiast ich realnego czasu trwania) — zaktualizowane wszystkie 3
+    wywołania (`hours_constraint.py`, `logic/generator/fix.py`, testy).
+- Testy: `tests/test_duty_rotation_constraint.py` (13, w tym pełny
+  end-to-end `AutoScheduleGenerator.generate()`).
+
+### Etap C — odpoczynek "doba za dobę" (commit `968a6a3`)
+
+- `logic/generator/duty_rotation_rest_constraint.py` (nowy plik),
+  dołączony do polityki `rest_11h` (ta sama, nie osobna — koncepcyjnie to
+  wciąż jedna zasada odpoczynku, tylko rozszerzona). Standardowe 11h dla
+  czterech "zwykłych" zmian rotacji, `(N-1)×24h` dla `weekend_full`
+  (N = pracownicy lokalizacji bez `nie_chce_24h`, potwierdzone przez
+  klienta), dolna granica 24h przy N≤1.
+- **Różnica względem `night_shift_adjacency_constraint`**: tamto sprawdza
+  tylko dzień d wobec d+1 (11h/19h zawsze mieści się w jednej dobie
+  różnicy). `(N-1)×24h` przy N≥3 przekracza 24h — samo "jutro" by nie
+  wystarczyło. Dodane sprawdzanie d wobec każdego późniejszego dnia w
+  ograniczonym oknie (`lookahead = wymagane_godziny/24 + 2`), z wczesnym
+  przerwaniem, gdy najwcześniejsza zmiana danego dnia już mieści wymagany
+  odpoczynek.
+- Testy: `tests/test_duty_rotation_rest_constraint.py` (10) — w tym
+  dokładna granica 48h dla N=3 (poniedziałek wciąż za wcześnie, wtorek
+  dokładnie na granicy już dozwolony) i potwierdzenie, że pracownik z
+  `nie_chce_24h` nie liczy się do N.
+
+### Zostało z sekcji 12 (nietknięte)
+
+- **Etap D** — `ConstraintPolicy.DISABLED` dla `balance`/`monthly_hours`
+  na realnym projekcie klienta (konfiguracja, nie kod) + nowa kolumna
+  "Nadgodziny" w gridzie/eksportach obok "Razem" (rozszerzenie
+  `logic/monthly_hours_status.py`, ma już `over_minutes`).
+- **Etap E** — menu "Placówki" w `ui/main_window.py` (osobne pliki
+  projektu + lista do szybkiego przełączania). Wymaga jednej drobnej
+  decyzji: gdzie trzymać listę znanych plików (proponowane:
+  `%LOCALAPPDATA%\GrafikDino\known_projects.json`, ten sam katalog co
+  `custom_profiles.json`).
+- **Etap F** — testy scenariuszowe pełnego miesiąca/kilku lokalizacji
+  naraz (dziś pokryte tylko pojedynczymi tygodniami/wycinkami w testach
+  jednostkowych Etapów B/C, nie pełnym miesiącem end-to-end).
+
+### Świadomie poza zakresem A-C (udokumentowane, nie przeoczone)
+
+- Ręczna edycja / rozpoznawanie zablokowanych komórek w trybie "Napraw
+  grafik" dla pięciu nowych zmian (`logic/generator/manual_constraint.py`,
+  `logic/generator/fix.py`) — dziś nie ma nawet UI do ręcznego ustawienia
+  tych zmian, więc nieosiągalne w praktyce; zostawione dla przyszłego
+  etapu UI.
+- Wiele placówek **w ramach jednego pliku projektu** z osobną listą
+  pracowników (opcja B z pytania w sekcji 10) — klient wybrał opcję A
+  (osobne pliki), więc `LocationConfig` nadal ma jedną, wspólną listę
+  pracowników per projekt; `duty_rotation` per lokalizacja działa już
+  dziś poprawnie dla tego przypadku (grupowanie po `location_key` w
+  `duty_rotation_constraint.py`), gdyby jednak opcja B była kiedyś
+  potrzebna.
