@@ -75,6 +75,17 @@ class MonthSchedule:
         self._data[employee][day] = deepcopy(self._clipboard)
 
     def total_hours_for_employee(self, employee: Employee) -> str:
+        total_minutes = self.total_minutes_for_employee(employee)
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        return f"{hours}:{minutes:02d}"
+
+    def total_minutes_for_employee(self, employee: Employee) -> int:
+        """To samo co total_hours_for_employee, ale jako int minut zamiast
+        sformatowanego stringa - do obliczeń (np. podświetlanie przekroczenia
+        miesięcznego limitu godzin, logic/monthly_hours_status.py), gdzie
+        liczy się dokładna wartość, nie tekst do wyświetlenia w siatce.
+        """
         total_minutes = 0
         for day in range(1, self.days_in_month + 1):
             ds = self._data[employee][day]
@@ -86,9 +97,7 @@ class MonthSchedule:
             if duration:
                 total_minutes += int(duration.total_seconds() // 60)
 
-        hours = total_minutes // 60
-        minutes = total_minutes % 60
-        return f"{hours}:{minutes:02d}"
+        return total_minutes
 
     def leave_hours_for_employee(self, employee: Employee) -> str:
         total_minutes = 0

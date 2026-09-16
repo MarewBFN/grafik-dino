@@ -2,15 +2,25 @@ import calendar
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
+from logic.monthly_hours_status import monthly_hours_status
+
+_OVERTIME_COLOR = (204, 0, 0)
+
 
 class ImageScheduleExporter:
-    def __init__(self, schedule, year, month):
+    def __init__(self, schedule, year, month, shop=None, employees=None):
+        """`shop` - opcjonalny ShopConfig, wyłącznie do podświetlenia
+        przekroczenia miesięcznego limitu godzin pełnego etatu na czerwono
+        (brak = brak podświetlenia, zachowanie sprzed tej funkcji).
+        `employees` - opcjonalna lista zamiast schedule.employees, do
+        wydruku pojedynczego pracownika."""
         self.schedule = schedule
         self.year = year
         self.month = month
+        self.shop = shop
 
         self.days = calendar.monthrange(year, month)[1]
-        self.employees = schedule.employees
+        self.employees = employees if employees is not None else schedule.employees
 
         self.NAME_W = 220
         self.LABEL_W = 40
@@ -158,11 +168,13 @@ class ImageScheduleExporter:
         sum_all = self.schedule.total_with_leave_and_sick_for_employee(emp)
 
         values = [total, leave, sick, sum_all]
+        is_over = self.shop is not None and monthly_hours_status(self.schedule, self.shop, emp)["is_over"]
 
         for i, val in enumerate(values):
             x = summary_x + i * 80
             self.draw.rectangle([x, y, x + 80, y + 3 * self.CELL_H], outline=self.GRID)
-            self._draw_centered_text(x + 40, y + self.CELL_H, str(val), self.font)
+            fill = _OVERTIME_COLOR if (i == 0 and is_over) else (0, 0, 0)
+            self._draw_centered_text(x + 40, y + self.CELL_H, str(val), self.font, fill=fill)
 
     # ================= UTILS =================
 
@@ -173,14 +185,14 @@ class ImageScheduleExporter:
             return str(int(time_str.split(":")[0]))
         return time_str
 
-    def _draw_centered_text(self, x, y, text, font):
+    def _draw_centered_text(self, x, y, text, font, fill=(0, 0, 0)):
         bbox = self.draw.textbbox((0, 0), text, font=font)
         w = bbox[2] - bbox[0]
         h = bbox[3] - bbox[1]
-        self.draw.text((x - w // 2, y - h // 2), text, fill=(0, 0, 0), font=font)
+        self.draw.text((x - w // 2, y - h // 2), text, fill=fill, font=font)
 
 
-def export_schedule_to_image(schedule, year, month, path):
-    exporter = ImageScheduleExporter(schedule, year, month)
+def export_schedule_to_image(schedule, year, month, path, shop=None, employees=None):
+    exporter = ImageScheduleExporter(schedule, year, month, shop=shop, employees=employees)
     exporter.export(path)
     return True
