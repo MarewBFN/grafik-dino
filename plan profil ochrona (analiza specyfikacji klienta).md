@@ -556,3 +556,99 @@ blok na lokalizację) **nie są tu wystarczające** - to inny, prostszy
 przypadek (patrz sekcja 7 wyżej) niż wielo-długościowa rotacja jedno-
 osobowa z zależnym od obsady odpoczynkiem. Realnie to osobny,
 porównywalny kalibrem etap pracy, nie rozszerzenie istniejącego.
+
+---
+
+## 11. Decyzje klienta na pytania z sekcji 10 (2026-09-16, cd.)
+
+Cztery pytania blokujące z sekcji 10 - wszystkie rozstrzygnięte,
+klient wybrał rekomendowaną opcję w każdym:
+
+1. **Odpoczynek po zmianie 24h:** system "doba za dobę" -
+   `odpoczynek = (N-1) × 24h`, gdzie N = liczba pracowników na rotacji
+   tej placówki (3 osoby → 24h pracy / 48h odpoczynku, 4 osoby → 24h/72h).
+   **Do doprecyzowania przy kodowaniu** (nie było osobnego pytania o to):
+   czy N liczy WSZYSTKICH pracowników przypisanych do placówki, czy tylko
+   tych zdolnych/chętnych robić 24h (bez flagi `nie_chce_24h`) - patrz
+   Etap C niżej, przyjmuję na razie to drugie jako założenie robocze
+   (bo to oni faktycznie rotują na zmianie 24h), do potwierdzenia.
+2. **Wiele placówek:** osobne pliki projektu + nowe menu "Placówki" do
+   szybkiego przełączania. Bez zmian w modelu danych - każdy plik
+   projektu już dziś niesie własną listę pracowników i własny
+   `ShopConfig` (w tym własny `business_type`/profil). Tylko UI: lista
+   ostatnio używanych/zarejestrowanych plików projektu z jednym
+   kliknięciem otwarcia.
+3. **Drugie 12h weekendu:** generator dobiera dowolnego dostępnego
+   pracownika, bez sztywnego parowania - upraszcza model (12h to
+   "zwykły" typ zmiany jak każdy inny, bez dodatkowej logiki parowania).
+4. **Model zmian w CP-SAT:** zamknięty katalog nowych, stałych typów
+   zmian (analogicznie do `SHIFT_NIGHT`) zamiast interval variables.
+
+## 12. Konkretna propozycja implementacji (do potwierdzenia przed Etapem A)
+
+Na bazie decyzji z sekcji 11 i oryginalnej specyfikacji klienta z tury 1
+("16h pon-pt, 12h lub 24h weekend") - **to jest propozycja do
+zatwierdzenia/poprawienia, nie ustalony fakt**, bo część szczegółów
+(dokładne godziny startowe, czy N w rotacji liczy tylko chętnych na 24h)
+nie padła wprost w odpowiedziach klienta:
+
+### Nowe typy zmian (per lokalizacja, analogicznie do `night_shift`)
+- `SHIFT_16H` - długa zmiana dzienna w tygodniu (pon-pt), np. 06:00-22:00.
+- `SHIFT_8H_NIGHT` - dopełnienie doby w tygodniu, np. 22:00-06:00.
+- `SHIFT_24H` - pełna doba w weekend (sob-nd), np. 06:00-06:00 (+1).
+- `SHIFT_12H_A` / `SHIFT_12H_B` - dwie połowy doby weekendowej, gdy nikt
+  odpowiedni nie chce/nie może 24h, np. 06:00-18:00 / 18:00-06:00 (+1).
+
+### Reguły pokrycia (nowy constraint, nie istnieje dziś w żadnej formie)
+- Pon-pt: **dokładnie 1** pracownik na `SHIFT_16H` i **dokładnie 1** na
+  `SHIFT_8H_NIGHT` każdego dnia (nie "co najmniej", jak dzisiejsze
+  `min_staff_with_role` - tu nadmiar też byłby błędem, bo złamałby
+  "dokładnie jedna osoba na zmianie").
+- Sob-nd: **albo** dokładnie 1 pracownik na `SHIFT_24H` **albo** dokładnie
+  po 1 na `SHIFT_12H_A` i `SHIFT_12H_B` - nigdy oba warianty naraz, nigdy
+  żaden. (`use_24h[d]` jako pomocnicza zmienna 0/1 przełączająca między
+  wariantami, podobnie do przełączników już używanych w innych miejscach
+  generatora.)
+- Pracownicy z flagą `nie_chce_24h` mają `x[e, d, SHIFT_24H] = 0` na
+  twardo (brama, analogicznie do `add_night_shift_gate_constraint`) -
+  nie ograniczenie miękkie, bo klient powiedział "musimy to uszanować".
+
+### Odpoczynek (rozszerzenie/nowy constraint obok `rest_constraint.py`)
+- Po `SHIFT_16H`: standardowe 11h (mieści się w dzisiejszym mechanizmie,
+  po uogólnieniu go na zmienną długość zmiany).
+- Po `SHIFT_24H`: `(N-1) × 24h`, N = pracownicy tej lokalizacji bez flagi
+  `nie_chce_24h` (założenie robocze z sekcji 11 pkt 1 - do potwierdzenia).
+- Po `SHIFT_12H_A`/`SHIFT_12H_B`: do ustalenia - domyślnie standardowe
+  11h, chyba że klient chce inaczej (nie padło wprost).
+
+### Balans / nominalne godziny
+- `balance` i `monthly_hours` z `base_specs.py` - `ConstraintPolicy.DISABLED`
+  dla tego profilu (konfiguracja `ShopConfig.constraint_policies`, nie
+  zmiana kodu generatora).
+- Nowa kolumna "Nadgodziny" w gridzie/eksportach obok "Razem" - rozszerzenie
+  już zbudowanego `logic/monthly_hours_status.py` (ma `over_minutes`),
+  czysto prezentacyjne, niezależne od reszty tego planu.
+
+### Wiele placówek
+- Nowe menu "Placówki" w `ui/main_window.py` - lista zapamiętanych ścieżek
+  plików projektu (podobny mechanizm co dzisiejsze `last_project.json`,
+  tylko lista zamiast jednego wpisu), każdy wpis otwiera dany plik przez
+  istniejące `load_project`. Zero zmian w `model`/`logic`.
+
+### Kolejność (Etapy, analogicznie do "plan zmiany nocne")
+- **Etap A** - nowe stałe typy zmian + pola konfiguracji per lokalizacja
+  (godziny `SHIFT_16H`/`SHIFT_8H_NIGHT`/`SHIFT_24H`/`SHIFT_12H_*`), bez
+  wpięcia w generator. Bezpieczny start, izolowany.
+- **Etap B** - reguła pokrycia (dokładnie 1 osoba/zmiana, przełącznik
+  24h vs 12h+12h dla weekendu) + brama `nie_chce_24h`.
+- **Etap C** - odpoczynek zależny od zmiany (11h dla 16h/12h, (N-1)×24h
+  dla 24h) - najbardziej ryzykowny etap, prawny parametr.
+- **Etap D** - wyłączenie `balance`/`monthly_hours` dla profilu, nowa
+  kolumna nadgodzin w UI/eksportach.
+- **Etap E** - menu "Placówki" (niezależne od A-D, może iść równolegle).
+- **Etap F** - testy scenariuszowe (pełny miesiąc, kilka osób, sprawdzić
+  brak dziur/nakładania i poprawność rotacji odpoczynku).
+
+Rekomendacja: zacząć od Etapu A (fundament, zero ryzyka), potwierdzić
+konkretne godziny startowe zmian i założenie o N w odpoczynku przed
+Etapem C.
