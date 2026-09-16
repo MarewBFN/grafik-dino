@@ -33,6 +33,12 @@ from logic.schedule_controller import ScheduleController
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from persistence.project_io import load_project, save_project
+from persistence.known_projects_store import (
+    load_known_projects,
+    register_known_project,
+    remove_known_project,
+    clear_known_projects,
+)
 from ui.config_dialog import ConfigDialog
 from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
@@ -532,6 +538,8 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("Plik")
         edit_menu = self.menuBar().addMenu("Edycja")
         config_menu = self.menuBar().addMenu("Konfiguracja")
+        self.locations_menu = self.menuBar().addMenu("Placówki")
+        self.locations_menu.aboutToShow.connect(self._populate_locations_menu)
         help_menu = self.menuBar().addMenu("Pomoc")
 
         help_menu.addAction("Samouczek", self._open_tutorial)
@@ -1022,6 +1030,7 @@ class MainWindow(QMainWindow):
 
         save_project(path, self.schedule, self.shop_config)
         save_project("last_project.json", self.schedule, self.shop_config)
+        register_known_project(path, self._project_label_for_path(path))
         self.statusBar().showMessage("Zapisano projekt.", 2500)
 
     def _load_project(self):
@@ -1032,7 +1041,63 @@ class MainWindow(QMainWindow):
             return
 
         self._apply_loaded_project(*load_project(path))
+        register_known_project(path, self._project_label_for_path(path))
         self.statusBar().showMessage("Wczytano projekt.", 2500)
+
+    def _project_label_for_path(self, path: str) -> str:
+        """Nazwa placówki do menu "Placówki" - nazwa z ShopConfig.name jeśli
+        ustawiona, w przeciwnym razie nazwa pliku bez rozszerzenia."""
+        name = (self.shop_config.name or "").strip() if self.shop_config else ""
+        if name:
+            return name
+        return os.path.splitext(os.path.basename(path))[0]
+
+    def _populate_locations_menu(self):
+        self.locations_menu.clear()
+        projects = load_known_projects()
+
+        if not projects:
+            empty_action = self.locations_menu.addAction("(Brak zapisanych placówek)")
+            empty_action.setEnabled(False)
+            return
+
+        for entry in projects:
+            path = entry["path"]
+            label = entry.get("label") or os.path.splitext(os.path.basename(path))[0]
+            action = self.locations_menu.addAction(label)
+            action.triggered.connect(lambda checked=False, p=path: self._open_known_project(p))
+
+        self.locations_menu.addSeparator()
+        self.locations_menu.addAction("Wyczyść listę...", self._clear_known_projects)
+
+    def _open_known_project(self, path: str):
+        if not os.path.exists(path):
+            QMessageBox.warning(
+                self, "Placówki",
+                f"Plik nie istnieje już pod zapamiętaną ścieżką:\n{path}\n\nUsuwam go z listy."
+            )
+            remove_known_project(path)
+            return
+
+        try:
+            self._apply_loaded_project(*load_project(path))
+        except Exception as exc:
+            QMessageBox.critical(self, "Placówki", f"Nie udało się otworzyć projektu:\n{exc}")
+            return
+
+        register_known_project(path, self._project_label_for_path(path))
+        save_project("last_project.json", self.schedule, self.shop_config)
+        self.statusBar().showMessage(f"Otwarto placówkę: {self._project_label_for_path(path)}", 2500)
+
+    def _clear_known_projects(self):
+        reply = QMessageBox.question(
+            self, "Wyczyść listę placówek",
+            "Usunąć wszystkie zapamiętane placówki z tego menu?\n"
+            "Same pliki projektów nie zostaną skasowane.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            clear_known_projects()
 
     def _apply_loaded_project(self, schedule, shop_config):
         self.schedule = schedule
@@ -1054,6 +1119,7 @@ class MainWindow(QMainWindow):
             self._apply_loaded_project(*load_project(path))
         except Exception:
             return False
+        register_known_project(path, self._project_label_for_path(path))
         self.statusBar().showMessage("Wczytano projekt.", 2500)
         return True
 
