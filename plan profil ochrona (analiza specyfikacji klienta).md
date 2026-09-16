@@ -840,3 +840,56 @@ zakresem, jest wymienione wyżej w sekcji "Świadomie poza zakresem A-C"
 jednego pliku) — żadne z nich nie blokuje realnego użycia przez klienta
 z dzisiejszym kształtem (osobne pliki per placówka, generowanie
 automatyczne, bez ręcznej edycji zmian rotacji).
+
+---
+
+## 15. Nowy tryb: "Używaj tylko zmian 12/24h" (2026-09-16, cd. — commit `322d6d3`)
+
+Na prośbę: opcjonalny tryb rotacji, w którym KAŻDY dzień tygodnia (nie
+tylko weekend) używa przełącznika 24h-albo-12h+12h — `weekday_long`
+(16h)/`weekday_short` (8h) nigdy się wtedy nie przydzielają. Reużywa
+istniejących typów zmian (`weekend_full`/`half_a`/`half_b`), zero nowych
+stałych w `AutoScheduleGenerator`.
+
+- `model/location.py::normalize_duty_rotation` — nowy klucz
+  `duty_rotation["only_12_24h"]` (bool, domyślnie False). Gdy True,
+  `weekday_long`/`weekday_short` nie są wymagane; jeśli i tak są podane,
+  są **zachowane** w wyniku (nieużywane, ale nie gubione) — inaczej
+  toggle nie dałby się bezpiecznie przełączyć z powrotem na False bez
+  osobnego UI do ponownego wpisania tych godzin (którego dziś nie ma).
+- `logic/generator/duty_rotation_constraint.py`,
+  `logic/generator/duty_rotation_rest_constraint.py`,
+  `logic/duty_coverage_presenter.py` — każde miejsce, które dotąd
+  decydowało "weekday czy weekend" na podstawie `shop.weekday(d) < 5`,
+  sprawdza teraz najpierw `rotation.get("only_12_24h")`.
+- `ui/config_dialog.py` — checkbox "Używaj tylko zmian 12/24h" w
+  zakładce "Limity", widoczny tylko gdy projekt faktycznie ma
+  skonfigurowaną `duty_rotation` (na razie jedyny UI dla tego
+  mechanizmu — godziny okien nadal tylko programowo, patrz
+  `demo/install_demo.py`).
+- **Przy okazji naprawiony realny bug**, odkryty przy budowie tego
+  checkboxa: `ConfigDialog._save()` rekonstruował `LocationConfig` dla
+  każdej lokalizacji z zakładki "Lokalizacje" bez przenoszenia
+  `duty_rotation` (wiersze UI o nim nie wiedzą) — każde otwarcie i
+  zapisanie Konfiguracji cicho zerowało tę konfigurację dla lokalizacji
+  używających jej per-lokalizacyjnie (nie dotyczy dzisiejszego demo,
+  które używa `duty_rotation` na poziomie całego projektu). Naprawione:
+  zachowywane po kluczu lokalizacji.
+- Testy: rozszerzone `test_duty_rotation.py`/`test_duty_rotation_constraint.py`/
+  `test_duty_rotation_rest_constraint.py`/`test_duty_coverage_presenter.py`/
+  `test_duty_rotation_scenario.py` (w tym pełny miesiąc z N=3 w trybie
+  12/24h — najbardziej wymagający wariant, bo (N-1)×24h=48h obowiązuje
+  teraz każdego dnia, nie tylko w weekend), nowy
+  `tests/test_duty_rotation_config_ui.py` (7). `pytest tests/` → **277
+  passed**.
+
+### Osobna naprawa przy tej samej okazji (niezwiązana z 12/24h)
+
+`model/shop_config.py::from_dict` i `ConfigDialog._save()`
+bezwarunkowo wymuszały `constraint_policies["balance"]` na PREFERRED —
+dla profilu ochrony (gdzie klient chce go całkiem WYŁĄCZONEGO, sekcja
+10) oznaczało to, że to ustawienie znikało przy każdym wczytaniu
+projektu albo zapisaniu Konfiguracji. Naprawione węziej: tylko MANDATORY
+(które realnie groziło niewykonalnością) jest korygowane na PREFERRED,
+DISABLED zostaje. Zweryfikowane na projekcie demo: zapis → wczytanie →
+`balance` faktycznie zostaje DISABLED (wcześniej wracało na PREFERRED).
