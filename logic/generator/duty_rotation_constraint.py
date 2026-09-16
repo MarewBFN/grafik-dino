@@ -57,7 +57,7 @@ def duty_rotation_minutes_for_employee(shop, employee, duty_shifts) -> dict:
     return minutes
 
 
-def _group_employees_with_duty_rotation(employees, shop) -> dict:
+def group_employees_with_duty_rotation(employees, shop) -> dict:
     """{location_key: (duty_rotation_dict, [employee_indices])} - tylko dla
     pracowników, których lokalizacja faktycznie ma skonfigurowaną rotację.
     Reużywane przez duty_rotation_rest_constraint.py (Etap C)."""
@@ -135,7 +135,7 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
         trace.log_constraint("duty_rotation_coverage", f"soft={soft}")
 
     violations = []
-    groups = _group_employees_with_duty_rotation(employees, shop)
+    groups = group_employees_with_duty_rotation(employees, shop)
 
     weekday_long = duty_shifts["weekday_long"]
     weekday_short = duty_shifts["weekday_short"]

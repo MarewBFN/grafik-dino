@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 from logic.constraint_presenter import ConstraintPresenter
+from logic.duty_coverage_presenter import is_day_fully_covered, project_uses_duty_rotation
 from logic.monthly_hours_status import monthly_hours_status
 from logic.schedule_presenter import SchedulePresenter
 from logic.utils.time_utils import classify_shift_as_morning_or_afternoon
@@ -521,6 +522,14 @@ class ScheduleGrid(QTableWidget):
             if disabled_keys:
                 rows = tuple(row for row in rows if row[1] not in disabled_keys)
 
+            # Rotacja 24/7 (np. ochrona) zastępuje Otwarcie/Zamknięcie -
+            # koncepcje bez znaczenia dla tego mechanizmu - jednym wierszem
+            # "Obłożenie" (patrz logic/duty_coverage_presenter.py).
+            employees = self.schedule.employees if self.schedule is not None else []
+            if project_uses_duty_rotation(self.shop_config, employees):
+                rows = tuple(row for row in rows if row[1] not in ("open", "close"))
+                rows = (("Obłożenie", "coverage"),) + rows
+
         return rows
 
     def set_data(
@@ -869,6 +878,19 @@ class ScheduleGrid(QTableWidget):
             self.setItem(row, 0, name_item)
 
             for day in range(1, days + 1):
+                if key == "coverage":
+                    # Rotacja 24/7 - sprawdzane niezależnie od reszty tej
+                    # pętli (open/close/morning/afternoon/meat nie mają tu
+                    # zastosowania), patrz logic/duty_coverage_presenter.py.
+                    covered = is_day_fully_covered(self.schedule, self.shop_config, self.schedule.employees, day)
+                    item = QTableWidgetItem("✅" if covered else "❌")
+                    item.setTextAlignment(Qt.AlignCenter)
+                    item.setBackground(QBrush(QColor(theme.OK_GREEN if covered else theme.ERR_RED)))
+                    if not covered:
+                        item.setToolTip("Brak pełnego pokrycia doby (24h) tego dnia.")
+                    self.setItem(row, day, item)
+                    continue
+
                 # Liczniki dla danego dnia
                 at_opening = 0
                 at_closing = 0

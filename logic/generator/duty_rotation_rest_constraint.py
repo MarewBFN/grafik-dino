@@ -62,10 +62,10 @@ def add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shif
     if trace is not None:
         trace.log_constraint("duty_rotation_rest", f"soft={soft}")
 
-    from logic.generator.duty_rotation_constraint import _group_employees_with_duty_rotation
+    from logic.generator.duty_rotation_constraint import group_employees_with_duty_rotation
 
     violations = []
-    groups = _group_employees_with_duty_rotation(employees, shop)
+    groups = group_employees_with_duty_rotation(employees, shop)
     days_sorted = sorted(days)
     day_index = {d: i for i, d in enumerate(days_sorted)}
 
