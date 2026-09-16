@@ -29,6 +29,11 @@ from logic.generator.night_shift_constraint import (
     add_night_shift_gate_constraint,
     add_night_shift_adjacency_constraint,
 )
+from logic.generator.duty_rotation_constraint import (
+    add_duty_rotation_gate_constraint,
+    add_duty_rotation_no24h_gate_constraint,
+    add_duty_rotation_coverage_constraint,
+)
 
 
 GENERIC_WEIGHTS = {
@@ -37,6 +42,8 @@ GENERIC_WEIGHTS = {
     "max_consecutive": 100,
     "monthly_hours": 250,
     "availability": 5000,
+    "duty_rotation_coverage": 5000,
+    "duty_rotation_no24h": 5000,
 }
 
 GENERIC_POLICY_LABELS = (
@@ -45,6 +52,15 @@ GENERIC_POLICY_LABELS = (
     ("monthly_hours", "Godziny miesięczne"),
     ("balance", "Bilans godzin"),
     ("max_consecutive", "Dni pod rząd"),
+    # duty_rotation_coverage/duty_rotation_no24h (GENERIC_WEIGHTS wyżej)
+    # celowo NIE mają tu wpisu - to no-opy dla każdego projektu bez
+    # skonfigurowanej duty_rotation (patrz komentarz w
+    # ShopConfig.__init__), a pokazywanie tego przełącznika w "Zasadach
+    # generatora" KAŻDEGO profilu (w tym Dino) byłoby myleniem UI czymś
+    # nieistotnym dla niego - dokładnie to, czemu ma zapobiegać
+    # RoleDef.linked_policy. Ekran do edycji tych dwóch polityk to zadanie
+    # osobnego etapu UI (Etap D/E planu), na razie edytowalne tylko
+    # programowo (ShopConfig.constraint_policies), domyślnie MANDATORY.
 )
 
 
@@ -84,7 +100,7 @@ def _build_always_on_specs():
             "work_dependency",
             lambda ctx, soft: add_work_dependency_constraint(
                 ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shift_open, ctx.shift_close, ctx.all_shifts,
-                trace=ctx.trace, shift_night=ctx.shift_night,
+                trace=ctx.trace, shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
             ),
             always_on=True,
         ),
@@ -103,6 +119,16 @@ def _build_always_on_specs():
             lambda ctx, soft: add_night_shift_gate_constraint(
                 ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.shift_night, trace=ctx.trace
             ) if ctx.shift_night is not None else None,
+            always_on=True,
+        ),
+        ConstraintSpec(
+            # Structural fact (duty-rotation shift types and the old
+            # OPEN/CLOSE/START/END/NIGHT model are mutually exclusive per
+            # employee) - "plan profil ochrona", sekcja 12, Etap B.
+            "duty_rotation_gate",
+            lambda ctx, soft: add_duty_rotation_gate_constraint(
+                ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.duty_shifts, ctx.all_shifts, trace=ctx.trace
+            ) if ctx.duty_shifts is not None else None,
             always_on=True,
         ),
     ]
@@ -141,7 +167,7 @@ def _build_rest_11h(ctx, soft):
 def _build_balance(ctx, soft):
     return add_balance_constraint(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts,
-        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night,
+        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
     )
 
 
@@ -149,7 +175,7 @@ def _build_availability(ctx, soft):
     return add_availability_constraint(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts,
         ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
-        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night,
+        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
     )
 
 
@@ -176,7 +202,21 @@ def _build_max_consecutive(ctx, soft):
 def _build_monthly_hours(ctx, soft):
     return add_monthly_hours_constraint(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
-        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night,
+        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
+    )
+
+
+def _build_duty_rotation_coverage(ctx, soft):
+    return add_duty_rotation_coverage_constraint(
+        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.duty_shifts,
+        soft=soft, trace=ctx.trace,
+    )
+
+
+def _build_duty_rotation_no24h(ctx, soft):
+    return add_duty_rotation_no24h_gate_constraint(
+        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.duty_shifts,
+        soft=soft, trace=ctx.trace,
     )
 
 
@@ -187,6 +227,14 @@ def _build_generic_policy_specs():
         ConstraintSpec("availability", _build_availability),
         ConstraintSpec("max_consecutive", _build_max_consecutive),
         ConstraintSpec("monthly_hours", _build_monthly_hours),
+        ConstraintSpec(
+            "duty_rotation_coverage",
+            lambda ctx, soft: _build_duty_rotation_coverage(ctx, soft) if ctx.duty_shifts is not None else [],
+        ),
+        ConstraintSpec(
+            "duty_rotation_no24h",
+            lambda ctx, soft: _build_duty_rotation_no24h(ctx, soft) if ctx.duty_shifts is not None else [],
+        ),
     ]
 
 

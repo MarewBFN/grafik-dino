@@ -278,16 +278,16 @@ class ShiftMinutesByTypeTests(unittest.TestCase):
 
         mapping = _shift_minutes_by_type(
             (SHIFT_OPEN, SHIFT_CLOSE, SHIFT_NIGHT),
-            standard_minutes=510, shift_night=SHIFT_NIGHT, night_minutes=480,
+            standard_minutes=510, overrides={SHIFT_NIGHT: 480},
         )
         self.assertEqual(mapping[SHIFT_OPEN], 510)
         self.assertEqual(mapping[SHIFT_CLOSE], 510)
         self.assertEqual(mapping[SHIFT_NIGHT], 480)
 
-    def test_uniform_minutes_when_no_night_shift_id_given(self):
+    def test_uniform_minutes_when_no_overrides_given(self):
         from logic.generator.hours_constraint import _shift_minutes_by_type
 
-        mapping = _shift_minutes_by_type((SHIFT_OPEN, SHIFT_CLOSE), 510, None, 0)
+        mapping = _shift_minutes_by_type((SHIFT_OPEN, SHIFT_CLOSE), 510, {})
         self.assertTrue(all(v == 510 for v in mapping.values()))
 
 

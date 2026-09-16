@@ -19,6 +19,7 @@ def setup_fix_hints_and_penalties(
     START_SHIFT_MAP,
     END_SHIFT_MAP,
     shift_night=None,
+    duty_shifts=None,
 ):
     """
     FIX MODE — stabilna wersja:
@@ -65,8 +66,7 @@ def setup_fix_hints_and_penalties(
     # ⏱️ NOMINAL (ważne — ale nie HARD)
     # ==================================================
     from logic.utils.time_utils import get_effective_daily_hours
-    from logic.generator.hours_constraint import _shift_minutes_by_type
-    from logic.generator.night_shift_constraint import night_shift_minutes_for_employee
+    from logic.generator.hours_constraint import _shift_minutes_by_type, _duration_overrides_for_employee
 
     nominal_hours = shop.get_full_time_nominal_hours()
     nominal_minutes = nominal_hours * 60
@@ -75,8 +75,7 @@ def setup_fix_hints_and_penalties(
 
         shift_minutes = int(get_effective_daily_hours(emp, shop) * 60)
         minutes_by_shift = _shift_minutes_by_type(
-            all_shifts, shift_minutes, shift_night,
-            night_shift_minutes_for_employee(shop, emp) if shift_night is not None else 0,
+            all_shifts, shift_minutes, _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts),
         )
 
         leave_days = 0

@@ -84,6 +84,15 @@ class ShopConfig:
             "availability": ConstraintPolicy.PREFERRED,
             "no_night": ConstraintPolicy.PREFERRED,
             "no_afternoon": ConstraintPolicy.PREFERRED,
+            # Rotacja służby 24/7 (patrz LocationConfig.duty_rotation) - te
+            # dwa constrainty są no-opami dopóki żadna lokalizacja projektu
+            # nie ma skonfigurowanej duty_rotation (patrz
+            # logic/generator/duty_rotation_constraint.py), więc MANDATORY
+            # domyślnie dla KAŻDEGO profilu (w tym Dino) nie zmienia
+            # zachowania żadnego istniejącego projektu - liczy się dopiero,
+            # gdy klient faktycznie skonfiguruje ten mechanizm.
+            "duty_rotation_coverage": ConstraintPolicy.MANDATORY,
+            "duty_rotation_no24h": ConstraintPolicy.MANDATORY,
         }
         # -----------------------------
         # Override godzin dla konkretnego dnia

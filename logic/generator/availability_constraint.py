@@ -20,6 +20,7 @@ def add_availability_constraint(
     soft=False,
     trace=None,
     shift_night=None,
+    duty_shifts=None,
 ):
     if trace is not None:
         trace.log_constraint("availability", f"soft={soft}")
@@ -56,16 +57,18 @@ def add_availability_constraint(
                 print(f"[AVAIL BLOCK] emp={e} day={d} NO SHIFTS ALLOWED")
 
             filtered_allowed = set(allowed_set)
+            duty_shift_ids = set(duty_shifts.values()) if duty_shifts else set()
 
             for s in all_shifts:
                 # get_allowed_shifts_for_day (availability_mapper.py) nie zna
-                # SHIFT_NIGHT - nie mapuje żadnego availability na tę zmianę,
-                # więc traktowanie "nieobecna w allowed" jako "zakazana" źle
-                # ograniczałoby ją każdemu pracownikowi z jakimikolwiek
-                # ograniczeniami dostępności, niezależnie od ich treści.
-                # Pomijamy ją tutaj do czasu, aż dostępność zacznie rozumieć
-                # godziny nocne (poza zakresem Etapu C).
-                if s == shift_night:
+                # SHIFT_NIGHT ani żadnej z pięciu zmian rotacji 24/7 - nie
+                # mapuje żadnego availability na nie, więc traktowanie
+                # "nieobecna w allowed" jako "zakazana" źle ograniczałoby je
+                # każdemu pracownikowi z jakimikolwiek ograniczeniami
+                # dostępności, niezależnie od ich treści. Pomijamy je tutaj
+                # do czasu, aż dostępność zacznie rozumieć te godziny (poza
+                # zakresem Etapu C zmian nocnych / Etapu B rotacji 24/7).
+                if s == shift_night or s in duty_shift_ids:
                     continue
 
                 if s in filtered_allowed:

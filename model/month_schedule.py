@@ -60,6 +60,10 @@ class MonthSchedule:
         self._validate_day(day)
         self._data[employee][day].set_hours(start, end)
 
+    def set_day_full_day_shift(self, employee: Employee, day: int, start: str) -> None:
+        self._validate_day(day)
+        self._data[employee][day].set_full_day_shift(start)
+
     def set_day_free(self, employee: Employee, day: int) -> None:
         self._validate_day(day)
         self._data[employee][day].set_free()

@@ -64,6 +64,27 @@ class AutoScheduleGenerator:
         # zero zmiany zachowania, tylko nieużywane zmienne w modelu.
         self.SHIFT_NIGHT = 14
 
+        # Rotacja służby 24/7 (np. ochrona) - "plan profil ochrona (analiza
+        # specyfikacji klienta).md", sekcja 12, Etap B. Istnieją w tej samej,
+        # wspólnej przestrzeni zmiennych x[e,d,s] dla KAŻDEGO profilu (tak
+        # jak SHIFT_NIGHT), ale logic/generator/duty_rotation_constraint.py
+        # blokuje je twardo dla każdego pracownika, którego lokalizacja nie
+        # ma skonfigurowanej duty_rotation (Etap A) - dla dzisiejszych
+        # projektów (żadna lokalizacja jej nie ma) to zero zmiany
+        # zachowania, tylko nieużywane zmienne w modelu.
+        self.SHIFT_DUTY_WEEKDAY_LONG = 15
+        self.SHIFT_DUTY_WEEKDAY_SHORT = 16
+        self.SHIFT_DUTY_WEEKEND_FULL = 17
+        self.SHIFT_DUTY_WEEKEND_HALF_A = 18
+        self.SHIFT_DUTY_WEEKEND_HALF_B = 19
+        self.DUTY_SHIFTS = {
+            "weekday_long": self.SHIFT_DUTY_WEEKDAY_LONG,
+            "weekday_short": self.SHIFT_DUTY_WEEKDAY_SHORT,
+            "weekend_full": self.SHIFT_DUTY_WEEKEND_FULL,
+            "weekend_half_a": self.SHIFT_DUTY_WEEKEND_HALF_A,
+            "weekend_half_b": self.SHIFT_DUTY_WEEKEND_HALF_B,
+        }
+
         # wszystkie zmiany (tu można dodawać kolejne typy zmian)
         self.ALL_SHIFTS = (
             self.SHIFT_OPEN,
@@ -83,6 +104,12 @@ class AutoScheduleGenerator:
             self.SHIFT_WORK_END_75,
 
             self.SHIFT_NIGHT,
+
+            self.SHIFT_DUTY_WEEKDAY_LONG,
+            self.SHIFT_DUTY_WEEKDAY_SHORT,
+            self.SHIFT_DUTY_WEEKEND_FULL,
+            self.SHIFT_DUTY_WEEKEND_HALF_A,
+            self.SHIFT_DUTY_WEEKEND_HALF_B,
         )
 
     # ==================================================
@@ -171,6 +198,7 @@ class AutoScheduleGenerator:
             end_shift_map=self.END_SHIFT_MAP,
             trace=trace,
             shift_night=self.SHIFT_NIGHT,
+            duty_shifts=self.DUTY_SHIFTS,
         )
 
         from model.business_profile import get_custom_profile
@@ -211,6 +239,7 @@ class AutoScheduleGenerator:
                 self.START_SHIFT_MAP,
                 self.END_SHIFT_MAP,
                 shift_night=self.SHIFT_NIGHT,
+                duty_shifts=self.DUTY_SHIFTS,
             )
             all_soft_violations.extend(fix_penalties)
 
@@ -234,6 +263,7 @@ class AutoScheduleGenerator:
             self.END_SHIFT_MAP,
             trace=trace,
             shift_night=self.SHIFT_NIGHT,
+            duty_shifts=self.DUTY_SHIFTS,
         )
 
         # SPRZĄTANIE: Przywracamy oryginalne daily_hours, żeby UI i zapisy nie świrowały

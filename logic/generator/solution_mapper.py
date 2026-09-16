@@ -17,6 +17,7 @@ def save_solution(
     END_SHIFTS,
     trace=None,
     shift_night=None,
+    duty_shifts=None,
 ):
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         print("❌ BRAK ROZWIĄZANIA")
@@ -97,6 +98,29 @@ def save_solution(
                     if trace is not None:
                         trace.log_assignment(e, d, shift_night, "solver_assignment")
                 continue
+
+            # Rotacja służby 24/7 (Etap B "plan profil ochrona") - podobnie
+            # jak SHIFT_NIGHT, ma własne, stałe godziny niezależne od
+            # open_hours dnia, więc sprawdzana też przed
+            # get_open_hours_for_day poniżej.
+            if duty_shifts is not None:
+                rotation = shop.get_location(emp).get_duty_rotation()
+                assigned_duty = False
+                if rotation:
+                    for key, shift_id in duty_shifts.items():
+                        if solver.Value(x[e, d, shift_id]) != 1:
+                            continue
+                        if key == "weekend_full":
+                            schedule.set_day_full_day_shift(emp, d, rotation[key]["start"])
+                        else:
+                            window = rotation[key]
+                            schedule.set_day_hours(emp, d, window["start"], window["end"])
+                        if trace is not None:
+                            trace.log_assignment(e, d, shift_id, "solver_assignment")
+                        assigned_duty = True
+                        break
+                if assigned_duty:
+                    continue
 
             hours = shop.get_location(emp).get_open_hours_for_day(d)
             if not hours:

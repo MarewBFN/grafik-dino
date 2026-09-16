@@ -34,6 +34,14 @@ class ConstraintContext:
     # dla dowolny kod konstruujący ConstraintContext sprzed Etapu C zmian
     # nocnych; AutoScheduleGenerator zawsze przekazuje tu konkretną wartość.
     shift_night: int | None = None
+    # Pięć typów zmian rotacji 24/7 (np. ochrona) - patrz
+    # logic/generator/duty_rotation_constraint.py i "plan profil ochrona
+    # (analiza specyfikacji klienta).md", sekcja 12. Klucze:
+    # "weekday_long"/"weekday_short"/"weekend_full"/"weekend_half_a"/
+    # "weekend_half_b" (te same nazwy co w LocationConfig.duty_rotation).
+    # None dla kodu sprzed tego mechanizmu; AutoScheduleGenerator zawsze
+    # przekazuje tu konkretny słownik.
+    duty_shifts: dict | None = None
     # Shared state a profile's constraints pass between each other (e.g. Dino's
     # meat-light duty budget). Empty/unused for profiles that don't need it.
     extra: dict = field(default_factory=dict)
