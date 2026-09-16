@@ -45,6 +45,65 @@ def normalize_night_shift(start: str | None, end: str | None) -> dict | None:
     return {"start": start, "end": end}
 
 
+_DUTY_ROTATION_PAIR_KEYS = {
+    "weekday_long": "długiej zmiany w tygodniu",
+    "weekday_short": "krótkiej zmiany w tygodniu",
+    "weekend_half_a": "pierwszej połowy doby weekendowej",
+    "weekend_half_b": "drugiej połowy doby weekendowej",
+}
+
+
+def _normalize_duty_window(raw: dict, label: str) -> dict:
+    start = raw.get("start") if raw else None
+    end = raw.get("end") if raw else None
+    if not start or not end:
+        raise ValueError(f"Okno \"{label}\" wymaga podania obu godzin (początku i końca)")
+    if start == end:
+        raise ValueError(f"Godzina początku i końca okna \"{label}\" nie mogą być takie same")
+    return {"start": start, "end": end}
+
+
+def normalize_duty_rotation(raw: dict | None) -> dict | None:
+    """Walidacja opcjonalnej konfiguracji rotacji służby 24/7 tej lokalizacji
+    ("plan profil ochrona (analiza specyfikacji klienta).md", sekcja 12,
+    Etap A) - pięć okien czasowych:
+
+    - `weekday_long` + `weekday_short`: dwie zmiany pokrywające razem całą
+      dobę w tygodniu (pon-pt), np. SHIFT_16H 06:00-22:00 + SHIFT_8H_NIGHT
+      22:00-06:00.
+    - `weekend_full`: sztywna zmiana 24h w weekend (sob-nd) - tylko godzina
+      startu, koniec z definicji 24h później (patrz
+      DaySchedule.set_full_day_shift) - "end" w tym oknie jest
+      niejednoznaczny (patrz normalize_night_shift), więc się go tu w ogóle
+      nie przyjmuje.
+    - `weekend_half_a` + `weekend_half_b`: dwuosobowa alternatywa dla
+      `weekend_full`, gdy przypisana osoba (albo obie) mają flagę "nie chce
+      24h" - też razem cała doba.
+
+    None/pusty słownik = lokalizacja nie używa tego mechanizmu (domyślne -
+    zero zmiany zachowania dla każdego istniejącego projektu/lokalizacji).
+    Skonfigurowanie choć jednego okna wymaga skonfigurowania wszystkich
+    pięciu - to jeden, spójny schemat rotacji, nie da się użyć częściowo.
+    """
+    if not raw:
+        return None
+
+    missing = [key for key in (*_DUTY_ROTATION_PAIR_KEYS, "weekend_full") if not raw.get(key)]
+    if missing:
+        raise ValueError(f"Rotacja służby wymaga skonfigurowania wszystkich okien - brakuje: {', '.join(missing)}")
+
+    weekend_full_start = raw["weekend_full"].get("start")
+    if not weekend_full_start:
+        raise ValueError("Zmiana 24h w weekend wymaga podania godziny startu")
+
+    normalized = {
+        key: _normalize_duty_window(raw[key], label)
+        for key, label in _DUTY_ROTATION_PAIR_KEYS.items()
+    }
+    normalized["weekend_full"] = {"start": weekend_full_start}
+    return normalized
+
+
 @dataclass
 class LocationConfig:
     key: str
@@ -59,6 +118,13 @@ class LocationConfig:
     # nocnej (domyślne - zero zmiany zachowania dla Dino i profili bez tej
     # potrzeby). Zob. "plan zmiany nocne (24-7).md", Etap B.
     night_shift: dict | None = field(default=None)
+
+    # Opcjonalna konfiguracja rotacji służby 24/7 (np. ochrona) - patrz
+    # normalize_duty_rotation() wyżej. None = lokalizacja jej nie używa
+    # (domyślne - zero zmiany zachowania). Niezależna od `night_shift`
+    # (ten mechanizm ma własny, oddzielny zestaw typów zmian - patrz "plan
+    # profil ochrona (analiza specyfikacji klienta).md", sekcja 12, Etap A).
+    duty_rotation: dict | None = field(default=None)
 
     # Same logic as ShopConfig.weekday/is_trade_day/get_open_hours_for_day
     # (model/shop_config.py) - a location has no year/month of its own, so
@@ -110,6 +176,14 @@ class LocationConfig:
     def set_night_shift(self, start: str | None, end: str | None) -> None:
         self.night_shift = normalize_night_shift(start, end)
 
+    def get_duty_rotation(self) -> dict | None:
+        """Konfiguracja rotacji służby 24/7 tej lokalizacji, albo None gdy
+        jej nie ma - patrz normalize_duty_rotation()."""
+        return self.duty_rotation
+
+    def set_duty_rotation(self, raw: dict | None) -> None:
+        self.duty_rotation = normalize_duty_rotation(raw)
+
     def to_dict(self):
         return {
             "key": self.key,
@@ -120,6 +194,7 @@ class LocationConfig:
             "day_overrides": self.day_overrides,
             "constraints": self.constraints,
             "night_shift": self.night_shift,
+            "duty_rotation": self.duty_rotation,
         }
 
     @classmethod
@@ -137,4 +212,6 @@ class LocationConfig:
         loc.constraints.update(data.get("constraints", {}))
         night_shift = data.get("night_shift")
         loc.night_shift = dict(night_shift) if night_shift else None
+        duty_rotation = data.get("duty_rotation")
+        loc.duty_rotation = dict(duty_rotation) if duty_rotation else None
         return loc

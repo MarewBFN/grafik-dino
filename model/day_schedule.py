@@ -28,6 +28,19 @@ class DaySchedule:
     is_day_off: bool = False
     shift_class: str | None = None  # "1" (rano) / "2" (popołudnie) — typ zmiany zablokowany dla generatora
 
+    # Zmiana obejmująca całą dobę (np. służba 24h w ochronie - "plan profil
+    # ochrona (analiza specyfikacji klienta).md", sekcja 12, Etap A).
+    # `start`/`end` są sobie wtedy równe - dozwolone WYŁĄCZNIE z tą flagą
+    # (set_hours() nadal odrzuca zwykłe end==start jako niejednoznaczne,
+    # patrz jej docstring). Koniec leży dokładnie 24h po `start`, czyli w
+    # kolejnej dobie kalendarzowej o tej samej godzinie zegarowej. Każde
+    # miejsce, które czyta tę flagę, sprawdza ją tylko gdy start/end nie są
+    # None (zob. crosses_midnight/total_duration) - istniejące, liczne
+    # miejsca w kodzie czyszczące start/end wprost (bez przechodzenia przez
+    # set_free/set_leave/...) nie muszą znać tego pola, żeby pozostać
+    # poprawne.
+    is_full_day: bool = False
+
 
     def is_empty(self) -> bool:
         """Czy dzień jest pusty (wolne)."""
@@ -40,14 +53,16 @@ class DaySchedule:
         self.is_leave = False
         self.is_sick = False
         self.is_day_off = True
+        self.is_full_day = False
 
     def set_leave(self) -> None:
         """Ustawia dzień jako urlop."""
         self.start = None
         self.end = None
         self.is_leave = True
-        self.is_sick = False  
+        self.is_sick = False
         self.is_day_off = False
+        self.is_full_day = False
 
     def set_hours(self, start: str, end: str) -> None:
         """
@@ -55,9 +70,9 @@ class DaySchedule:
         Format: 'HH:MM'
 
         end == start pozostaje błędem (nierozróżnialne od pustej/24h
-        zmiany). end < start jest dozwolone i oznacza zmianę nocną,
-        przechodzącą przez północ (np. "22:00" -> "06:00") - patrz
-        crosses_midnight().
+        zmiany) - użyj set_full_day_shift() dla prawdziwej zmiany 24h.
+        end < start jest dozwolone i oznacza zmianę nocną, przechodzącą
+        przez północ (np. "22:00" -> "06:00") - patrz crosses_midnight().
         """
         start_dt = _parse_time(start)
         end_dt = _parse_time(end)
@@ -70,11 +85,28 @@ class DaySchedule:
         self.is_leave = False
         self.is_sick = False
         self.is_day_off = False
+        self.is_full_day = False
+
+    def set_full_day_shift(self, start: str) -> None:
+        """Zmiana trwająca dokładnie 24h: zaczyna się o `start` i kończy o
+        tej samej godzinie następnego dnia (np. służba 24h w ochronie)."""
+        _parse_time(start)  # waliduje format, tak jak set_hours
+
+        self.start = start
+        self.end = start
+        self.is_leave = False
+        self.is_sick = False
+        self.is_day_off = False
+        self.is_full_day = True
 
     def crosses_midnight(self) -> bool:
-        """Czy to zmiana nocna, kończąca się w kolejnej dobie kalendarzowej."""
+        """Czy to zmiana nocna (albo 24h), kończąca się w kolejnej dobie
+        kalendarzowej."""
         if self.is_empty() or self.start is None or self.end is None:
             return False
+
+        if self.is_full_day:
+            return True
 
         return _parse_time(self.end) < _parse_time(self.start)
 
@@ -84,6 +116,9 @@ class DaySchedule:
         """
         if self.is_empty() or self.is_leave or self.is_sick:
             return None
+
+        if self.is_full_day:
+            return timedelta(hours=24)
 
         start_dt = _parse_time(self.start)
         end_dt = _parse_time(self.end)
@@ -140,6 +175,7 @@ class DaySchedule:
         self.is_leave = False
         self.is_sick = True
         self.is_day_off = False
+        self.is_full_day = False
 
     def set_shift_class(self, code: str) -> None:
         """
@@ -151,6 +187,7 @@ class DaySchedule:
         self.is_leave = False
         self.is_sick = False
         self.is_day_off = False
+        self.is_full_day = False
         self.shift_class = code
 
     def total_minutes(self, employee=None, shop=None) -> int:

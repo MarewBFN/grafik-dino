@@ -1,7 +1,7 @@
 import calendar
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
-from model.location import LocationConfig, normalize_night_shift
+from model.location import LocationConfig, normalize_night_shift, normalize_duty_rotation
 
 
 class _LocationView:
@@ -25,6 +25,9 @@ class _LocationView:
 
     def get_night_shift_hours(self):
         return self._location.get_night_shift_hours()
+
+    def get_duty_rotation(self):
+        return self._location.get_duty_rotation()
 
     @property
     def constraints(self) -> dict:
@@ -135,6 +138,11 @@ class ShopConfig:
         # poziomie całego projektu). None = brak zmiany nocnej (domyślne).
         self.night_shift: dict | None = None
 
+        # Opcjonalna konfiguracja rotacji służby 24/7 dla projektów bez
+        # zdefiniowanych lokalizacji - patrz LocationConfig.duty_rotation /
+        # normalize_duty_rotation() w model/location.py. None = domyślne.
+        self.duty_rotation: dict | None = None
+
     # ==========================================================
     # PODSTAWOWE METODY
     # ==========================================================
@@ -210,6 +218,12 @@ class ShopConfig:
     def set_night_shift(self, start: str | None, end: str | None) -> None:
         self.night_shift = normalize_night_shift(start, end)
 
+    def get_duty_rotation(self) -> dict | None:
+        return self.duty_rotation
+
+    def set_duty_rotation(self, raw: dict | None) -> None:
+        self.duty_rotation = normalize_duty_rotation(raw)
+
     # ==========================================================
     # LOKALIZACJE (Etap 3b)
     # ==========================================================
@@ -238,6 +252,7 @@ class ShopConfig:
             "locations": {key: loc.to_dict() for key, loc in self.locations.items()},
             "open_hours": self.open_hours,
             "night_shift": self.night_shift,
+            "duty_rotation": self.duty_rotation,
             "trade_sundays": list(self.trade_sundays),
             "day_overrides": self.day_overrides,
             "constraints": self.constraints,
@@ -261,6 +276,8 @@ class ShopConfig:
         }
         night_shift = data.get("night_shift")
         cfg.night_shift = dict(night_shift) if night_shift else None
+        duty_rotation = data.get("duty_rotation")
+        cfg.duty_rotation = dict(duty_rotation) if duty_rotation else None
 
         # open_hours
         cfg.open_hours = {

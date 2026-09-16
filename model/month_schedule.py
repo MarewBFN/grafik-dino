@@ -228,6 +228,7 @@ class MonthSchedule:
                             "is_sick": ds.is_sick,
                             "is_day_off": ds.is_day_off,
                             "shift_class": ds.shift_class,
+                            "is_full_day": ds.is_full_day,
                         }
                         for day in range(1, self.days_in_month + 1)
                         if (
@@ -276,6 +277,7 @@ class MonthSchedule:
                 ds.start = None
                 ds.end = None
                 ds.is_leave = False
+                ds.is_full_day = False
 
             for day, dd in ed.get("days", {}).items():
                 ds = sched.get_day(emp, int(day))
@@ -286,6 +288,7 @@ class MonthSchedule:
                 ds.is_locked = dd.get("is_locked", False)
                 ds.is_day_off = dd.get("is_day_off", False)
                 ds.shift_class = dd.get("shift_class")
+                ds.is_full_day = dd.get("is_full_day", False)
 
         sched.employees.sort(key=cls._employee_sort_key)
         return sched
@@ -311,6 +314,7 @@ class MonthSchedule:
                 if not day_data.is_locked:
                     day_data.start = None
                     day_data.end = None
+                    day_data.is_full_day = False
                     if hasattr(day_data, "is_day_off"):
                         day_data.is_day_off = False
 
@@ -326,6 +330,7 @@ class MonthSchedule:
                 ds.end = None
                 ds.is_leave = False
                 ds.is_sick = False
+                ds.is_full_day = False
 
                 if hasattr(ds, "is_day_off"):
                     ds.is_day_off = False
