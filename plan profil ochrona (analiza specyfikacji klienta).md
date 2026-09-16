@@ -779,3 +779,64 @@ mechanizm jest identyczny z propozycją.
   dziś poprawnie dla tego przypadku (grupowanie po `location_key` w
   `duty_rotation_constraint.py`), gdyby jednak opcja B była kiedyś
   potrzebna.
+
+---
+
+## 14. Stan wdrożenia, cd. (2026-09-16, cd.) — Etapy D, E, F zrobione
+
+Na prośbę: `client-demo/enyo-ochrona` scalone do tego brancha (commit
+`22271bc`) — jedno miejsce pracy zamiast dwóch, `CLIENT_DEMO_README.md`
+zaktualizowany (`40ebed6`) żeby to odzwierciedlić. Dalej: Etapy D/E/F z
+sekcji 12 dokończone. `pytest tests/` → **244 passed, zero regresji**.
+
+### Etap D — kolumna "Nadgodziny" + wyłączenie balance/monthly_hours (commity `ccab109`, `7092cc2`)
+
+- `ui/grid_view.py` — nowa kolumna "Nadgodziny\n(h)" zaraz po "Razem\n(h)"
+  (kolumna "Cel" trybu rozliczeniowego przesunięta o jeden indeks).
+  Istniejące czerwone tło kolumny "Praca" **zostaje** — oba mechanizmy
+  współistnieją.
+- `export/excel_exporter.py`/`export/image_exporter.py` — ta sama
+  kolumna w obu eksportach.
+- `demo/install_demo.py` — **przepisany, żeby faktycznie używać
+  `duty_rotation` z Etapów A-C** zamiast starszego przybliżenia przez
+  `night_shift` (16h+8h w tygodniu, 24h/12h+12h w weekend, dokładnie
+  jak w oryginalnej specyfikacji klienta). `balance`/`monthly_hours` →
+  `DISABLED`. Załoga zmniejszona do 4 osób (celowo skromna, jak klient
+  opisał: "braki zatrudnienia... duża ilość nadgodzin") — zweryfikowane
+  po wygenerowaniu: dwie osoby po 24h nadgodzin, jedna 4h, jedna
+  niedociążona (140h) - naturalny wynik braku balansu, nie ręcznie
+  dogrywana zmiana jak w poprzedniej wersji demo.
+- Testy: `tests/test_overtime_column.py` (3 - grid, Excel, JPG).
+
+### Etap E — menu "Placówki" (commit `84c6782`)
+
+- `persistence/known_projects_store.py` (nowy plik) — lista
+  zapamiętanych ścieżek plików projektu w
+  `%LOCALAPPDATA%\GrafikDino\known_projects.json`, most-recently-used
+  first.
+- `ui/main_window.py` — nowe menu "Placówki" w pasku menu, budowane na
+  nowo przy każdym otwarciu (`aboutToShow`). Zapis/wczytanie projektu
+  rejestruje ścieżkę pod nazwą z `ShopConfig.name` (albo nazwą pliku).
+  Brakujący plik usuwa się z listy zamiast cicho failować.
+- Testy: `tests/test_known_projects_store.py` (7).
+
+### Etap F — testy scenariuszowe pełnego miesiąca (commit `5f1b6c4`)
+
+- `tests/test_duty_rotation_scenario.py` — generuje **cały miesiąc**
+  (nie wycinek) i weryfikuje wynik **niezależnie od kodu constraintów**
+  (licząc rzeczywiste godziny wprost z zapisanego `DaySchedule`, nie
+  przez ponowne wywołanie tych samych funkcji budujących model CP-SAT).
+  Trzy scenariusze: 4 osoby/1 `nie_chce_24h` (jak załoga demo), 3
+  osoby/0 `nie_chce_24h` (najbardziej wymagający - N=3 daje 48h
+  odpoczynku po każdej z wielu zmian 24h w miesiącu, test wielodniowego
+  "lookahead" z Etapu C), 5 osób/2 `nie_chce_24h`. Wszystkie feasible,
+  solver <1.5s łącznie.
+
+### Domknięte tym samym — rdzeń generatora rotacji 24/7 gotowy end-to-end
+
+Etapy A→F z sekcji 12 tego planu są kompletne. To, co zostaje poza
+zakresem, jest wymienione wyżej w sekcji "Świadomie poza zakresem A-C"
+(ręczna edycja/UI dla nowych typów zmian, multi-placówka w ramach
+jednego pliku) — żadne z nich nie blokuje realnego użycia przez klienta
+z dzisiejszym kształtem (osobne pliki per placówka, generowanie
+automatyczne, bez ręcznej edycji zmian rotacji).
