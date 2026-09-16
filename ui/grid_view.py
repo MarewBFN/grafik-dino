@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 from logic.constraint_presenter import ConstraintPresenter
+from logic.monthly_hours_status import monthly_hours_status
 from logic.schedule_presenter import SchedulePresenter
 from logic.utils.time_utils import classify_shift_as_morning_or_afternoon
 from model.business_profile import get_profile
@@ -626,9 +627,9 @@ class ScheduleGrid(QTableWidget):
     def _day_header_tooltip(self, day):
         hours = self.shop_config.get_open_hours_for_day(day)
         if hours:
-            hours_text = f"Godziny pracy sklepu: {hours[0]}–{hours[1]}"
+            hours_text = f"Godziny pracy: {hours[0]}–{hours[1]}"
         else:
-            hours_text = "Sklep nieczynny tego dnia"
+            hours_text = "Nieczynne tego dnia"
 
         override_text = ""
         if day in self.shop_config.day_overrides:
@@ -817,6 +818,19 @@ class ScheduleGrid(QTableWidget):
             item.setTextAlignment(Qt.AlignCenter)
             item.setBackground(QBrush(QColor(theme.BG_PANEL)))
             self.setItem(row, idx, item)
+
+        # Kolumna "Praca" (pierwsza z items) - podświetlenie przekroczenia
+        # miesięcznego limitu pełnego etatu, dokładnie tego samego, którego
+        # pilnuje generator (logic/monthly_hours_status.py).
+        hours_status = monthly_hours_status(self.schedule, self.shop_config, emp)
+        if hours_status["is_over"]:
+            work_item = items[0]
+            work_item.setBackground(QBrush(QColor(theme.ERR_RED)))
+            over_h = hours_status["over_minutes"] // 60
+            over_m = hours_status["over_minutes"] % 60
+            work_item.setToolTip(
+                f"Przekroczony miesięczny limit godzin pełnego etatu o {over_h}:{over_m:02d}."
+            )
 
         if self.settlement_mode:
             target_minutes = self.schedule.get_settlement_target(emp)

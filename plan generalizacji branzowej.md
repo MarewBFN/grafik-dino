@@ -7,9 +7,13 @@ pushem (poprawka message'a jednego commita, patrz sekcja "Drobne"
 niżej) — więc to przepisanie już nie jest bezpieczne do powtórzenia
 (branch jest teraz publiczny/współdzielony na `origin`, kolejny rebase
 wymagałby force-push i koordynacji z każdym, kto go już pobrał). Stan na
-dziś: `pytest tests/` → 85 passed, 1 pre-existing fail niezwiązany z tą
-pracą (`test_default_shop_config_uses_soft_staff_and_availability_policies`,
-istniał już na `main`).
+2026-09-15 (po ściągnięciu commitów `3cb675b..4ddae25` zrobionych na
+innym urządzeniu, patrz sekcja 9 niżej): `pytest tests/` → 172 passed,
+0 fail. Stary pre-existing fail
+(`test_default_shop_config_uses_soft_staff_and_availability_policies`)
+usunięty w Etapie B sekcji 9 — sprawdzał domyślne polityki open/close
+jako PREFERRED, a te świadomie stały się MANDATORY jeszcze przed tą
+sesją, bez aktualizacji testu; commit usuwający go opisuje to wprost.
 
 Powód całej tej pracy: klient z firmy ochroniarskiej chce kupić lokalną
 wersję Dingo, skonfigurowaną pod swoją działalność. Docelowo appka ma iść
@@ -189,6 +193,59 @@ kluczy licencji, appka go nie importuje):
   jest utracony, ale żadna komenda uruchomiona w tej sesji go nie
   dotyczyła. Nieprzywrócony - do wyjaśnienia z Tobą.
 
+### 9. Zmiana nocna / 24-7 (commity `67f6452`…`0e20055`, zrobione na innym urządzeniu 2026-09-14/15, wciągnięte do lokalnego brancha przez `git merge --ff-only` 2026-09-15)
+
+Zrealizowane wg osobnego planu `plan zmiany nocne (24-7).md` (commit
+`9c6fa1e`), etapy A→G, każdy osobnym commitem/PR-em na branchu
+`claude/night-shift-generator-support-ex6pqc`, scalonym do
+`feature/business-profiles` przez PR #1–#4 na GitHubie:
+
+- **Etap A** (`67f6452`) — `model/day_schedule.py`: `end <= start`
+  rozumiane jako "koniec następnego dnia" zamiast rzucania wyjątku
+  (`set_hours`/`total_duration`/`total_minutes`). Zero zmiany dla
+  istniejących zmian Dino (`end > start` zawsze).
+- **Etap B** (`054c26f`) — `night_shift: {"start", "end"} | None` na
+  `LocationConfig` i `ShopConfig` (`model/location.py::normalize_night_shift`,
+  wspólna walidacja), UI w zakładce "Lokalizacje". Samo
+  przechowywanie/edycja, generator jeszcze go nie czyta. Przy okazji
+  usunięty jedyny pre-existing fail (patrz wyżej) — sprawdzał nieaktualną
+  domyślną politykę open/close.
+- **Etap C** (`955bb07`) — `logic/generator/night_shift_constraint.py`:
+  nowy `SHIFT_NIGHT` jako prawdziwa zmienna CP-SAT, wpięty w okna
+  odpoczynku 11h (nie tylko `no_night`, który dalej tylko *zakazuje*
+  dotykania nocy, nie tworzy zmiany) i w brak nakładania się z dniem D+1.
+- **Etap D** (`e28fee4`) — ręczna edycja/blokowanie zmiany nocnej w
+  `ui/day_edit_dialog.py`, poprawne rozpoznawanie przy `is_fix=True`
+  w `logic/generator/manual_constraint.py`/`fix.py`.
+- **Etap E** (`56f4c5a`) — `export/excel_exporter.py`/`image_exporter.py`
+  renderują `22:00 → 06:00` czytelnie; `logic/settlement_balancer.py`
+  liczy zmianę nocną raz, do dnia D (zgodnie z art. 128 §3 pkt 1 KP —
+  cała doba pracownicza należy do dnia rozpoczęcia).
+- **Etap F** (`6150cf7`) — zamiast sztywnego nowego profilu "ochrona":
+  nowy typ reguły w kreatorze custom profili,
+  `logic/generator/generic_rules.py` + `model/custom_profile.py` +
+  `ui/profile_wizard_dialog.py`, liczący obsadę `SHIFT_NIGHT` — więc
+  **dowolny** przyszły profil custom (nie tylko ochrona) może z tego
+  skorzystać bez nowego, zahardkodowanego pliku profilu.
+- **Etap G** (`3fbe186`) — scenariusze/stress w `tests/run_scenarios.py`,
+  `tests/stress_test_generator.py`, nowy plik testowy per etap
+  (`test_overnight_shift.py`, `test_night_shift_constraint.py`,
+  `test_night_shift_manual_editing.py`,
+  `test_night_shift_export_and_diagnostics.py`,
+  `test_night_shift_coverage_rule.py`, `test_night_shift_stress.py`).
+- Trzy poprawki po fakcie (PR #2/#3, `3b162af`/`3c10759`/`0e20055`):
+  `no_night` blokował ręcznie ustawiony `SHIFT_NIGHT` bezwarunkowo (nawet
+  gdy okno realnie nie dotykało nocy) i `build_role_time_restriction` nie
+  obejmował w ogóle `SHIFT_NIGHT` — oba naprawione.
+- Constrainty specyficzne dla Dino (`meat`, `no_night`, `no_afternoon`,
+  `open`/`close`) nietknięte — `SHIFT_NIGHT` istnieje tylko tam, gdzie
+  lokalizacja/projekt go skonfiguruje, więc `dino_retail` zachowuje się
+  identycznie.
+- **Nadal odłożone** (patrz sekcja niżej): sam profil "ochrona" jako
+  gotowy, wbudowany `BusinessProfile` — infrastruktura (Etapy A–G) jest
+  gotowa, ale konkretne role/godziny/reguły klienta wciąż nieznane.
+- `pytest tests/` → 172 passed, 0 fail.
+
 ---
 
 ## Co zostało do zrobienia
@@ -204,11 +261,6 @@ kluczy licencji, appka go nie importuje):
 
 ### Odłożone jako głęboka przebudowa (podobny kaliber ryzyka co lokalizacje)
 
-- **Prawdziwy model zmian 24/7** — dziś zmiany liczone są w obrębie
-  jednego dnia kalendarzowego (`datetime` bez śledzenia daty), zero
-  miejsc dodaje dzień przy przekroczeniu północy. Rzeczywista zmiana
-  nocna 22:00–06:00 nie jest wspierana; obejście: godziny placówki
-  ustawione na prawie całą dobę (np. 00:00–23:45).
 - **Dni handlowe per lokalizacja** — `LocationConfig.trade_sundays`/
   `public_holidays` istnieją w modelu (od pierwszej fazy lokalizacji),
   ale generator ich nie czyta. `trade_days` to dziś jedna, globalna lista
@@ -264,5 +316,5 @@ kluczy licencji, appka go nie importuje):
 ## Jak z tego korzystać
 
 Ten plik to zrzut stanu na dziś (branch `feature/business-profiles`,
-commit `ab89225`) — aktualizuj go albo poproś o świeże podsumowanie, gdy
+commit `4ddae25`) — aktualizuj go albo poproś o świeże podsumowanie, gdy
 zrobimy kolejny krok, bo inaczej szybko się zdezaktualizuje.

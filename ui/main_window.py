@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QDialog,
+    QInputDialog,
 )
 
 from export.excel_exporter import export_schedule_to_excel
@@ -115,7 +116,9 @@ class MainWindow(QMainWindow):
         if saved_key and validate_license(self.user_id, saved_key):
             self.demo.is_demo = False
 
-        self.setWindowTitle("Grafik Dino v2")
+        # Branch demonstracyjne (client-demo/enyo-ochrona) celowo nie
+        # pokazuje marki "Dino" w tytule okna - patrz CLIENT_DEMO_README.md.
+        self.setWindowTitle("Grafik pracy")
         self.user_id = get_user_id()
         today = date.today()
         self.year = today.year
@@ -541,6 +544,9 @@ class MainWindow(QMainWindow):
         export_menu = QMenu("Eksport", self)
         export_menu.addAction("Excel", self._export_excel)
         export_menu.addAction("JPG", self._export_image)
+        export_menu.addSeparator()
+        export_menu.addAction("Excel (jeden pracownik)...", self._export_excel_single_employee)
+        export_menu.addAction("JPG (jeden pracownik)...", self._export_image_single_employee)
         file_menu.addMenu(export_menu)
 
         file_menu.addSeparator()
@@ -644,7 +650,7 @@ class MainWindow(QMainWindow):
 
     def _update_window_title(self):
         name = self.shop_config.name if self.shop_config else ""
-        prefix = f"Grafik Dino — {name}" if name else "Grafik Dino"
+        prefix = f"Grafik pracy — {name}" if name else "Grafik pracy"
         self.setWindowTitle(f"{prefix} — {self.month:02d}.{self.year}")
 
     def _update_nominal_hours_label(self):
@@ -1058,7 +1064,7 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        export_schedule_to_excel(self.schedule, self.year, self.month, path)
+        export_schedule_to_excel(self.schedule, self.year, self.month, path, shop=self.shop_config)
         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500)
 
     def _export_image(self):
@@ -1071,8 +1077,47 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith(".jpg"):
             path += ".jpg"
 
-        export_schedule_to_image(self.schedule, self.year, self.month, path)
+        export_schedule_to_image(self.schedule, self.year, self.month, path, shop=self.shop_config)
         self.statusBar().showMessage("Wyeksportowano do JPG.", 2500)
+
+    def _pick_single_employee(self, title):
+        if not self.schedule or not self.schedule.employees:
+            QMessageBox.warning(self, title, "Brak pracowników w projekcie.")
+            return None
+        names = [emp.display_name() for emp in self.schedule.employees]
+        name, ok = QInputDialog.getItem(self, title, "Pracownik:", names, editable=False)
+        if not ok:
+            return None
+        return self.schedule.employees[names.index(name)]
+
+    def _export_excel_single_employee(self):
+        if self.demo.block_export(self):
+            return
+        emp = self._pick_single_employee("Eksport Excel — pracownik")
+        if emp is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Eksport Excel", "", "Excel (*.xlsx)")
+        if not path:
+            return
+
+        export_schedule_to_excel(self.schedule, self.year, self.month, path, shop=self.shop_config, employees=[emp])
+        self.statusBar().showMessage(f"Wyeksportowano grafik {emp.display_name()} do Excela.", 2500)
+
+    def _export_image_single_employee(self):
+        if self.demo.block_export(self):
+            return
+        emp = self._pick_single_employee("Eksport JPG — pracownik")
+        if emp is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Eksport JPG", "", "Obraz JPG (*.jpg)")
+        if not path:
+            return
+
+        if not path.lower().endswith(".jpg"):
+            path += ".jpg"
+
+        export_schedule_to_image(self.schedule, self.year, self.month, path, shop=self.shop_config, employees=[emp])
+        self.statusBar().showMessage(f"Wyeksportowano grafik {emp.display_name()} do JPG.", 2500)
 
     def _update_generate_label(self):
         remaining = self.demo.get_remaining_generations()
@@ -1100,7 +1145,7 @@ class MainWindow(QMainWindow):
             temp_path = temp_file.name
             temp_file.close()
 
-            export_schedule_to_image(self.schedule, self.year, self.month, temp_path)
+            export_schedule_to_image(self.schedule, self.year, self.month, temp_path, shop=self.shop_config)
 
             # 2. printer
             printer = QPrinter(QPrinter.HighResolution)
@@ -1345,13 +1390,13 @@ class MainWindow(QMainWindow):
         return [
             TutorialStep(
                 "Witaj w Dingo!",
-                "Program służy do tworzenia grafików pracy dla sklepów.\n"
+                "Program służy do tworzenia grafików pracy.\n"
                 "Możesz generować grafik automatycznie albo układać go ręcznie.",
             ),
             TutorialStep(
                 "Dodaj pracowników",
                 "Tutaj dodajesz pracowników i ustawiasz ich dane: wymiar etatu, "
-                "godziny dzienne oraz role (np. otwarcie, obsługa mięsa).",
+                "godziny dzienne oraz role.",
                 target=self.btn_add_employee,
             ),
             TutorialStep(

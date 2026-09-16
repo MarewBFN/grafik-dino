@@ -4,6 +4,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
+from logic.monthly_hours_status import monthly_hours_status
+
+_OVERTIME_FONT = Font(bold=True, color="FFCC0000")
+
 def _format_hour(time_str):
     if not time_str:
         return ""
@@ -11,10 +15,16 @@ def _format_hour(time_str):
         return str(int(str(time_str).split(":")[0]))
     return str(time_str)
 
-def export_schedule_to_excel(schedule, year, month, path):
+def export_schedule_to_excel(schedule, year, month, path, shop=None, employees=None):
+    """`shop` - opcjonalny ShopConfig, wyłącznie do podświetlenia przekroczenia
+    miesięcznego limitu godzin pełnego etatu na czerwono (brak = brak
+    podświetlenia, zachowanie sprzed tej funkcji). `employees` - opcjonalna
+    lista zamiast schedule.employees, do wydruku pojedynczego pracownika."""
     wb = Workbook()
     ws = wb.active
     ws.title = "Grafik"
+
+    employees = employees if employees is not None else schedule.employees
 
     days_in_month = calendar.monthrange(year, month)[1]
     weekdays = ["Pn", "Wt", "Śr", "Cz", "Pt", "S", "N"]
@@ -68,7 +78,7 @@ def export_schedule_to_excel(schedule, year, month, path):
 
     # DANE PRACOWNIKÓW
     cur_row = 6
-    for emp in schedule.employees:
+    for emp in employees:
         # Scalone nazwisko
         ws.merge_cells(start_row=cur_row, start_column=1, end_row=cur_row+2, end_column=1)
         name_cell = ws.cell(row=cur_row, column=1, value=emp.display_name())
@@ -118,7 +128,10 @@ def export_schedule_to_excel(schedule, year, month, path):
         for i, val in enumerate(values):
             col = sum_col_start + i
             ws.merge_cells(start_row=cur_row, start_column=col, end_row=cur_row+2, end_column=col)
-            ws.cell(row=cur_row, column=col, value=val).alignment = align_center
+            cell = ws.cell(row=cur_row, column=col, value=val)
+            cell.alignment = align_center
+            if i == 0 and shop is not None and monthly_hours_status(schedule, shop, emp)["is_over"]:
+                cell.font = _OVERTIME_FONT
 
         cur_row += 3
 

@@ -153,7 +153,7 @@ class FirstRunWizardDialog(QDialog):
 
         form = QFormLayout()
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("np. Dino Nowa Sól")
+        self.name_edit.setPlaceholderText("np. Moja Firma")
         form.addRow("Nazwa placówki:", self.name_edit)
 
         self.year_spin = QSpinBox()

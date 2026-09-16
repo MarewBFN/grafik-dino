@@ -179,14 +179,14 @@ class ConfigDialog(QDialog):
     def _build_ui(self):
         root = QVBoxLayout(self)
 
-        title = QLabel("Konfiguracja sklepu")
+        title = QLabel("Konfiguracja obiektu")
         title.setObjectName("sectionLabel")
         root.addWidget(title)
 
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel("Nazwa placówki:"))
         self.name_edit = QLineEdit(self.shop_config.name)
-        self.name_edit.setPlaceholderText("np. Dino Nowa Sól")
+        self.name_edit.setPlaceholderText("np. Moja Firma")
         name_row.addWidget(self.name_edit, 1)
         root.addLayout(name_row)
 
@@ -728,7 +728,7 @@ class ConfigDialog(QDialog):
             "Standardowy: dokładne godziny zmian.\n"
             "Uproszczony: tylko klasa zmiany (rano/popołudnie) — po zmianie "
             "popołudniowej następny dzień może być tylko popołudniowy albo wolny. "
-            "Szybszy na słabszym sprzęcie; sensowny tylko dla sklepów z dokładnie "
+            "Szybszy na słabszym sprzęcie; sensowny tylko dla obiektów z dokładnie "
             "dwoma typami zmian."
         )
         policy_grid.addWidget(QLabel("Tryb liczenia odpoczynku 11h:"), rest_row, rest_column)
@@ -752,13 +752,13 @@ class ConfigDialog(QDialog):
     def _build_tutorial_steps(self):
         return [
             TutorialStep(
-                "Konfiguracja sklepu",
+                "Konfiguracja obiektu",
                 "Tutaj ustawiasz zasady, według których generator układa grafik: "
                 "godziny otwarcia, niedziele handlowe, limity i zasady generatora.",
             ),
             TutorialStep(
                 "Godziny otwarcia",
-                "Ustaw godziny pracy sklepu osobno dla każdego dnia tygodnia.",
+                "Ustaw godziny pracy obiektu osobno dla każdego dnia tygodnia.",
                 target=self.tabs,
                 on_show=lambda: self.tabs.setCurrentIndex(0),
             ),
@@ -772,7 +772,7 @@ class ConfigDialog(QDialog):
             TutorialStep(
                 "Limity",
                 "Maksymalna liczba dni z rzędu oraz minimalna liczba pracowników "
-                "na otwarciu i zamknięciu sklepu.",
+                "na otwarciu i zamknięciu.",
                 target=self.tabs,
                 on_show=lambda: self.tabs.setCurrentIndex(2),
             ),
