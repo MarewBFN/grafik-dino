@@ -627,9 +627,9 @@ class ScheduleGrid(QTableWidget):
     def _day_header_tooltip(self, day):
         hours = self.shop_config.get_open_hours_for_day(day)
         if hours:
-            hours_text = f"Godziny pracy sklepu: {hours[0]}–{hours[1]}"
+            hours_text = f"Godziny pracy: {hours[0]}–{hours[1]}"
         else:
-            hours_text = "Sklep nieczynny tego dnia"
+            hours_text = "Nieczynne tego dnia"
 
         override_text = ""
         if day in self.shop_config.day_overrides:

@@ -214,7 +214,7 @@ class DayEditDialog(QDialog):
             return
 
         if start_qt < self._open_start_qt or end_qt > self._open_end_qt:
-            QMessageBox.critical(self, "Błąd", "Godziny muszą mieścić się w czasie otwarcia sklepu.")
+            QMessageBox.critical(self, "Błąd", "Godziny muszą mieścić się w godzinach pracy obiektu.")
             return
 
         self.result_mode = "hours"

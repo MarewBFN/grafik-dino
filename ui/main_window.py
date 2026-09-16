@@ -116,7 +116,9 @@ class MainWindow(QMainWindow):
         if saved_key and validate_license(self.user_id, saved_key):
             self.demo.is_demo = False
 
-        self.setWindowTitle("Grafik Dino v2")
+        # Branch demonstracyjne (client-demo/enyo-ochrona) celowo nie
+        # pokazuje marki "Dino" w tytule okna - patrz CLIENT_DEMO_README.md.
+        self.setWindowTitle("Grafik pracy")
         self.user_id = get_user_id()
         today = date.today()
         self.year = today.year
@@ -648,7 +650,7 @@ class MainWindow(QMainWindow):
 
     def _update_window_title(self):
         name = self.shop_config.name if self.shop_config else ""
-        prefix = f"Grafik Dino — {name}" if name else "Grafik Dino"
+        prefix = f"Grafik pracy — {name}" if name else "Grafik pracy"
         self.setWindowTitle(f"{prefix} — {self.month:02d}.{self.year}")
 
     def _update_nominal_hours_label(self):
@@ -1388,13 +1390,13 @@ class MainWindow(QMainWindow):
         return [
             TutorialStep(
                 "Witaj w Dingo!",
-                "Program służy do tworzenia grafików pracy dla sklepów.\n"
+                "Program służy do tworzenia grafików pracy.\n"
                 "Możesz generować grafik automatycznie albo układać go ręcznie.",
             ),
             TutorialStep(
                 "Dodaj pracowników",
                 "Tutaj dodajesz pracowników i ustawiasz ich dane: wymiar etatu, "
-                "godziny dzienne oraz role (np. otwarcie, obsługa mięsa).",
+                "godziny dzienne oraz role.",
                 target=self.btn_add_employee,
             ),
             TutorialStep(
