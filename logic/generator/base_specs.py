@@ -34,6 +34,7 @@ from logic.generator.duty_rotation_constraint import (
     add_duty_rotation_no24h_gate_constraint,
     add_duty_rotation_coverage_constraint,
 )
+from logic.generator.duty_rotation_rest_constraint import add_duty_rotation_rest_constraint
 
 
 GENERIC_WEIGHTS = {
@@ -158,6 +159,15 @@ def _build_rest_11h(ctx, soft):
         violations = list(violations) + add_night_shift_adjacency_constraint(
             ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.shift_night,
             ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
+            soft=soft, trace=ctx.trace,
+        )
+
+    # Rotacja służby 24/7 (Etap C "plan profil ochrona") - ten sam wzorzec:
+    # add_rest_11h_constraint nie buduje okien dla tych pięciu zmian w
+    # ogóle, więc to dokłada się obok, nie modyfikuje istniejącej logiki.
+    if ctx.duty_shifts is not None:
+        violations = list(violations) + add_duty_rotation_rest_constraint(
+            ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.duty_shifts,
             soft=soft, trace=ctx.trace,
         )
 

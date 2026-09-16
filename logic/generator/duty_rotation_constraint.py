@@ -57,9 +57,10 @@ def duty_rotation_minutes_for_employee(shop, employee, duty_shifts) -> dict:
     return minutes
 
 
-def _group_employees_with_duty_rotation(employees, shop):
+def _group_employees_with_duty_rotation(employees, shop) -> dict:
     """{location_key: (duty_rotation_dict, [employee_indices])} - tylko dla
-    pracowników, których lokalizacja faktycznie ma skonfigurowaną rotację."""
+    pracowników, których lokalizacja faktycznie ma skonfigurowaną rotację.
+    Reużywane przez duty_rotation_rest_constraint.py (Etap C)."""
     groups: dict[str, tuple[dict, list[int]]] = {}
     for e, emp in enumerate(employees):
         rotation = shop.get_location(emp).get_duty_rotation()
