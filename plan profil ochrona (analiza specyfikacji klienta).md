@@ -454,5 +454,105 @@ ujęte — czeka na odpowiedzi z sekcji 8.
 
 Punkty 5-6 warto zrobić po ustaleniu pytania 7/8 z sekcji 8 (żeby nie
 przerabiać koloru/układu wydruku dwa razy), ale są **niezależne
-technicznie** od pytań blokujących w sekcji 8 (1-4) — mogą ruszyć od
-razu, gdy potwierdzisz kierunek.
+technicznie** od pytań blokujących w sekcji 8 (1-4) — mogły ruszyć od
+razu (i faktycznie ruszyły — patrz commity `e5dce9b`..`f512d17` na
+`client-demo/enyo-ochrona`).
+
+---
+
+## 10. Ustalenia klienta (2026-09-16, cd.) — odpowiedzi na blokujące pytania z sekcji 8
+
+Klient odpowiedział wprost na pytania blokujące 1-4 z sekcji 8, plus
+dodał nowe wymagania spoza pierwotnej specyfikacji. Poniżej — co się
+przez to rozstrzygnęło, i co mimo to nadal wymaga decyzji przed
+ruszeniem z kodem generatora (sekcja 7 pozostaje w mocy jako ocena
+skali, ta sekcja tylko aktualizuje stan wiedzy).
+
+### Rozstrzygnięte
+
+1. **Kształt pokrycia doby (pytania 1-2 z sekcji 8):** potwierdzone
+   wprost — **dokładnie jedna osoba na zmianie na placówkę jednocześnie**,
+   zmiany **nie zazębiają się** (koniec jednej = początek następnej, bez
+   przerwy i bez nakładania), **zawsze pełne pokrycie 24/7** (żadnych
+   dziur, nigdy "obiekt bez ochrony"). To dokładnie scenariusz opisany w
+   sekcji 7 tego planu jako "inny kształt problemu niż obsada
+   wielo-osobowa" — teraz potwierdzony, nie tylko podejrzewany.
+2. **Opt-out z 24h w weekendy (pytanie 4 z sekcji 8, częściowo):**
+   potwierdzone — część pracowników ma zamiast 24h w weekend robić 12h,
+   **musimy to uszanować** (klient użył słowa "musimy" — MANDATORY, nie
+   PREFERRED). Kto pokrywa drugie 12h takiego dnia — patrz pytania niżej,
+   nierozstrzygnięte.
+3. **Umowa vs brak umowy:** potwierdzone, że część pracowników nie ma
+   umowy o pracę — to uzasadnia flagę `umowa` dodaną w commicie
+   `f512d17` na `client-demo/enyo-ochrona` (zwykły checkbox bez efektu w
+   generatorze). Klient **nie powiedział jeszcze**, jaki konkretnie
+   wpływ na reguły ma brak umowy — patrz pytania niżej.
+4. **Balans / nominalny czas pracy — WYŁĄCZONE, nie tylko miękkie:**
+   nowa, jednoznaczna decyzja: **nie stosujemy w ogóle** constraintów
+   `balance` i `monthly_hours` (dziś `base_specs.py`, wspólne dla
+   każdego profilu custom, w tym demo "Ochrona") dla tego klienta. Cel
+   generatora to wyłącznie pełne pokrycie miesiąca — nadgodziny (nawet
+   rzędu kilkudziesięciu godzin/miesiąc na osobę) są oczekiwane i
+   akceptowane, nie karane ani nie wygładzane. To **upraszcza** jeden
+   wymiar problemu (brak potrzeby ważenia spread/balance penalty w
+   `objective.py`), nawet jeśli inny wymiar (pokrycie 24/7 jedną osobą,
+   zmiennej długości zmiany) jest istotnie trudniejszy niż cokolwiek w
+   dzisiejszym generatorze.
+5. **Podświetlanie nadgodzin — doprecyzowane:** zamiast (albo obok)
+   czerwonego tła istniejącej kolumny "Praca" (`ui/grid_view.py`,
+   wdrożone w commicie `4092e68`), klient chce **osobną kolumnę
+   podsumowującą z liczbą nadgodzin**, obok kolumny "Razem". Drobne
+   rozszerzenie już zbudowanej `logic/monthly_hours_status.py` (ma już
+   `over_minutes`) + nowa kolumna w `ui/grid_view.py`/obu eksporterach -
+   nie wymaga zmian w generatorze, tylko w warstwie prezentacji.
+6. **Wiele placówek z osobną listą pracowników, przełączanych z menu:**
+   nowe wymaganie spoza pierwotnej specyfikacji klienta z pierwszej tury.
+   Dzisiejszy `LocationConfig`/`ShopConfig.locations` (Etap 3a-3d planu
+   lokalizacji) to lokalizacje **w ramach jednego projektu**, ze
+   **wspólną listą pracowników** (pracownik ma `location_key`, ale
+   wszyscy pracownicy żyją w jednym `MonthSchedule`) i wspólnym profilem
+   biznesowym. Klient chce placówek z **osobną listą pracowników** i
+   **niecodziennie takimi samymi zasadami** — to nie pasuje 1:1 do
+   dzisiejszego mechanizmu bez rozbudowy. Patrz pytanie 2 niżej — dwie
+   różne drogi o bardzo różnym koszcie.
+
+### Nadal otwarte — bez tego nie da się bezpiecznie ruszyć z rdzeniem generatora
+
+1. **Dokładny wzór odpoczynku po zmianie 24h zależnego od liczby osób.**
+   "Nie mniej niż 24h" to tylko dolna granica. Bez wzoru/tabeli
+   (np. klasyczny system "doba za dobę": przy N osobach na rotacji
+   odpoczynek = (N-1)×24h, czyli 3 osoby → 24h pracy/48h odpoczynku,
+   4 osoby → 24h/72h) nie da się zakodować `rest_constraint` dla zmiany
+   24h - a to jest **prawny, nie tylko produktowy** parametr (odpoczynek
+   po dyżurze), więc zgadywanie go jest ryzykowne.
+2. **Architektura "wielu placówek z osobną listą pracowników":** czy to
+   ma być (A) **osobne pliki projektu** per placówka + nowe menu
+   "Placówki" jako wygodne przełączanie między nimi (mały, bezpieczny
+   zakres — każda placówka to dziś już w pełni wspierany, niezależny
+   projekt/plik, nic nowego w modelu danych) czy (B) **rozszerzenie
+   dzisiejszego `LocationConfig`** o własną listę pracowników w ramach
+   JEDNEGO pliku projektu (duża przebudowa — dziś `MonthSchedule.employees`
+   jest globalna dla całego projektu, nie per lokalizacja).
+3. **Kto pokrywa drugie 12h dnia, gdy dana osoba robi tylko 12h zamiast
+   24h w weekend?** Czy to zawsze inny, konkretny pracownik (para na
+   dany weekend), czy generator ma to dobierać dowolnie z dostępnych?
+   Wpływa na to, czy weekendowy "slot" ma zmienną granulację (raz 1 blok
+   24h, raz 2 bloki 12h) zależną od tego, kto akurat go obsługuje.
+4. **Realny wpływ braku umowy o pracę na reguły generatora** - inny
+   limit/brak limitu godzin? Zwolnienie z regulacji odpoczynku (kodeks
+   pracy dotyczy umowy o pracę, nie każdej formy współpracy)? Dziś to
+   tylko checkbox bez znaczenia (`umowa` w profilu demo) - do
+   sprecyzowania, zanim zacznie znaczyć cokolwiek w generatorze.
+5. **Model reprezentacji zmiany w CP-SAT:** czy zamknięty katalog
+   długości (24h / 16h / 12h / 8h jako nowe stałe typy zmian, podobnie do
+   dzisiejszego `SHIFT_NIGHT`) wystarczy, czy potrzebna w pełni
+   elastyczna godzina startu/końca (interval variables) - zależy wprost
+   od odpowiedzi na pytanie 3 wyżej i od tego, czy weekday nadal ma być
+   sztywne 16h (oryginalna specyfikacja klienta z pierwszej tury) czy to
+   też się zmieniło.
+
+Punkty A→G z "plan zmiany nocne (24-7).md" (SHIFT_NIGHT, jeden sztywny
+blok na lokalizację) **nie są tu wystarczające** - to inny, prostszy
+przypadek (patrz sekcja 7 wyżej) niż wielo-długościowa rotacja jedno-
+osobowa z zależnym od obsady odpoczynkiem. Realnie to osobny,
+porównywalny kalibrem etap pracy, nie rozszerzenie istniejącego.
