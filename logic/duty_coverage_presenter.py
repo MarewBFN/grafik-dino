@@ -39,7 +39,7 @@ def is_day_fully_covered(schedule, shop, employees, day: int) -> bool:
         assigned = [schedule.get_day(employees[e], day) for e in indices]
         assigned = [ds for ds in assigned if not ds.is_empty()]
 
-        if wd < 5:
+        if wd < 5 and not rotation.get("only_12_24h"):
             long_ok = any(_matches_window(ds, rotation["weekday_long"]) for ds in assigned)
             short_ok = any(_matches_window(ds, rotation["weekday_short"]) for ds in assigned)
             if not (long_ok and short_ok):

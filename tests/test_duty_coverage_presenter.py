@@ -24,10 +24,18 @@ MONDAY = 3
 SATURDAY = 1
 
 
-def _shop_with_rotation():
+ROTATION_ONLY_12_24H = {
+    "only_12_24h": True,
+    "weekend_full": {"start": "06:00"},
+    "weekend_half_a": {"start": "06:00", "end": "18:00"},
+    "weekend_half_b": {"start": "18:00", "end": "06:00"},
+}
+
+
+def _shop_with_rotation(rotation=ROTATION):
     shop = ShopConfig(2026, 8)
     loc = LocationConfig(key="site1", name="Site 1")
-    loc.set_duty_rotation(ROTATION)
+    loc.set_duty_rotation(rotation)
     shop.locations["site1"] = loc
     return shop
 
@@ -110,3 +118,35 @@ def test_empty_day_is_not_covered():
 
     assert is_day_fully_covered(schedule, shop, [emp], MONDAY) is False
     assert is_day_fully_covered(schedule, shop, [emp], SATURDAY) is False
+
+
+def test_only_12_24h_weekday_covered_by_a_single_24h_shift():
+    shop = _shop_with_rotation(rotation=ROTATION_ONLY_12_24H)
+    emp = Employee(last_name="A", first_name="A", location_key="site1")
+    schedule = _schedule_with(shop, emp)
+    schedule.get_day(emp, MONDAY).set_full_day_shift("06:00")
+
+    assert is_day_fully_covered(schedule, shop, [emp], MONDAY) is True
+
+
+def test_only_12_24h_weekday_covered_by_both_halves():
+    shop = _shop_with_rotation(rotation=ROTATION_ONLY_12_24H)
+    half_a_emp = Employee(last_name="A", first_name="A", location_key="site1")
+    half_b_emp = Employee(last_name="B", first_name="B", location_key="site1")
+    schedule = _schedule_with(shop, half_a_emp, half_b_emp)
+    schedule.get_day(half_a_emp, MONDAY).set_hours("06:00", "18:00")
+    schedule.get_day(half_b_emp, MONDAY).set_hours("18:00", "06:00")
+
+    assert is_day_fully_covered(schedule, shop, [half_a_emp, half_b_emp], MONDAY) is True
+
+
+def test_only_12_24h_weekday_not_covered_by_a_16h_shift():
+    """Gdyby ktoś ręcznie ustawił 06:00-22:00 (stary wzorzec weekday_long)
+    na lokalizacji z only_12_24h, to i tak nie liczy się jako pokrycie -
+    ten typ zmiany nie należy już do repertuaru tej lokalizacji."""
+    shop = _shop_with_rotation(rotation=ROTATION_ONLY_12_24H)
+    emp = Employee(last_name="A", first_name="A", location_key="site1")
+    schedule = _schedule_with(shop, emp)
+    schedule.get_day(emp, MONDAY).set_hours("06:00", "22:00")
+
+    assert is_day_fully_covered(schedule, shop, [emp], MONDAY) is False

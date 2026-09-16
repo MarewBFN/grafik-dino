@@ -17,6 +17,7 @@ VALID_ROTATION = {
     "weekend_full": {"start": "06:00"},
     "weekend_half_a": {"start": "06:00", "end": "18:00"},
     "weekend_half_b": {"start": "18:00", "end": "06:00"},
+    "only_12_24h": False,
 }
 
 
@@ -38,8 +39,40 @@ def test_normalize_duty_rotation_drops_extra_keys_on_weekend_full():
     assert normalize_duty_rotation(raw)["weekend_full"] == {"start": "06:00"}
 
 
+def test_normalize_duty_rotation_only_12_24h_does_not_require_weekday_windows():
+    raw = {
+        "only_12_24h": True,
+        "weekend_full": {"start": "06:00"},
+        "weekend_half_a": {"start": "06:00", "end": "18:00"},
+        "weekend_half_b": {"start": "18:00", "end": "06:00"},
+    }
+    result = normalize_duty_rotation(raw)
+    assert result["only_12_24h"] is True
+    assert "weekday_long" not in result
+    assert "weekday_short" not in result
+
+
+def test_normalize_duty_rotation_only_12_24h_still_requires_weekend_windows():
+    raw = {"only_12_24h": True, "weekend_full": {"start": "06:00"}}
+    with pytest.raises(ValueError):
+        normalize_duty_rotation(raw)
+
+
+def test_normalize_duty_rotation_only_12_24h_preserves_weekday_windows_if_present():
+    """Jeśli ktoś i tak poda weekday_long/short razem z only_12_24h=True, są
+    zachowane (nieużywane w tym trybie, ale nie zgubione) - inaczej toggle
+    "Używaj tylko zmian 12/24h" nie dałoby się bezpiecznie przełączyć z
+    powrotem na False bez osobnego UI do ponownego wpisania tych godzin."""
+    raw = dict(VALID_ROTATION)
+    raw["only_12_24h"] = True
+    result = normalize_duty_rotation(raw)
+    assert result["weekday_long"] == VALID_ROTATION["weekday_long"]
+    assert result["weekday_short"] == VALID_ROTATION["weekday_short"]
+
+
 def test_normalize_duty_rotation_requires_all_five_windows():
-    for missing_key in VALID_ROTATION:
+    required_keys = [k for k in VALID_ROTATION if k != "only_12_24h"]
+    for missing_key in required_keys:
         raw = {k: v for k, v in VALID_ROTATION.items() if k != missing_key}
         with pytest.raises(ValueError):
             normalize_duty_rotation(raw)

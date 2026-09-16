@@ -23,7 +23,10 @@ Trzy constrainty:
   weekday_long/weekday_short każdego dnia roboczego; w weekend albo
   dokładnie 1 na weekend_full, albo dokładnie po 1 na obu połówkach -
   nigdy inna kombinacja. Też przez system polityk (domyślnie MANDATORY -
-  klient: "ZAWSZE musi być pokrycie 24/7").
+  klient: "ZAWSZE musi być pokrycie 24/7"). Gdy lokalizacja ma
+  `duty_rotation["only_12_24h"]` (toggle "Używaj tylko zmian 12/24h" w
+  Konfiguracji), wariant weekendowy (24h-albo-12h+12h) obowiązuje KAŻDEGO
+  dnia tygodnia, a weekday_long/weekday_short w ogóle się nie przydzielają.
 
 Grupowanie: rotacja jest per lokalizacja (klient: multi-placówka to
 osobne pliki projektu, ale w ramach jednego pliku nadal może być kilka
@@ -51,9 +54,15 @@ def duty_rotation_minutes_for_employee(shop, employee, duty_shifts) -> dict:
     for key, shift_id in duty_shifts.items():
         if key == "weekend_full":
             minutes[shift_id] = FULL_DAY_MINUTES
-        else:
-            window = rotation[key]
-            minutes[shift_id] = night_shift_duration_minutes((window["start"], window["end"]))
+            continue
+        window = rotation.get(key)
+        if window is None:
+            # only_12_24h: weekday_long/weekday_short nie są w ogóle
+            # skonfigurowane dla tej lokalizacji - ich zmienna jest zawsze 0
+            # (patrz add_duty_rotation_gate_constraint), więc czas trwania
+            # nie ma znaczenia.
+            continue
+        minutes[shift_id] = night_shift_duration_minutes((window["start"], window["end"]))
     return minutes
 
 
@@ -91,10 +100,10 @@ def add_duty_rotation_gate_constraint(model, x, employees, days, shop, duty_shif
     weekend_ids = {duty_shifts[k] for k in _WEEKEND_KEYS}
 
     for e, emp in enumerate(employees):
-        has_rotation = bool(shop.get_location(emp).get_duty_rotation())
+        rotation = shop.get_location(emp).get_duty_rotation()
 
         for d in days:
-            if not has_rotation:
+            if not rotation:
                 for s in duty_shift_ids:
                     model.Add(x[e, d, s] == 0)
                 continue
@@ -104,7 +113,12 @@ def add_duty_rotation_gate_constraint(model, x, employees, days, shop, duty_shif
 
             # Zmiany dnia roboczego nie istnieją w weekend i odwrotnie - to
             # fakt strukturalny (kalendarzowy), nie preferencja biznesowa.
-            wrong_kind = weekend_ids if shop.weekday(d) < 5 else weekday_ids
+            # only_12_24h: weekday_long/weekday_short nie istnieją wcale,
+            # żadnego dnia tygodnia (toggle "Używaj tylko zmian 12/24h").
+            if rotation.get("only_12_24h"):
+                wrong_kind = weekday_ids
+            else:
+                wrong_kind = weekend_ids if shop.weekday(d) < 5 else weekday_ids
             for s in wrong_kind:
                 model.Add(x[e, d, s] == 0)
 
@@ -153,13 +167,14 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
         model.Add(count + under - over == target)
         violations.extend([under, over])
 
-    for location_key, (_, indices) in groups.items():
+    for location_key, (rotation, indices) in groups.items():
         max_count = max(len(indices), 1)
+        only_12_24h = rotation.get("only_12_24h", False)
 
         for d in days:
             wd = shop.weekday(d)
 
-            if wd < 5:
+            if wd < 5 and not only_12_24h:
                 _exactly(
                     sum(x[e, d, weekday_long] for e in indices), 1, max_count,
                     f"duty_weekday_long_{location_key}_d{d}",
@@ -170,9 +185,10 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
                 )
                 continue
 
-            # Weekend: albo dokładnie 1 osoba na całej dobie (weekend_full),
-            # albo dokładnie po 1 na każdej połówce - nigdy oba naraz, nigdy
-            # żaden z wariantów. use_24h koduje, który wariant wybrano.
+            # Weekend (albo KAŻDY dzień, gdy only_12_24h): albo dokładnie 1
+            # osoba na całej dobie (weekend_full), albo dokładnie po 1 na
+            # każdej połówce - nigdy oba naraz, nigdy żaden z wariantów.
+            # use_24h koduje, który wariant wybrano.
             use_24h = model.NewBoolVar(f"duty_use_24h_{location_key}_d{d}")
 
             full_count = sum(x[e, d, weekend_full] for e in indices)

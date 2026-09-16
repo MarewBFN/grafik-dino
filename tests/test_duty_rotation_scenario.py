@@ -37,6 +37,13 @@ ROTATION = {
     "weekend_half_b": {"start": "18:00", "end": "06:00"},
 }
 
+ROTATION_ONLY_12_24H = {
+    "only_12_24h": True,
+    "weekend_full": {"start": "06:00"},
+    "weekend_half_a": {"start": "06:00", "end": "18:00"},
+    "weekend_half_b": {"start": "18:00", "end": "06:00"},
+}
+
 
 def _anchor(day: int, time_str: str) -> datetime:
     t = datetime.strptime(time_str, FMT)
@@ -53,9 +60,9 @@ def _shift_end_dt(day: int, ds) -> datetime:
     return end_dt
 
 
-def _build_month(year: int, month: int, n_employees: int, no24h_count: int):
+def _build_month(year: int, month: int, n_employees: int, no24h_count: int, rotation=ROTATION):
     profile = CustomBusinessProfile(
-        key=f"custom_test_scenario_{year}_{month}",
+        key=f"custom_test_scenario_{year}_{month}_{id(rotation)}",
         display_name="Test Ochrona Scenario",
         roles=[RoleDefinition(key="nie_chce_24h", label="Nie chce 24h", show_summary_row=False)],
         rules=[],
@@ -65,7 +72,7 @@ def _build_month(year: int, month: int, n_employees: int, no24h_count: int):
     shop = ShopConfig(year, month)
     shop.business_type = profile.key
     loc = LocationConfig(key="site1", name="Site 1")
-    loc.set_duty_rotation(ROTATION)
+    loc.set_duty_rotation(rotation)
     shop.locations["site1"] = loc
     shop.constraint_policies.update(default_policies(profile))
     shop.constraint_policies["balance"] = ConstraintPolicy.DISABLED
@@ -94,6 +101,7 @@ def _verify_full_month(shop, schedule, employees):
     days = schedule.days_in_month
     rotation_capable = _rotation_capable_count(employees)
     required_full_day_rest = timedelta(hours=24 * max(rotation_capable - 1, 1))
+    only_12_24h = bool(shop.locations["site1"].get_duty_rotation().get("only_12_24h"))
 
     assignments_by_day: dict[int, list[tuple[Employee, object]]] = {}
 
@@ -106,7 +114,7 @@ def _verify_full_month(shop, schedule, employees):
         ]
         assignments_by_day[day] = assigned
 
-        if wd < 5:
+        if wd < 5 and not only_12_24h:
             assert len(assigned) == 2, f"day {day} (weekday): expected 2 people on duty, got {len(assigned)}"
             starts_ends = sorted((ds.start, ds.end) for _, ds in assigned)
             assert starts_ends == [("06:00", "22:00"), ("22:00", "06:00")], (
@@ -165,8 +173,8 @@ def _verify_full_month(shop, schedule, employees):
                     break
 
 
-def _generate_and_verify(year, month, n_employees, no24h_count):
-    shop, schedule, employees = _build_month(year, month, n_employees, no24h_count)
+def _generate_and_verify(year, month, n_employees, no24h_count, rotation=ROTATION):
+    shop, schedule, employees = _build_month(year, month, n_employees, no24h_count, rotation=rotation)
 
     with redirect_stdout(io.StringIO()):
         result = AutoScheduleGenerator(schedule, shop).generate(solver_time_limit_seconds=60)
@@ -191,3 +199,15 @@ def test_full_month_five_employees_two_no24h():
     """Większa, luźniejsza załoga z dwiema osobami niechętnymi 24h -
     sprawdza że reszta i tak swobodnie rotuje na zmianie 24h (N=3)."""
     _generate_and_verify(2026, 11, n_employees=5, no24h_count=2)
+
+
+def test_full_month_only_12_24h_three_employees():
+    """Toggle "Używaj tylko zmian 12/24h": KAŻDY dzień miesiąca (nie tylko
+    weekend) używa wariantu 24h-albo-12h+12h, nigdy weekday_long/short. N=3
+    -> 48h odpoczynku po zmianie 24h, teraz przez cały miesiąc, nie tylko
+    weekendy - najbardziej wymagający wariant tego trybu."""
+    _generate_and_verify(2026, 11, n_employees=3, no24h_count=0, rotation=ROTATION_ONLY_12_24H)
+
+
+def test_full_month_only_12_24h_four_employees_one_no24h():
+    _generate_and_verify(2026, 11, n_employees=4, no24h_count=1, rotation=ROTATION_ONLY_12_24H)

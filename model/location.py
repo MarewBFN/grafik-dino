@@ -45,12 +45,15 @@ def normalize_night_shift(start: str | None, end: str | None) -> dict | None:
     return {"start": start, "end": end}
 
 
-_DUTY_ROTATION_PAIR_KEYS = {
+_WEEKDAY_DUTY_PAIR_KEYS = {
     "weekday_long": "długiej zmiany w tygodniu",
     "weekday_short": "krótkiej zmiany w tygodniu",
+}
+_WEEKEND_DUTY_PAIR_KEYS = {
     "weekend_half_a": "pierwszej połowy doby weekendowej",
     "weekend_half_b": "drugiej połowy doby weekendowej",
 }
+_DUTY_ROTATION_PAIR_KEYS = {**_WEEKDAY_DUTY_PAIR_KEYS, **_WEEKEND_DUTY_PAIR_KEYS}
 
 
 def _normalize_duty_window(raw: dict, label: str) -> dict:
@@ -66,29 +69,40 @@ def _normalize_duty_window(raw: dict, label: str) -> dict:
 def normalize_duty_rotation(raw: dict | None) -> dict | None:
     """Walidacja opcjonalnej konfiguracji rotacji służby 24/7 tej lokalizacji
     ("plan profil ochrona (analiza specyfikacji klienta).md", sekcja 12,
-    Etap A) - pięć okien czasowych:
+    Etap A) - okna czasowe:
 
     - `weekday_long` + `weekday_short`: dwie zmiany pokrywające razem całą
       dobę w tygodniu (pon-pt), np. SHIFT_16H 06:00-22:00 + SHIFT_8H_NIGHT
-      22:00-06:00.
-    - `weekend_full`: sztywna zmiana 24h w weekend (sob-nd) - tylko godzina
-      startu, koniec z definicji 24h później (patrz
-      DaySchedule.set_full_day_shift) - "end" w tym oknie jest
-      niejednoznaczny (patrz normalize_night_shift), więc się go tu w ogóle
-      nie przyjmuje.
+      22:00-06:00. Wymagane, chyba że `only_12_24h` jest włączone (patrz
+      niżej) - wtedy te dwa typy zmian w ogóle nie są używane.
+    - `weekend_full`: sztywna zmiana 24h - tylko godzina startu, koniec z
+      definicji 24h później (patrz DaySchedule.set_full_day_shift) - "end"
+      w tym oknie jest niejednoznaczny (patrz normalize_night_shift), więc
+      się go tu w ogóle nie przyjmuje. Zawsze wymagane.
     - `weekend_half_a` + `weekend_half_b`: dwuosobowa alternatywa dla
       `weekend_full`, gdy przypisana osoba (albo obie) mają flagę "nie chce
-      24h" - też razem cała doba.
+      24h" - też razem cała doba. Zawsze wymagane.
+    - `only_12_24h` (bool, domyślnie False): gdy True, generator używa tego
+      samego przełącznika 24h-albo-12h+12h co w weekend dla KAŻDEGO dnia
+      tygodnia - `weekday_long`/`weekday_short` nigdy się wtedy nie
+      przydzielają (i nie trzeba ich tu w ogóle konfigurować). Odpowiada
+      toggle'owi "Używaj tylko zmian 12/24h" w Konfiguracji.
 
     None/pusty słownik = lokalizacja nie używa tego mechanizmu (domyślne -
     zero zmiany zachowania dla każdego istniejącego projektu/lokalizacji).
-    Skonfigurowanie choć jednego okna wymaga skonfigurowania wszystkich
-    pięciu - to jeden, spójny schemat rotacji, nie da się użyć częściowo.
+    Skonfigurowanie choć jednego wymaganego okna wymaga skonfigurowania
+    wszystkich pozostałych wymaganych - to jeden, spójny schemat rotacji,
+    nie da się użyć częściowo.
     """
     if not raw:
         return None
 
-    missing = [key for key in (*_DUTY_ROTATION_PAIR_KEYS, "weekend_full") if not raw.get(key)]
+    only_12_24h = bool(raw.get("only_12_24h", False))
+    required_pair_keys = dict(_WEEKEND_DUTY_PAIR_KEYS)
+    if not only_12_24h:
+        required_pair_keys.update(_WEEKDAY_DUTY_PAIR_KEYS)
+
+    missing = [key for key in (*required_pair_keys, "weekend_full") if not raw.get(key)]
     if missing:
         raise ValueError(f"Rotacja służby wymaga skonfigurowania wszystkich okien - brakuje: {', '.join(missing)}")
 
@@ -96,11 +110,18 @@ def normalize_duty_rotation(raw: dict | None) -> dict | None:
     if not weekend_full_start:
         raise ValueError("Zmiana 24h w weekend wymaga podania godziny startu")
 
+    # Waliduje/kopiuje KAŻDE podane okno parowe, nawet spoza required_pair_keys
+    # (np. weekday_long/short podane razem z only_12_24h=True) - nieużywane w
+    # tym trybie, ale zachowane, żeby toggle "Używaj tylko zmian 12/24h" dało
+    # się bezpiecznie przełączyć z powrotem bez utraty wcześniej wpisanych
+    # godzin (dziś nie ma osobnego UI do ich ponownego wpisania).
     normalized = {
         key: _normalize_duty_window(raw[key], label)
         for key, label in _DUTY_ROTATION_PAIR_KEYS.items()
+        if raw.get(key)
     }
     normalized["weekend_full"] = {"start": weekend_full_start}
+    normalized["only_12_24h"] = only_12_24h
     return normalized
 
 

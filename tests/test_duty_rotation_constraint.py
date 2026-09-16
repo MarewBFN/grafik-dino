@@ -47,9 +47,17 @@ ROTATION = {
 }
 
 
-def _location_with_rotation(key="site1"):
+ROTATION_ONLY_12_24H = {
+    "only_12_24h": True,
+    "weekend_full": {"start": "06:00"},
+    "weekend_half_a": {"start": "06:00", "end": "18:00"},
+    "weekend_half_b": {"start": "18:00", "end": "06:00"},
+}
+
+
+def _location_with_rotation(key="site1", rotation=ROTATION):
     loc = LocationConfig(key=key, name="Site 1")
-    loc.set_duty_rotation(ROTATION)
+    loc.set_duty_rotation(rotation)
     return loc
 
 
@@ -287,3 +295,107 @@ def test_end_to_end_generation_covers_a_full_week_with_duty_rotation():
         for emp, ds in zip(employees, ds_list):
             if emp.custom_roles.get("nie_chce_24h") and ds.is_full_day:
                 assert False, f"day {day}: {emp.display_name()} has nie_chce_24h but got a 24h shift"
+
+
+class TestOnly1224hToggle:
+    """Toggle "Używaj tylko zmian 12/24h" - weekday_long/weekday_short nie
+    są w ogóle używane, KAŻDY dzień (nie tylko weekend) używa wariantu
+    24h-albo-12h+12h."""
+
+    def test_weekday_shift_types_forbidden_even_on_a_weekday(self):
+        shop = ShopConfig(2026, 8)
+        shop.locations["site1"] = _location_with_rotation(rotation=ROTATION_ONLY_12_24H)
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1")
+        model, x = _model_and_x([emp], [WEEKDAY])
+
+        add_duty_rotation_gate_constraint(model, x, [emp], [WEEKDAY], shop, DUTY_SHIFTS, ALL_SHIFTS)
+        model.Add(x[0, WEEKDAY, WEEKDAY_LONG] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        assert status == cp_model.INFEASIBLE
+
+    def test_24h_shift_allowed_on_a_weekday(self):
+        shop = ShopConfig(2026, 8)
+        shop.locations["site1"] = _location_with_rotation(rotation=ROTATION_ONLY_12_24H)
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1")
+        model, x = _model_and_x([emp], [WEEKDAY])
+
+        add_duty_rotation_gate_constraint(model, x, [emp], [WEEKDAY], shop, DUTY_SHIFTS, ALL_SHIFTS)
+        model.Add(x[0, WEEKDAY, WEEKEND_FULL] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    def test_coverage_uses_24h_or_12h_pattern_on_a_weekday(self):
+        shop = ShopConfig(2026, 8)
+        shop.locations["site1"] = _location_with_rotation(rotation=ROTATION_ONLY_12_24H)
+        emp_a = Employee(last_name="A", first_name="A", location_key="site1")
+        emp_b = Employee(last_name="B", first_name="B", location_key="site1")
+        employees = [emp_a, emp_b]
+        model, x = _model_and_x(employees, [WEEKDAY])
+
+        add_one_shift_per_day_constraint(model, x, employees, [WEEKDAY], ALL_SHIFTS)
+        add_duty_rotation_gate_constraint(model, x, employees, [WEEKDAY], shop, DUTY_SHIFTS, ALL_SHIFTS)
+        add_duty_rotation_coverage_constraint(model, x, employees, [WEEKDAY], shop, DUTY_SHIFTS, soft=False)
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+        # Nobody ever gets weekday_long/weekday_short - they're not part of
+        # this location's rotation at all.
+        assert all(solver.Value(x[e, WEEKDAY, WEEKDAY_LONG]) == 0 for e in range(2))
+        assert all(solver.Value(x[e, WEEKDAY, WEEKDAY_SHORT]) == 0 for e in range(2))
+
+        full_count = sum(solver.Value(x[e, WEEKDAY, WEEKEND_FULL]) for e in range(2))
+        half_a_count = sum(solver.Value(x[e, WEEKDAY, WEEKEND_HALF_A]) for e in range(2))
+        half_b_count = sum(solver.Value(x[e, WEEKDAY, WEEKEND_HALF_B]) for e in range(2))
+
+        if full_count:
+            assert full_count == 1 and half_a_count == 0 and half_b_count == 0
+        else:
+            assert half_a_count == 1 and half_b_count == 1
+
+    def test_end_to_end_full_week_uses_only_12_24h_shifts(self):
+        from model.business_profile import register_custom_profile
+        from model.custom_profile import CustomBusinessProfile
+
+        profile = CustomBusinessProfile(key="custom_test_only_12_24h_e2e", display_name="Test Ochrona 12/24h")
+        register_custom_profile(profile)
+
+        shop = ShopConfig(2026, 8)
+        shop.business_type = profile.key
+        shop.locations["site1"] = _location_with_rotation(rotation=ROTATION_ONLY_12_24H)
+
+        schedule = MonthSchedule(2026, 8)
+        employees = [
+            Employee(last_name="A", first_name="A", location_key="site1"),
+            Employee(last_name="B", first_name="B", location_key="site1"),
+            Employee(last_name="C", first_name="C", location_key="site1", custom_roles={"nie_chce_24h": True}),
+        ]
+        for emp in employees:
+            schedule.add_employee(emp)
+
+        with redirect_stdout(io.StringIO()):
+            result = AutoScheduleGenerator(schedule, shop).generate(solver_time_limit_seconds=20, solver_workers=1)
+
+        assert result["success"] is True
+
+        for day in range(1, 8):
+            ds_list = [schedule.get_day(emp, day) for emp in employees]
+            assigned = [ds for ds in ds_list if not ds.is_empty()]
+
+            # weekday_long/weekday_short never assigned - every day uses the
+            # 24h-or-12h+12h pattern, weekday or weekend alike.
+            assert not any(
+                not ds.is_full_day and (ds.start, ds.end) == ("06:00", "22:00") for ds in assigned
+            ), f"day {day}: got a 16h weekday_long shift, should never happen with only_12_24h"
+
+            if any(ds.is_full_day for ds in assigned):
+                assert len(assigned) == 1, f"day {day} (24h variant) should have exactly 1 person"
+            else:
+                assert len(assigned) == 2, f"day {day} (12h+12h variant) should have exactly 2 people"
+
+            for emp, ds in zip(employees, ds_list):
+                if emp.custom_roles.get("nie_chce_24h") and ds.is_full_day:
+                    assert False, f"day {day}: {emp.display_name()} has nie_chce_24h but got a 24h shift"

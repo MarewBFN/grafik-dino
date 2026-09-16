@@ -28,7 +28,7 @@ from ui.profile_wizard_dialog import ProfileWizardDialog
 from ui.slug import slugify
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import BUSINESS_PROFILES, DEFAULT_BUSINESS_TYPE, get_profile
-from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig, normalize_night_shift
+from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig, normalize_night_shift, normalize_duty_rotation
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
 
@@ -499,6 +499,38 @@ class ConfigDialog(QDialog):
 
         layout.addWidget(flags_card)
 
+        # --- Sekcja: Rotacja 24/7 (widoczna tylko gdy projekt jej faktycznie
+        # używa - patrz LocationConfig.duty_rotation / ShopConfig.duty_rotation).
+        # Na razie jedyny UI dla tego mechanizmu - reszta konfiguracji
+        # (godziny okien) jest programowa, patrz demo/install_demo.py.
+        self._duty_rotation_configs = [
+            cfg for cfg in (
+                self.shop_config.get_duty_rotation(),
+                *(loc.get_duty_rotation() for loc in self.shop_config.locations.values()),
+            )
+            if cfg
+        ]
+        self.only_12_24h = None
+        if self._duty_rotation_configs:
+            duty_label = QLabel("ROTACJA 24/7")
+            duty_label.setObjectName("groupLabel")
+            layout.addWidget(duty_label)
+
+            duty_card = QFrame()
+            duty_card.setObjectName("configCard")
+            duty_layout = QVBoxLayout(duty_card)
+
+            self.only_12_24h = QCheckBox("Używaj tylko zmian 12/24h")
+            self.only_12_24h.setCursor(Qt.PointingHandCursor)
+            self.only_12_24h.setChecked(bool(self._duty_rotation_configs[0].get("only_12_24h")))
+            self.only_12_24h.setToolTip(
+                "Włączone: KAŻDY dzień tygodnia (nie tylko weekend) używa "
+                "zmiany 24h albo dwóch zmian po 12h - zmiany 16h/8h w "
+                "tygodniu nigdy się wtedy nie przydzielają."
+            )
+            duty_layout.addWidget(self.only_12_24h)
+            layout.addWidget(duty_card)
+
         # --- Sekcja: Obsada ---
         staff_label = QLabel("MINIMALNA OBSADA PRACOWNIKÓW")
         staff_label.setObjectName("groupLabel")
@@ -850,6 +882,12 @@ class ConfigDialog(QDialog):
                 day for day, box in self.sunday_checks.items() if box.isChecked()
             }
 
+            # Zachowane dla kroku niżej: _LocationRow nie niesie duty_rotation
+            # (brak UI do jego edycji, patrz sekcja "Rotacja 24/7" wyżej) -
+            # bez tego rekonstrukcja LocationConfig poniżej cicho zgubiłaby tę
+            # konfigurację przy każdym zapisaniu Konfiguracji.
+            old_locations = self.shop_config.locations
+
             new_locations = {}
             taken_keys = set()
             for row in self._location_rows:
@@ -878,6 +916,8 @@ class ConfigDialog(QDialog):
                     constraints=row.constraints_overrides(),
                     night_shift=night_shift,
                 )
+                if key in old_locations and old_locations[key].duty_rotation:
+                    new_locations[key].duty_rotation = old_locations[key].duty_rotation
             self.shop_config.locations = new_locations
 
             self.shop_config.constraints["max_consecutive_days"] = self.max_consecutive.value()
@@ -888,6 +928,18 @@ class ConfigDialog(QDialog):
             self.shop_config.constraints["enforce_meat_coverage"] = True
             self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
             self.shop_config.constraints["highlight_max_consecutive"] = self.hl_consecutive.isChecked()
+
+            if self.only_12_24h is not None:
+                only_12_24h_value = self.only_12_24h.isChecked()
+                if self.shop_config.duty_rotation:
+                    merged = dict(self.shop_config.duty_rotation)
+                    merged["only_12_24h"] = only_12_24h_value
+                    self.shop_config.duty_rotation = normalize_duty_rotation(merged)
+                for loc in self.shop_config.locations.values():
+                    if loc.duty_rotation:
+                        merged = dict(loc.duty_rotation)
+                        merged["only_12_24h"] = only_12_24h_value
+                        loc.duty_rotation = normalize_duty_rotation(merged)
             self.shop_config.constraints["rest_11h_mode"] = self.rest_11h_mode_selector.currentData()
             self.shop_config.constraints["solver_time_limit_seconds"] = self.solver_time_limit.value()
             for policy_name, selector in self.policy_selectors.items():

@@ -13,6 +13,11 @@ Zasady (potwierdzone przez klienta):
   wydłużać cyklu odpoczynku tym, którzy faktycznie rotują). Nigdy mniej
   niż 24h nawet przy N<=1 (dolna granica, klient: "nie mniej niż 24h").
 
+Gdy lokalizacja ma `duty_rotation["only_12_24h"]` (toggle "Używaj tylko
+zmian 12/24h" w Konfiguracji), powyższe zasady dla weekend_full/half_a/
+half_b obowiązują KAŻDEGO dnia tygodnia (patrz `_keys_for_day`) -
+weekday_long/weekday_short nigdy się wtedy nie przydzielają.
+
 Zakres: tylko przejścia między kolejnymi dniami TEGO SAMEGO pracownika
 (x[e,d,s1] + x[e,d_next,s2] <= 1, ten sam wzorzec co night_shift_adjacency).
 Ponieważ zmiany rotacji i stary model zmian są wzajemnie wyłączne per
@@ -44,6 +49,15 @@ def _shift_start_end_anchored(key: str, window: dict, day_offset: int) -> tuple[
     if end <= start:
         end += timedelta(days=1)
     return start, end
+
+
+def _keys_for_day(rotation: dict, weekday: int) -> tuple:
+    """Które typy zmian są w ogóle ważne tego dnia - zawsze weekendowe, gdy
+    `only_12_24h` (toggle "Używaj tylko zmian 12/24h"), inaczej zależnie od
+    dnia tygodnia jak dotąd."""
+    if rotation.get("only_12_24h") or weekday >= 5:
+        return _WEEKEND_KEYS
+    return _WEEKDAY_KEYS
 
 
 def _required_rest(key: str, rotation_capable_count: int) -> timedelta:
@@ -80,7 +94,7 @@ def add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shif
         lookahead_days = int(max_required.total_seconds() // 86400) + 2
 
         for i, d in enumerate(days_sorted):
-            keys_today = _WEEKDAY_KEYS if shop.weekday(d) < 5 else _WEEKEND_KEYS
+            keys_today = _keys_for_day(rotation, shop.weekday(d))
 
             for key1 in keys_today:
                 s1 = duty_shifts[key1]
@@ -90,7 +104,7 @@ def add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shif
                 for j in range(i + 1, min(i + 1 + lookahead_days, len(days_sorted))):
                     d_future = days_sorted[j]
                     day_offset = day_index[d_future] - day_index[d]
-                    keys_future = _WEEKDAY_KEYS if shop.weekday(d_future) < 5 else _WEEKEND_KEYS
+                    keys_future = _keys_for_day(rotation, shop.weekday(d_future))
 
                     reached_beyond_required = True
                     for key2 in keys_future:

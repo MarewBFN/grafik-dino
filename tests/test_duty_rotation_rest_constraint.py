@@ -38,10 +38,18 @@ ROTATION = {
 SAT, SUN, MON, TUE, WED = 1, 2, 3, 4, 5
 
 
-def _shop_with_rotation():
+ROTATION_ONLY_12_24H = {
+    "only_12_24h": True,
+    "weekend_full": {"start": "06:00"},
+    "weekend_half_a": {"start": "06:00", "end": "18:00"},
+    "weekend_half_b": {"start": "18:00", "end": "06:00"},
+}
+
+
+def _shop_with_rotation(rotation=ROTATION):
     shop = ShopConfig(2026, 8)
     loc = LocationConfig(key="site1", name="Site 1")
-    loc.set_duty_rotation(ROTATION)
+    loc.set_duty_rotation(rotation)
     shop.locations["site1"] = loc
     return shop
 
@@ -208,6 +216,55 @@ class TestFullDayRotationRest:
         add_duty_rotation_rest_constraint(model, x, employees, days, shop, DUTY_SHIFTS, soft=False)
         model.Add(x[0, SAT, WEEKEND_FULL] == 1)
         model.Add(x[0, SUN, WEEKEND_FULL] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        assert status == cp_model.INFEASIBLE
+
+
+class TestOnly1224hToggleRest:
+    """Z toggle'em "Używaj tylko zmian 12/24h" te same zasady (24h dla
+    weekend_full, 11h dla połówek) obowiązują w KAŻDY dzień tygodnia, nie
+    tylko w weekend."""
+
+    def test_24h_shift_on_a_weekday_still_requires_full_rest(self):
+        shop = _shop_with_rotation(rotation=ROTATION_ONLY_12_24H)
+        employees = _employees(2)  # N=2 -> 24h rest
+        days = [MON, TUE]
+        model, x = _model_and_x(2, days)
+
+        add_duty_rotation_rest_constraint(model, x, employees, days, shop, DUTY_SHIFTS, soft=False)
+        model.Add(x[0, MON, WEEKEND_FULL] == 1)
+        # 24h shift started Monday 06:00 ends Tuesday 06:00 - a second 24h
+        # shift starting right then for the SAME employee is 0h rest.
+        model.Add(x[0, TUE, WEEKEND_FULL] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        assert status == cp_model.INFEASIBLE
+
+    def test_different_employee_can_take_the_next_weekday_24h_shift(self):
+        shop = _shop_with_rotation(rotation=ROTATION_ONLY_12_24H)
+        employees = _employees(2)
+        days = [MON, TUE]
+        model, x = _model_and_x(2, days)
+
+        add_duty_rotation_rest_constraint(model, x, employees, days, shop, DUTY_SHIFTS, soft=False)
+        model.Add(x[0, MON, WEEKEND_FULL] == 1)
+        model.Add(x[1, TUE, WEEKEND_FULL] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    def test_three_capable_employees_need_48h_rest_across_weekdays_too(self):
+        shop = _shop_with_rotation(rotation=ROTATION_ONLY_12_24H)
+        employees = _employees(3)  # N=3 -> 48h rest
+        days = [MON, TUE, WED]
+        model, x = _model_and_x(3, days)
+
+        add_duty_rotation_rest_constraint(model, x, employees, days, shop, DUTY_SHIFTS, soft=False)
+        model.Add(x[0, MON, WEEKEND_FULL] == 1)
+        # Ends Tuesday 06:00; Wednesday 06:00 is only 24h later - still
+        # short of the 48h required with a 3-person rotation.
+        model.Add(x[0, WED, WEEKEND_HALF_A] == 1)
 
         status = cp_model.CpSolver().Solve(model)
         assert status == cp_model.INFEASIBLE
