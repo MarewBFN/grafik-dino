@@ -4,12 +4,16 @@
 Robi dokładnie to samo, co ProfileWizardDialog + "Nowy projekt" + "Generuj
 grafik" zrobiłyby ręcznie w UI, tylko bez klikania:
 
-1. Buduje profil biznesowy "Ochrona" (dwie role z regułą "Zakaz pracy w
-   oknie czasowym" - odpowiedniki Dino'wego no_night/no_afternoon, patrz
-   "plan profil ochrona (analiza specyfikacji klienta).md", sekcja 9 pkt 1)
-   i zapisuje go tam, gdzie normalnie zapisuje go kreator w UI
-   (%LOCALAPPDATA%\\GrafikDino\\custom_profiles.json) - profil jest więc
-   trwały i widoczny też w kreatorze/Konfiguracji, nie tylko w tym demo.
+1. Buduje profil biznesowy "Ochrona" (dwie role - "Umowa" i "Nie chce
+   24h" - patrz "plan profil ochrona (analiza specyfikacji klienta).md",
+   sekcja 9 pkt 1) i zapisuje go tam, gdzie normalnie zapisuje go kreator
+   w UI (%LOCALAPPDATA%\\GrafikDino\\custom_profiles.json) - profil jest
+   więc trwały i widoczny też w kreatorze/Konfiguracji, nie tylko w tym
+   demo. Te dwie role celowo NIE mają żadnej reguły (custom.rules=[]) -
+   to same checkboxy w EmployeeDialog, zapisywane w Employee.custom_roles
+   i przechodzące przez zapis/odczyt projektu bez żadnego wpływu na
+   generator - przyszłe flagi pod zmienne godziny/zmianę 24h (sekcje
+   4.4/7 planu), które czekają na odpowiedzi klienta, nie gotowa reguła.
 2. Buduje przykładowy projekt (obiekt otwarty 07:00-21:00 + zmiana nocna
    21:00-07:00, kilku pracowników z różnymi wymiarami etatu i rolami) i
    generuje dla niego grafik na bieżący miesiąc.
@@ -43,13 +47,7 @@ if str(ROOT) not in sys.path:
 from logic.auto_generator import AutoScheduleGenerator
 from logic.generator.custom_profile_wiring import default_policies
 from model.business_profile import register_custom_profile
-from model.constraint_policy import ConstraintPolicy
-from model.custom_profile import (
-    RULE_TYPE_ROLE_TIME_RESTRICTION,
-    CustomBusinessProfile,
-    RoleDefinition,
-    RuleInstance,
-)
+from model.custom_profile import CustomBusinessProfile, RoleDefinition
 from model.custom_profile_store import save_custom_profile
 from model.employee import Employee
 from model.month_schedule import MonthSchedule
@@ -69,8 +67,8 @@ DAY_CLOSE = "21:00"
 NIGHT_START = "21:00"
 NIGHT_END = "07:00"
 
-ROLE_NO_NIGHT = "brak_nocy"
-ROLE_DAY_ONLY = "tylko_dzien"
+ROLE_UMOWA = "umowa"
+ROLE_NIE_CHCE_24H = "nie_chce_24h"
 
 
 def build_profile() -> CustomBusinessProfile:
@@ -78,40 +76,12 @@ def build_profile() -> CustomBusinessProfile:
         key=PROFILE_KEY,
         display_name="Ochrona",
         roles=[
-            RoleDefinition(
-                key=ROLE_NO_NIGHT,
-                label="Nie pracuje w godzinach nocnych (22:00-6:00)",
-                show_summary_row=False,
-            ),
-            RoleDefinition(
-                key=ROLE_DAY_ONLY,
-                label="Nie pracuje po południu (tylko zmiany dzienne)",
-                show_summary_row=False,
-            ),
+            RoleDefinition(key=ROLE_UMOWA, label="Umowa", show_summary_row=False),
+            RoleDefinition(key=ROLE_NIE_CHCE_24H, label="Nie chce 24h", show_summary_row=False),
         ],
-        rules=[
-            RuleInstance(
-                type=RULE_TYPE_ROLE_TIME_RESTRICTION,
-                role_key=ROLE_NO_NIGHT,
-                # PREFERRED (soft), tak jak domyślne no_night/no_afternoon
-                # Dino (model/shop_config.py) - generator stara się to
-                # uszanować, ale nie odmawia wygenerowania grafiku, gdyby
-                # było to niewykonalne przy małej obsadzie.
-                policy="PREFERRED",
-                params={"window_start_hour": 22, "window_end_hour": 6},
-            ),
-            RuleInstance(
-                type=RULE_TYPE_ROLE_TIME_RESTRICTION,
-                role_key=ROLE_DAY_ONLY,
-                policy="PREFERRED",
-                # 16-6: obejmuje CLOSE (13:00-21:00) i SHIFT_NIGHT
-                # (21:00-07:00), zostawia OPEN (07:00-15:00) dozwolony -
-                # patrz wyliczenie w commit message / plan, "role_time_restriction
-                # blokował każdą zwykłą zmianę" dla wyjaśnienia jak liczą się
-                # te dwie liczby.
-                params={"window_start_hour": 16, "window_end_hour": 6},
-            ),
-        ],
+        # Celowo bez żadnej reguły - patrz docstring modułu. Te dwie flagi
+        # nie robią dziś nic w generatorze, tylko zapisują się na pracowniku.
+        rules=[],
     )
 
 
@@ -139,17 +109,17 @@ def build_shop_config(profile: CustomBusinessProfile, year: int, month: int) -> 
 
 def build_employees() -> list[Employee]:
     return [
-        Employee(last_name="Kowalski", first_name="Jan", employment_fraction=1.0),
-        Employee(last_name="Nowak", first_name="Anna", employment_fraction=1.0),
+        Employee(last_name="Kowalski", first_name="Jan", employment_fraction=1.0, custom_roles={ROLE_UMOWA: True}),
+        Employee(last_name="Nowak", first_name="Anna", employment_fraction=1.0, custom_roles={ROLE_UMOWA: True}),
         Employee(
             last_name="Wiśniewski", first_name="Piotr",
             employment_fraction=0.75,  # "6/8"
-            custom_roles={ROLE_NO_NIGHT: True},
+            custom_roles={ROLE_NIE_CHCE_24H: True},
         ),
         Employee(
             last_name="Zielińska", first_name="Ewa",
             employment_fraction=0.5,
-            custom_roles={ROLE_DAY_ONLY: True},
+            custom_roles={ROLE_NIE_CHCE_24H: True},
         ),
         Employee(last_name="Kamiński", first_name="Tomasz", employment_fraction=1.0),
     ]
