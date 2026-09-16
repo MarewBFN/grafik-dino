@@ -141,6 +141,57 @@ def test_end_to_end_night_coverage_rule_conflicts_with_role_time_restriction():
     )
 
 
+class TestBuildRoleTimeRestrictionRegularShifts:
+    """_shift_touches_window previously paired window_start_hour with
+    start_dt and window_end_hour with end_dt - backwards from the window's
+    own clock boundaries. For the default (22, 6) "no_night"-style window
+    that made end_dt.hour >= 6 (true for virtually any shift ending in the
+    afternoon or evening) or start_dt.hour <= 22 (true for virtually any
+    shift at all), so a role_time_restriction rule silently forbade every
+    ordinary daytime OPEN/CLOSE shift too, not just ones actually touching
+    22:00-06:00. Only the separate SHIFT_NIGHT branch (tested above) was
+    ever covered by a test, so this regressed unnoticed."""
+
+    def _location(self, open_hours):
+        loc = LocationConfig(key="site1", name="Site 1")
+        loc.open_hours = {wd: open_hours for wd in range(7)}
+        return loc
+
+    def test_daytime_shifts_not_forbidden_by_night_window(self):
+        shop = ShopConfig(2026, 3)
+        shop.locations["site1"] = self._location(("08:00", "20:00"))
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+
+        # OPEN (08:00-16:00) and CLOSE (12:00-20:00) both sit entirely
+        # within the day - neither should be forced to 0 by a 22:00-06:00
+        # restriction. Checked independently (each on its own fresh model
+        # built the same way) since this bare ctx doesn't model "one shift
+        # per day", so forcing both at once on the same model would be a
+        # meaningless test.
+        for shift in (SHIFT_OPEN, SHIFT_CLOSE):
+            trial_ctx = _ctx(shop, [emp])
+            build_role_time_restriction(trial_ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
+            trial_ctx.model.Add(trial_ctx.x[0, 3, shift] == 1)
+            status = cp_model.CpSolver().Solve(trial_ctx.model)
+            assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE), (
+                f"shift {shift} within 08:00-20:00 should not be forbidden by a 22:00-06:00 restriction"
+            )
+
+    def test_shift_touching_night_window_is_forbidden(self):
+        shop = ShopConfig(2026, 3)
+        # CLOSE ends exactly at 22:00 (start 14:00) - genuinely touches the
+        # 22:00-06:00 window and must still be forbidden after the fix.
+        shop.locations["site1"] = self._location(("08:00", "22:00"))
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        ctx = _ctx(shop, [emp])
+
+        build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
+        ctx.model.Add(ctx.x[0, 3, SHIFT_CLOSE] == 1)
+
+        status = cp_model.CpSolver().Solve(ctx.model)
+        assert status == cp_model.INFEASIBLE
+
+
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-v"]))

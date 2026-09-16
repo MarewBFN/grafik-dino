@@ -79,13 +79,25 @@ def build_min_staff_with_role(ctx, soft, role_key, rule_key, min_count=1, scope=
 
 
 def _shift_touches_window(start_dt, end_dt, window_start_hour, window_end_hour):
-    # Same "start.hour <= X or end.hour >= Y" heuristic the built-in no_night
-    # constraint already uses (logic/generator/night_constraint.py) -
-    # adequate given every shift here is computed within one day's open/close
-    # window (see ShopConfig.get_open_hours_for_day), not a true 24h
-    # continuous roster; a shift genuinely spanning midnight is outside what
-    # this app's shift model represents today, for any profile.
-    return end_dt.hour >= window_end_hour or start_dt.hour <= window_start_hour
+    # Same "end.hour >= window_start_hour or start.hour <= window_end_hour"
+    # heuristic the built-in no_night constraint already uses
+    # (logic/generator/night_constraint.py: "end.hour >= 22 or start.hour <= 6"
+    # for its default 22/6 window) - adequate given every shift here is
+    # computed within one day's open/close window (see
+    # ShopConfig.get_open_hours_for_day), not a true 24h continuous roster; a
+    # shift genuinely spanning midnight is outside what this app's shift
+    # model represents today, for any profile.
+    #
+    # NOTE: window_start_hour/window_end_hour name the window's own clock
+    # boundaries (e.g. 22 and 6 for "22:00-06:00"), not two independent
+    # thresholds - the two comparisons below must pair window_start_hour
+    # with end_dt and window_end_hour with start_dt to match that. This was
+    # previously swapped, which for the default (22, 6) "no_night"-style
+    # window made end_dt.hour >= 6 (true for virtually any shift ending in
+    # the afternoon or evening) or start_dt.hour <= 22 (true for virtually
+    # any shift at all) - i.e. it forbade every ordinary daytime shift, not
+    # just ones actually touching the night window.
+    return end_dt.hour >= window_start_hour or start_dt.hour <= window_end_hour
 
 
 def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, window_end_hour=6):
