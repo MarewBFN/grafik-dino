@@ -14,9 +14,15 @@ grafik" zrobiłyby ręcznie w UI, tylko bez klikania:
    i przechodzące przez zapis/odczyt projektu bez żadnego wpływu na
    generator - przyszłe flagi pod zmienne godziny/zmianę 24h (sekcje
    4.4/7 planu), które czekają na odpowiedzi klienta, nie gotowa reguła.
-2. Buduje przykładowy projekt (obiekt otwarty 07:00-21:00 + zmiana nocna
-   21:00-07:00, kilku pracowników z różnymi wymiarami etatu i rolami) i
-   generuje dla niego grafik na bieżący miesiąc.
+2. Buduje przykładowy projekt na PRAWDZIWYM mechanizmie rotacji 24/7
+   (LocationConfig.duty_rotation, Etapy A-C planu) - obiekt pokryty
+   16h+8h w tygodniu i 24h (albo 12h+12h dla "nie chce 24h") w weekend -
+   z celowo skromną obsadą (4 osoby), żeby demo od razu pokazywało to,
+   co klient opisał wprost: "w firmie panują braki zatrudnienia, które
+   przekładają się na dużą ilość nadgodzin" (sekcja "nowe założenia").
+   `balance`/`monthly_hours` wyłączone dla tego projektu (Etap D) -
+   klient: "nie bierzemy pod uwagę w ogóle" tych constraintów, celujemy
+   w pokrycie miesiąca, nie w trafienie w nominalny czas pracy.
 3. Zapisuje ten projekt jako last_project.json w katalogu repo - dokładnie
    ten plik, który MainWindow wczytuje automatycznie przy starcie
    (main_window.py::_try_load_last_project). Plik jest już w .gitignore,
@@ -47,6 +53,7 @@ if str(ROOT) not in sys.path:
 from logic.auto_generator import AutoScheduleGenerator
 from logic.generator.custom_profile_wiring import default_policies
 from model.business_profile import register_custom_profile
+from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import CustomBusinessProfile, RoleDefinition
 from model.custom_profile_store import save_custom_profile
 from model.employee import Employee
@@ -57,18 +64,19 @@ from persistence.project_io import save_project
 PROFILE_KEY = "ochrona_enyo"
 LAST_PROJECT_PATH = ROOT / "last_project.json"
 
-# Obiekt "otwarty" 07:00-21:00 (dwie zachodzące na siebie zmiany dzienne,
-# OPEN 07:00-15:00 / CLOSE 13:00-21:00) + zmiana nocna 21:00-07:00
-# (SHIFT_NIGHT, mechanizm gotowy od Etapu A-G "plan zmiany nocne (24-7).md")
-# - razem pełna doba, bez sięgania po niezaimplementowaną jeszcze zmianę
-# 24h/16h/12h per pracownik (patrz README, sekcja "Czego tu NIE ma").
-DAY_OPEN = "07:00"
-DAY_CLOSE = "21:00"
-NIGHT_START = "21:00"
-NIGHT_END = "07:00"
-
 ROLE_UMOWA = "umowa"
 ROLE_NIE_CHCE_24H = "nie_chce_24h"
+
+# Rotacja 24/7 (Etapy A-C planu): 16h+8h w tygodniu, 24h (albo 12h+12h)
+# w weekend - dokładnie przykład z pierwotnej specyfikacji klienta
+# ("służba 16h od pn do pt, sb nd po 24h, niektórzy wolą 12h").
+DUTY_ROTATION = {
+    "weekday_long": {"start": "06:00", "end": "22:00"},
+    "weekday_short": {"start": "22:00", "end": "06:00"},
+    "weekend_full": {"start": "06:00"},
+    "weekend_half_a": {"start": "06:00", "end": "18:00"},
+    "weekend_half_b": {"start": "18:00", "end": "06:00"},
+}
 
 
 def build_profile() -> CustomBusinessProfile:
@@ -99,11 +107,13 @@ def build_shop_config(profile: CustomBusinessProfile, year: int, month: int) -> 
 
     shop.standard_daily_hours = 8.0
     shop.constraints["force_fulltime_845"] = False
-    for weekday in range(7):
-        shop.open_hours[weekday] = (DAY_OPEN, DAY_CLOSE)
-    shop.set_night_shift(NIGHT_START, NIGHT_END)
+    shop.set_duty_rotation(DUTY_ROTATION)
 
     shop.constraint_policies.update(default_policies(profile))
+    # Etap D: klient nie chce w ogóle tych constraintów dla tego profilu -
+    # celujemy w pełne pokrycie miesiąca, nadgodziny są oczekiwane.
+    shop.constraint_policies["balance"] = ConstraintPolicy.DISABLED
+    shop.constraint_policies["monthly_hours"] = ConstraintPolicy.DISABLED
     return shop
 
 
@@ -113,29 +123,10 @@ def build_employees() -> list[Employee]:
         Employee(last_name="Nowak", first_name="Anna", employment_fraction=1.0, custom_roles={ROLE_UMOWA: True}),
         Employee(
             last_name="Wiśniewski", first_name="Piotr",
-            employment_fraction=0.75,  # "6/8"
-            custom_roles={ROLE_NIE_CHCE_24H: True},
-        ),
-        Employee(
-            last_name="Zielińska", first_name="Ewa",
-            employment_fraction=0.5,
-            custom_roles={ROLE_NIE_CHCE_24H: True},
+            employment_fraction=1.0, custom_roles={ROLE_UMOWA: True, ROLE_NIE_CHCE_24H: True},
         ),
         Employee(last_name="Kamiński", first_name="Tomasz", employment_fraction=1.0),
     ]
-
-
-def _add_overtime_example(schedule: MonthSchedule, employee: Employee) -> None:
-    """Ręcznie dokłada jedną dodatkową zmianę ponad to, co ułożył generator,
-    żeby projekt demo od razu pokazywał podświetlenie przekroczenia limitu
-    (logic/monthly_hours_status.py) bez polegania na tym, jak akurat trafi
-    solver."""
-    for day in range(1, schedule.days_in_month + 1):
-        ds = schedule.get_day(employee, day)
-        if ds.is_empty() and not ds.is_leave and not getattr(ds, "is_sick", False):
-            ds.set_hours(DAY_OPEN, DAY_CLOSE)
-            ds.is_locked = True
-            return
 
 
 def build_demo_project() -> tuple[MonthSchedule, ShopConfig]:
@@ -149,11 +140,9 @@ def build_demo_project() -> tuple[MonthSchedule, ShopConfig]:
     for emp in employees:
         schedule.add_employee(emp)
 
-    result = AutoScheduleGenerator(shop=shop, schedule=schedule).generate(solver_time_limit_seconds=30)
+    result = AutoScheduleGenerator(shop=shop, schedule=schedule).generate(solver_time_limit_seconds=60)
     if not result["success"]:
         raise RuntimeError(f"Generator nie znalazł rozwiązania dla projektu demo: {result}")
-
-    _add_overtime_example(schedule, employees[-1])
 
     return schedule, shop
 
