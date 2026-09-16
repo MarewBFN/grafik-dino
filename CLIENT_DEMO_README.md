@@ -1,61 +1,55 @@
-# ⚠️ BRANCH DEMONSTRACYJNY — NIE MERGOWAĆ BEZ ŚWIADOMEJ DECYZJI ⚠️
+# Praca dla klienta: Enyo (ochrona) — stan bieżący
 
-Ten branch (`client-demo/enyo-ochrona`) to **prototyp do poklikania dla
-jednego, konkretnego klienta** (Michał, Enyo — firma ochroniarska), nie
-kolejny etap rozwoju głównego produktu.
+Ten branch (`claude/night-shift-generator-support-ex6pqc`) to **jedyne,
+bieżące miejsce pracy** nad profilem dla klienta z firmy ochroniarskiej
+(Michał, Enyo). Wcześniej istniał osobny, wydzielony branch demo
+(`client-demo/enyo-ochrona`, wyłącznie kosmetyka/dane) obok tego brancha
+(rdzeń generatora) — na prośbę scalone tutaj 2026-09-16, żeby dalsza
+praca (Etapy D/E/F i kolejne) toczyła się w jednym miejscu, nie dwóch
+rozjeżdżających się liniach.
 
-**NIE mergować tego brancha do `main` ani do `feature/business-profiles`
-bez świadomej decyzji i przeglądu.** Powody:
+Pełny, szczegółowy log decyzji i etapów: **`plan profil ochrona (analiza
+specyfikacji klienta).md`** w katalogu głównym repo — ten plik to tylko
+szybkie streszczenie i instrukcja odpalenia demo.
 
-1. Zawiera dane demonstracyjne (przykładowy projekt, przykładowi
-   pracownicy) specyficzne dla tego jednego klienta/pokazu — nie mają
-   sensu w głównym produkcie.
-2. Profil "Ochrona" w tym branchu ilustruje **tylko** punkty 1-4 z
-   sekcji 9 `plan profil ochrona (analiza specyfikacji klienta).md`
-   ("Wstępny plan działania — tylko punkty jednoznaczne"). Świadomie
-   **pomija** zmienne godziny pracy per dzień tygodnia i zmianę 24h/16h/12h
-   (sekcje 4.4 i 7 tego samego planu) — te czekają na odpowiedzi klienta
-   na pytania blokujące (sekcja 8) i nie są tu w żaden sposób
-   rozwiązane, tylko obładomnie ominięte. Grafik przykładowy w tym
-   branchu **nie pokazuje** prawdziwej rotacji 24/7 ochrony — to
-   uproszczenie na potrzeby demo, nie docelowy kształt funkcji.
-3. Kosmetyczne zmiany w UI (patrz "Co się różni" niżej) są zrobione pod
-   kątem "to demo nie powinno zdradzać, że to ten sam program co dla
-   sklepów Dino" — część z nich może nie być tym, co finalnie trafi do
-   głównego produktu.
+## Co tu jest (stan na 2026-09-16)
 
-## Co jest w tym branchu
+Rdzeń generatora rotacji 24/7 (etapy z sekcji 12 planu):
 
-- Poprawka rzeczywistego błędu w `logic/generator/generic_rules.py`
-  (`_shift_touches_window`) — dotyczyła każdego custom profilu
-  używającego reguły "Zakaz pracy w oknie czasowym" (`role_time_restriction`)
-  przeciwko zwykłym zmianom (OPEN/CLOSE/START/END), nie tylko `SHIFT_NIGHT`.
-  Ta poprawka **nie jest specyficzna dla demo** — to prawdziwy fix,
-  bezpieczny do zabrania też do `feature/business-profiles` przy okazji
-  następnego przeglądu (patrz commit i `tests/test_night_shift_role_restriction.py`).
-- Profil biznesowy "Ochrona" (custom profile, budowany tym samym
-  mechanizmem co `ProfileWizardDialog` — patrz `demo/enyo_ochrona/`).
+- **Etap A** — `DaySchedule.set_full_day_shift()` (prawdziwa zmiana 24h)
+  + `LocationConfig.duty_rotation` (5 skonfigurowanych okien czasowych).
+- **Etap B** — reguła pokrycia w CP-SAT: dokładnie 1 osoba na zmianę,
+  przełącznik 24h-albo-12h+12h w weekend, twarda brama "nie chce 24h".
+- **Etap C** — odpoczynek "doba za dobę" `(N-1)×24h` po zmianie 24h.
+
+Warstwa demo/prezentacyjna (z dawnego brancha `client-demo/enyo-ochrona`):
+
+- Profil biznesowy "Ochrona" (custom profile) z dwiema flagami-checkboxami
+  "Umowa"/"Nie chce 24h" (dziś czyste dane, bez efektu w generatorze -
+  patrz plan, sekcja "Świadomie poza zakresem").
 - Podświetlanie na czerwono przekroczenia miesięcznego limitu godzin
-  pełnoetatowych — w gridzie i w obu eksporterach (JPG, Excel).
+  pełnoetatowych (`logic/monthly_hours_status.py`) — w gridzie i w obu
+  eksporterach (JPG, Excel).
 - Wydruk/eksport dla pojedynczego pracownika (JPG i Excel).
-- Drobne kosmetyczne zmiany w UI, żeby nic nie zdradzało "Dino"/"sklepu"
-  w widoku dla tego profilu.
-- Gotowy projekt demonstracyjny (`demo/enyo_ochrona/`) + skrypt
-  `demo/install_demo.py`, który instaluje profil i projekt tak, żeby
-  aplikacja otworzyła się od razu z gotowym przykładem.
+- Kosmetyczne zmiany w UI, żeby żaden ekran nie zdradzał "Dino"/"sklepu"
+  niezależnie od wybranego profilu.
+- `demo/install_demo.py` — instaluje przykładowy projekt (dziś wciąż na
+  starszym mechanizmie `night_shift`, nie na nowym `duty_rotation` z
+  Etapów A-C — patrz "Do zrobienia" niżej).
+- Prawdziwy fix w `logic/generator/generic_rules.py` (`_shift_touches_window`)
+  — dotyczy każdego custom profilu, nie tylko tego klienta.
 
-## Czego w tym branchu NIE ma (celowo)
+## Do zrobienia (z sekcji 12/13 planu)
 
-- Zmiennej długości zmiany per pracownik/dzień tygodnia (16h pon-pt,
-  12h/24h weekend) — sekcja 4.4 planu.
-- Prawdziwej zmiany 24h — sekcja 7 planu. Demo pokazuje istniejący,
-  wcześniej wdrożony mechanizm `SHIFT_NIGHT` (jeden sztywny blok nocny
-  na lokalizację, Etap A-G "plan zmiany nocne (24-7).md"), nie nowy
-  mechanizm zmian o zmiennej długości.
-- Trzeciej kategorii wymiaru etatu "nieokreślony" — czeka na decyzję
-  produktową (pytanie 5, sekcja 8 planu).
-- Jakiejkolwiek reguły minimalnej obsady — klient świadomie z tego
-  zrezygnował (sekcja 2.4 planu).
+- **Etap D** — wyłączenie `balance`/`monthly_hours` dla tego profilu +
+  nowa kolumna "Nadgodziny" w gridzie/eksportach.
+- **Etap E** — menu "Placówki" (osobne pliki projektu + szybkie
+  przełączanie).
+- **Etap F** — testy scenariuszowe pełnego miesiąca.
+- Zaktualizować `demo/install_demo.py`, żeby przykładowy projekt używał
+  nowego mechanizmu `duty_rotation` (Etapy A-C) zamiast starszego
+  przybliżenia przez `night_shift` — dziś demo i rdzeń generatora nie są
+  jeszcze spięte w jedną, spójną prezentację.
 
 ## Jak odpalić demo
 
