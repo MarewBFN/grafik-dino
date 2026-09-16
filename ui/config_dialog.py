@@ -704,12 +704,20 @@ class ConfigDialog(QDialog):
             current_policy = self.shop_config.constraint_policies.get(
                 policy_name, ConstraintPolicy.PREFERRED
             )
-            if policy_name == "balance":
+            if policy_name == "balance" and current_policy == ConstraintPolicy.MANDATORY:
+                # MANDATORY zrobiłby grafik niewykonalnym za każdym razem, gdy
+                # nie da się trafić dokładnie w bilans - nigdy nie pokazujemy
+                # ani nie zachowujemy tej wartości. DISABLED (np. profil
+                # ochrony, gdzie klient świadomie nie chce bilansu wcale)
+                # zostaje nietknięty.
                 current_policy = ConstraintPolicy.PREFERRED
             selector.setCurrentIndex(selector.findData(current_policy))
             if policy_name == "balance":
                 selector.setEnabled(False)
-                selector.setToolTip("Bilans godzin zawsze pozostaje preferowany.")
+                selector.setToolTip(
+                    "Bilans godzin edytowalny tylko programowo (np. przy "
+                    "definiowaniu profilu) - tu tylko podgląd."
+                )
             policy_grid.addWidget(QLabel(label + ":"), row, column)
             policy_grid.addWidget(selector, row, column + 1)
             self.policy_selectors[policy_name] = selector
@@ -884,7 +892,12 @@ class ConfigDialog(QDialog):
             self.shop_config.constraints["solver_time_limit_seconds"] = self.solver_time_limit.value()
             for policy_name, selector in self.policy_selectors.items():
                 self.shop_config.constraint_policies[policy_name] = selector.currentData()
-            self.shop_config.constraint_policies["balance"] = ConstraintPolicy.PREFERRED
+                # "balance" ma disabled selector (patrz konstrukcja wyżej) -
+                # jego currentData() już poprawnie odzwierciedla wartość
+                # ustawioną programowo (np. DISABLED dla profilu ochrony) i
+                # nie trzeba (ani nie wolno) jej tu nadpisywać z powrotem na
+                # PREFERRED, bo to by cofnęło taką decyzję przy każdym
+                # otwarciu i zapisaniu Konfiguracji.
         except Exception as exc:
             QMessageBox.critical(self, "Błąd konfiguracji", str(exc))
             return

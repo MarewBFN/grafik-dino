@@ -322,8 +322,13 @@ class ShopConfig:
             except ValueError:
                 continue
 
-        # This rule is an optimization target, not a strict feasibility rule.
-        cfg.constraint_policies["balance"] = ConstraintPolicy.PREFERRED
+        # "balance" jest celem optymalizacji, nie twardym wymogiem - MANDATORY
+        # zrobiłby grafik niewykonalnym za każdym razem, gdy nie da się trafić
+        # w bilans dokładnie, więc nigdy nie wczytujemy tej wartości z pliku.
+        # DISABLED (np. profil ochrony, gdzie klient świadomie nie chce
+        # bilansu wcale - "plan profil ochrona...", sekcja 10) zostaje.
+        if cfg.constraint_policies.get("balance") == ConstraintPolicy.MANDATORY:
+            cfg.constraint_policies["balance"] = ConstraintPolicy.PREFERRED
 
         return cfg
 
