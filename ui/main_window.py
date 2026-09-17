@@ -45,6 +45,7 @@ from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import ScheduleGrid
 from ui.new_project_dialog import NewProjectDialog
+from ui.quick_mode_settings_dialog import QuickModeSettingsDialog
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.loading_overlay import LoadingOverlay
@@ -477,7 +478,12 @@ class MainWindow(QMainWindow):
             btn.setObjectName("secondaryButton")
             btn.setMinimumHeight(36)
 
-        btn_grid.addWidget(self.btn_work, 0, 0)
+        # "Praca" (ręczne wpisywanie godzin) - schowany na rzecz nazwanych
+        # przedziałów z "Ustawień trybu szybkiego" (Konfiguracja), ale
+        # zostaje w pełni działający w kodzie (_set_quick_shift("WORK"),
+        # time_panel poniżej) na prośbę z 2026-09-17.
+        self.btn_work.hide()
+
         btn_grid.addWidget(self.btn_morning, 0, 1)
         btn_grid.addWidget(self.btn_afternoon, 0, 2)
         btn_grid.addWidget(self.btn_off, 1, 0)
@@ -485,6 +491,20 @@ class MainWindow(QMainWindow):
         btn_grid.addWidget(self.btn_sick, 1, 2)
 
         layout.addLayout(btn_grid)
+
+        # --- przyciski dla ręcznie zdefiniowanych przedziałów (Konfiguracja
+        # -> "Ustawienia trybu szybkiego") - dobudowywane dynamicznie,
+        # patrz _rebuild_quick_preset_buttons(). ---
+        self.quick_presets_label = QLabel("Własne przedziały:")
+        self.quick_presets_label.setObjectName("mutedHint")
+        self.quick_presets_label.hide()
+        layout.addWidget(self.quick_presets_label)
+
+        self.quick_presets_grid = QGridLayout()
+        self.quick_presets_grid.setSpacing(6)
+        layout.addLayout(self.quick_presets_grid)
+
+        self.quick_preset_buttons: dict[str, QPushButton] = {}
 
         # --- panel godzin (tylko dla "Praca") ---
         self.time_panel = QWidget(self)
@@ -574,6 +594,7 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Wyczyść auto", self._clear_generated)
 
         config_menu.addAction("Generator", self._open_config)
+        config_menu.addAction("Ustawienia trybu szybkiego", self._open_quick_mode_settings)
 
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
         help_menu.addAction("Sprawdź aktualizacje", lambda: self._check_updates(manual=True))
@@ -629,6 +650,7 @@ class MainWindow(QMainWindow):
         self._update_state_label()
         self._update_generate_label()
         self._update_settlement_section_visibility()
+        self._rebuild_quick_preset_buttons()
 
     def _update_settlement_section_visibility(self):
         is_generated = bool(self.schedule and getattr(self.schedule, "is_generated", False))
@@ -1009,6 +1031,19 @@ class MainWindow(QMainWindow):
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano konfigurację.", 2500)
+
+    def _open_quick_mode_settings(self):
+        dialog = QuickModeSettingsDialog(self, self.shop_config.quick_mode_presets)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.shop_config.quick_mode_presets = dialog.result_presets
+        self._rebuild_quick_preset_buttons()
+        try:
+            save_project("last_project.json", self.schedule, self.shop_config)
+        except OSError:
+            pass
+        self.statusBar().showMessage("Zapisano ustawienia trybu szybkiego.", 2500)
 
     def _save_project(self):
 
@@ -1417,6 +1452,8 @@ class MainWindow(QMainWindow):
         self.btn_off.setChecked(False)
         self.btn_leave.setChecked(False)
         self.btn_sick.setChecked(False)
+        for btn in self.quick_preset_buttons.values():
+            btn.setChecked(False)
 
         # Wyszarzone zamiast ukryte, żeby reszta panelu bocznego nie
         # "przeskakiwała" przy każdej zmianie typu zmiany w trybie szybkim.
@@ -1437,6 +1474,48 @@ class MainWindow(QMainWindow):
             self.btn_leave.setChecked(True)
         elif shift_type == "SICK":
             self.btn_sick.setChecked(True)
+        elif shift_type.startswith("PRESET:"):
+            btn = self.quick_preset_buttons.get(shift_type.split(":", 1)[1])
+            if btn:
+                btn.setChecked(True)
+
+    def _rebuild_quick_preset_buttons(self):
+        while self.quick_presets_grid.count():
+            item = self.quick_presets_grid.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+                widget.deleteLater()
+        self.quick_preset_buttons = {}
+
+        presets = self.shop_config.quick_mode_presets if self.shop_config else []
+        self.quick_presets_label.setVisible(bool(presets))
+
+        for index, preset in enumerate(presets):
+            name = preset["name"]
+            btn = QPushButton(name)
+            btn.setCheckable(True)
+            btn.setObjectName("secondaryButton")
+            btn.setMinimumHeight(36)
+            if preset.get("full_day"):
+                btn.setToolTip(f"Cała doba (24h), start {preset['start']}.")
+            else:
+                btn.setToolTip(f"{preset['start']}–{preset['end']}")
+            shift_type = f"PRESET:{name}"
+            btn.clicked.connect(lambda _checked=False, st=shift_type: self._set_quick_shift(st))
+            self.quick_preset_buttons[name] = btn
+            row, col = divmod(index, 3)
+            self.quick_presets_grid.addWidget(btn, row, col)
+
+        # Wybrany wcześniej przedział mógł zostać usunięty/przemianowany w
+        # "Ustawieniach trybu szybkiego" - nie zostawiamy generatora trybu
+        # szybkiego wskazującego na już nieistniejący przycisk.
+        if (
+            isinstance(self.quick_selected_shift, str)
+            and self.quick_selected_shift.startswith("PRESET:")
+            and self.quick_selected_shift.split(":", 1)[1] not in self.quick_preset_buttons
+        ):
+            self.quick_selected_shift = None
 
     def _calc_end_from_daily(self, start_str, hours):
         from datetime import datetime, timedelta

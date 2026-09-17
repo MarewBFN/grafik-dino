@@ -1283,6 +1283,17 @@ class ScheduleGrid(QTableWidget):
             self.refresh()
             return
 
+        elif isinstance(shift, str) and shift.startswith("PRESET:"):
+            preset_name = shift.split(":", 1)[1]
+            presets = self.main_window.shop_config.quick_mode_presets
+            preset = next((p for p in presets if p["name"] == preset_name), None)
+            if preset is None:
+                return
+
+            self.controller.set_day_preset(emp, day, preset)
+            self.refresh()
+            return
+
         elif shift in ("MORNING_CLASS", "AFTERNOON_CLASS"):
             code = "1" if shift == "MORNING_CLASS" else "2"
             self.controller.set_shift_class(emp, day, code)

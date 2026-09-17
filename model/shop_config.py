@@ -39,6 +39,48 @@ class _LocationView:
         return merged
 
 
+def normalize_quick_mode_presets(raw: list[dict] | None) -> list[dict]:
+    """Waliduje i porządkuje presety trybu szybkiego (patrz
+    ShopConfig.quick_mode_presets). Rzuca ValueError przy nazwie pustej/
+    zdublowanej albo niepoprawnym zakresie godzin - to samo miejsce, z
+    którego korzysta zarówno UI (ui/quick_mode_settings_dialog.py), jak i
+    deserializacja projektu, żeby raz zapisany plik nie mógł zawierać
+    nieprawidłowych presetów."""
+    if not raw:
+        return []
+
+    presets = []
+    seen_names = set()
+    for entry in raw:
+        name = (entry.get("name") or "").strip()
+        if not name:
+            raise ValueError("Nazwa przedziału nie może być pusta.")
+        if name in seen_names:
+            raise ValueError(f'Nazwa przedziału musi być unikalna: "{name}".')
+        seen_names.add(name)
+
+        start = entry.get("start")
+        if not start:
+            raise ValueError(f'Brak godziny startu dla "{name}".')
+
+        full_day = bool(entry.get("full_day"))
+        if full_day:
+            presets.append({"name": name, "start": start, "end": None, "full_day": True})
+            continue
+
+        end = entry.get("end")
+        if not end:
+            raise ValueError(f'Brak godziny końca dla "{name}".')
+        if end == start:
+            raise ValueError(
+                f'Koniec nie może być równy początkowi dla "{name}" - '
+                'zaznacz "Cała doba (24h)", jeśli o to chodzi.'
+            )
+        presets.append({"name": name, "start": start, "end": end, "full_day": False})
+
+    return presets
+
+
 class ShopConfig:
     """
     Konfiguracja sklepu:
@@ -152,6 +194,18 @@ class ShopConfig:
         # normalize_duty_rotation() w model/location.py. None = domyślne.
         self.duty_rotation: dict | None = None
 
+        # Ręcznie zdefiniowane, nazwane przedziały czasowe do trybu szybkiego
+        # (ui/main_window.py::_build_quick_panel) - zastępują ręczne wpisywanie
+        # godzin przyciskiem "Praca" (patrz "plan profil ochrona...", prośba
+        # klienta 2026-09-17). Każdy wpis: {"name": str, "start": "HH:MM",
+        # "end": "HH:MM" | None, "full_day": bool}. `end` jest None wyłącznie
+        # gdy full_day=True (zmiana trwająca dokładnie 24h, patrz
+        # DaySchedule.set_full_day_shift) - w przeciwnym razie zawsze ustawione,
+        # ewentualnie <= start, co oznacza przejście przez północ. Pusta lista
+        # domyślnie: stare projekty i te bez tej konfiguracji zachowują się
+        # dokładnie jak dziś (przycisk "Praca" widoczny, ręczne wpisywanie).
+        self.quick_mode_presets: list[dict] = []
+
     # ==========================================================
     # PODSTAWOWE METODY
     # ==========================================================
@@ -234,6 +288,13 @@ class ShopConfig:
         self.duty_rotation = normalize_duty_rotation(raw)
 
     # ==========================================================
+    # PRESETY TRYBU SZYBKIEGO
+    # ==========================================================
+
+    def set_quick_mode_presets(self, raw: list[dict] | None) -> None:
+        self.quick_mode_presets = normalize_quick_mode_presets(raw)
+
+    # ==========================================================
     # LOKALIZACJE (Etap 3b)
     # ==========================================================
 
@@ -262,6 +323,7 @@ class ShopConfig:
             "open_hours": self.open_hours,
             "night_shift": self.night_shift,
             "duty_rotation": self.duty_rotation,
+            "quick_mode_presets": self.quick_mode_presets,
             "trade_sundays": list(self.trade_sundays),
             "day_overrides": self.day_overrides,
             "constraints": self.constraints,
@@ -287,6 +349,13 @@ class ShopConfig:
         cfg.night_shift = dict(night_shift) if night_shift else None
         duty_rotation = data.get("duty_rotation")
         cfg.duty_rotation = dict(duty_rotation) if duty_rotation else None
+
+        try:
+            cfg.quick_mode_presets = normalize_quick_mode_presets(data.get("quick_mode_presets"))
+        except ValueError:
+            # Plik z ręcznie popsutą/starszą, niepoprawną konfiguracją -
+            # traktujemy jak brak presetów zamiast blokować wczytanie projektu.
+            cfg.quick_mode_presets = []
 
         # open_hours
         cfg.open_hours = {
