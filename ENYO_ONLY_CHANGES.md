@@ -47,6 +47,10 @@ wyżej, żeby nie zaśmiecać jej ścieżkami plików, które w większości zos
 | `tests/test_first_run_wizard.py::test_wizard_dino_retail_feature_toggle_disables_meat_policy` | Test zakładał domyślny wybór "Dino" w kreatorze (teraz niedostępny w UI) | POMINIĘTY (`@pytest.mark.skip`, kod testu zostaje) | (ten wpis) | TAK (odkomentować/usunąć skip przy porcie do main) | Jedyny test, który padł po ukryciu Dino z pickera - 361/362 przeszło bez zmian |
 | `ui/config_dialog.py` (profile_row) | Guziki "Nowy profil...", "Edytuj profil...", "Usuń profil..." - `setVisible(False)` zaraz po utworzeniu, cała logika kliknięć/`_sync_edit_profile_button()` zostaje | UKRYTY | (ten wpis) | NIE (main ma je pokazywać) | Decyzja użytkownika: klient ma dokładnie jeden, gotowy profil "Ochrona" i nie zarządza profilami przez UI w ogóle |
 | `ui/business_profile_picker.py` | Guzik "+ Nowa branża..." oraz per-wierszowe "Edytuj..."/"Usuń..." dla każdego profilu custom na liście - `setVisible(False)`, logika zostaje | UKRYTY | (ten wpis) | NIE (main ma je pokazywać) | Ten sam powód co wyżej - inny punkt wejścia do tej samej funkcjonalności (używany przez "Nowy projekt" i kreator pierwszego uruchomienia) |
+| `ui/main_window.py::_about` | Tekst `<b>Dingo!</b>` + dedykacja "Dla Mamy" | UPROSZCZONY (branding zamieniony na neutralny, nie usunięty cały dialog) | (ten wpis) | DO USTALENIA (zależy, czy main ma zostać przy brandingu "Dingo!" - to nie jest odtwarzalne 1:1, to decyzja marketingowa) | Wersja + link `madebykewin.pl` zostały |
+| `ui/main_window.py::_build_tutorial_steps` | Tytuł pierwszego kroku "Witaj w Dingo!" | UPROSZCZONY | (ten wpis) | DO USTALENIA (jw.) | To jest ŻYWY samouczek (`TutorialOverlay`) - reszta kroków była już neutralna |
+| `ui/main_window.py` (`_start_update_download`) | Tytuł dialogu "Aktualizacja DinGO" | UPROSZCZONY | (ten wpis) | DO USTALENIA (jw.) | |
+| `ui/tutorial_dialog.py` (`TutorialDialog.steps`) | "Witaj w Grafik Dino v2!", "dla sklepów", przykład roli "otwarcie, mięso" | UPROSZCZONY | (ten wpis) | DO USTALENIA (jw., choć ta klasa i tak nigdzie się nie tworzy - patrz notatka wyżej) | Martwy kod odkryty przy okazji - nic w aplikacji nie tworzy `TutorialDialog` |
 
 ## Audyt (2026-09-18) - pełna lista kandydatów, jeszcze nietknięta
 
@@ -72,18 +76,24 @@ poza jakimkolwiek warunkiem), więc każdy mechanizm, który iteruje
   (`ui/first_run_wizard.py`, krok `STEP_BRANCH`) też filtruje przez
   `visible_profiles()` - jeden fix w pickerze naprawił oba ekrany.
   **Nadal otwarte:** przycisk "+ Nowa branża..." zostaje widoczny.
-- **`ui/main_window.py::_about` (~linia 1601)** - okno "O programie" pisze
-  wprost `<b>Dingo!</b>` + osobistą dedykację ("Z dedykacją dla Mamy ❤️,
-  Dzięki za wsparcie i motywację") + link `madebykewin.pl`. Zero z tego nie
-  nadaje się na ekran, który zobaczy klient Enyo.
-- **`ui/tutorial_dialog.py`** - samouczek zaczyna się od "Witaj w Grafik
-  Dino v2!", opisuje program jako narzędzie "dla sklepów", a przykładowe
-  role w kroku 1 to "otwarcie"/"mięso" (Dino-specyficzne, nie istnieją w
-  profilu Ochrona). Zrzuty ekranu `assets/tutorial/step1-6.png` prawie na
-  pewno pokazują UI/dane Dino (nieprzejrzane wizualnie - do sprawdzenia
-  ręcznie, screenshoty się nie grepują).
-- **`ui/main_window.py:2097`** - tytuł dialogu aktualizacji to
-  `"Aktualizacja DinGO"`.
+- ✅ **ZROBIONE** `ui/main_window.py::_about` - "O programie" nie pisze już
+  `<b>Dingo!</b>` ani osobistej dedykacji ("Z dedykacją dla Mamy ❤️..."),
+  zostaje neutralny opis + wersja + `madebykewin.pl` (link do strony
+  producenta, nie marka Dino - zostawiony).
+- ✅ **ZROBIONE** samouczek (`_build_tutorial_steps` w `ui/main_window.py`,
+  RZECZYWIŚCIE używany overlay, nie `ui/tutorial_dialog.py` - patrz niżej) -
+  "Witaj w Dingo!" → "Witaj!". Reszta kroków była już neutralna. Zrzuty
+  ekranu (`assets/tutorial/step1-6.png`) obejrzane - to generyczne kadry
+  UI (przyciski, panel trybu szybkiego), bez brandingu/danych Dino - OK,
+  zostają bez zmian.
+- ✅ **ZROBIONE** (choć bez realnego efektu) `ui/tutorial_dialog.py` -
+  "Witaj w Grafik Dino v2!"/"dla sklepów"/"otwarcie, mięso" zneutralizowane.
+  Przy okazji ustalone: **ta klasa (`TutorialDialog`) jest martwym kodem -
+  nigdzie w aplikacji nie jest tworzona** (żywy samouczek to
+  `TutorialOverlay`/`_build_tutorial_steps`, wpis wyżej). Zero wpływu na
+  klienta; wart osobnej decyzji "usunąć plik" przy kolejnym porządkowaniu.
+- ✅ **ZROBIONE** `ui/main_window.py` (dialog aktualizacji) - tytuł
+  `"Aktualizacja DinGO"` → `"Aktualizacja programu"`.
 - **`release_channel.py`** - `RELEASE_CHANNEL = "dino"` zacommitowane jako
   wartość domyślna; build dla Enyo musi to nadpisywać przez
   `scripts/build_release.ps1 -Channel enyo` - do zweryfikowania, że

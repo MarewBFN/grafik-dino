@@ -1601,10 +1601,8 @@ class MainWindow(QMainWindow):
         msg.setWindowTitle("O programie")
 
         msg.setText(
-            "<b>Dingo!</b><br><br>"
+            "<b>Grafik pracy</b><br><br>"
             "Nowoczesne narzędzie do tworzenia grafików pracy.<br><br>"
-            "Z dedykacją dla Mamy ❤️<br>"
-            "Dzięki za wsparcie i motywację.<br><br>"
             f"<b>Wersja:</b> {APP_VERSION}<br><br>"
             "Strona: madebykewin.pl"
         )
@@ -1799,7 +1797,7 @@ class MainWindow(QMainWindow):
     def _build_tutorial_steps(self):
         return [
             TutorialStep(
-                "Witaj w Dingo!",
+                "Witaj!",
                 "Program służy do tworzenia grafików pracy.\n"
                 "Możesz generować grafik automatycznie albo układać go ręcznie.",
             ),
@@ -2094,7 +2092,7 @@ class MainWindow(QMainWindow):
 
     def _start_update_download(self, url):
         self.update_progress_dialog = QProgressDialog("Łączenie z serwerem aktualizacji...", "Anuluj", 0, 100, self)
-        self.update_progress_dialog.setWindowTitle("Aktualizacja DinGO")
+        self.update_progress_dialog.setWindowTitle("Aktualizacja programu")
         self.update_progress_dialog.setWindowModality(Qt.WindowModal)
         self.update_progress_dialog.setMinimumDuration(0)
         self.update_progress_dialog.setAutoClose(False)
