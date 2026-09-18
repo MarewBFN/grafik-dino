@@ -33,7 +33,6 @@ from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from ui import theme
-from ui.config_dialog import ConfigDialog
 from ui.day_edit_dialog import DayEditDialog
 from ui.main_window import MainWindow
 
@@ -653,17 +652,20 @@ class OpenNewProjectCustomProfilePolicyBugTests(unittest.TestCase):
             )
 
 
-class ConfigDialogLocationRenameBugTests(unittest.TestCase):
-    """Codex review finding on this PR: ConfigDialog._save() regenerated
-    every location's key from its current name via slugify() on every save,
-    while Employee.location_key is a stable reference recorded once - so
-    renaming a location with assigned employees replaced the whole
-    shop_config.locations mapping under a new key, and ShopConfig.get_location
-    silently fell back to the project-wide configuration for those
-    employees."""
+class LocationsDialogRenameBugTests(unittest.TestCase):
+    """Codex review finding (originally against ConfigDialog._save(), now
+    ui.locations_dialog.LocationsDialog._save() since the "Lokalizacje" tab
+    moved into its own dialog): regenerating every location's key from its
+    current name via slugify() on every save, while Employee.location_key is
+    a stable reference recorded once, meant renaming a location with
+    assigned employees replaced the whole shop_config.locations mapping
+    under a new key, and ShopConfig.get_location silently fell back to the
+    project-wide configuration for those employees. LocationsDialog._save()
+    guards against this via _LocationRow.original_key - this test protects
+    that guard."""
 
     def test_renaming_a_location_preserves_its_key(self):
-        from ui.config_dialog import _LocationRow
+        from ui.locations_dialog import LocationsDialog, _LocationRow
 
         shop = ShopConfig(2026, 8)  # project default hours: 05:30-22:45/23:00
         shop.locations["site1"] = LocationConfig(
@@ -671,29 +673,16 @@ class ConfigDialogLocationRenameBugTests(unittest.TestCase):
         )
         emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1")
 
-        dialog = ConfigDialog.__new__(ConfigDialog)
+        dialog = LocationsDialog.__new__(LocationsDialog)
         dialog.shop_config = shop
-        dialog.name_edit = MagicMock(text=MagicMock(return_value=""))
-        dialog.business_type_selector = MagicMock(currentData=MagicMock(return_value=shop.business_type))
-        dialog.open_edits = {}
-        dialog.sunday_checks = {}
-        dialog.max_consecutive = MagicMock(value=MagicMock(return_value=4))
-        dialog.standard_daily_hours = MagicMock(value=MagicMock(return_value=8.0))
-        dialog.min_open = MagicMock(value=MagicMock(return_value=3))
-        dialog.min_close = MagicMock(value=MagicMock(return_value=3))
-        dialog.force_fulltime_845 = MagicMock(isChecked=MagicMock(return_value=True))
-        dialog.hl_consecutive = MagicMock(isChecked=MagicMock(return_value=False))
-        dialog.rest_11h_mode_selector = MagicMock(currentData=MagicMock(return_value="standard"))
-        dialog.solver_time_limit = MagicMock(value=MagicMock(return_value=60))
-        dialog.policy_selectors = {}
-        dialog.accept = MagicMock()  # ConfigDialog.__new__ skips QDialog.__init__
+        dialog.accept = MagicMock()  # LocationsDialog.__new__ skips QDialog.__init__
 
-        # Same row, but renamed - open/close hours (08:00-20:00) and
-        # original_key ("site1", set by _build_locations_tab when this row
-        # was populated) unchanged, only the display name differs.
+        # Same row, but renamed - open hours (08:00-20:00) and original_key
+        # ("site1", set by LocationsDialog._build_ui when this row was
+        # populated) unchanged, only the display name differs.
         renamed_row = _LocationRow(
             lambda r: None, name="Nowa Nazwa",
-            open_time="08:00", close_time="20:00", original_key="site1",
+            open_hours={wd: ("08:00", "20:00") for wd in range(7)}, original_key="site1",
         )
         dialog._location_rows = [renamed_row]
 

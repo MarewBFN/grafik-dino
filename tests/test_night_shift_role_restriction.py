@@ -264,9 +264,14 @@ class TestBuildRoleTimeRestrictionRegularShifts:
 
     def test_shift_touching_night_window_is_forbidden(self):
         shop = ShopConfig(2026, 3)
-        # CLOSE ends exactly at 22:00 (start 14:00) - genuinely touches the
-        # 22:00-06:00 window and must still be forbidden after the fix.
-        shop.locations["site1"] = self._location(("08:00", "22:00"))
+        # CLOSE ends at 22:15 (start 14:15), genuinely spilling into the
+        # 22:00-06:00 window, so it must still be forbidden after the fix.
+        # (A CLOSE ending exactly at 22:00 borders the window without
+        # overlapping it under the half-open [start, end) interval semantics
+        # _shift_touches_window now shares with daily_windows_overlap - see
+        # TestShiftTouchesWindow above for that function's own boundary
+        # coverage - so it's deliberately not used here.)
+        shop.locations["site1"] = self._location(("08:00", "22:15"))
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
         ctx = _ctx(shop, [emp])
 
