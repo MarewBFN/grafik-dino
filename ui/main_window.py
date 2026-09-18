@@ -29,9 +29,11 @@ from PySide6.QtWidgets import (
 
 from export.excel_exporter import export_schedule_to_excel
 from export.image_exporter import export_schedule_to_image
+from export.pdf_exporter import export_schedule_to_pdf
 from export.employee_card_exporter import (
     export_employee_card_to_image,
     export_employee_cards_to_excel,
+    export_employee_cards_to_pdf,
     sanitize_filename_part,
 )
 from logic.schedule_controller import ScheduleController
@@ -644,11 +646,13 @@ class MainWindow(QMainWindow):
         export_menu = QMenu("Eksport", self)
         export_menu.addAction("Excel", self._export_excel)
         export_menu.addAction("JPG", self._export_image)
+        export_menu.addAction("PDF", self._export_pdf)
         file_menu.addMenu(export_menu)
 
         cards_menu = QMenu("Karty pracy", self)
         cards_menu.addAction("Excel...", self._export_employee_cards_excel)
         cards_menu.addAction("JPG...", self._export_employee_cards_image)
+        cards_menu.addAction("PDF...", self._export_employee_cards_pdf)
         file_menu.addMenu(cards_menu)
 
         file_menu.addSeparator()
@@ -1329,6 +1333,22 @@ class MainWindow(QMainWindow):
         )
         self.statusBar().showMessage("Wyeksportowano do JPG.", 2500)
 
+    def _export_pdf(self):
+        if self.demo.block_export(self):
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Eksport PDF", "", "PDF (*.pdf)")
+        if not path:
+            return
+
+        if not path.lower().endswith(".pdf"):
+            path += ".pdf"
+
+        export_schedule_to_pdf(
+            self.schedule, self.year, self.month, path, shop=self.shop_config,
+            employees=self.grid.get_visible_employees(),
+        )
+        self.statusBar().showMessage("Wyeksportowano do PDF.", 2500)
+
     def _pick_single_employee(self, title):
         # Ograniczone do aktualnie wybranej placówki (patrz przełącznik pod
         # "Grafik na:"), spójnie z tym, co użytkownik widzi w tabeli.
@@ -1424,6 +1444,25 @@ class MainWindow(QMainWindow):
             export_employee_card_to_image(self.schedule, self.year, self.month, path, shop=self.shop_config, employee=emp)
 
         self.statusBar().showMessage(f"Wyeksportowano {len(employees)} kart pracy do JPG.", 2500)
+
+    def _export_employee_cards_pdf(self):
+        if self.demo.block_export(self):
+            return
+        employees = self._employee_cards_scope_list("Karty pracy — PDF")
+        if not employees:
+            return
+
+        # Jeden dokument PDF niezależnie od liczby pracowników - jedna
+        # strona na pracownika (patrz export_employee_cards_to_pdf), więc
+        # w przeciwieństwie do JPG nie ma tu potrzeby wyboru folderu.
+        path, _ = QFileDialog.getSaveFileName(self, "Karty pracy — PDF", "", "PDF (*.pdf)")
+        if not path:
+            return
+        if not path.lower().endswith(".pdf"):
+            path += ".pdf"
+
+        export_employee_cards_to_pdf(self.schedule, self.year, self.month, path, shop=self.shop_config, employees=employees)
+        self.statusBar().showMessage(f"Wyeksportowano {len(employees)} kart(y) pracy do PDF.", 2500)
 
     def _update_generate_label(self):
         remaining = self.demo.get_remaining_generations()

@@ -149,10 +149,18 @@ class _EmployeeCardImageExporter:
 
         self.BLACK = (0, 0, 0)
 
-    def export(self, path):
+    def render(self):
+        """Rysuje kartę i zwraca gotowy obraz - bez zapisu, żeby ten sam
+        render mógł posłużyć zarówno JPG (`export`), jak i PDF
+        (`export_employee_cards_to_pdf`, wielostronicowy - jedna strona
+        na pracownika) bez powielania logiki rysowania."""
         y = self._draw_header()
         y = self._draw_data_block(y)
-        y = self._draw_table(y)
+        self._draw_table(y)
+        return self.img
+
+    def export(self, path):
+        self.render()
         self.img.save(path, "JPEG", quality=95)
 
     def _draw_header(self):
@@ -249,6 +257,26 @@ class _EmployeeCardImageExporter:
 def export_employee_card_to_image(schedule, year, month, path, shop=None, employee=None):
     exporter = _EmployeeCardImageExporter(schedule, year, month, shop, employee)
     exporter.export(path)
+    return True
+
+
+# ============================== PDF ===============================
+
+
+def export_employee_cards_to_pdf(schedule, year, month, path, shop=None, employees=None):
+    """Jeden dokument PDF, jedna strona na pracownika (kolejność jak w
+    `employees`) - ten sam render co JPG (`_EmployeeCardImageExporter.render()`),
+    tylko zapisany jako PDF zamiast JPEG (Pillow wspiera to natywnie,
+    wielostronicowo przez `save_all`/`append_images`)."""
+    employees = employees if employees is not None else schedule.employees
+
+    pages = [
+        _EmployeeCardImageExporter(schedule, year, month, shop, employee).render()
+        for employee in employees
+    ]
+
+    first, rest = pages[0], pages[1:]
+    first.save(path, "PDF", resolution=150.0, save_all=True, append_images=rest)
     return True
 
 

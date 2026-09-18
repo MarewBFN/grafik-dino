@@ -54,9 +54,16 @@ class SecurityScheduleImageExporter:
         self.SATURDAY = (225, 225, 225)
         self.SUNDAY = (200, 200, 200)
 
-    def export(self, path):
+    def render(self):
+        """Rysuje grafik i zwraca gotowy obraz - bez zapisu, żeby ten sam
+        render mógł posłużyć zarówno JPG (`export`), jak i PDF
+        (`export/pdf_exporter.py`) bez powielania logiki rysowania."""
         self._draw_header()
         self._draw_table()
+        return self.img
+
+    def export(self, path):
+        self.render()
         self.img.save(path, "JPEG", quality=95)
 
     # ================= HEADER =================
