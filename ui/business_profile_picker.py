@@ -34,9 +34,14 @@ class BusinessProfilePicker(QWidget):
         layout.addLayout(self.profiles_container)
         self._reload()
 
+        # Tworzenie profilu schowane dla Enyo - klient ma dokładnie jeden,
+        # gotowy profil "Ochrona" i nie zarządza profilami przez UI (patrz
+        # ENYO_ONLY_CHANGES.md). Guzik i cała logika kliknięcia zostają -
+        # tylko setVisible(False).
         new_branch_btn = QPushButton("+ Nowa branża...")
         new_branch_btn.setObjectName("secondaryButton")
         new_branch_btn.clicked.connect(self._open_profile_wizard)
+        new_branch_btn.setVisible(False)
         layout.addWidget(new_branch_btn)
 
     def selected_key(self):
@@ -71,14 +76,18 @@ class BusinessProfilePicker(QWidget):
 
             custom = get_custom_profile(profile.key)
             if custom is not None:
+                # Edycja/kasowanie schowane dla Enyo - patrz komentarz przy
+                # new_branch_btn wyżej.
                 edit_btn = QPushButton("Edytuj...")
                 edit_btn.setObjectName("secondaryButton")
                 edit_btn.clicked.connect(lambda _=False, key=profile.key: self._open_profile_wizard_for_edit(key))
+                edit_btn.setVisible(False)
                 row_layout.addWidget(edit_btn)
 
                 delete_btn = QPushButton("Usuń...")
                 delete_btn.setObjectName("dangerButton")
                 delete_btn.clicked.connect(lambda _=False, key=profile.key: self._delete_profile(key))
+                delete_btn.setVisible(False)
                 row_layout.addWidget(delete_btn)
 
             self._button_group.addButton(radio)

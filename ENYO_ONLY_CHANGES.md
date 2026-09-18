@@ -42,9 +42,11 @@ wyżej, żeby nie zaśmiecać jej ścieżkami plików, które w większości zos
 |---|---|---|---|---|---|
 | `model/business_profile.py` | Nowa funkcja `visible_profiles()` - filtruje `dino_retail` z listy do wyświetlenia, `BUSINESS_PROFILES`/`get_profile()` bez zmian | UKRYTY (dodatek, nic nie usunięte) | (ten wpis) | TAK (sama funkcja jest neutralna/nieużywana w main, nie szkodzi) | Czysto addytywne - można spokojnie zabrać do main, tylko main nie musi jej wywoływać |
 | `ui/business_profile_picker.py::_reload` | `BUSINESS_PROFILES.values()` → `visible_profiles()`; domyślny wybór profilu też liczony z listy widocznej, nie ze wszystkich zarejestrowanych | UKRYTY | (ten wpis) | NIE (main ma dalej pokazywać Dino w tym pickerze) | Używany przez `NewProjectDialog` i `FirstRunWizardDialog` - jeden fix naprawia oba ekrany |
-| `ui/config_dialog.py::_reload_business_type_selector` | `BUSINESS_PROFILES.values()` → `visible_profiles()` w dropdownie "Profil działalności:" | UKRYTY | (ten wpis) | NIE (main ma dalej pokazywać Dino) | Przyciski "Nowy/Edytuj/Usuń profil" ZOSTAJĄ widoczne - to osobna, nierozstrzygnięta decyzja (patrz Poziom 3 niżej), nie ruszałem ich |
+| `ui/config_dialog.py::_reload_business_type_selector` | `BUSINESS_PROFILES.values()` → `visible_profiles()` w dropdownie "Profil działalności:" | UKRYTY | (ten wpis) | NIE (main ma dalej pokazywać Dino) | |
 | `ui/config_dialog.py::_build_limits_tab` | Sekcja "MINIMALNA OBSADA PRACOWNIKÓW" (`min_open`/`min_close`) - budowana tylko gdy `business_type == DEFAULT_BUSINESS_TYPE`; same widżety `QSpinBox` zawsze tworzone (żeby `_save()` nie wymagał zmian), tylko nie trafiają do layoutu gdy ukryte | UKRYTY | (ten wpis) | NIE (main ma dalej pokazywać tę sekcję zawsze) | Zweryfikowane w izolacji: dla `dino_retail` sekcja się buduje bez zmian, dla innego profilu - nie |
 | `tests/test_first_run_wizard.py::test_wizard_dino_retail_feature_toggle_disables_meat_policy` | Test zakładał domyślny wybór "Dino" w kreatorze (teraz niedostępny w UI) | POMINIĘTY (`@pytest.mark.skip`, kod testu zostaje) | (ten wpis) | TAK (odkomentować/usunąć skip przy porcie do main) | Jedyny test, który padł po ukryciu Dino z pickera - 361/362 przeszło bez zmian |
+| `ui/config_dialog.py` (profile_row) | Guziki "Nowy profil...", "Edytuj profil...", "Usuń profil..." - `setVisible(False)` zaraz po utworzeniu, cała logika kliknięć/`_sync_edit_profile_button()` zostaje | UKRYTY | (ten wpis) | NIE (main ma je pokazywać) | Decyzja użytkownika: klient ma dokładnie jeden, gotowy profil "Ochrona" i nie zarządza profilami przez UI w ogóle |
+| `ui/business_profile_picker.py` | Guzik "+ Nowa branża..." oraz per-wierszowe "Edytuj..."/"Usuń..." dla każdego profilu custom na liście - `setVisible(False)`, logika zostaje | UKRYTY | (ten wpis) | NIE (main ma je pokazywać) | Ten sam powód co wyżej - inny punkt wejścia do tej samej funkcjonalności (używany przez "Nowy projekt" i kreator pierwszego uruchomienia) |
 
 ## Audyt (2026-09-18) - pełna lista kandydatów, jeszcze nietknięta
 
@@ -117,15 +119,12 @@ poza jakimkolwiek warunkiem), więc każdy mechanizm, który iteruje
 ### Poziom 3 - decyzje architektoniczne (nie da się rozstrzygnąć samym gotowym audytem)
 
 - ~~Czy dropdown profili ma przestać pokazywać Dino~~ - **ZROBIONE**
-  (`visible_profiles()`, patrz wyżej). Nadal otwarte: czy przyciski
-  "Nowy profil...", "Edytuj profil...", "Usuń profil..."
-  (`ui/config_dialog.py`) i "+ Nowa branża..." (`ui/business_profile_picker.py`,
-  otwiera `ProfileWizardDialog`) mają zniknąć w całości (klient ma
-  DOKŁADNIE jeden, gotowy profil "Ochrona" i nigdy nie tworzy nowego przez
-  UI), czy zostają na wypadek gdyby Enyo dostał drugi obiekt/branżę
-  wymagającą osobnego zestawu ról/reguł. Zostawione bez zmian, bo to
-  usunięcie/schowanie realnej funkcjonalności (tworzenie/edycja/kasowanie
-  profilu), nie samo "co widać w liście" - wymaga Twojej decyzji.
+  (`visible_profiles()`).
+- ~~Czy przyciski Nowy/Edytuj/Usuń profil i "+ Nowa branża..." mają
+  zniknąć~~ - **ZROBIONE** (decyzja: tak, ukryte - klient ma dokładnie
+  jeden, gotowy profil "Ochrona" i nie zarządza profilami przez UI).
+  `ProfileWizardDialog` sam w sobie zostaje w repo nietknięty, tylko
+  wszystkie 4 wejścia do niego są `setVisible(False)`.
 - Czy `DINO_RETAIL_PROFILE`/`dino_retail` zostaje zarejestrowany w ogóle w
   tym buildzie, czy usuwamy rejestrację i cały generator dino_retail
   fizycznie z tego brancha (mniejsza binarka, zero ryzyka wycieku, ale

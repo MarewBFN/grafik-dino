@@ -87,19 +87,27 @@ class ConfigDialog(QDialog):
         self.business_type_selector.currentIndexChanged.connect(self._on_business_type_changed)
         profile_row.addWidget(self.business_type_selector)
 
+        # Zarządzanie profilami (tworzenie/edycja/kasowanie) schowane dla
+        # Enyo - klient ma dokładnie jeden, gotowy profil "Ochrona" i nie
+        # zarządza profilami przez UI (patrz ENYO_ONLY_CHANGES.md). Guziki
+        # i cała logika kliknięć zostają - tylko setVisible(False), żeby nie
+        # tracić funkcjonalności na wypadek powrotu do main.
         new_profile_btn = QPushButton("Nowy profil...")
         new_profile_btn.setObjectName("secondaryButton")
         new_profile_btn.clicked.connect(self._open_profile_wizard)
+        new_profile_btn.setVisible(False)
         profile_row.addWidget(new_profile_btn)
 
         self.edit_profile_btn = QPushButton("Edytuj profil...")
         self.edit_profile_btn.setObjectName("secondaryButton")
         self.edit_profile_btn.clicked.connect(self._open_profile_wizard_for_edit)
+        self.edit_profile_btn.setVisible(False)
         profile_row.addWidget(self.edit_profile_btn)
 
         self.delete_profile_btn = QPushButton("Usuń profil...")
         self.delete_profile_btn.setObjectName("dangerButton")
         self.delete_profile_btn.clicked.connect(self._delete_current_profile)
+        self.delete_profile_btn.setVisible(False)
         profile_row.addWidget(self.delete_profile_btn)
 
         self._sync_edit_profile_button()
