@@ -893,3 +893,49 @@ projektu albo zapisaniu Konfiguracji. Naprawione węziej: tylko MANDATORY
 (które realnie groziło niewykonalnością) jest korygowane na PREFERRED,
 DISABLED zostaje. Zweryfikowane na projekcie demo: zapis → wczytanie →
 `balance` faktycznie zostaje DISABLED (wcześniej wracało na PREFERRED).
+
+---
+
+## 16. "Karty pracy" — eksport karty pracy pojedynczego pracownika (2026-09-18)
+
+Na prośbę: nowy moduł eksportu, niezależny od profilu biznesowego (Dino/
+Ochrona) - jedna strona A4 = jeden pracownik = jeden miesiąc, wzorowana
+na papierowym formularzu "Lista obecności miesięczna pracownika" klienta
+(dni w wierszach, nie w kolumnach jak reszta eksportów; miejsce na
+odręczny podpis). Zastąpiła dawne pozycje menu "Excel/JPG (jeden
+pracownik)..." - te renderowały tego samego, wielo-pracownikowego
+eksportera co cała załoga, tylko z listą jednoelementową; karta pracy to
+osobny, od zera zbudowany moduł: `export/employee_card_exporter.py`
+(`export_employee_card_to_image`, `export_employee_cards_to_excel`) +
+nowe podmenu "Karty pracy" w `ui/main_window.py`, z wyborem zakresu
+(cała aktualna lokalizacja - JPG: folder z jednym plikiem per pracownik,
+Excel: jeden plik z jednym arkuszem per pracownik - albo jeden wybrany
+pracownik).
+
+Dwie wartości na karcie są dziś świadomym przybliżeniem, bo klient nie
+sprecyzował ich jeszcze w żadnej wcześniejszej turze:
+
+1. **Pole "Norma"** (nominalny wymiar godzin na miesiąc) - zostaje dziś
+   **puste**. Do ustalenia: czy ma to być czysty nominał × wymiar etatu
+   (`shop.get_full_time_nominal_hours() * employment_fraction`, bez
+   pomniejszania o urlop/L4 wzięty w danym miesiącu), czy ten sam
+   `target_minutes` co dziś liczy `logic/monthly_hours_status.py`
+   (nominał × wymiar etatu, POMNIEJSZONY o urlop/L4), czy jeszcze inna,
+   stała liczba wpisywana ręcznie w Konfiguracji (podobny temat już
+   padł w sekcji 8, pytanie 6, dla kolorowania przekroczenia - nie
+   został tam ostatecznie rozstrzygnięty co do źródła liczby, tylko co
+   do progu porównania).
+2. **Próg "Dzienna / Nocna"** (kolumna klasyfikująca zmianę danego dnia)
+   - zaimplementowany jako "jakiekolwiek nakładanie z oknem 22:00-06:00
+   z kodeksu pracy" (>0 minut nakładania → "Nocna"), czyli najprostsza,
+   dosłowna interpretacja definicji pracy w porze nocnej. To jest
+   zgadywanie, jawnie zaznaczone jako niepewne - klient może chcieć
+   inny próg (np. większość godzin zmiany w porze nocnej, albo osobna
+   reguła dla zmiany 24h, która dziś zawsze wychodzi jako "Nocna", mimo
+   że w praktyce jest też "Dzienna").
+
+Obie wartości są odizolowane w `export/employee_card_exporter.py`
+(`_night_minutes`/`_shift_label` dla progu Dzienna/Nocna, puste pole
+"Norma" wprost w `_write_employee_sheet`/`_EmployeeCardImageExporter`) -
+zmiana po odpowiedzi klienta to edycja w jednym miejscu, bez ryzyka dla
+reszty eksportów czy generatora.

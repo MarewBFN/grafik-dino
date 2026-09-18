@@ -29,6 +29,11 @@ from PySide6.QtWidgets import (
 
 from export.excel_exporter import export_schedule_to_excel
 from export.image_exporter import export_schedule_to_image
+from export.employee_card_exporter import (
+    export_employee_card_to_image,
+    export_employee_cards_to_excel,
+    sanitize_filename_part,
+)
 from logic.schedule_controller import ScheduleController
 from model.business_profile import DEFAULT_BUSINESS_TYPE
 from model.location import format_open_hours_summary
@@ -639,10 +644,12 @@ class MainWindow(QMainWindow):
         export_menu = QMenu("Eksport", self)
         export_menu.addAction("Excel", self._export_excel)
         export_menu.addAction("JPG", self._export_image)
-        export_menu.addSeparator()
-        export_menu.addAction("Excel (jeden pracownik)...", self._export_excel_single_employee)
-        export_menu.addAction("JPG (jeden pracownik)...", self._export_image_single_employee)
         file_menu.addMenu(export_menu)
+
+        cards_menu = QMenu("Karty pracy", self)
+        cards_menu.addAction("Excel...", self._export_employee_cards_excel)
+        cards_menu.addAction("JPG...", self._export_employee_cards_image)
+        file_menu.addMenu(cards_menu)
 
         file_menu.addSeparator()
         file_menu.addAction("Drukuj...", self._print_schedule)
@@ -1335,34 +1342,88 @@ class MainWindow(QMainWindow):
             return None
         return employees[names.index(name)]
 
-    def _export_excel_single_employee(self):
+    def _pick_card_scope(self, title):
+        """Wybór zakresu dla "Karty pracy": wszyscy pracownicy aktualnie
+        wybranej lokalizacji, jeden konkretny pracownik, albo anulowanie
+        (None)."""
+        box = QMessageBox(self)
+        box.setWindowTitle(title)
+        box.setText("Czy wygenerować kartę dla całej lokalizacji, czy dla jednego pracownika?")
+        btn_all = box.addButton("Cała lokalizacja", QMessageBox.AcceptRole)
+        btn_single = box.addButton("Wybierz pracownika...", QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Cancel)
+        box.exec()
+
+        clicked = box.clickedButton()
+        if clicked is btn_all:
+            return "all"
+        if clicked is btn_single:
+            return "single"
+        return None
+
+    def _employee_cards_scope_list(self, title):
+        """Zwraca listę pracowników do wygenerowania kart wg wyboru
+        użytkownika (cała lokalizacja / jeden pracownik), albo None przy
+        anulowaniu/braku pracowników."""
+        scope = self._pick_card_scope(title)
+        if scope is None:
+            return None
+
+        if scope == "all":
+            employees = self.grid.get_visible_employees()
+            if not employees:
+                QMessageBox.warning(self, title, "Brak pracowników w tej placówce.")
+                return None
+            return employees
+
+        emp = self._pick_single_employee(title)
+        if emp is None:
+            return None
+        return [emp]
+
+    def _export_employee_cards_excel(self):
         if self.demo.block_export(self):
             return
-        emp = self._pick_single_employee("Eksport Excel — pracownik")
-        if emp is None:
+        employees = self._employee_cards_scope_list("Karty pracy — Excel")
+        if not employees:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Eksport Excel", "", "Excel (*.xlsx)")
+
+        path, _ = QFileDialog.getSaveFileName(self, "Karty pracy — Excel", "", "Excel (*.xlsx)")
         if not path:
             return
 
-        export_schedule_to_excel(self.schedule, self.year, self.month, path, shop=self.shop_config, employees=[emp])
-        self.statusBar().showMessage(f"Wyeksportowano grafik {emp.display_name()} do Excela.", 2500)
+        export_employee_cards_to_excel(self.schedule, self.year, self.month, path, shop=self.shop_config, employees=employees)
+        self.statusBar().showMessage("Wyeksportowano karty pracy do Excela.", 2500)
 
-    def _export_image_single_employee(self):
+    def _export_employee_cards_image(self):
         if self.demo.block_export(self):
             return
-        emp = self._pick_single_employee("Eksport JPG — pracownik")
-        if emp is None:
-            return
-        path, _ = QFileDialog.getSaveFileName(self, "Eksport JPG", "", "Obraz JPG (*.jpg)")
-        if not path:
+        employees = self._employee_cards_scope_list("Karty pracy — JPG")
+        if not employees:
             return
 
-        if not path.lower().endswith(".jpg"):
-            path += ".jpg"
+        if len(employees) == 1:
+            emp = employees[0]
+            path, _ = QFileDialog.getSaveFileName(self, "Karta pracy — JPG", "", "Obraz JPG (*.jpg)")
+            if not path:
+                return
+            if not path.lower().endswith(".jpg"):
+                path += ".jpg"
 
-        export_schedule_to_image(self.schedule, self.year, self.month, path, shop=self.shop_config, employees=[emp])
-        self.statusBar().showMessage(f"Wyeksportowano grafik {emp.display_name()} do JPG.", 2500)
+            export_employee_card_to_image(self.schedule, self.year, self.month, path, shop=self.shop_config, employee=emp)
+            self.statusBar().showMessage(f"Wyeksportowano kartę pracy {emp.display_name()} do JPG.", 2500)
+            return
+
+        folder = QFileDialog.getExistingDirectory(self, "Karty pracy — folder docelowy")
+        if not folder:
+            return
+
+        for emp in employees:
+            name_part = sanitize_filename_part(f"{emp.last_name}_{emp.first_name}")
+            path = os.path.join(folder, f"Karta_pracy_{name_part}_{self.month:02d}_{self.year}.jpg")
+            export_employee_card_to_image(self.schedule, self.year, self.month, path, shop=self.shop_config, employee=emp)
+
+        self.statusBar().showMessage(f"Wyeksportowano {len(employees)} kart pracy do JPG.", 2500)
 
     def _update_generate_label(self):
         remaining = self.demo.get_remaining_generations()
