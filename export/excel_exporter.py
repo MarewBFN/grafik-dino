@@ -20,7 +20,8 @@ def export_schedule_to_excel(schedule, year, month, path):
     weekdays = ["Pn", "Wt", "Śr", "Cz", "Pt", "S", "N"]
 
     # Style
-    fill_title = PatternFill(start_color="EDEDED", end_color="EDEDED", fill_type="solid")
+    fill_sat = PatternFill(start_color="E1E1E1", end_color="E1E1E1", fill_type="solid")
+    fill_sun = PatternFill(start_color="C8C8C8", end_color="C8C8C8", fill_type="solid")
     align_center = Alignment(horizontal="center", vertical="center")
     border_thin = Border(left=Side(style='thin'), right=Side(style='thin'),
                          top=Side(style='thin'), bottom=Side(style='thin'))
@@ -38,23 +39,23 @@ def export_schedule_to_excel(schedule, year, month, path):
     # NAGŁÓWEK TABELI
     ws.merge_cells("A4:B5")
     ws.cell(row=4, column=1, value="Nazwisko i imię").alignment = align_center
-    for r in (4, 5):
-        for col in (1, 2):
-            ws.cell(row=r, column=col).fill = fill_title
-
+    
     ws.merge_cells(start_row=3, start_column=3, end_row=3, end_column=sum_col_start-1)
     ws.cell(row=3, column=3, value="Dni miesiąca").alignment = align_center
     ws.cell(row=3, column=3).font = Font(bold=True)
-    for col in range(3, sum_col_start):
-        ws.cell(row=3, column=col).fill = fill_title
-
+    
     # Nagłówki dni
     for day in range(1, days_in_month + 1):
         col = day + 2
         wd = calendar.weekday(year, month, day)
         ws.cell(row=4, column=col, value=day).alignment = align_center
         ws.cell(row=5, column=col, value=weekdays[wd]).alignment = align_center
-        ws.cell(row=5, column=col).fill = fill_title
+        if wd == 5:
+            ws.cell(row=4, column=col).fill = fill_sat
+            ws.cell(row=5, column=col).fill = fill_sat
+        elif wd == 6:
+            ws.cell(row=4, column=col).fill = fill_sun
+            ws.cell(row=5, column=col).fill = fill_sun
 
     # NAGŁÓWKI PODSUMOWANIA (odwzorowanie ImageExporter)
     sum_labels = ["Godziny", "Urlop", "L4", "Razem"]
@@ -64,8 +65,6 @@ def export_schedule_to_excel(schedule, year, month, path):
         c = ws.cell(row=4, column=col, value=lbl)
         c.alignment = Alignment(textRotation=90, horizontal="center", vertical="center")
         c.font = Font(bold=True)
-        for r in (4, 5):
-            ws.cell(row=r, column=col).fill = fill_title
 
     # DANE PRACOWNIKÓW
     cur_row = 6
@@ -75,22 +74,23 @@ def export_schedule_to_excel(schedule, year, month, path):
         name_cell = ws.cell(row=cur_row, column=1, value=emp.display_name())
         name_cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
         name_cell.font = Font(bold=True)
-        for r in range(cur_row, cur_row + 3):
-            ws.cell(row=r, column=1).fill = fill_title
 
         for i, lbl in enumerate(["od", "do", "h"]):
-            c = ws.cell(row=cur_row + i, column=2, value=lbl)
-            c.alignment = align_center
-            c.fill = fill_title
+            ws.cell(row=cur_row + i, column=2, value=lbl).alignment = align_center
 
         # Dni miesiąca
         for day in range(1, days_in_month + 1):
             col = day + 2
             ds = schedule.get_day(emp, day)
-
+            wd = calendar.weekday(year, month, day)
+            
             cells = [ws.cell(row=cur_row + i, column=col) for i in range(3)]
             for c in cells:
                 c.alignment = align_center
+                if wd == 5:
+                    c.fill = fill_sat
+                elif wd == 6:
+                    c.fill = fill_sun
 
             if ds.is_leave:
                 ws.merge_cells(start_row=cur_row, start_column=col, end_row=cur_row+2, end_column=col)
