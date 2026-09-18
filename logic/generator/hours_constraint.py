@@ -1,4 +1,25 @@
 from logic.utils.time_utils import get_effective_daily_hours
+from logic.generator.night_shift_constraint import night_shift_minutes_for_employee
+from logic.generator.duty_rotation_constraint import duty_rotation_minutes_for_employee
+
+
+def _shift_minutes_by_type(all_shifts, standard_minutes, overrides):
+    """Minuty przypisane każdej zmianie z all_shifts - stała, wspólna
+    wartość dla wszystkich zwykłych zmian (tak jak dziś), z wyjątkiem
+    zmian o własnym, sztywnym czasie trwania niezależnym od
+    get_effective_daily_hours pracownika (SHIFT_NIGHT - Etap C planu zmian
+    nocnych - i pięć zmian rotacji 24/7 - Etap B planu profilu ochrona),
+    przekazanych w `overrides` jako {shift_id: minuty}."""
+    return {s: overrides.get(s, standard_minutes) for s in all_shifts}
+
+
+def _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts):
+    overrides = {}
+    if shift_night is not None:
+        overrides[shift_night] = night_shift_minutes_for_employee(shop, emp)
+    if duty_shifts is not None:
+        overrides.update(duty_rotation_minutes_for_employee(shop, emp, duty_shifts))
+    return overrides
 
 
 def add_monthly_hours_constraint(
@@ -10,7 +31,9 @@ def add_monthly_hours_constraint(
     shop,
     all_shifts,
     soft=False,
-    trace=None
+    trace=None,
+    shift_night=None,
+    duty_shifts=None,
 ):
     violations = []
 
@@ -44,10 +67,14 @@ def add_monthly_hours_constraint(
 
         total_minutes = model.NewIntVar(0, 50000, f"month_total_e{e}")
 
+        minutes_by_shift = _shift_minutes_by_type(
+            all_shifts, shift_minutes, _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts),
+        )
+
         model.Add(
             total_minutes ==
             sum(
-                x[e, d, s] * shift_minutes
+                x[e, d, s] * minutes_by_shift[s]
                 for d in days
                 for s in all_shifts
             )
@@ -93,7 +120,9 @@ def add_balance_constraint(
     shop,
     all_shifts,
     soft=True,
-    trace=None
+    trace=None,
+    shift_night=None,
+    duty_shifts=None,
 ):
     if trace is not None:
         trace.log_constraint("balance", f"soft={soft}")
@@ -112,12 +141,16 @@ def add_balance_constraint(
         nominal_minutes = int(nominal * 60 * emp.employment_fraction)
         shift_minutes = int(get_effective_daily_hours(emp, shop) * 60)
 
+        minutes_by_shift = _shift_minutes_by_type(
+            all_shifts, shift_minutes, _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts),
+        )
+
         total_minutes = model.NewIntVar(0, 20000, f"total_minutes_e{e}")
 
         model.Add(
             total_minutes ==
             sum(
-                sum(x[e, d, s] for s in all_shifts) * shift_minutes
+                sum(x[e, d, s] * minutes_by_shift[s] for s in all_shifts)
                 for d in days
             )
         )

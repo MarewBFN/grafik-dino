@@ -2,6 +2,10 @@ from dataclasses import dataclass, field
 import uuid
 from typing import Dict
 
+_ROLE_FIELDS = {
+    "is_opener", "is_meat", "is_meat_light", "is_manager", "no_night", "no_afternoon",
+}
+
 @dataclass(order=True, frozen=True)
 class Employee:
     """
@@ -32,8 +36,25 @@ class Employee:
     id: str = field(default_factory=lambda: str(uuid.uuid4()), compare=False)
     availability: Dict[int, dict] = field(default_factory=dict, compare=False)
 
+    # Role spoza sześciu pól powyżej (np. dla innych profili działalności niż
+    # Dino), trzymane jako słownik zamiast kolejnych pól dataclass.
+    custom_roles: Dict[str, bool] = field(default_factory=dict, compare=False)
+
+    # Klucz lokalizacji (model.location.LocationConfig) do której przypisany
+    # jest pracownik. Puste = brak przypisania (dzisiejsze, jednolokalizacyjne
+    # zachowanie) - patrz ShopConfig.locations.
+    location_key: str = field(default="", compare=False)
+
     def display_name(self) -> str:
         return f"{self.last_name} {self.first_name}"
+
+    def has_role(self, key: str) -> bool:
+        """True if this employee carries role `key`, whether it's one of the
+        six legacy Dino fields (is_opener, is_meat, ...) or a custom_roles
+        entry from another business profile."""
+        if key in _ROLE_FIELDS:
+            return bool(getattr(self, key))
+        return bool(self.custom_roles.get(key, False))
 
     def validate(self) -> None:
         if not self.last_name.strip():

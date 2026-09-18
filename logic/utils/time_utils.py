@@ -1,4 +1,13 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
+
+# Przeniesione do model/location.py (żeby model/ nie zaczęło importować z
+# logic/) - re-eksportowane tutaj, żeby istniejące importy w logic/generator/*
+# i testach zostały bez zmian.
+from model.location import (  # noqa: F401
+    daily_subintervals,
+    daily_windows_overlap,
+    hour_window_overlaps_time_range,
+)
 
 
 def get_effective_daily_hours(emp, shop):
@@ -11,7 +20,7 @@ def get_effective_daily_hours(emp, shop):
         hours = 8.50
 
     else:
-        hours = 8.0 * emp.employment_fraction
+        hours = shop.standard_daily_hours * emp.employment_fraction
 
     minutes = int(hours * 60)
     minutes = (minutes // 15) * 15

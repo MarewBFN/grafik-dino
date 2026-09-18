@@ -85,14 +85,19 @@ def add_max_consecutive_constraint(
     max_consecutive,
     all_shifts,
     soft=False,
-    trace=None
+    trace=None,
+    employee_indices=None,
 ):
     if trace is not None:
         trace.log_constraint("max_consecutive", f"max_consecutive={max_consecutive} soft={soft}")
 
     violations = []
 
-    for e in range(len(employees)):
+    # employee_indices lets a caller apply this same max_consecutive value
+    # to only some employees (e.g. one per-location group at a time) while
+    # keeping x[e,...] indices global - default is every employee, exactly
+    # today's behavior.
+    for e in (employee_indices if employee_indices is not None else range(len(employees))):
         for start in range(1, len(days) - max_consecutive + 1):
 
             work_sum = sum(

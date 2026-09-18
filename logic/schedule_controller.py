@@ -44,9 +44,16 @@ class ScheduleController:
         except:
             return  # nieprawidłowy format → ignoruj
 
-        # ❌ BLOKADA: koniec <= start
+        # ❌ BLOKADA: koniec <= start, chyba że to dokładnie skonfigurowana
+        # zmiana nocna tej lokalizacji (Etap D planu zmian nocnych) - inne
+        # dowolne zakresy przez północ i tak nie są rozpoznawane przez
+        # generator (logic/generator/night_shift_constraint.py), więc
+        # przepuszczanie ich tutaj tylko tworzyłoby martwe, niezrozumiałe
+        # dla generatora wpisy.
         if end_dt <= start_dt:
-            return
+            night_hours = self.shop_config.get_location(emp).get_night_shift_hours()
+            if night_hours != (start, end):
+                return
 
         ds = self.schedule.get_day(emp, day)
 
@@ -55,6 +62,42 @@ class ScheduleController:
 
         self.snapshot()
         self.schedule.set_day_hours(emp, day, start, end)
+        ds.is_locked = True
+        ds.shift_class = None
+
+    def set_day_preset(self, emp, day, preset):
+        """Zastosuj przedział zdefiniowany w "Ustawieniach trybu szybkiego"
+        (Konfiguracja -> Ustawienia trybu szybkiego). W odróżnieniu od
+        set_day_hours ufa przedziałowi bez sprawdzania go względem zmiany
+        nocnej lokalizacji - użytkownik zdefiniował go świadomie w
+        konfiguracji (a nie wpisał przypadkowo w locie), i normalize_quick_mode_presets
+        już zagwarantowało, że godziny są sensowne."""
+        ds = self.schedule.get_day(emp, day)
+        full_day = bool(preset.get("full_day"))
+        start = preset["start"]
+        end = preset.get("end")
+
+        # is_locked musi być częścią porównania: komórka może już mieć te
+        # same godziny "przypadkiem" (np. wygenerowane automatycznie przez
+        # generator) bez bycia zablokowaną ręcznie - kliknięcie presetu ma
+        # wtedy nadal skutek (zablokowanie), więc nie może się skrócić do
+        # no-opa tylko dlatego, że start/end się zgadzają.
+        if full_day:
+            if ds.is_locked and ds.is_full_day and ds.start == start:
+                return
+        elif (
+            ds.is_locked and ds.start == start and ds.end == end
+            and not ds.is_full_day and not ds.is_leave and not ds.is_sick
+        ):
+            return
+
+        self.snapshot()
+
+        if full_day:
+            self.schedule.set_day_full_day_shift(emp, day, start)
+        else:
+            self.schedule.set_day_hours(emp, day, start, end)
+
         ds.is_locked = True
         ds.shift_class = None
 
@@ -166,7 +209,9 @@ class ScheduleController:
                     return
 
                 if end_dt <= start_dt:
-                    return
+                    night_hours = self.shop_config.get_location(emp).get_night_shift_hours()
+                    if night_hours != (start, end):
+                        return
 
                 ds.start = start
                 ds.end = end
