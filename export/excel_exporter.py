@@ -1,7 +1,7 @@
 import calendar
 from datetime import datetime
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+from openpyxl.styles import Alignment, Font, Border, Side
 from openpyxl.utils import get_column_letter
 
 def _format_hour(time_str):
@@ -20,8 +20,6 @@ def export_schedule_to_excel(schedule, year, month, path):
     weekdays = ["Pn", "Wt", "Śr", "Cz", "Pt", "S", "N"]
 
     # Style
-    fill_sat = PatternFill(start_color="E1E1E1", end_color="E1E1E1", fill_type="solid")
-    fill_sun = PatternFill(start_color="C8C8C8", end_color="C8C8C8", fill_type="solid")
     align_center = Alignment(horizontal="center", vertical="center")
     border_thin = Border(left=Side(style='thin'), right=Side(style='thin'),
                          top=Side(style='thin'), bottom=Side(style='thin'))
@@ -50,12 +48,6 @@ def export_schedule_to_excel(schedule, year, month, path):
         wd = calendar.weekday(year, month, day)
         ws.cell(row=4, column=col, value=day).alignment = align_center
         ws.cell(row=5, column=col, value=weekdays[wd]).alignment = align_center
-        if wd == 5:
-            ws.cell(row=4, column=col).fill = fill_sat
-            ws.cell(row=5, column=col).fill = fill_sat
-        elif wd == 6:
-            ws.cell(row=4, column=col).fill = fill_sun
-            ws.cell(row=5, column=col).fill = fill_sun
 
     # NAGŁÓWKI PODSUMOWANIA (odwzorowanie ImageExporter)
     sum_labels = ["Godziny", "Urlop", "L4", "Razem"]
@@ -82,15 +74,10 @@ def export_schedule_to_excel(schedule, year, month, path):
         for day in range(1, days_in_month + 1):
             col = day + 2
             ds = schedule.get_day(emp, day)
-            wd = calendar.weekday(year, month, day)
-            
+
             cells = [ws.cell(row=cur_row + i, column=col) for i in range(3)]
             for c in cells:
                 c.alignment = align_center
-                if wd == 5:
-                    c.fill = fill_sat
-                elif wd == 6:
-                    c.fill = fill_sun
 
             if ds.is_leave:
                 ws.merge_cells(start_row=cur_row, start_column=col, end_row=cur_row+2, end_column=col)

@@ -34,8 +34,6 @@ class ImageScheduleExporter:
             self.font_b = self.font
 
         self.GRID = (0, 0, 0)
-        self.SATURDAY = (225, 225, 225)
-        self.SUNDAY = (200, 200, 200)
 
     def export(self, path):
         self._draw_header()
@@ -76,15 +74,9 @@ class ImageScheduleExporter:
         center = start_x + (self.days * self.CELL_W) // 2
         self._draw_centered_text(center, y - 60, "Dni miesiąca", self.font_b)
 
-        table_bottom = self.HEADER_H + len(self.employees) * 3 * self.CELL_H
-
         for d in range(1, self.days + 1):
             x = start_x + (d - 1) * self.CELL_W
             wd = calendar.weekday(self.year, self.month, d)
-
-            color = self.SUNDAY if wd == 6 else self.SATURDAY if wd == 5 else None
-            if color:
-                self.draw.rectangle([x, y - 40, x + self.CELL_W, table_bottom], fill=color)
 
             self.draw.rectangle([x, y - 40, x + self.CELL_W, y - 20], outline=self.GRID)
             self.draw.text((x + self.CELL_W // 2, y - 30), str(d), fill=(0, 0, 0), font=self.font, anchor="mm")
