@@ -29,6 +29,8 @@ w dniu d+1) - nie trzeba osobno traktować "starych" zmian w ogóle.
 
 from datetime import datetime, timedelta
 
+from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
+
 MIN_REST = timedelta(hours=11)
 FMT = "%H:%M"
 
@@ -85,7 +87,7 @@ def add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shif
 
     for _, (rotation, indices) in groups.items():
         rotation_capable_count = sum(
-            1 for e in indices if not employees[e].custom_roles.get("nie_chce_24h", False)
+            1 for e in indices if not employees[e].custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False)
         )
         max_required = _required_rest("weekend_full", rotation_capable_count)
         # +2 dni marginesu na przesunięcia z zaokrąglania godzin/zmian

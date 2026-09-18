@@ -219,6 +219,33 @@ QFrame#sidebarHero {
     border-radius: 16px;
 }
 
+QFrame#locationSwitcher {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+}
+
+QPushButton#locationSwitcherArrow {
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-weight: 700;
+    color: #475569;
+}
+
+QPushButton#locationNameButton {
+    background: transparent;
+    border: none;
+    padding: 4px 6px;
+    text-align: center;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+QPushButton#locationNameButton:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
 QLabel#titleLabel {
     font-size: 26px;
     font-weight: 800;

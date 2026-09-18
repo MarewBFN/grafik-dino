@@ -116,10 +116,22 @@ def get_custom_profile(business_type: str | None):
 
 def register_custom_profile(custom) -> None:
     from logic.generator import custom_profile_wiring
+    from model.custom_profile import GENERIC_SUMMARY_ROWS
 
     CUSTOM_PROFILES[custom.key] = custom
 
-    summary_rows = [("Otwarcie", "open"), ("Zamknięcie", "close")]
+    # W przeciwieństwie do Dino, profile custom nie mają "na sztywno" żadnego
+    # z tych ogólnych wskaźników (obsada otwarcia/zamknięcia, rano/popo,
+    # mięso) - to czysto informacyjne wiersze (patrz
+    # ui/grid_view.py::_fill_validation_rows, generyczne dla każdego profilu),
+    # nie egzekwowane przez żadną regułę generatora dla profili custom, więc
+    # użytkownik wybiera je świadomie w kreatorze ("Wiersze podsumowania" w
+    # ui/profile_wizard_dialog.py) zamiast dziedziczyć dwa wiersze
+    # specyficzne dla Dino.
+    enabled = set(custom.enabled_summary_rows)
+    summary_rows = [
+        (label, key) for key, label in GENERIC_SUMMARY_ROWS if key in enabled
+    ]
     summary_rows.extend(
         (role.label, f"role:{role.key}") for role in custom.roles if role.show_summary_row
     )

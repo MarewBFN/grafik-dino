@@ -81,7 +81,6 @@ class ClassifyEditableSideTests(unittest.TestCase):
         as SHIFT_NIGHT on the next regenerate (Etap D)."""
         shop = ShopConfig(2026, 8)
         loc = LocationConfig(key="site1", name="Site 1")
-        loc.set_night_shift("22:00", "06:00")
         shop.locations["site1"] = loc
         schedule = MonthSchedule(2026, 8)
         emp = Employee("Testowy", "Pracownik", location_key="site1")
@@ -161,7 +160,6 @@ class BalanceEmployeeHoursTests(unittest.TestCase):
         (Etap A)."""
         shop = ShopConfig(2026, 8)
         loc = LocationConfig(key="site1", name="Site 1")
-        loc.set_night_shift("22:00", "06:00")
         shop.locations["site1"] = loc
         schedule = MonthSchedule(2026, 8)
         emp = Employee("Testowy", "Pracownik", location_key="site1")

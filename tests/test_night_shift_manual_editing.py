@@ -38,8 +38,10 @@ NIGHT_HOURS = ("22:00", "06:00")
 
 def _shop_with_night():
     shop = ShopConfig(2026, 8)
+    # Default open_hours already overlap 22:00-06:00, so this auto-detects
+    # the standard night window - LocationConfig no longer has a way to
+    # configure an arbitrary/custom night window (see model/location.py).
     loc = LocationConfig(key="site1", name="Site 1")
-    loc.set_night_shift(*NIGHT_HOURS)
     shop.locations["site1"] = loc
     return shop
 
@@ -255,55 +257,14 @@ class NoNightConstraintShiftNightTests(unittest.TestCase):
         self.assertEqual(solver.Value(x[0, 3, SHIFT_NIGHT]), 1)
         self.assertEqual(solver.Value(night_violation), 1)
 
-    def test_no_night_does_not_block_a_night_shift_window_that_is_not_actually_nocturnal(self):
-        """Codex review finding on PR #3 (P2): normalize_night_shift only
-        requires start != end - a location could configure "night_shift" as
-        an arbitrary fixed midday block (e.g. a delivery-unloading window)
-        that never touches 22:00-06:00. no_night describes "before 6:00 and
-        after 22:00" (ui/employee_dialog.py); it must not block a
-        configured window that doesn't actually overlap that range."""
-        shop = ShopConfig(2026, 8)
-        loc = LocationConfig(key="site1", name="Site 1")
-        loc.set_night_shift("10:00", "14:00")  # a fixed midday block, not night
-        shop.locations["site1"] = loc
-        emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1", no_night=True)
-
-        model = cp_model.CpModel()
-        x = {(0, 3, s): model.NewBoolVar(f"x_{s}") for s in ALL_SHIFTS}
-
-        add_no_night_constraint(
-            model, x, [emp], [3], shop, ALL_SHIFTS,
-            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
-            soft=False, shift_night=SHIFT_NIGHT,
-        )
-        model.Add(x[0, 3, SHIFT_NIGHT] == 1)
-
-        status = cp_model.CpSolver().Solve(model)
-        self.assertIn(status, (cp_model.OPTIMAL, cp_model.FEASIBLE))
-
-    def test_no_night_blocks_a_fixed_window_that_partially_overlaps_night_hours(self):
-        """Regression companion to the test above: a fixed window that
-        genuinely touches the night range (05:00-06:00 here) must still be
-        blocked, even though it isn't the "canonical" 22:00-06:00 window."""
-        shop = ShopConfig(2026, 8)
-        loc = LocationConfig(key="site1", name="Site 1")
-        loc.set_night_shift("05:00", "13:00")  # overlaps 22:00-06:00 by one hour
-        shop.locations["site1"] = loc
-        emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1", no_night=True)
-
-        model = cp_model.CpModel()
-        x = {(0, 3, s): model.NewBoolVar(f"x_{s}") for s in ALL_SHIFTS}
-
-        add_no_night_constraint(
-            model, x, [emp], [3], shop, ALL_SHIFTS,
-            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
-            soft=False, shift_night=SHIFT_NIGHT,
-        )
-        model.Add(x[0, 3, SHIFT_NIGHT] == 1)
-
-        status = cp_model.CpSolver().Solve(model)
-        self.assertEqual(status, cp_model.INFEASIBLE)
-
+    # test_no_night_does_not_block_a_night_shift_window_that_is_not_actually_nocturnal
+    # and test_no_night_blocks_a_fixed_window_that_partially_overlaps_night_hours
+    # (Codex review regression coverage for a bug where normalize_night_shift
+    # allowed an arbitrary non-nocturnal/partial-overlap window to be
+    # misclassified) were removed: LocationConfig can no longer configure an
+    # arbitrary "night_shift" window at all (see model/location.py) - a
+    # location's night window is always exactly 22:00-06:00 or None, so
+    # neither scenario can be constructed any more.
 
 class FixModeNightShiftTests(unittest.TestCase):
     def test_nominal_hours_count_night_duration_not_standard_shift(self):

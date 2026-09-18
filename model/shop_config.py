@@ -3,6 +3,26 @@ from model.constraint_policy import ConstraintPolicy
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
 from model.location import LocationConfig, normalize_night_shift, normalize_duty_rotation
 
+# Klucz/nazwa auto-tworzonej domyślnej lokalizacji: każdy projekt ma zawsze
+# co najmniej jedną lokalizację (patrz ShopConfig.__init__/from_dict), żeby
+# UI/generator mogły zawsze liczyć na shop_config.locations będące niepuste.
+DEFAULT_LOCATION_KEY = "glowna"
+DEFAULT_LOCATION_NAME = "Placówka główna"
+
+
+def _default_location_from_shop(shop, key: str, name: str) -> LocationConfig:
+    """Buduje nową LocationConfig zasiedloną z pól poziomu projektu (open_hours,
+    trade_sundays, itd.) - używane zarówno przy tworzeniu nowego projektu, jak
+    i przy migracji starego pliku bez zdefiniowanych lokalizacji, tak że
+    zachowanie generatora się nie zmienia (patrz ShopConfig.__init__/from_dict)."""
+    loc = LocationConfig(key=key, name=name)
+    loc.open_hours = dict(shop.open_hours)
+    loc.trade_sundays = set(shop.trade_sundays)
+    loc.public_holidays = set(shop.public_holidays)
+    loc.day_overrides = dict(shop.day_overrides)
+    loc.duty_rotation = dict(shop.duty_rotation) if shop.duty_rotation else None
+    return loc
+
 
 class _LocationView:
     """Duck-types the day-hours subset of ShopConfig's API (weekday /
@@ -105,11 +125,11 @@ class ShopConfig:
         # zachowują się dokładnie jak dziś.
         self.business_type: str = DEFAULT_BUSINESS_TYPE
 
-        # Lokalizacje/obiekty w ramach tego projektu (Etap 3a - sam model
-        # danych). Puste domyślnie: projekt bez zdefiniowanych lokalizacji
-        # zachowuje się dokładnie jak dziś, jedna, niejawna lokalizacja to
-        # pola bezpośrednio na tym ShopConfig (open_hours, trade_sundays,
-        # itd. poniżej). Generator i UI nie czytają tego pola jeszcze.
+        # Lokalizacje/obiekty w ramach tego projektu. Każdy projekt ma zawsze
+        # co najmniej jedną (patrz koniec tej metody i from_dict()) - pola
+        # bezpośrednio na tym ShopConfig (open_hours, trade_sundays, itd.
+        # poniżej) zostają tylko jako legacy fallback dla starych plików w
+        # trakcie wczytywania (patrz get_location()), UI już ich nie edytuje.
         self.locations: dict[str, LocationConfig] = {}
 
         # Toggle dla constraintów z model.constraint_policy
@@ -206,9 +226,37 @@ class ShopConfig:
         # dokładnie jak dziś (przycisk "Praca" widoczny, ręczne wpisywanie).
         self.quick_mode_presets: list[dict] = []
 
+        # Nowy projekt startuje zawsze z jedną, domyślną lokalizacją zasiedloną
+        # z powyższych pól (patrz DEFAULT_LOCATION_KEY/_default_location_from_shop
+        # wyżej) - "projekt zawsze ma co najmniej jedną lokalizację" jest
+        # niezmiennikiem, na którym opiera się przełącznik placówek w UI.
+        self.locations[DEFAULT_LOCATION_KEY] = _default_location_from_shop(
+            self, DEFAULT_LOCATION_KEY, DEFAULT_LOCATION_NAME
+        )
+
     # ==========================================================
     # PODSTAWOWE METODY
     # ==========================================================
+
+    def reset_for_new_month(self, year: int, month: int) -> None:
+        """Zmiana miesiąca dla TEGO SAMEGO projektu ("Zmień datę" w
+        ui/main_window.py::_save_date_clicked) - zeruje tylko to, co jest
+        specyficzne dla poprzedniego miesiąca (niedziele handlowe, święta,
+        ręczne nadpisania dni - na poziomie projektu i każdej lokalizacji),
+        zachowując WSZYSTKO inne bez zmian: profil działalności, lokalizacje
+        (wraz z ich godzinami otwarcia/24-7/rotacją służby/progami obsady),
+        presety trybu szybkiego, zasady generatora, nazwę placówki itd.
+        Odwrotnie niż _init_state() w main_window.py, która przy "Nowym
+        projekcie" świadomie tworzy zupełnie nowy, pusty ShopConfig."""
+        self.year = year
+        self.month = month
+        self.trade_sundays = set()
+        self.public_holidays = set()
+        self.day_overrides = {}
+        for location in self.locations.values():
+            location.trade_sundays = set()
+            location.public_holidays = set()
+            location.day_overrides = {}
 
     def weekday(self, day: int) -> int:
         return calendar.weekday(self.year, self.month, day)
@@ -398,6 +446,17 @@ class ShopConfig:
         # bilansu wcale - "plan profil ochrona...", sekcja 10) zostaje.
         if cfg.constraint_policies.get("balance") == ConstraintPolicy.MANDATORY:
             cfg.constraint_policies["balance"] = ConstraintPolicy.PREFERRED
+
+        if not cfg.locations:
+            # Stary plik sprzed lokalizacji (Etap 3b) - migrujemy na jedną
+            # domyślną lokalizację zasiedloną z pól projektu wczytanych
+            # powyżej. `_migrated_default_location` (nieserializowane) mówi
+            # persistence/project_io.py::load_project(), że trzeba jeszcze
+            # dopiąć location_key każdemu pracownikowi.
+            cfg.locations[DEFAULT_LOCATION_KEY] = _default_location_from_shop(
+                cfg, DEFAULT_LOCATION_KEY, DEFAULT_LOCATION_NAME
+            )
+            cfg._migrated_default_location = True
 
         return cfg
 

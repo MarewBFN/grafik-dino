@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from model.employee import Employee
 from model.business_profile import get_profile
 from model.constraint_policy import ConstraintPolicy
+from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 
 # RoleDef.key values that map directly onto an Employee dataclass field
 # (the six legacy Dino flags). Any other key lives in Employee.custom_roles
@@ -31,12 +32,18 @@ _EMPLOYEE_FIELDS = {f.name for f in dataclasses.fields(Employee)}
 
 
 class EmployeeDialog(QDialog):
-    def __init__(self, parent=None, employee=None, shop_config=None):
+    def __init__(self, parent=None, employee=None, shop_config=None, default_location_key=None):
         super().__init__(parent)
         self.employee = employee
         self.shop_config = shop_config
         self.profile = get_profile(shop_config.business_type if shop_config else None)
         self.locations = shop_config.locations if shop_config else {}
+        # Lokalizacja, na którą ma się domyślnie ustawić kombo poniżej dla
+        # NOWEGO pracownika (patrz _fill_from_employee) - zwykle aktualnie
+        # przeglądana placówka (main_window.selected_location_key), żeby
+        # dodany właśnie pracownik od razu pojawił się w widocznej tabeli
+        # zamiast "zniknąć" w nieprzefiltrowanej lokalizacji.
+        self.default_location_key = default_location_key
         self.role_checkboxes: dict[str, QCheckBox] = {}
         self.location_combo: QComboBox | None = None
         self.setWindowTitle("Edytuj pracownika" if employee else "Dodaj pracownika")
@@ -54,6 +61,16 @@ class EmployeeDialog(QDialog):
         if not role.linked_policy or not self.shop_config:
             return False
         return self.shop_config.constraint_policies.get(role.linked_policy) == ConstraintPolicy.DISABLED
+
+    def _project_uses_duty_rotation(self) -> bool:
+        """Ten sam warunek co "Rotacja 24/7" w ui/config_dialog.py -
+        projekt/którakolwiek lokalizacja ma faktycznie skonfigurowaną
+        LocationConfig.duty_rotation (patrz normalize_duty_rotation)."""
+        if not self.shop_config:
+            return False
+        if self.shop_config.get_duty_rotation():
+            return True
+        return any(loc.get_duty_rotation() for loc in self.shop_config.locations.values())
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -105,8 +122,13 @@ class EmployeeDialog(QDialog):
         form.addRow("Wymiar etatu:", self.employment_fraction)
 
         if self.locations:
+            # Bez opcji "Brak" - projekt ma zawsze co najmniej jedną
+            # lokalizację (patrz model/shop_config.py), a tabela grafiku
+            # filtruje się teraz po lokalizacji (ui/grid_view.py), więc
+            # pracownik bez żadnej przypisanej byłby trwale niewidoczny w
+            # każdym widoku - patrz _fill_from_employee() niżej dla wyboru
+            # domyślnej wartości.
             self.location_combo = QComboBox()
-            self.location_combo.addItem("Brak", "")
             for loc in self.locations.values():
                 self.location_combo.addItem(loc.name, loc.key)
             form.addRow("Lokalizacja:", self.location_combo)
@@ -140,6 +162,21 @@ class EmployeeDialog(QDialog):
         manager_cb = self.role_checkboxes.get("is_manager")
         if manager_cb:
             manager_cb.toggled.connect(self._on_manager_toggled)
+
+        # Flaga dla rotacji służby 24/7 (patrz LocationConfig.duty_rotation,
+        # logic/generator/duty_rotation_constraint.py) - osobna od systemu
+        # ról profilu, bo dotyczy generatora niezależnie od tego, jakie role
+        # ma dany profil. Widoczna tylko gdy projekt faktycznie używa tego
+        # mechanizmu (na poziomie projektu albo którejkolwiek lokalizacji) -
+        # dla profili bez rotacji nic by nie robiła.
+        self.no_24h_check = None
+        if self._project_uses_duty_rotation():
+            self.no_24h_check = QCheckBox("Nie chce pracować zmian 24h")
+            self.no_24h_check.setToolTip(
+                "Przy rotacji służby 24/7: ta osoba nigdy nie dostanie zmiany "
+                "24h w weekend (dostanie dwie 12h zamiast tego)."
+            )
+            flags_layout.addWidget(self.no_24h_check)
 
         content_layout.addWidget(flags_card)
         content_layout.addStretch()
@@ -196,6 +233,13 @@ class EmployeeDialog(QDialog):
 
     def _fill_from_employee(self):
         if not self.employee:
+            # Nowy pracownik: kombo lokalizacji i tak zawsze ma co najmniej
+            # jedną pozycję (patrz _build_ui) - ustawiamy ją od razu na
+            # aktualnie przeglądaną placówkę, żeby domyślnie trafił tam,
+            # gdzie użytkownik go dodaje, zamiast na pierwszą z listy.
+            if self.location_combo is not None:
+                idx = self.location_combo.findData(self.default_location_key or "")
+                self.location_combo.setCurrentIndex(idx if idx >= 0 else 0)
             return
         self.last_name.setText(self.employee.last_name)
         self.first_name.setText(self.employee.first_name)
@@ -208,6 +252,8 @@ class EmployeeDialog(QDialog):
         idx = self.employment_fraction.findData(self.employee.employment_fraction)
         if idx >= 0:
             self.employment_fraction.setCurrentIndex(idx)
+        if self.no_24h_check is not None:
+            self.no_24h_check.setChecked(self.employee.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False))
         if self.location_combo is not None:
             idx = self.location_combo.findData(self.employee.location_key)
             self.location_combo.setCurrentIndex(idx if idx >= 0 else 0)
@@ -240,6 +286,14 @@ class EmployeeDialog(QDialog):
                 legacy_roles[key] = value
             else:
                 custom_roles[key] = value
+
+        if self.no_24h_check is not None:
+            custom_roles[NIE_CHCE_24H_ROLE_KEY] = self.no_24h_check.isChecked()
+        elif self.employee is not None:
+            # Checkbox niewidoczny (projekt nie używa rotacji 24/7) - nie
+            # wolno cicho zgubić wartości, gdyby jednak była już ustawiona
+            # (np. lokalizacja z rotacją została w międzyczasie usunięta).
+            custom_roles[NIE_CHCE_24H_ROLE_KEY] = self.employee.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False)
 
         location_key = self.location_combo.currentData() if self.location_combo is not None else ""
 

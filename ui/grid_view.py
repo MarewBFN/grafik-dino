@@ -387,6 +387,13 @@ class ScheduleGrid(QTableWidget):
         self.shop_config = None
         self.controller = None
 
+        # Klucz aktualnie wybranej placówki (patrz set_data()) - tabela
+        # pokazuje tylko pracowników do niej przypisanych. None = brak
+        # filtrowania (pokaż wszystkich) - używane tylko zanim main_window
+        # w ogóle ma jakąś wybraną placówkę. Patrz też właściwość
+        # _visible_employees niżej.
+        self._location_filter = None
+
         self.on_edit_day = None
         self.on_edit_employee = None
         self.on_context_menu = None
@@ -525,8 +532,7 @@ class ScheduleGrid(QTableWidget):
             # Rotacja 24/7 (np. ochrona) zastępuje Otwarcie/Zamknięcie -
             # koncepcje bez znaczenia dla tego mechanizmu - jednym wierszem
             # "Obłożenie" (patrz logic/duty_coverage_presenter.py).
-            employees = self.schedule.employees if self.schedule is not None else []
-            if project_uses_duty_rotation(self.shop_config, employees):
+            if project_uses_duty_rotation(self.shop_config, self._visible_employees):
                 rows = tuple(row for row in rows if row[1] not in ("open", "close"))
                 rows = (("Obłożenie", "coverage"),) + rows
 
@@ -542,6 +548,7 @@ class ScheduleGrid(QTableWidget):
         on_edit_employee=None,
         on_context_menu=None,
         on_header_menu=None,
+        location_filter=None,
     ):
         self.schedule = schedule
         self.shop_config = shop_config
@@ -551,6 +558,26 @@ class ScheduleGrid(QTableWidget):
         self.on_edit_employee = on_edit_employee
         self.on_context_menu = on_context_menu
         self.on_header_menu = on_header_menu
+        self._location_filter = location_filter
+
+    def get_visible_employees(self) -> list:
+        """Pracownicy aktualnie pokazywani w tabeli (po filtrze placówki,
+        patrz set_data(location_filter=...)) - używane przez eksporty/druk w
+        ui/main_window.py, żeby domyślnie obejmowały tylko wybraną placówkę."""
+        return self._visible_employees
+
+    @property
+    def _visible_employees(self) -> list:
+        # Liczone na żywo (nie cache'owane w build()) - interakcje takie jak
+        # _apply_quick_shift/_handle_click muszą dawać poprawny wynik nawet
+        # gdy coś wywoła je bez uprzedniego build() (patrz testy jednostkowe
+        # w tests/test_grid_view_quick_preset.py, które pomijają pełny cykl
+        # renderowania).
+        if not self.schedule:
+            return []
+        if not self._location_filter:
+            return list(self.schedule.employees)
+        return [e for e in self.schedule.employees if e.location_key == self._location_filter]
 
     def build(self):
         self.clear()
@@ -574,7 +601,7 @@ class ScheduleGrid(QTableWidget):
 
         self.setColumnCount(len(headers))
         self.setHorizontalHeaderLabels(headers)
-        self.setRowCount(len(self.schedule.employees) + len(self._summary_rows()))
+        self.setRowCount(len(self._visible_employees) + len(self._summary_rows()))
 
         for day in range(1, days + 1):
             header_item = self.horizontalHeaderItem(day)
@@ -617,7 +644,7 @@ class ScheduleGrid(QTableWidget):
         # 24 px = a further 25% reduction from the previous 32 px height.
         summary_row_height = 24
         for row in range(self.rowCount()):
-            height = employee_row_height if row < len(self.schedule.employees) else summary_row_height
+            height = employee_row_height if row < len(self._visible_employees) else summary_row_height
             self.setRowHeight(row, height)
 
         # QTableView has its own vertical header, so mirror the explicit heights.
@@ -634,7 +661,14 @@ class ScheduleGrid(QTableWidget):
         QTimer.singleShot(0, self._update_frozen_name_column)
 
     def _day_header_tooltip(self, day):
-        hours = self.shop_config.get_open_hours_for_day(day)
+        # Godziny wybranej placówki (patrz set_data(location_filter=...)),
+        # nie ogólne godziny projektu - ten nagłówek jest teraz osadzony w
+        # kontekście jednej, aktualnie przeglądanej lokalizacji.
+        location = self.shop_config.locations.get(self._location_filter)
+        hours = (
+            location.get_open_hours_for_day(self.schedule.year, self.schedule.month, day)
+            if location else self.shop_config.get_open_hours_for_day(day)
+        )
         if hours:
             hours_text = f"Godziny pracy: {hours[0]}–{hours[1]}"
         else:
@@ -665,9 +699,9 @@ class ScheduleGrid(QTableWidget):
         hl_consecutive = self.shop_config.constraints.get("highlight_max_consecutive", False)
 
         days = self.schedule.days_in_month
-        emp_count = len(self.schedule.employees)
+        emp_count = len(self._visible_employees)
 
-        for row, emp in enumerate(self.schedule.employees):
+        for row, emp in enumerate(self._visible_employees):
             self._fill_employee_name(row, emp)
             self._fill_day_cells(row, emp, days, presenter, constraint_presenter, hl_consecutive)
             self._fill_summary_cells(row, emp, days)
@@ -882,7 +916,7 @@ class ScheduleGrid(QTableWidget):
                     # Rotacja 24/7 - sprawdzane niezależnie od reszty tej
                     # pętli (open/close/morning/afternoon/meat nie mają tu
                     # zastosowania), patrz logic/duty_coverage_presenter.py.
-                    covered = is_day_fully_covered(self.schedule, self.shop_config, self.schedule.employees, day)
+                    covered = is_day_fully_covered(self.schedule, self.shop_config, self._visible_employees, day)
                     item = QTableWidgetItem("✅" if covered else "❌")
                     item.setTextAlignment(Qt.AlignCenter)
                     item.setBackground(QBrush(QColor(theme.OK_GREEN if covered else theme.ERR_RED)))
@@ -901,7 +935,7 @@ class ScheduleGrid(QTableWidget):
                 role_key = key[len("role:"):] if key.startswith("role:") else None
                 fmt = "%H:%M"
 
-                for emp in self.schedule.employees:
+                for emp in self._visible_employees:
                     ds = self.schedule.get_day(emp, day)
 
                     # Ignorujemy osoby, które nie pracują, są na urlopie lub L4
@@ -1027,7 +1061,7 @@ class ScheduleGrid(QTableWidget):
 
         row = self.currentRow()
         col = self.currentColumn()
-        emp_count = len(self.schedule.employees)
+        emp_count = len(self._visible_employees)
         days = self.schedule.days_in_month
 
         if (
@@ -1036,7 +1070,7 @@ class ScheduleGrid(QTableWidget):
             and self.shop_config
             and self.shop_config.is_trade_day(col)
         ):
-            emp = self.schedule.employees[row]
+            emp = self._visible_employees[row]
             day = col
 
             if event.key() in (Qt.Key_1, Qt.Key_2):
@@ -1095,7 +1129,7 @@ class ScheduleGrid(QTableWidget):
         if not self.schedule or not self.main_window:
             return
 
-        emp_count = len(self.schedule.employees)
+        emp_count = len(self._visible_employees)
         days = self.schedule.days_in_month
 
         if row < emp_count and 1 <= col <= days:
@@ -1109,15 +1143,15 @@ class ScheduleGrid(QTableWidget):
         if not self.schedule or not self.main_window:
             return
 
-        emp_count = len(self.schedule.employees)
+        emp_count = len(self._visible_employees)
         days = self.schedule.days_in_month
 
         if self.settlement_mode and row < emp_count and col == days + 6:
-            self._edit_settlement_target(self.schedule.employees[row])
+            self._edit_settlement_target(self._visible_employees[row])
             return
 
         if row < emp_count and col == 0 and self.on_edit_employee:
-            self.on_edit_employee(self.schedule.employees[row])
+            self.on_edit_employee(self._visible_employees[row])
             return
 
         if row < emp_count and 1 <= col <= days:
@@ -1127,7 +1161,7 @@ class ScheduleGrid(QTableWidget):
             ):
                 self._apply_quick_shift(row, col)
             elif self.on_edit_day:
-                self.on_edit_day(self.schedule.employees[row], col)
+                self.on_edit_day(self._visible_employees[row], col)
 
     def _edit_settlement_target(self, emp):
         # Ta sama wartość, co kolumna "Razem" w siatce.
@@ -1191,13 +1225,13 @@ class ScheduleGrid(QTableWidget):
         if row == -1 or col == -1:
             return
             
-        emp_count = len(self.schedule.employees)
+        emp_count = len(self._visible_employees)
         days = self.schedule.days_in_month
 
         if row >= emp_count or not (1 <= col <= days):
             return
 
-        emp = self.schedule.employees[row]
+        emp = self._visible_employees[row]
         day = col
         ds = self.schedule.get_day(emp, day)
         
@@ -1249,7 +1283,7 @@ class ScheduleGrid(QTableWidget):
         if not self.main_window:
             return
 
-        emp = self.schedule.employees[row]
+        emp = self._visible_employees[row]
         day = col
         shift = self.main_window.quick_selected_shift
 

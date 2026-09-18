@@ -120,7 +120,6 @@ def _build_24_7_guard_scenario(guard_count, seed, min_on_night=2, leave_probabil
     shop.constraints["solver_time_limit_seconds"] = 20
 
     loc = LocationConfig(key="site1", name="Obiekt")
-    loc.set_night_shift("22:00", "06:00")
     shop.locations = {"site1": loc}
 
     schedule = MonthSchedule(YEAR, MONTH)

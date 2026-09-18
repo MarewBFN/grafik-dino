@@ -109,7 +109,6 @@ def build_night_shift_scenario(guard_count: int, seed: int, min_on_night: int = 
     shop.constraint_policies[rule_key] = ConstraintPolicy.MANDATORY
 
     loc = LocationConfig(key="site1", name="Obiekt 24/7")
-    loc.set_night_shift("22:00", "06:00")
     shop.locations = {"site1": loc}
 
     schedule = MonthSchedule(2026, 8)

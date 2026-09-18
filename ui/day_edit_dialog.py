@@ -214,8 +214,17 @@ class DayEditDialog(QDialog):
             return
 
         if start_qt < self._open_start_qt or end_qt > self._open_end_qt:
-            QMessageBox.critical(self, "Błąd", "Godziny muszą mieścić się w godzinach pracy obiektu.")
-            return
+            reply = QMessageBox.question(
+                self,
+                "Godziny poza godzinami otwarcia",
+                "Wprowadzone godziny wykraczają poza godziny otwarcia tej lokalizacji "
+                f"({self._open_start_qt.toString('HH:mm')}–{self._open_end_qt.toString('HH:mm')}). "
+                "Kontynuować mimo to?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
 
         self.result_mode = "hours"
         self.result_start = start_str

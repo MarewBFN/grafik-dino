@@ -75,7 +75,7 @@ night_shop.constraint_policies.update(default_policies(_night_profile))
 night_shop.constraint_policies[_night_rule_key] = ConstraintPolicy.MANDATORY
 
 night_loc = LocationConfig(key='site1', name='Obiekt 24/7')
-night_loc.set_night_shift('22:00', '06:00')
+night_loc.set_24_7(True)
 night_shop.locations = {'site1': night_loc}
 
 night_schedule = MonthSchedule(2026, 8)

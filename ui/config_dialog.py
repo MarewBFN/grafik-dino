@@ -22,13 +22,12 @@ from PySide6.QtWidgets import (
     QWidget,
     QFrame,
 )
-from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.profile_wizard_dialog import ProfileWizardDialog
-from ui.slug import slugify
+from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import BUSINESS_PROFILES, DEFAULT_BUSINESS_TYPE, get_profile
-from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig, normalize_night_shift, normalize_duty_rotation
+from model.location import normalize_duty_rotation
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
 
@@ -43,116 +42,6 @@ REST_11H_MODE_OPTIONS = (
     ("Standardowy (dokładny)", "standard"),
     ("Uproszczony (2 zmiany — szybszy)", "simplified"),
 )
-
-class _LocationRow(QFrame):
-    """One editable location row in the "Lokalizacje" tab: name + a single
-    open/close pair applied to every weekday for that location (full
-    per-weekday-per-location hours are a possible future refinement, not
-    needed for the first usable version), plus per-location staffing
-    thresholds that actually override the generator (see
-    logic/generator/base_specs.py::_build_max_consecutive and
-    logic/generator/generic_rules.py::build_min_staff_with_role) - fields for
-    thresholds the generator doesn't read per-location (min_open_staff/
-    min_close_staff for the built-in dino_retail profile) are deliberately
-    NOT shown here, since they'd silently do nothing."""
-
-    def __init__(
-        self, on_remove, name="", open_time="08:00", close_time="20:00",
-        max_consecutive_days=None, rule_defs=(), rule_overrides=None,
-        night_shift=None,
-    ):
-        super().__init__()
-        self.setObjectName("configCard")
-        self.rule_defs = list(rule_defs)
-        rule_overrides = rule_overrides or {}
-        outer = QVBoxLayout(self)
-
-        top = QHBoxLayout()
-        self.name_edit = QLineEdit(name)
-        self.name_edit.setPlaceholderText("np. Galeria Płn")
-        top.addWidget(self.name_edit, 1)
-
-        top.addWidget(QLabel("Godziny:"))
-        self.open_input = TimeInputWidget()
-        self.open_input.set_time_str(open_time)
-        top.addWidget(self.open_input)
-        top.addWidget(QLabel("—"))
-        self.close_input = TimeInputWidget()
-        self.close_input.set_time_str(close_time)
-        top.addWidget(self.close_input)
-
-        remove_btn = QPushButton("Usuń")
-        remove_btn.setObjectName("dangerButton")
-        remove_btn.clicked.connect(lambda: on_remove(self))
-        top.addWidget(remove_btn)
-        outer.addLayout(top)
-
-        # Sztywny blok zmiany nocnej dla tej lokalizacji (Etap B planu zmian
-        # nocnych) - osobny od "Godziny" powyżej, bo może (i typowo będzie)
-        # przechodzić przez północ, czego open_hours jeszcze nie wspiera.
-        # Sam generator jeszcze tego nie czyta (Etap C) - to na razie tylko
-        # przechowywanie i edycja konfiguracji.
-        night_row = QHBoxLayout()
-        self.night_shift_check = QCheckBox("Zmiana nocna:")
-        night_row.addWidget(self.night_shift_check)
-        self.night_start_input = TimeInputWidget()
-        self.night_end_input = TimeInputWidget()
-        night_start, night_end = (night_shift or {}).get("start"), (night_shift or {}).get("end")
-        self.night_start_input.set_time_str(night_start or "22:00")
-        self.night_end_input.set_time_str(night_end or "06:00")
-        self.night_shift_check.setChecked(bool(night_shift))
-        self.night_start_input.setEnabled(bool(night_shift))
-        self.night_end_input.setEnabled(bool(night_shift))
-        self.night_shift_check.toggled.connect(self.night_start_input.setEnabled)
-        self.night_shift_check.toggled.connect(self.night_end_input.setEnabled)
-        night_row.addWidget(self.night_start_input)
-        night_row.addWidget(QLabel("—"))
-        night_row.addWidget(self.night_end_input)
-        night_row.addWidget(QLabel("(może przechodzić przez północ)"))
-        night_row.addStretch()
-        outer.addLayout(night_row)
-
-        thresholds = QHBoxLayout()
-        thresholds.addWidget(QLabel("Progi obsady dla tej lokalizacji:"))
-
-        self.max_consecutive_spin = QSpinBox()
-        self.max_consecutive_spin.setRange(1, 14)
-        self.max_consecutive_spin.setFixedWidth(60)
-        self.max_consecutive_spin.setValue(
-            max_consecutive_days or DEFAULT_LOCATION_CONSTRAINTS["max_consecutive_days"]
-        )
-        thresholds.addWidget(QLabel("Dni pod rząd:"))
-        thresholds.addWidget(self.max_consecutive_spin)
-
-        self.rule_spins: dict[str, QSpinBox] = {}
-        for rule_key, label, default_value in self.rule_defs:
-            spin = QSpinBox()
-            spin.setRange(0, 50)
-            spin.setSpecialValueText(f"domyślnie ({default_value})")
-            spin.setFixedWidth(120)
-            spin.setValue(rule_overrides.get(rule_key, 0))
-            thresholds.addWidget(QLabel(f"{label}:"))
-            thresholds.addWidget(spin)
-            self.rule_spins[rule_key] = spin
-
-        thresholds.addStretch()
-        outer.addLayout(thresholds)
-
-    def name(self) -> str:
-        return self.name_edit.text().strip()
-
-    def constraints_overrides(self) -> dict:
-        overrides = {"max_consecutive_days": self.max_consecutive_spin.value()}
-        for rule_key, spin in self.rule_spins.items():
-            if spin.value():
-                overrides[rule_key] = spin.value()
-        return overrides
-
-    def night_shift_hours(self) -> tuple[str, str] | None:
-        if not self.night_shift_check.isChecked():
-            return None
-        return self.night_start_input.get_time_str(), self.night_end_input.get_time_str()
-
 
 def _parse_time(value: str) -> QTime:
     if not value:
@@ -232,7 +121,6 @@ class ConfigDialog(QDialog):
             tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
         tabs.addTab(self._build_limits_tab(), "Limity")
         tabs.addTab(self._build_generator_rules_tab(), "Zasady generatora")
-        tabs.addTab(self._build_locations_tab(), "Lokalizacje")
 
         buttons = QDialogButtonBox()
         help_btn = QPushButton("Pomoc")
@@ -359,36 +247,8 @@ class ConfigDialog(QDialog):
         outer.setContentsMargins(20, 20, 20, 20)
         outer.setSpacing(12)
 
-        card = QFrame()
-        card.setObjectName("configCard")
-        layout = QGridLayout(card)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setHorizontalSpacing(14)
-        layout.setVerticalSpacing(10)
-
-        self.open_edits = {}
-        days = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
-
-        for row, name in enumerate(days):
-            label = QLabel(name)
-            label.setStyleSheet("font-weight: 600;")
-            layout.addWidget(label, row, 0)
-
-            start, end = self.shop_config.open_hours[row]
-
-            start_edit = TimeInputWidget()
-            start_edit.set_time_str(start)
-
-            end_edit = TimeInputWidget()
-            end_edit.set_time_str(end)
-
-            layout.addWidget(start_edit, row, 1)
-            layout.addWidget(QLabel("—"), row, 2, Qt.AlignCenter)
-            layout.addWidget(end_edit, row, 3)
-
-            self.open_edits[row] = (start_edit, end_edit)
-
-        outer.addWidget(card)
+        self.hours_editor = WeeklyHoursEditor(self.shop_config.open_hours)
+        outer.addWidget(self.hours_editor)
 
         hint = QLabel(
             "Godziny pracy dla pojedynczego dnia możesz zmienić ręcznie, "
@@ -553,103 +413,6 @@ class ConfigDialog(QDialog):
 
         layout.addStretch()
         return page
-
-    def _build_locations_tab(self):
-        page = QWidget()
-        page_layout = QVBoxLayout(page)
-        page_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Lista lokalizacji rośnie bez ograniczeń - bez scrolla treść tej
-        # zakładki (i przyciski Zapisz/Anuluj dialogu) wypadały poza okno
-        # przy kilku lokalizacjach naraz. Wzorem sidebaru głównego okna
-        # (ui/main_window.py::_build_left_panel).
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        page_layout.addWidget(scroll)
-
-        outer_host = QWidget()
-        scroll.setWidget(outer_host)
-        outer = QVBoxLayout(outer_host)
-        outer.setContentsMargins(20, 20, 20, 20)
-        outer.setSpacing(12)
-
-        hint = QLabel(
-            "Osobne obiekty/placówki w ramach tego projektu (np. kilka "
-            "chronionych lokalizacji), każdy z własnymi godzinami. Bez "
-            "zdefiniowanych lokalizacji projekt działa jak dziś - jedna, "
-            "wspólna konfiguracja z zakładki \"Godziny otwarcia\".\n"
-            "Godziny otwarcia: dla działalności całodobowej ustaw np. "
-            "00:00–23:45 (ten zakres, w odróżnieniu od zmiany nocnej "
-            "poniżej, nie może jeszcze przechodzić przez północ).\n"
-            "Zmiana nocna: opcjonalny, osobny blok godzinowy dla tej "
-            "lokalizacji (np. 22:00–06:00) - może przechodzić przez "
-            "północ. Generator jeszcze go nie przydziela (to dopiero "
-            "przechowywanie/edycja konfiguracji).\n"
-            "Progi obsady poniżej nadpisują wartości domyślne tylko dla "
-            "pracowników przypisanych do tej lokalizacji."
-        )
-        hint.setObjectName("mutedHint")
-        hint.setWordWrap(True)
-        outer.addWidget(hint)
-
-        # Progi z reguł "min. N osób z rolą X" bieżącego (custom) profilu -
-        # ta zakładka nie odświeża się na żywo po zmianie profilu w selektorze
-        # wyżej, tak samo jak "Zasady generatora" (patrz _on_business_type_changed).
-        from model.business_profile import get_custom_profile
-        from model.custom_profile import RULE_TYPE_MIN_STAFF_WITH_ROLE
-
-        self._location_rule_defs = []
-        custom = get_custom_profile(self.shop_config.business_type)
-        if custom is not None:
-            for rule in custom.rules:
-                if rule.type == RULE_TYPE_MIN_STAFF_WITH_ROLE:
-                    self._location_rule_defs.append((
-                        custom.rule_policy_key(rule),
-                        custom.rule_label(rule),
-                        rule.params.get("min_count", 1),
-                    ))
-
-        self._location_rows: list[_LocationRow] = []
-        self.locations_container = QVBoxLayout()
-        outer.addLayout(self.locations_container)
-
-        for loc in self.shop_config.locations.values():
-            start, end = next(iter(loc.open_hours.values()), ("08:00", "20:00"))
-            self._add_location_row(
-                loc.name, start, end,
-                max_consecutive_days=loc.constraints.get("max_consecutive_days"),
-                rule_overrides=loc.constraints,
-                night_shift=loc.night_shift,
-            )
-
-        add_btn = QPushButton("Dodaj lokalizację")
-        add_btn.setObjectName("secondaryButton")
-        add_btn.clicked.connect(lambda: self._add_location_row())
-        outer.addWidget(add_btn)
-
-        outer.addStretch()
-        return page
-
-    def _add_location_row(
-        self, name="", open_time="08:00", close_time="20:00",
-        max_consecutive_days=None, rule_overrides=None, night_shift=None,
-    ):
-        row = _LocationRow(
-            self._remove_location_row, name, open_time, close_time,
-            max_consecutive_days=max_consecutive_days,
-            rule_defs=self._location_rule_defs,
-            rule_overrides=rule_overrides,
-            night_shift=night_shift,
-        )
-        self._location_rows.append(row)
-        self.locations_container.addWidget(row)
-
-    def _remove_location_row(self, row):
-        self._location_rows.remove(row)
-        row.setParent(None)
-        row.deleteLater()
 
     def _build_generator_rules_tab(self):
         page = QWidget()
@@ -861,10 +624,7 @@ class ConfigDialog(QDialog):
             self.shop_config.name = self.name_edit.text().strip()
             self.shop_config.business_type = self.business_type_selector.currentData()
 
-            for wd, (start_input, end_input) in self.open_edits.items():
-                start_str = start_input.get_time_str()
-                end_str = end_input.get_time_str()
-                
+            for wd, (start_str, end_str) in self.hours_editor.get_hours().items():
                 start_qt = _parse_time(start_str)
                 end_qt = _parse_time(end_str)
 
@@ -875,50 +635,12 @@ class ConfigDialog(QDialog):
                         "Zmiany przechodzące przez północ nie są jeszcze wspierane — dla działalności "
                         "całodobowej ustaw np. 00:00–23:45."
                     )
-                
+
                 self.shop_config.open_hours[wd] = (start_str, end_str)
 
             self.shop_config.trade_sundays = {
                 day for day, box in self.sunday_checks.items() if box.isChecked()
             }
-
-            # Zachowane dla kroku niżej: _LocationRow nie niesie duty_rotation
-            # (brak UI do jego edycji, patrz sekcja "Rotacja 24/7" wyżej) -
-            # bez tego rekonstrukcja LocationConfig poniżej cicho zgubiłaby tę
-            # konfigurację przy każdym zapisaniu Konfiguracji.
-            old_locations = self.shop_config.locations
-
-            new_locations = {}
-            taken_keys = set()
-            for row in self._location_rows:
-                name = row.name()
-                if not name:
-                    continue
-                key = slugify(name, taken_keys)
-                taken_keys.add(key)
-                start = row.open_input.get_time_str()
-                end = row.close_input.get_time_str()
-                if _parse_time(end) <= _parse_time(start):
-                    raise ValueError(
-                        f"Zamknięcie musi być później niż otwarcie tego samego dnia dla lokalizacji: {name}. "
-                        "Zmiany przechodzące przez północ nie są jeszcze wspierane — dla działalności "
-                        "całodobowej ustaw np. 00:00–23:45."
-                    )
-                night_start, night_end = row.night_shift_hours() or (None, None)
-                try:
-                    night_shift = normalize_night_shift(night_start, night_end)
-                except ValueError as exc:
-                    raise ValueError(f"{exc} (lokalizacja: {name}).") from exc
-
-                new_locations[key] = LocationConfig(
-                    key=key, name=name,
-                    open_hours={wd: (start, end) for wd in range(7)},
-                    constraints=row.constraints_overrides(),
-                    night_shift=night_shift,
-                )
-                if key in old_locations and old_locations[key].duty_rotation:
-                    new_locations[key].duty_rotation = old_locations[key].duty_rotation
-            self.shop_config.locations = new_locations
 
             self.shop_config.constraints["max_consecutive_days"] = self.max_consecutive.value()
             self.shop_config.standard_daily_hours = self.standard_daily_hours.value()

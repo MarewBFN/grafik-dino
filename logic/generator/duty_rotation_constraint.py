@@ -38,6 +38,12 @@ from logic.generator.night_shift_constraint import night_shift_duration_minutes
 
 DUTY_ROTATION_KEYS = ("weekday_long", "weekday_short", "weekend_full", "weekend_half_a", "weekend_half_b")
 
+# Employee.custom_roles key - patrz add_duty_rotation_no24h_gate_constraint
+# poniżej i ui/employee_dialog.py (checkbox "Nie chce zmian 24h", widoczny
+# tylko gdy projekt faktycznie używa rotacji służby). Stała, żeby te dwa
+# miejsca nie mogły się rozjechać na literale stringa.
+NIE_CHCE_24H_ROLE_KEY = "nie_chce_24h"
+
 FULL_DAY_MINUTES = 24 * 60
 
 
@@ -131,7 +137,7 @@ def add_duty_rotation_no24h_gate_constraint(model, x, employees, days, duty_shif
     weekend_full = duty_shifts["weekend_full"]
 
     for e, emp in enumerate(employees):
-        if not emp.custom_roles.get("nie_chce_24h", False):
+        if not emp.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False):
             continue
         for d in days:
             if soft:

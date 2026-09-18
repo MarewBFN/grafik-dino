@@ -40,10 +40,11 @@ SHIFT_OPEN, SHIFT_CLOSE, SHIFT_NIGHT = 0, 1, 14
 ALL_SHIFTS = (SHIFT_OPEN, SHIFT_CLOSE, SHIFT_NIGHT)
 
 
-def _location_with_night(start="22:00", end="06:00"):
-    loc = LocationConfig(key="site1", name="Site 1")
-    loc.set_night_shift(start, end)
-    return loc
+def _location_with_night():
+    # Default open_hours already overlap 22:00-06:00, so this auto-detects
+    # the standard night window - LocationConfig no longer has a way to
+    # configure an arbitrary/custom night window (see model/location.py).
+    return LocationConfig(key="site1", name="Site 1")
 
 
 def _ctx(shop, employees, days=(3,)):
@@ -60,7 +61,7 @@ def _ctx(shop, employees, days=(3,)):
 class TestBuildRoleTimeRestrictionNight:
     def test_night_shift_forbidden_when_window_overlaps(self):
         shop = ShopConfig(2026, 8)
-        shop.locations["site1"] = _location_with_night("22:00", "06:00")
+        shop.locations["site1"] = _location_with_night()
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
         ctx = self._ctx = _ctx(shop, [emp])
 
@@ -72,7 +73,7 @@ class TestBuildRoleTimeRestrictionNight:
 
     def test_night_shift_allowed_when_window_does_not_overlap(self):
         shop = ShopConfig(2026, 8)
-        shop.locations["site1"] = _location_with_night("22:00", "06:00")
+        shop.locations["site1"] = _location_with_night()
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
         ctx = _ctx(shop, [emp])
 
@@ -125,7 +126,7 @@ def test_end_to_end_night_coverage_rule_conflicts_with_role_time_restriction():
     shop.constraint_policies[profile.rule_policy_key(restriction_rule)] = ConstraintPolicy.MANDATORY
     shop.constraint_policies[profile.rule_policy_key(coverage_rule)] = ConstraintPolicy.MANDATORY
 
-    loc = _location_with_night("22:00", "06:00")
+    loc = _location_with_night()
     shop.locations = {"site1": loc}
 
     schedule = MonthSchedule(2026, 3)

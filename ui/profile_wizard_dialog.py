@@ -22,6 +22,7 @@ from model.business_profile import CUSTOM_PROFILES, register_custom_profile
 from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import (
     CustomBusinessProfile,
+    GENERIC_SUMMARY_ROWS,
     RoleDefinition,
     RuleInstance,
     RULE_TYPE_MIN_STAFF_WITH_ROLE,
@@ -303,6 +304,28 @@ class ProfileWizardDialog(QDialog):
         add_role_btn.clicked.connect(lambda: self._add_role_row())
         content_layout.addWidget(add_role_btn)
 
+        content_layout.addWidget(QLabel("Wiersze podsumowania:"))
+        summary_rows_hint = QLabel(
+            "Ogólne wskaźniki pokazywane w wierszach pod tabelą grafiku "
+            "(osobno od wierszy per rola, patrz checkbox przy każdej roli "
+            "wyżej) - zaznacz, które mają sens dla tej branży."
+        )
+        summary_rows_hint.setObjectName("mutedHint")
+        summary_rows_hint.setWordWrap(True)
+        content_layout.addWidget(summary_rows_hint)
+
+        enabled_summary_rows = set(existing.enabled_summary_rows) if existing else set()
+        summary_rows_card = QFrame()
+        summary_rows_card.setObjectName("configCard")
+        summary_rows_layout = QVBoxLayout(summary_rows_card)
+        self._summary_row_checks: dict[str, QCheckBox] = {}
+        for row_key, label in GENERIC_SUMMARY_ROWS:
+            check = QCheckBox(label)
+            check.setChecked(row_key in enabled_summary_rows)
+            summary_rows_layout.addWidget(check)
+            self._summary_row_checks[row_key] = check
+        content_layout.addWidget(summary_rows_card)
+
         content_layout.addWidget(QLabel("Reguły generatora:"))
         self.rules_container = QVBoxLayout()
         content_layout.addLayout(self.rules_container)
@@ -418,8 +441,13 @@ class ProfileWizardDialog(QDialog):
                 key = f"custom_{base_key}_{suffix}"
                 suffix += 1
 
+        enabled_summary_rows = [
+            row_key for row_key, check in self._summary_row_checks.items() if check.isChecked()
+        ]
+
         profile = CustomBusinessProfile(
             key=key, display_name=display_name, roles=roles, rules=rules,
+            enabled_summary_rows=enabled_summary_rows,
         )
 
         try:

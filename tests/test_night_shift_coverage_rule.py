@@ -56,7 +56,6 @@ class TestBuildMinStaffWithRoleNightScope:
     def test_night_scope_only_counts_shift_night(self):
         shop = ShopConfig(2026, 8)
         loc = LocationConfig(key="site1", name="Site 1")
-        loc.set_night_shift("22:00", "06:00")
         shop.locations["site1"] = loc
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
         ctx = self._ctx(shop, [emp])
@@ -72,7 +71,6 @@ class TestBuildMinStaffWithRoleNightScope:
     def test_night_scope_satisfied_by_shift_night(self):
         shop = ShopConfig(2026, 8)
         loc = LocationConfig(key="site1", name="Site 1")
-        loc.set_night_shift("22:00", "06:00")
         shop.locations["site1"] = loc
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
         ctx = self._ctx(shop, [emp])
@@ -127,7 +125,6 @@ def test_end_to_end_night_coverage_rule_requires_enough_guards():
         shop.constraint_policies[rule_key] = ConstraintPolicy.MANDATORY
 
         loc = LocationConfig(key="site1", name="Obiekt")
-        loc.set_night_shift("22:00", "06:00")
         shop.locations = {"site1": loc}
 
         schedule = MonthSchedule(2026, 3)

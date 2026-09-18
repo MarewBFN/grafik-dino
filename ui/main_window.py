@@ -30,16 +30,13 @@ from PySide6.QtWidgets import (
 from export.excel_exporter import export_schedule_to_excel
 from export.image_exporter import export_schedule_to_image
 from logic.schedule_controller import ScheduleController
+from model.business_profile import DEFAULT_BUSINESS_TYPE
+from model.location import format_open_hours_summary
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
-from persistence.project_io import load_project, save_project
-from persistence.known_projects_store import (
-    load_known_projects,
-    register_known_project,
-    remove_known_project,
-    clear_known_projects,
-)
+from persistence.project_io import assign_missing_location_keys, load_project, save_project
 from ui.config_dialog import ConfigDialog
+from ui.locations_dialog import LocationsDialog
 from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
@@ -142,6 +139,13 @@ class MainWindow(QMainWindow):
         self.quick_selected_shift = None
 
         self.settlement_mode_active = False
+
+        # Aktualnie wybrana placówka (klucz w shop_config.locations) -
+        # patrz przełącznik pod "Grafik na:" (_build_left_panel) i pasek
+        # godzin nad tabelą (_update_grid_header_bar). Samonaprawia się do
+        # pierwszej dostępnej lokalizacji w _update_location_switcher(), więc
+        # None tu jest tylko stanem przejściowym przed pierwszym _sync_everything().
+        self.selected_location_key = None
 
         self._build_quick_panel()
         self._build_ui()
@@ -310,6 +314,40 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(hero)
 
+        # Przełącznik placówek - celowo NA OSOBNYM tle od karty "hero"
+        # powyżej (patrz QFrame#locationSwitcher w ui/theme.py), zawsze
+        # widoczny (nawet z jedną lokalizacją - strzałki są wtedy tylko
+        # wyszarzone), bo projekt ma zawsze co najmniej jedną lokalizację
+        # (patrz model/shop_config.py). Kliknięcie nazwy otwiera pełną listę.
+        self.location_switcher = QFrame()
+        self.location_switcher.setObjectName("locationSwitcher")
+        switcher_layout = QHBoxLayout(self.location_switcher)
+        switcher_layout.setContentsMargins(6, 4, 6, 4)
+        switcher_layout.setSpacing(4)
+
+        self.btn_location_prev = QPushButton("◀")
+        self.btn_location_prev.setObjectName("locationSwitcherArrow")
+        self.btn_location_prev.setFixedWidth(30)
+        self.btn_location_prev.setToolTip("Poprzednia placówka")
+        self.btn_location_prev.clicked.connect(lambda: self._cycle_location(-1))
+        switcher_layout.addWidget(self.btn_location_prev)
+
+        self.btn_location_name = QPushButton("")
+        self.btn_location_name.setObjectName("locationNameButton")
+        self.btn_location_name.setCursor(Qt.PointingHandCursor)
+        self.btn_location_name.setToolTip("Wybierz placówkę")
+        self.btn_location_name.clicked.connect(self._open_location_picker)
+        switcher_layout.addWidget(self.btn_location_name, 1)
+
+        self.btn_location_next = QPushButton("▶")
+        self.btn_location_next.setObjectName("locationSwitcherArrow")
+        self.btn_location_next.setFixedWidth(30)
+        self.btn_location_next.setToolTip("Następna placówka")
+        self.btn_location_next.clicked.connect(lambda: self._cycle_location(1))
+        switcher_layout.addWidget(self.btn_location_next)
+
+        layout.addWidget(self.location_switcher)
+
         metric_hint = QLabel("Nominalny etat")
         metric_hint.setObjectName("metricHint")
         layout.addWidget(metric_hint)
@@ -396,6 +434,11 @@ class MainWindow(QMainWindow):
         settlement_layout.addWidget(self.btn_settlement_balance)
 
         layout.addWidget(self.settlement_section)
+        # Okres rozliczeniowy (sidebar + kolumna "Cel" w ui/grid_view.py, w
+        # pełni sterowana przez settlement_mode) - schowany na prośbę klienta,
+        # zostaje w pełni działający w kodzie (patrz też btn_work.hide() niżej
+        # dla identycznego wzorca).
+        self.settlement_section.hide()
 
         layout.addStretch(1)
 
@@ -437,7 +480,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.quick_info_label)
 
         # --- przyciski: siatka 2x3 (Praca/Rano/Popo, Wolne/Urlop/L4) ---
-        btn_grid = QGridLayout()
+        self.quick_btn_grid = QGridLayout()
+        btn_grid = self.quick_btn_grid
         btn_grid.setSpacing(6)
 
         self.btn_work = QPushButton("Praca")
@@ -484,11 +528,11 @@ class MainWindow(QMainWindow):
         # time_panel poniżej) na prośbę z 2026-09-17.
         self.btn_work.hide()
 
-        btn_grid.addWidget(self.btn_morning, 0, 1)
-        btn_grid.addWidget(self.btn_afternoon, 0, 2)
-        btn_grid.addWidget(self.btn_off, 1, 0)
-        btn_grid.addWidget(self.btn_leave, 1, 1)
-        btn_grid.addWidget(self.btn_sick, 1, 2)
+        # Pozycje w siatce są przeliczane dynamicznie w _relayout_quick_btn_grid()
+        # (tak, żeby ukrycie Rano/Popo dla profili innych niż Dino/retail -
+        # patrz _update_quick_panel_profile_visibility - nie zostawiało pustych
+        # komórek), więc tu tylko budujemy layout, bez addWidget.
+        self._relayout_quick_btn_grid()
 
         layout.addLayout(btn_grid)
 
@@ -532,6 +576,13 @@ class MainWindow(QMainWindow):
         self.quick_duration_label.setEnabled(False)
         layout.addWidget(self.quick_duration_label)
 
+        # "Od"/"Do" (tylko dla "Praca", który jest schowany - patrz wyżej) oraz
+        # licznik godzin pod nim - schowane z tego samego powodu, zostają w
+        # pełni działające w kodzie (_set_quick_shift/_quick_update_duration
+        # nadal ustawiają ich stan jak dziś).
+        self.time_panel.hide()
+        self.quick_duration_label.hide()
+
         self.quick_panel.setLayout(layout)
         self.quick_panel.hide()
 
@@ -548,6 +599,24 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 0, 12, 12)
         layout.setSpacing(10)
 
+        # Pasek nad tabelą: nazwa aktualnie wybranej placówki (lewo) i jej
+        # godziny pracy (prawo, patrz format_open_hours_summary) - odświeżany
+        # w _update_grid_header_bar(), wywoływanym z _update_location_switcher().
+        self.grid_header_bar = QWidget()
+        grid_header_layout = QHBoxLayout(self.grid_header_bar)
+        grid_header_layout.setContentsMargins(4, 4, 4, 4)
+
+        self.grid_header_location_label = QLabel("")
+        self.grid_header_location_label.setObjectName("sectionLabel")
+        grid_header_layout.addWidget(self.grid_header_location_label)
+        grid_header_layout.addStretch(1)
+
+        self.grid_header_hours_label = QLabel("")
+        self.grid_header_hours_label.setObjectName("mutedHint")
+        grid_header_layout.addWidget(self.grid_header_hours_label)
+
+        layout.addWidget(self.grid_header_bar)
+
         self.grid = ScheduleGrid()
         self.grid.compact_mode = True
         layout.addWidget(self.grid, 1)
@@ -558,8 +627,6 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("Plik")
         edit_menu = self.menuBar().addMenu("Edycja")
         config_menu = self.menuBar().addMenu("Konfiguracja")
-        self.locations_menu = self.menuBar().addMenu("Placówki")
-        self.locations_menu.aboutToShow.connect(self._populate_locations_menu)
         help_menu = self.menuBar().addMenu("Pomoc")
 
         help_menu.addAction("Samouczek", self._open_tutorial)
@@ -594,6 +661,7 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Wyczyść auto", self._clear_generated)
 
         config_menu.addAction("Generator", self._open_config)
+        config_menu.addAction("Lokalizacje", self._open_locations_dialog)
         config_menu.addAction("Ustawienia trybu szybkiego", self._open_quick_mode_settings)
 
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
@@ -645,12 +713,109 @@ class MainWindow(QMainWindow):
         self.controller = ScheduleController(self.schedule, self.shop_config)
 
     def _sync_everything(self):
+        # Bezpiecznik: tabela grafiku filtruje pracowników po location_key
+        # (patrz _sync_grid), więc ktoś bez poprawnego przypisania byłby
+        # trwale niewidoczny w każdej placówce - dopina go do pierwszej
+        # dostępnej. Tania, bezstanowa operacja (patrz assign_missing_location_keys),
+        # bezpieczna do wołania przy każdej synchronizacji.
+        if self.schedule and self.shop_config:
+            assign_missing_location_keys(self.schedule, self.shop_config)
+
+        # Musi wejść przed _sync_grid(): samonaprawia selected_location_key,
+        # które ten drugi przekazuje jako filtr tabeli.
+        self._update_location_switcher()
         self._sync_grid()
         self._update_window_title()
         self._update_state_label()
         self._update_generate_label()
         self._update_settlement_section_visibility()
         self._rebuild_quick_preset_buttons()
+        self._update_quick_panel_profile_visibility()
+
+    def _update_location_switcher(self):
+        """Samonaprawia self.selected_location_key (patrz komentarz w
+        __init__) i odświeża przełącznik pod "Grafik na:" oraz pasek godzin
+        nad tabelą. Projekt ma zawsze >=1 lokalizację (model/shop_config.py),
+        więc `location` poniżej jest None tylko przejściowo, zanim
+        shop_config w ogóle istnieje."""
+        locations = self.shop_config.locations if self.shop_config else {}
+        if self.selected_location_key not in locations:
+            self.selected_location_key = next(iter(locations), None)
+
+        location = locations.get(self.selected_location_key)
+        self.btn_location_name.setText(location.name if location else "—")
+
+        multiple = len(locations) > 1
+        self.btn_location_prev.setEnabled(multiple)
+        self.btn_location_next.setEnabled(multiple)
+
+        self._update_grid_header_bar()
+
+    def _update_grid_header_bar(self):
+        locations = self.shop_config.locations if self.shop_config else {}
+        location = locations.get(self.selected_location_key)
+        self.grid_header_location_label.setText(location.name if location else "")
+        self.grid_header_hours_label.setText(
+            format_open_hours_summary(location) if location else ""
+        )
+
+    def _cycle_location(self, direction: int):
+        keys = list(self.shop_config.locations.keys())
+        if len(keys) < 2 or self.selected_location_key not in keys:
+            return
+        idx = keys.index(self.selected_location_key)
+        self._select_location(keys[(idx + direction) % len(keys)])
+
+    def _select_location(self, key: str):
+        if key == self.selected_location_key or key not in self.shop_config.locations:
+            return
+        self.selected_location_key = key
+        self._update_location_switcher()
+        self._sync_grid()
+
+    def _open_location_picker(self):
+        locations = self.shop_config.locations
+        if not locations:
+            return
+        menu = QMenu(self)
+        for key, loc in locations.items():
+            action = menu.addAction(loc.name)
+            action.setCheckable(True)
+            action.setChecked(key == self.selected_location_key)
+            action.triggered.connect(lambda checked=False, k=key: self._select_location(k))
+        menu.exec(self.btn_location_name.mapToGlobal(self.btn_location_name.rect().bottomLeft()))
+
+    def _relayout_quick_btn_grid(self):
+        """Przelicza pozycje przycisków trybu szybkiego tak, żeby Rano/Popo,
+        ukryte dla profili innych niż Dino/retail (patrz
+        _update_quick_panel_profile_visibility), nie zostawiały pustych
+        komórek w siatce. Celowo NIE opiera się na isHidden()/isVisible() -
+        oba zależą od tego, czy cały widget jest już faktycznie pokazany w
+        oknie (fałszywie widoczne jako "ukryte" zanim main_window.show() w
+        ogóle się wykona), tylko bezpośrednio na profilu projektu."""
+        while self.quick_btn_grid.count():
+            self.quick_btn_grid.takeAt(0)
+
+        is_retail = (
+            self.shop_config.business_type == DEFAULT_BUSINESS_TYPE
+            if self.shop_config else True
+        )
+        buttons = (
+            [self.btn_morning, self.btn_afternoon] if is_retail else []
+        ) + [self.btn_off, self.btn_leave, self.btn_sick]
+
+        cols = 3
+        for i, btn in enumerate(buttons):
+            self.quick_btn_grid.addWidget(btn, i // cols, i % cols)
+
+    def _update_quick_panel_profile_visibility(self):
+        """Rano/Popo to skróty specyficzne dla profilu Dino/retail (klasy
+        zmian sklepowych) - dla innych profili (np. Ochrona) są schowane, ale
+        w pełni działające w kodzie, gdyby jednak okazały się potrzebne."""
+        is_retail = self.shop_config.business_type == DEFAULT_BUSINESS_TYPE
+        self.btn_morning.setVisible(is_retail)
+        self.btn_afternoon.setVisible(is_retail)
+        self._relayout_quick_btn_grid()
 
     def _update_settlement_section_visibility(self):
         is_generated = bool(self.schedule and getattr(self.schedule, "is_generated", False))
@@ -674,6 +839,7 @@ class MainWindow(QMainWindow):
             on_edit_employee=self._edit_employee,
             on_context_menu=self._open_day_context_menu,
             on_header_menu=self._open_header_menu,
+            location_filter=self.selected_location_key,
         )
         self.grid.build()
         self.grid.refresh()
@@ -733,8 +899,18 @@ class MainWindow(QMainWindow):
             self.year = new_year
             self.month = new_month
             self.date_display_label.setText(f"{self.month:02d}.{self.year}")
-            
-            self._init_state()
+
+            # Celowo NIE _init_state() - to tworzyłoby zupełnie nowy, pusty
+            # ShopConfig i gubiło profil działalności, lokalizacje, presety
+            # trybu szybkiego i zasady generatora (dialog wyżej mówi wyraźnie
+            # o kasowaniu tylko GRAFIKU, nie ustawień). Zamiast tego: ten sam
+            # shop_config, zerowany tylko z tego co miesiąc-specyficzne (patrz
+            # ShopConfig.reset_for_new_month), i świeży MonthSchedule z tymi
+            # samymi pracownikami.
+            self.shop_config.reset_for_new_month(self.year, self.month)
+            self.schedule = MonthSchedule(self.year, self.month, employees=self.schedule.employees)
+            self.controller = ScheduleController(self.schedule, self.shop_config)
+
             self._update_nominal_hours_label()
             self._sync_everything()
             self.statusBar().showMessage("Utworzono nowy grafik dla wybranego miesiąca.", 2500)
@@ -802,7 +978,7 @@ class MainWindow(QMainWindow):
             )
 
     def _open_add_employee(self):
-        dialog = EmployeeDialog(self, shop_config=self.shop_config)
+        dialog = EmployeeDialog(self, shop_config=self.shop_config, default_location_key=self.selected_location_key)
 
         if dialog.exec() != QDialog.Accepted:
             return
@@ -830,7 +1006,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Zapisano pracownika.", 2500)
 
     def _edit_day(self, emp, day):
-        hours = self.shop_config.get_open_hours_for_day(day)
+        hours = self.shop_config.get_location(emp).get_open_hours_for_day(day)
         if not hours:
             return
 
@@ -1024,6 +1200,7 @@ class MainWindow(QMainWindow):
             return
         self._update_nominal_hours_label()
         self._sync_grid()
+        self._update_quick_panel_profile_visibility()
         # Constraint policies are part of the local working project, so retain
         # the selected generator configuration for the next application start.
         try:
@@ -1031,6 +1208,22 @@ class MainWindow(QMainWindow):
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano konfigurację.", 2500)
+
+    def _open_locations_dialog(self):
+        dialog = LocationsDialog(self, self.shop_config)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        # Lokalizacja usunięta/przemianowana może osierocić pracowników
+        # przypisanych do jej starego klucza - dopinamy ich do pierwszej
+        # dostępnej, tak samo jak przy wczytywaniu starego pliku.
+        assign_missing_location_keys(self.schedule, self.shop_config)
+        self._sync_everything()
+        try:
+            save_project("last_project.json", self.schedule, self.shop_config)
+        except OSError:
+            pass
+        self.statusBar().showMessage("Zapisano lokalizacje.", 2500)
 
     def _open_quick_mode_settings(self):
         dialog = QuickModeSettingsDialog(self, self.shop_config.quick_mode_presets)
@@ -1065,7 +1258,6 @@ class MainWindow(QMainWindow):
 
         save_project(path, self.schedule, self.shop_config)
         save_project("last_project.json", self.schedule, self.shop_config)
-        register_known_project(path, self._project_label_for_path(path))
         self.statusBar().showMessage("Zapisano projekt.", 2500)
 
     def _load_project(self):
@@ -1076,63 +1268,7 @@ class MainWindow(QMainWindow):
             return
 
         self._apply_loaded_project(*load_project(path))
-        register_known_project(path, self._project_label_for_path(path))
         self.statusBar().showMessage("Wczytano projekt.", 2500)
-
-    def _project_label_for_path(self, path: str) -> str:
-        """Nazwa placówki do menu "Placówki" - nazwa z ShopConfig.name jeśli
-        ustawiona, w przeciwnym razie nazwa pliku bez rozszerzenia."""
-        name = (self.shop_config.name or "").strip() if self.shop_config else ""
-        if name:
-            return name
-        return os.path.splitext(os.path.basename(path))[0]
-
-    def _populate_locations_menu(self):
-        self.locations_menu.clear()
-        projects = load_known_projects()
-
-        if not projects:
-            empty_action = self.locations_menu.addAction("(Brak zapisanych placówek)")
-            empty_action.setEnabled(False)
-            return
-
-        for entry in projects:
-            path = entry["path"]
-            label = entry.get("label") or os.path.splitext(os.path.basename(path))[0]
-            action = self.locations_menu.addAction(label)
-            action.triggered.connect(lambda checked=False, p=path: self._open_known_project(p))
-
-        self.locations_menu.addSeparator()
-        self.locations_menu.addAction("Wyczyść listę...", self._clear_known_projects)
-
-    def _open_known_project(self, path: str):
-        if not os.path.exists(path):
-            QMessageBox.warning(
-                self, "Placówki",
-                f"Plik nie istnieje już pod zapamiętaną ścieżką:\n{path}\n\nUsuwam go z listy."
-            )
-            remove_known_project(path)
-            return
-
-        try:
-            self._apply_loaded_project(*load_project(path))
-        except Exception as exc:
-            QMessageBox.critical(self, "Placówki", f"Nie udało się otworzyć projektu:\n{exc}")
-            return
-
-        register_known_project(path, self._project_label_for_path(path))
-        save_project("last_project.json", self.schedule, self.shop_config)
-        self.statusBar().showMessage(f"Otwarto placówkę: {self._project_label_for_path(path)}", 2500)
-
-    def _clear_known_projects(self):
-        reply = QMessageBox.question(
-            self, "Wyczyść listę placówek",
-            "Usunąć wszystkie zapamiętane placówki z tego menu?\n"
-            "Same pliki projektów nie zostaną skasowane.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        )
-        if reply == QMessageBox.Yes:
-            clear_known_projects()
 
     def _apply_loaded_project(self, schedule, shop_config):
         self.schedule = schedule
@@ -1154,7 +1290,6 @@ class MainWindow(QMainWindow):
             self._apply_loaded_project(*load_project(path))
         except Exception:
             return False
-        register_known_project(path, self._project_label_for_path(path))
         self.statusBar().showMessage("Wczytano projekt.", 2500)
         return True
 
@@ -1165,7 +1300,10 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        export_schedule_to_excel(self.schedule, self.year, self.month, path, shop=self.shop_config)
+        export_schedule_to_excel(
+            self.schedule, self.year, self.month, path, shop=self.shop_config,
+            employees=self.grid.get_visible_employees(),
+        )
         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500)
 
     def _export_image(self):
@@ -1178,18 +1316,24 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith(".jpg"):
             path += ".jpg"
 
-        export_schedule_to_image(self.schedule, self.year, self.month, path, shop=self.shop_config)
+        export_schedule_to_image(
+            self.schedule, self.year, self.month, path, shop=self.shop_config,
+            employees=self.grid.get_visible_employees(),
+        )
         self.statusBar().showMessage("Wyeksportowano do JPG.", 2500)
 
     def _pick_single_employee(self, title):
-        if not self.schedule or not self.schedule.employees:
-            QMessageBox.warning(self, title, "Brak pracowników w projekcie.")
+        # Ograniczone do aktualnie wybranej placówki (patrz przełącznik pod
+        # "Grafik na:"), spójnie z tym, co użytkownik widzi w tabeli.
+        employees = self.grid.get_visible_employees()
+        if not employees:
+            QMessageBox.warning(self, title, "Brak pracowników w tej placówce.")
             return None
-        names = [emp.display_name() for emp in self.schedule.employees]
+        names = [emp.display_name() for emp in employees]
         name, ok = QInputDialog.getItem(self, title, "Pracownik:", names, editable=False)
         if not ok:
             return None
-        return self.schedule.employees[names.index(name)]
+        return employees[names.index(name)]
 
     def _export_excel_single_employee(self):
         if self.demo.block_export(self):
@@ -1246,7 +1390,10 @@ class MainWindow(QMainWindow):
             temp_path = temp_file.name
             temp_file.close()
 
-            export_schedule_to_image(self.schedule, self.year, self.month, temp_path, shop=self.shop_config)
+            export_schedule_to_image(
+                self.schedule, self.year, self.month, temp_path, shop=self.shop_config,
+                employees=self.grid.get_visible_employees(),
+            )
 
             # 2. printer
             printer = QPrinter(QPrinter.HighResolution)

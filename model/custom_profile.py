@@ -17,6 +17,24 @@ import uuid
 RULE_TYPE_MIN_STAFF_WITH_ROLE = "min_staff_with_role"
 RULE_TYPE_ROLE_TIME_RESTRICTION = "role_time_restriction"
 
+# Ogólne (nie powiązane z żadną konkretną rolą) wiersze podsumowania, jakie
+# program w ogóle potrafi narysować nad tabelą grafiku (patrz
+# ui/grid_view.py::_fill_validation_rows - ta logika liczenia jest generyczna,
+# nie specyficzna dla Dino) - (klucz, etykieta). Profil custom decyduje, które
+# z nich pokazać przez CustomBusinessProfile.enabled_summary_rows poniżej;
+# domyślnie żaden (w przeciwieństwie do wbudowanego profilu Dino, dla którego
+# wszystkie mają sens i są zawsze włączone na sztywno w model/business_profile.py).
+# "Obłożenie" (rotacja służby 24/7) świadomie tu NIE występuje - to osobny,
+# automatyczny mechanizm zależny od LocationConfig.duty_rotation, nie prosty
+# przełącznik profilu (patrz ScheduleGrid._summary_rows).
+GENERIC_SUMMARY_ROWS = (
+    ("open", "Otwarcie"),
+    ("close", "Zamknięcie"),
+    ("morning", "Rano"),
+    ("afternoon", "Popo"),
+    ("meat", "Mięso"),
+)
+
 
 @dataclass
 class RoleDefinition:
@@ -83,6 +101,11 @@ class CustomBusinessProfile:
     display_name: str
     roles: list = field(default_factory=list)   # list[RoleDefinition]
     rules: list = field(default_factory=list)   # list[RuleInstance]
+    # Które klucze z GENERIC_SUMMARY_ROWS pokazać nad tabelą grafiku dla tego
+    # profilu (patrz ui/profile_wizard_dialog.py "Wiersze podsumowania").
+    # Puste domyślnie - w przeciwieństwie do Dino, żaden z tych wskaźników
+    # nie jest z góry oczywisty dla dowolnej, nowo tworzonej branży.
+    enabled_summary_rows: list = field(default_factory=list)
 
     def to_dict(self):
         return {
@@ -90,6 +113,7 @@ class CustomBusinessProfile:
             "display_name": self.display_name,
             "roles": [r.to_dict() for r in self.roles],
             "rules": [r.to_dict() for r in self.rules],
+            "enabled_summary_rows": list(self.enabled_summary_rows),
         }
 
     @classmethod
@@ -99,6 +123,7 @@ class CustomBusinessProfile:
             display_name=data["display_name"],
             roles=[RoleDefinition.from_dict(r) for r in data.get("roles", [])],
             rules=[RuleInstance.from_dict(r) for r in data.get("rules", [])],
+            enabled_summary_rows=list(data.get("enabled_summary_rows", [])),
         )
 
     def rule_policy_key(self, rule: RuleInstance) -> str:

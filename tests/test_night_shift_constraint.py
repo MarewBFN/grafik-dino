@@ -30,10 +30,11 @@ SHIFT_NIGHT = 14
 ALL_SHIFTS = (SHIFT_OPEN, SHIFT_CLOSE, *START_SHIFT_MAP, *END_SHIFT_MAP, SHIFT_NIGHT)
 
 
-def _location_with_night(start="22:00", end="06:00", key="site1"):
-    loc = LocationConfig(key=key, name="Site 1")
-    loc.set_night_shift(start, end)
-    return loc
+def _location_with_night(key="site1"):
+    # Default open_hours already overlap 22:00-06:00, so this auto-detects
+    # the standard night window - LocationConfig no longer has a way to
+    # configure an arbitrary/custom night window (see model/location.py).
+    return LocationConfig(key=key, name="Site 1")
 
 
 def _employee_at(location_key="site1", **kwargs):
@@ -147,7 +148,7 @@ class NightShiftAdjacencyTests(unittest.TestCase):
 
     def test_back_to_back_night_shifts_with_enough_rest_is_feasible(self):
         shop = ShopConfig(2026, 8)
-        shop.locations["site1"] = _location_with_night("22:00", "06:00")
+        shop.locations["site1"] = _location_with_night()
         emp = _employee_at()
 
         model, x = _two_day_full_model()
@@ -162,43 +163,14 @@ class NightShiftAdjacencyTests(unittest.TestCase):
         status = cp_model.CpSolver().Solve(model)
         self.assertIn(status, (cp_model.OPTIMAL, cp_model.FEASIBLE))
 
-    def test_back_to_back_night_shifts_without_enough_rest_is_infeasible(self):
-        shop = ShopConfig(2026, 8)
-        shop.locations["site1"] = _location_with_night("18:00", "08:00")  # 14h shift
-        emp = _employee_at()
-
-        model, x = _two_day_full_model()
-        add_night_shift_adjacency_constraint(
-            model, x, [emp], [DAY_1, DAY_2], shop, SHIFT_NIGHT, SHIFT_OPEN, SHIFT_CLOSE,
-            START_SHIFT_MAP, END_SHIFT_MAP,
-        )
-
-        model.Add(x[0, DAY_1, SHIFT_NIGHT] == 1)
-        model.Add(x[0, DAY_2, SHIFT_NIGHT] == 1)  # ends day1 08:00, starts day2 18:00 -> only 10h rest
-
-        status = cp_model.CpSolver().Solve(model)
-        self.assertEqual(status, cp_model.INFEASIBLE)
-
-    def test_late_shift_today_forbids_early_night_shift_tomorrow(self):
-        shop = ShopConfig(2026, 8)
-        # Starts just after midnight - close enough to a normal day-1 CLOSE
-        # shift (ending ~14:15 under the default 22:45 close) that it's the
-        # night-start side, not the crossing-midnight side, that violates
-        # rest here.
-        shop.locations["site1"] = _location_with_night("00:30", "08:30")
-        emp = _employee_at()
-
-        model, x = _two_day_full_model()
-        add_night_shift_adjacency_constraint(
-            model, x, [emp], [DAY_1, DAY_2], shop, SHIFT_NIGHT, SHIFT_OPEN, SHIFT_CLOSE,
-            START_SHIFT_MAP, END_SHIFT_MAP,
-        )
-
-        model.Add(x[0, DAY_1, SHIFT_CLOSE] == 1)  # ends 22:45 on day 1
-        model.Add(x[0, DAY_2, SHIFT_NIGHT] == 1)  # starts 00:30 on day 2 -> 1h45 rest
-
-        status = cp_model.CpSolver().Solve(model)
-        self.assertEqual(status, cp_model.INFEASIBLE)
+    # test_back_to_back_night_shifts_without_enough_rest_is_infeasible and
+    # test_late_shift_today_forbids_early_night_shift_tomorrow were removed:
+    # both relied on constructing a location with a non-standard night
+    # window (14h "18:00-08:00" / "00:30-08:30") via set_night_shift(), which
+    # no longer exists - a location's night window is always exactly
+    # 22:00-06:00 or None now (see model/location.py). Duration-math
+    # coverage for arbitrary windows still exists directly against
+    # night_shift_duration_minutes() in NightShiftDurationTests above.
 
     def test_employee_without_night_window_is_left_unconstrained(self):
         shop = ShopConfig(2026, 8)
