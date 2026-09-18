@@ -30,7 +30,7 @@ wprost w kolumnie Akcja - to inna sytuacja niż fizyczne usunięcie pliku.
 
 | Plik/moduł | Akcja | Co robił(a) dla Dino/ogółu | Commit | Przywrócić do main? | Notatka |
 |---|---|---|---|---|---|
-| _(na razie brak wpisów - branch dopiero startuje)_ | | | | | |
+| _(na razie brak wpisów - usuwane/dodawane całe pliki jeszcze nie wystąpiły)_ | | | | | |
 
 ## Pojedyncze fragmenty kodu (nie całe pliki)
 
@@ -40,7 +40,11 @@ wyżej, żeby nie zaśmiecać jej ścieżkami plików, które w większości zos
 
 | Plik | Co dokładnie (funkcja/blok/pole) | Akcja | Commit | Przywrócić do main? | Notatka |
 |---|---|---|---|---|---|
-| _(brak wpisów)_ | | | | | |
+| `model/business_profile.py` | Nowa funkcja `visible_profiles()` - filtruje `dino_retail` z listy do wyświetlenia, `BUSINESS_PROFILES`/`get_profile()` bez zmian | UKRYTY (dodatek, nic nie usunięte) | (ten wpis) | TAK (sama funkcja jest neutralna/nieużywana w main, nie szkodzi) | Czysto addytywne - można spokojnie zabrać do main, tylko main nie musi jej wywoływać |
+| `ui/business_profile_picker.py::_reload` | `BUSINESS_PROFILES.values()` → `visible_profiles()`; domyślny wybór profilu też liczony z listy widocznej, nie ze wszystkich zarejestrowanych | UKRYTY | (ten wpis) | NIE (main ma dalej pokazywać Dino w tym pickerze) | Używany przez `NewProjectDialog` i `FirstRunWizardDialog` - jeden fix naprawia oba ekrany |
+| `ui/config_dialog.py::_reload_business_type_selector` | `BUSINESS_PROFILES.values()` → `visible_profiles()` w dropdownie "Profil działalności:" | UKRYTY | (ten wpis) | NIE (main ma dalej pokazywać Dino) | Przyciski "Nowy/Edytuj/Usuń profil" ZOSTAJĄ widoczne - to osobna, nierozstrzygnięta decyzja (patrz Poziom 3 niżej), nie ruszałem ich |
+| `ui/config_dialog.py::_build_limits_tab` | Sekcja "MINIMALNA OBSADA PRACOWNIKÓW" (`min_open`/`min_close`) - budowana tylko gdy `business_type == DEFAULT_BUSINESS_TYPE`; same widżety `QSpinBox` zawsze tworzone (żeby `_save()` nie wymagał zmian), tylko nie trafiają do layoutu gdy ukryte | UKRYTY | (ten wpis) | NIE (main ma dalej pokazywać tę sekcję zawsze) | Zweryfikowane w izolacji: dla `dino_retail` sekcja się buduje bez zmian, dla innego profilu - nie |
+| `tests/test_first_run_wizard.py::test_wizard_dino_retail_feature_toggle_disables_meat_policy` | Test zakładał domyślny wybór "Dino" w kreatorze (teraz niedostępny w UI) | POMINIĘTY (`@pytest.mark.skip`, kod testu zostaje) | (ten wpis) | TAK (odkomentować/usunąć skip przy porcie do main) | Jedyny test, który padł po ukryciu Dino z pickera - 361/362 przeszło bez zmian |
 
 ## Audyt (2026-09-18) - pełna lista kandydatów, jeszcze nietknięta
 
@@ -54,26 +58,18 @@ poza jakimkolwiek warunkiem), więc każdy mechanizm, który iteruje
 
 ### Poziom 1 - realne wycieki do klienta (widoczne w normalnym użytkowaniu)
 
-- **`ui/config_dialog.py:82-108`** - okno "Konfiguracja" (otwierane
-  regularnie) ma wiersz "Profil działalności:" z dropdownem listującym
-  WSZYSTKIE zarejestrowane profile (`BUSINESS_PROFILES.values()`) - klient
-  widzi tam "Sklep (Dino)" obok "Ochrona" i może realnie przełączyć swój
-  projekt na Dino. Do tego przyciski "Nowy profil...", "Edytuj profil...",
-  "Usuń profil..." - pełne CRUD profili wprost w głównym oknie configu.
-  `business_type_selector.setEnabled(count() > 1)` (linia 149) - selektor
-  jest aktywny zawsze, bo Dino zawsze jest zarejestrowany.
-- **`ui/config_dialog.py:394-412`** (zakładka "Limity") - sekcja
-  "MINIMALNA OBSADA PRACOWNIKÓW" (pola "Pracowników na otwarciu (rano)"/
-  "...na zamknięciu (wieczór)") pokazuje się BEZWARUNKOWO, bez guardu jak
-  ma zakładka "Niedziele handlowe" (`if self.profile.uses_trade_calendar`,
-  linia 120-121). `model/constraints.py:223` już i tak ignoruje te wartości
-  dla profili innych niż dino_retail - więc dla Enyo to pole, które nic nie
-  robi, ale wygląda jak działające ustawienie.
-- **`ui/new_project_dialog.py` + `ui/business_profile_picker.py`** - okno
-  "Nowy projekt" zawsze pokazuje sekcję "Branża:" z pełną listą profili +
-  przycisk "+ Nowa branża..." otwierający `ProfileWizardDialog`.
-- **`ui/first_run_wizard.py`** (krok `STEP_BRANCH`) - ten sam wybór branży
-  w kreatorze pierwszego uruchomienia.
+- ✅ **ZROBIONE** `ui/config_dialog.py` - dropdown "Profil działalności:"
+  filtruje teraz przez `visible_profiles()` (bez Dino). **Nadal otwarte:**
+  przyciski "Nowy profil...", "Edytuj profil...", "Usuń profil..." zostają
+  widoczne bez zmian - to osobna decyzja, patrz Poziom 3.
+- ✅ **ZROBIONE** `ui/config_dialog.py` (zakładka "Limity") - sekcja
+  "MINIMALNA OBSADA PRACOWNIKÓW" pokazuje się teraz tylko dla
+  `business_type == dino_retail`, tak jak zakładka "Niedziele handlowe".
+- ✅ **ZROBIONE** `ui/new_project_dialog.py` + `ui/business_profile_picker.py`
+  - "Branża:" w "Nowym projekcie" i w kreatorze pierwszego uruchomienia
+  (`ui/first_run_wizard.py`, krok `STEP_BRANCH`) też filtruje przez
+  `visible_profiles()` - jeden fix w pickerze naprawił oba ekrany.
+  **Nadal otwarte:** przycisk "+ Nowa branża..." zostaje widoczny.
 - **`ui/main_window.py::_about` (~linia 1601)** - okno "O programie" pisze
   wprost `<b>Dingo!</b>` + osobistą dedykację ("Z dedykacją dla Mamy ❤️,
   Dzięki za wsparcie i motywację") + link `madebykewin.pl`. Zero z tego nie
@@ -120,12 +116,16 @@ poza jakimkolwiek warunkiem), więc każdy mechanizm, który iteruje
 
 ### Poziom 3 - decyzje architektoniczne (nie da się rozstrzygnąć samym gotowym audytem)
 
-- Czy **cały mechanizm profili custom** (kreator `ProfileWizardDialog`,
-  `+ Nowa branża...`, edycja/usuwanie profilu, `model/custom_profile*.py`)
-  ma zniknąć z UI Enyo w całości (klient ma DOKŁADNIE jeden, gotowy profil
-  "Ochrona" i nigdy nie tworzy nowego), czy tylko dropdown profili ma
-  przestać pokazywać Dino (usunąć `DINO_RETAIL_PROFILE` z listy, zostawić
-  kreator na wypadek gdyby Enyo dostał drugi obiekt/branżę)?
+- ~~Czy dropdown profili ma przestać pokazywać Dino~~ - **ZROBIONE**
+  (`visible_profiles()`, patrz wyżej). Nadal otwarte: czy przyciski
+  "Nowy profil...", "Edytuj profil...", "Usuń profil..."
+  (`ui/config_dialog.py`) i "+ Nowa branża..." (`ui/business_profile_picker.py`,
+  otwiera `ProfileWizardDialog`) mają zniknąć w całości (klient ma
+  DOKŁADNIE jeden, gotowy profil "Ochrona" i nigdy nie tworzy nowego przez
+  UI), czy zostają na wypadek gdyby Enyo dostał drugi obiekt/branżę
+  wymagającą osobnego zestawu ról/reguł. Zostawione bez zmian, bo to
+  usunięcie/schowanie realnej funkcjonalności (tworzenie/edycja/kasowanie
+  profilu), nie samo "co widać w liście" - wymaga Twojej decyzji.
 - Czy `DINO_RETAIL_PROFILE`/`dino_retail` zostaje zarejestrowany w ogóle w
   tym buildzie, czy usuwamy rejestrację i cały generator dino_retail
   fizycznie z tego brancha (mniejsza binarka, zero ryzyka wycieku, ale

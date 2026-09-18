@@ -58,6 +58,16 @@ def get_profile(business_type: str | None) -> BusinessProfile:
     return BUSINESS_PROFILES.get(business_type, BUSINESS_PROFILES[DEFAULT_BUSINESS_TYPE])
 
 
+def visible_profiles() -> list[BusinessProfile]:
+    """Profiles a business-profile picker should actually list for a human
+    to choose from - see ENYO_ONLY_CHANGES.md. Excludes dino_retail so a
+    build dedicated to a non-Dino client never shows it or lets you switch
+    back to it. Purely a UI display filter: dino_retail stays registered
+    and fully functional (BUSINESS_PROFILES/get_profile() are untouched),
+    nothing about the profile system itself is removed."""
+    return [p for p in BUSINESS_PROFILES.values() if p.key != DEFAULT_BUSINESS_TYPE]
+
+
 DINO_RETAIL_PROFILE = BusinessProfile(
     key=DEFAULT_BUSINESS_TYPE,
     display_name="Sklep (Dino)",

@@ -4,6 +4,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -51,6 +53,12 @@ def test_wizard_refuses_to_advance_past_basics_with_empty_name(monkeypatch):
     assert warned
 
 
+@pytest.mark.skip(
+    reason="dino_retail celowo ukryty w BusinessProfilePicker na branchu "
+    "integration/enyo-only (visible_profiles(), patrz ENYO_ONLY_CHANGES.md) "
+    "- kreator nie oferuje już Dino, więc nie da się do niego dojść przez UI. "
+    "Odkomentować po powrocie tego pliku do main."
+)
 def test_wizard_dino_retail_feature_toggle_disables_meat_policy():
     wizard = _advance_to_branch(FirstRunWizardDialog(None))
     assert wizard._step_index == STEP_BRANCH

@@ -11,15 +11,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from model.business_profile import BUSINESS_PROFILES, get_custom_profile
+from model.business_profile import get_custom_profile, visible_profiles
 from ui.profile_wizard_dialog import ProfileWizardDialog
 
 
 class BusinessProfilePicker(QWidget):
-    """Radio list of every registered business profile (dino_retail plus any
-    custom ones), each with Edit/Delete for custom profiles and a "+ Nowa
-    branża..." button to create one on the spot. Shared by NewProjectDialog
-    and the first-run wizard (ui/first_run_wizard.py) so the two don't drift."""
+    """Radio list of every registered business profile a user should actually
+    see (visible_profiles() - excludes dino_retail, see ENYO_ONLY_CHANGES.md),
+    each with Edit/Delete for custom profiles and a "+ Nowa branża..." button
+    to create one on the spot. Shared by NewProjectDialog and the first-run
+    wizard (ui/first_run_wizard.py) so the two don't drift."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -45,7 +46,8 @@ class BusinessProfilePicker(QWidget):
         return None
 
     def _reload(self, select_key: str | None = None):
-        select_key = select_key or self.selected_key() or next(iter(BUSINESS_PROFILES), None)
+        profiles = visible_profiles()
+        select_key = select_key or self.selected_key() or (profiles[0].key if profiles else None)
 
         for radio in self._profile_radios.values():
             self._button_group.removeButton(radio)
@@ -60,7 +62,7 @@ class BusinessProfilePicker(QWidget):
                 widget.setParent(None)
                 widget.deleteLater()
 
-        for profile in BUSINESS_PROFILES.values():
+        for profile in profiles:
             row = QFrame()
             row.setObjectName("configCard")
             row_layout = QHBoxLayout(row)

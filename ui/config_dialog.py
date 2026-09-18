@@ -26,7 +26,7 @@ from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.profile_wizard_dialog import ProfileWizardDialog
 from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.constraint_policy import ConstraintPolicy
-from model.business_profile import BUSINESS_PROFILES, DEFAULT_BUSINESS_TYPE, get_profile
+from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile, visible_profiles
 from model.location import normalize_duty_rotation
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
@@ -141,7 +141,7 @@ class ConfigDialog(QDialog):
         current = self.business_type_selector.currentData() or self.shop_config.business_type
         self.business_type_selector.blockSignals(True)
         self.business_type_selector.clear()
-        for profile in BUSINESS_PROFILES.values():
+        for profile in visible_profiles():
             self.business_type_selector.addItem(profile.display_name, profile.key)
         idx = self.business_type_selector.findData(current)
         self.business_type_selector.setCurrentIndex(idx if idx >= 0 else 0)
@@ -391,12 +391,13 @@ class ConfigDialog(QDialog):
             duty_layout.addWidget(self.only_12_24h)
             layout.addWidget(duty_card)
 
-        # --- Sekcja: Obsada ---
-        staff_label = QLabel("MINIMALNA OBSADA PRACOWNIKÓW")
-        staff_label.setObjectName("groupLabel")
-        layout.addWidget(staff_label)
-
-        form_staff = QFormLayout()
+        # --- Sekcja: Obsada (tylko dino_retail - min_open_staff/
+        # min_close_staff to koncepty specyficzne dla tego profilu, patrz
+        # model/constraints.py:223 - dla innych profili nie robią nic, więc
+        # pokazywanie ich byłoby polem-widmo. Widżety tworzymy zawsze (żeby
+        # nie trzeba było osobno zabezpieczać _save() poniżej, wzorem
+        # self.only_12_24h), tylko nie trafiają do layoutu, gdy schowane -
+        # patrz ENYO_ONLY_CHANGES.md.
         self.min_open = QSpinBox()
         self.min_open.setRange(1, 10)
         self.min_open.setFixedWidth(70)
@@ -407,9 +408,15 @@ class ConfigDialog(QDialog):
         self.min_close.setFixedWidth(70)
         self.min_close.setValue(self.shop_config.constraints.get("min_close_staff", 3))
 
-        form_staff.addRow("Pracowników na otwarciu (rano):", self.min_open)
-        form_staff.addRow("Pracowników na zamknięciu (wieczór):", self.min_close)
-        layout.addLayout(form_staff)
+        if self.shop_config.business_type == DEFAULT_BUSINESS_TYPE:
+            staff_label = QLabel("MINIMALNA OBSADA PRACOWNIKÓW")
+            staff_label.setObjectName("groupLabel")
+            layout.addWidget(staff_label)
+
+            form_staff = QFormLayout()
+            form_staff.addRow("Pracowników na otwarciu (rano):", self.min_open)
+            form_staff.addRow("Pracowników na zamknięciu (wieczór):", self.min_close)
+            layout.addLayout(form_staff)
 
         layout.addStretch()
         return page
