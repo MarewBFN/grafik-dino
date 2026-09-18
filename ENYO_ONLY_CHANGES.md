@@ -146,3 +146,63 @@ poza jakimkolwiek warunkiem), więc każdy mechanizm, który iteruje
   tym buildzie, czy usuwamy rejestrację i cały generator dino_retail
   fizycznie z tego brancha (mniejsza binarka, zero ryzyka wycieku, ale
   utrudnia ewentualny powrót zmian do main przez rozjazd struktury)?
+
+## Audyt generatora/constraintów (2026-09-18)
+
+Przegląd `logic/generator/*.py` pod kątem: co jest Dino-only, co jest
+generyczne i bezpieczne dla Enyo, i czy coś realnie koliduje z rotacją
+24/7 (duty_rotation). Zasada dla całej tej sekcji: **zero zmian w
+zachowaniu dla Dino** - każda poprawka jest albo nowym, równoległym
+kodem, albo guardem, który dla lokalizacji bez `duty_rotation` (czyli
+KAŻDEGO dzisiejszego projektu Dino) jest bezwarunkowym no-opem.
+
+### Wynik: architektura już dobrze rozdzielona
+
+`dino_retail_profile.py` (mięso, opener/closer, no_night/no_afternoon,
+`constraints_staff.add_fixed_staff_shift_constraints`) jest **w pełni
+izolowany** - `custom_profile_wiring.py` (którego używa profil Enyo,
+`ochrona_enyo`) nigdy go nie importuje ani nie wywołuje. Sprawdzone i
+potwierdzone bezpieczne/generyczne dla Enyo: `hours_constraint.py`
+(monthly_hours/balance liczą minuty per duty-shift), `availability_
+constraint.py` (jawny wyjątek dla zmian duty_rotation), `objective.py`
+(kary OPEN/CLOSE zawsze wychodzą 0 dla pracowników rotacji, bo te
+zmienne są tam zawsze wyzerowane - nieszkodliwe, tylko marnowane
+terminy), `constraints_basic.py`, `constraints_logic.py::
+add_work_dependency_constraint` (ma już jawny wyjątek dla `duty_shift_ids`),
+cały `duty_rotation_*.py`.
+
+### Znaleziony i naprawiony konflikt: ręczna blokada dnia
+
+**Problem:** `logic/generator/manual_constraint.py::add_manual_shift_constraints`
+(ALWAYS_ON, działa dla każdego generowania) nie znało pięciu zmian
+duty_rotation ani `DaySchedule.is_full_day`. Ręczne zablokowanie dnia
+pracownikowi rotacji 24/7 (dwuklik na komórce w gridzie **lub** "Cała
+doba (24h)" w Ustawieniach trybu szybkiego - obie ścieżki dostępne bez
+żadnej blokady profilowej) próbowało dopasować godziny do starego modelu
+OPEN/CLOSE/START/END. Zweryfikowane empirycznie na żywym
+`AutoScheduleGenerator`: **jeden ręcznie zablokowany dzień robił model
+INFEASIBLE dla całego miesiąca**, bo zablokowana zmiana najczęściej
+rozwiązywała się na `SHIFT_OPEN` (godziny startu duty_rotation pokrywają
+się z godzinami otwarcia lokalizacji), co wprost sprzeczne z
+`add_duty_rotation_gate_constraint` (zawsze zeruje `SHIFT_OPEN` dla
+pracowników rotacji). Kontrolny przebieg bez ręcznej blokady na tych
+samych danych: FEASIBLE.
+
+**Naprawa** (nowa, równoległa funkcja - decyzja użytkownika):
+
+| Plik | Akcja | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/duty_rotation_manual_constraint.py` (nowy plik, `add_duty_rotation_manual_shift_constraint`) | Odpowiednik `add_manual_shift_constraints` dla pięciu zmian duty_rotation - dopasowuje zablokowane godziny (albo `is_full_day`+start) do właściwej zmiany tej lokalizacji, w przeciwnym razie zeruje wszystkie zmiany duty tego dnia | TAK - czysto addytywny, main może go po prostu nie wpinać |
+| `logic/generator/manual_constraint.py` | Jedna linijka: `if shop.get_location(emp).get_duty_rotation(): continue` na początku pętli po pracownikach - pomija pracowników rotacji 24/7 (nowa funkcja ich przejmuje) | TAK do main jest bezpieczne (no-op tam, gdzie żadna lokalizacja nie ma duty_rotation), ale main nie MUSI tego mieć, skoro tam duty_rotation dla Dino i tak nie istnieje |
+| `logic/generator/base_specs.py` | Nowy `ConstraintSpec("duty_rotation_manual_shift", ...)` w `_build_always_on_specs()`, ten sam wzorzec co `duty_rotation_gate` (`if ctx.duty_shifts is not None`) | TAK |
+| `tests/test_duty_rotation_manual_constraint.py` (nowy plik, 8 testów) | Testy izolowane (ConstraintSpec wprost) + end-to-end przez `AutoScheduleGenerator` odtwarzające dokładnie ten scenariusz, który wcześniej dawał INFEASIBLE | TAK |
+
+**Weryfikacja:** 369/369 testów przechodzi (361 sprzed tej zmiany + 8
+nowych), 1 świadomie pominięty test bez zmian. Reprodukcja z audytu
+(ręczna blokada `06:00-22:00` na dzień tygodnia) po naprawie: FEASIBLE,
+zablokowane godziny zachowane w wyniku.
+
+**Mniejsze, nierozwiązane znalezisko przy okazji:** `diagnostics.py`
+tłumaczy niewykonalność językiem Dino ("brak pracownika otwarcia") nawet
+dla profilu Enyo, gdzie to pojęcie nie istnieje - myląca diagnostyka.
+Niezgłoszone do naprawy, czeka na decyzję.

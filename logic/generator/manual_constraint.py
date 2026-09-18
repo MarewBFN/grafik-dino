@@ -57,6 +57,18 @@ def add_manual_shift_constraints(
     for e in range(len(employees)):
         emp = employees[e]
 
+        # Pracownicy rotacji 24/7 (duty_rotation) mają swoją, równoległą
+        # wersję tego constraintu - logic/generator/duty_rotation_manual_constraint.py
+        # (patrz jej docstring dla pełnego uzasadnienia). Ten stary model
+        # OPEN/CLOSE/START/END/NIGHT nie zna pięciu zmian duty_rotation, a
+        # próba dopasowania ręcznej blokady do niego dawała model sprzeczny
+        # z add_duty_rotation_gate_constraint. Zero zmiany zachowania dla
+        # każdego projektu bez duty_rotation (czyli każdego dzisiejszego
+        # projektu Dino) - get_duty_rotation() zawsze zwraca None/pusty
+        # słownik dla lokalizacji bez tej konfiguracji.
+        if shop.get_location(emp).get_duty_rotation():
+            continue
+
         for d in days:
 
             day_state = schedule.get_day(emp, d)

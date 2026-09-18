@@ -35,6 +35,7 @@ from logic.generator.duty_rotation_constraint import (
     add_duty_rotation_coverage_constraint,
 )
 from logic.generator.duty_rotation_rest_constraint import add_duty_rotation_rest_constraint
+from logic.generator.duty_rotation_manual_constraint import add_duty_rotation_manual_shift_constraint
 
 
 GENERIC_WEIGHTS = {
@@ -129,6 +130,17 @@ def _build_always_on_specs():
             "duty_rotation_gate",
             lambda ctx, soft: add_duty_rotation_gate_constraint(
                 ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.duty_shifts, ctx.all_shifts, trace=ctx.trace
+            ) if ctx.duty_shifts is not None else None,
+            always_on=True,
+        ),
+        ConstraintSpec(
+            # Ręczna blokada dnia dla pracowników rotacji 24/7 - równoległa
+            # do "manual_shift" wyżej (ten sam wzorzec co
+            # duty_rotation_rest_constraint obok add_rest_11h_constraint) -
+            # patrz logic/generator/duty_rotation_manual_constraint.py.
+            "duty_rotation_manual_shift",
+            lambda ctx, soft: add_duty_rotation_manual_shift_constraint(
+                ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.duty_shifts, trace=ctx.trace
             ) if ctx.duty_shifts is not None else None,
             always_on=True,
         ),
