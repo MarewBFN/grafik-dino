@@ -34,6 +34,7 @@ class ImageScheduleExporter:
             self.font_b = self.font
 
         self.GRID = (0, 0, 0)
+        self.TITLE_BG = (237, 237, 237)
 
     def export(self, path):
         self._draw_header()
@@ -72,6 +73,7 @@ class ImageScheduleExporter:
         start_x = self.NAME_W + self.LABEL_W
 
         center = start_x + (self.days * self.CELL_W) // 2
+        self.draw.rectangle([start_x, y - 80, start_x + self.days * self.CELL_W, y - 40], fill=self.TITLE_BG)
         self._draw_centered_text(center, y - 60, "Dni miesiąca", self.font_b)
 
         for d in range(1, self.days + 1):
@@ -81,7 +83,7 @@ class ImageScheduleExporter:
             self.draw.rectangle([x, y - 40, x + self.CELL_W, y - 20], outline=self.GRID)
             self.draw.text((x + self.CELL_W // 2, y - 30), str(d), fill=(0, 0, 0), font=self.font, anchor="mm")
 
-            self.draw.rectangle([x, y - 20, x + self.CELL_W, y], outline=self.GRID)
+            self.draw.rectangle([x, y - 20, x + self.CELL_W, y], fill=self.TITLE_BG, outline=self.GRID)
             self.draw.text(
                 (x + self.CELL_W // 2, y - 10),
                 ["Pn", "Wt", "Śr", "Cz", "Pt", "S", "N"][wd],
@@ -95,6 +97,7 @@ class ImageScheduleExporter:
 
         for i, h in enumerate(headers):
             x = summary_x + i * 80
+            self.draw.rectangle([x, y - 40, x + 80, y], fill=self.TITLE_BG)
             self._draw_centered_text(x + 40, y - 40, h, self.font)
 
         for emp in self.employees:
@@ -104,12 +107,13 @@ class ImageScheduleExporter:
     # ================= EMPLOYEE =================
 
     def _draw_employee(self, emp, y):
-        self.draw.rectangle([0, y, self.NAME_W, y + 3 * self.CELL_H], outline=self.GRID)
+        self.draw.rectangle([0, y, self.NAME_W, y + 3 * self.CELL_H], fill=self.TITLE_BG, outline=self.GRID)
         self._draw_centered_text(self.NAME_W // 2, y + self.CELL_H, emp.display_name(), self.font)
 
         for i, txt in enumerate(["od", "do", "h"]):
             self.draw.rectangle(
                 [self.NAME_W, y + i * self.CELL_H, self.NAME_W + self.LABEL_W, y + (i + 1) * self.CELL_H],
+                fill=self.TITLE_BG,
                 outline=self.GRID
             )
             self._draw_centered_text(self.NAME_W + self.LABEL_W // 2, y + i * self.CELL_H + 5, txt, self.font)
