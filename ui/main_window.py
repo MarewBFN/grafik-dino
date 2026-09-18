@@ -709,6 +709,18 @@ class MainWindow(QMainWindow):
         self._init_state()
         self.shop_config.business_type = dialog.result_business_type
 
+        # Codex review finding on this PR: unlike _apply_first_run_wizard_result,
+        # this path never applied a fresh custom profile's default policies -
+        # apply_registry skips a spec whose policy key is absent from
+        # shop.constraint_policies, so every rule of a custom profile
+        # selected here (including ones configured as MANDATORY in the
+        # wizard) stayed silently DISABLED until Config was opened and saved.
+        from model.business_profile import get_custom_profile
+        custom = get_custom_profile(dialog.result_business_type)
+        if custom is not None:
+            from logic.generator.custom_profile_wiring import default_policies
+            self.shop_config.constraint_policies.update(default_policies(custom))
+
         self._update_nominal_hours_label()
         self._sync_everything()
         self.statusBar().showMessage("Utworzono nowy projekt.", 2500)
@@ -1017,12 +1029,18 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Zapisano pracownika.", 2500)
 
     def _edit_day(self, emp, day):
-        hours = self.shop_config.get_location(emp).get_open_hours_for_day(day)
+        # Codex review finding on this PR: this read project-wide hours even
+        # for an employee assigned to a location with its own, different
+        # hours, while night_hours just below was already resolved per
+        # location - the dialog validated/bounded a manual entry against the
+        # wrong open/close window for such an employee.
+        location = self.shop_config.get_location(emp)
+        hours = location.get_open_hours_for_day(day)
         if not hours:
             return
 
         ds = self.controller.get_day(emp, day)
-        night_hours = self.shop_config.get_location(emp).get_night_shift_hours()
+        night_hours = location.get_night_shift_hours()
         dialog = DayEditDialog(
             self,
             start=None if ds.is_leave else ds.start,

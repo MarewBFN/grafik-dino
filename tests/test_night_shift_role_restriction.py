@@ -10,6 +10,7 @@ with no conflict raised.
 import io
 import sys
 from contextlib import redirect_stdout
+from datetime import datetime
 from pathlib import Path
 
 from ortools.sat.python import cp_model
@@ -21,7 +22,7 @@ if str(ROOT) not in sys.path:
 from logic.auto_generator import AutoScheduleGenerator
 from logic.generator.constraint_registry import ConstraintContext
 from logic.generator.custom_profile_wiring import default_policies
-from logic.generator.generic_rules import build_role_time_restriction
+from logic.generator.generic_rules import _shift_touches_window, build_role_time_restriction
 from model.business_profile import register_custom_profile
 from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import (
@@ -96,6 +97,89 @@ class TestBuildRoleTimeRestrictionNight:
         ctx.model.Add(ctx.x[0, 3, SHIFT_NIGHT] == 1)
         status = cp_model.CpSolver().Solve(ctx.model)
         assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+
+class TestShiftTouchesWindow:
+    """Refactoring finding (constraint plan, priority 1): _shift_touches_window
+    compared the shift's end hour against `window_end_hour` and its start
+    hour against `window_start_hour` - swapped relative to the window they
+    describe. With the default 22:00-06:00 window that made
+    `end.hour >= 6 or start.hour <= 22` true for virtually every shift in the
+    day, so build_role_time_restriction forbade the role from working at
+    all, not just during 22:00-06:00. No prior test caught this because the
+    only existing coverage (below) only asserts on SHIFT_NIGHT, never on a
+    real OPEN/CLOSE/START/END shift computed from open hours.
+    """
+
+    def test_midday_shift_does_not_touch_the_night_window(self):
+        start = datetime.strptime("10:00", "%H:%M")
+        end = datetime.strptime("18:00", "%H:%M")
+        assert _shift_touches_window(start, end, window_start_hour=22, window_end_hour=6) is False
+
+    def test_late_closing_shift_touches_the_night_window(self):
+        start = datetime.strptime("14:30", "%H:%M")
+        end = datetime.strptime("23:00", "%H:%M")
+        assert _shift_touches_window(start, end, window_start_hour=22, window_end_hour=6) is True
+
+    def test_early_opening_shift_touches_the_night_window(self):
+        start = datetime.strptime("03:00", "%H:%M")
+        end = datetime.strptime("11:00", "%H:%M")
+        assert _shift_touches_window(start, end, window_start_hour=22, window_end_hour=6) is True
+
+
+class TestShiftTouchesWindowNonWrapping:
+    """Codex review finding on this PR: the fix above only handled a window
+    that wraps midnight (start hour > end hour, like 22-6). For a
+    non-wrapping custom window (e.g. "no work 10:00-12:00", start < end),
+    `end.hour >= 10 or start.hour <= 12` is true for virtually every normal
+    shift, so the rule forbade the role from working at all instead of just
+    10:00-12:00."""
+
+    def test_shift_entirely_outside_a_non_wrapping_window_is_not_forbidden(self):
+        start = datetime.strptime("14:00", "%H:%M")
+        end = datetime.strptime("18:00", "%H:%M")
+        assert _shift_touches_window(start, end, window_start_hour=10, window_end_hour=12) is False
+
+    def test_shift_overlapping_a_non_wrapping_window_is_forbidden(self):
+        start = datetime.strptime("09:00", "%H:%M")
+        end = datetime.strptime("13:00", "%H:%M")
+        assert _shift_touches_window(start, end, window_start_hour=10, window_end_hour=12) is True
+
+
+class TestBuildRoleTimeRestrictionDaytime:
+    """End-to-end companion to TestShiftTouchesWindow above, through
+    build_role_time_restriction's actual OPEN/CLOSE forbidding (not just the
+    helper in isolation)."""
+
+    def test_does_not_forbid_a_shift_that_never_touches_the_window(self):
+        shop = ShopConfig(2026, 8)
+        loc = LocationConfig(key="site1", name="Site 1")
+        for wd in range(7):
+            loc.open_hours[wd] = ("10:00", "18:00")  # midday-only site
+        shop.locations["site1"] = loc
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        ctx = _ctx(shop, [emp])
+
+        build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
+        ctx.model.Add(ctx.x[0, 3, SHIFT_OPEN] == 1)
+
+        status = cp_model.CpSolver().Solve(ctx.model)
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    def test_still_forbids_a_shift_that_genuinely_touches_the_window(self):
+        shop = ShopConfig(2026, 8)
+        loc = LocationConfig(key="site1", name="Site 1")
+        for wd in range(7):
+            loc.open_hours[wd] = ("14:30", "23:00")  # closes late, touches 22:00-06:00
+        shop.locations["site1"] = loc
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        ctx = _ctx(shop, [emp])
+
+        build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
+        ctx.model.Add(ctx.x[0, 3, SHIFT_CLOSE] == 1)
+
+        status = cp_model.CpSolver().Solve(ctx.model)
+        assert status == cp_model.INFEASIBLE
 
 
 def test_end_to_end_night_coverage_rule_conflicts_with_role_time_restriction():
