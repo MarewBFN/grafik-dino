@@ -1,20 +1,26 @@
+"""Eksport JPG dla profili innych niż Dino (np. "Ochrona") - zbudowany od
+zera, niezależnie od `export/image_exporter.py`, żeby przyszłe zmiany w
+wyglądzie Ochrony nigdy nie ruszały wyglądu Dino (i odwrotnie).
+
+To jest na razie prosty, działający układ tabeli (dni miesiąca w
+kolumnach, pracownicy w wierszach - jedyny sensowny układ dla
+MonthSchedule/DaySchedule, niezależny od profilu), bez brandingu Dino.
+Docelowy wygląd dla Ochrony (per-posterunek, rotacja 24/7...) czeka na
+wymagania klienta - patrz "plan profil ochrona (analiza specyfikacji
+klienta).md".
+"""
+
 import calendar
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
 from logic.monthly_hours_status import monthly_hours_status
-from export.export_style import is_dino_style
 
 _OVERTIME_COLOR = (204, 0, 0)
 
 
-class ImageScheduleExporter:
+class SecurityScheduleImageExporter:
     def __init__(self, schedule, year, month, shop=None, employees=None):
-        """`shop` - opcjonalny ShopConfig, wyłącznie do podświetlenia
-        przekroczenia miesięcznego limitu godzin pełnego etatu na czerwono
-        (brak = brak podświetlenia, zachowanie sprzed tej funkcji).
-        `employees` - opcjonalna lista zamiast schedule.employees, do
-        wydruku pojedynczego pracownika."""
         self.schedule = schedule
         self.year = year
         self.month = month
@@ -28,8 +34,8 @@ class ImageScheduleExporter:
         self.CELL_W = 55
         self.CELL_H = 22
 
-        self.HEADER_H = 140
-        self.FOOTER_H = 100
+        self.HEADER_H = 100
+        self.FOOTER_H = 60
 
         self.width = self.NAME_W + self.LABEL_W + self.days * self.CELL_W + 5 * 80
         self.height = self.HEADER_H + len(self.employees) * 3 * self.CELL_H + self.FOOTER_H
@@ -39,8 +45,8 @@ class ImageScheduleExporter:
 
         try:
             self.font = ImageFont.truetype("arial.ttf", 14)
-            self.font_b = ImageFont.truetype("arial.ttf", 20)  # +2
-        except:
+            self.font_b = ImageFont.truetype("arial.ttf", 20)
+        except Exception:
             self.font = ImageFont.load_default()
             self.font_b = self.font
 
@@ -56,36 +62,24 @@ class ImageScheduleExporter:
     # ================= HEADER =================
 
     def _draw_header(self):
-        x_base = int(self.width * 0.25)
+        name = self.shop.name if self.shop is not None and getattr(self.shop, "name", "") else ""
+        title = f"Grafik {self.month:02d}/{self.year}" + (f" - {name}" if name else "")
 
+        self.draw.text((20, 15), title, fill=(0, 0, 0), font=self.font_b)
+
+        right_x = self.width - 220
         self.draw.text(
-            (x_base, 20),
-            f"Grafik planowany {self.month:02d}/{self.year}",
+            (right_x, 15),
+            f"Data wydruku: {datetime.now().strftime('%d/%m/%Y')}",
             fill=(0, 0, 0),
-            font=self.font_b
+            font=self.font,
         )
-
-        self.draw.text(
-            (x_base + 300, 20),
-            f"Komórka:",
-            fill=(0, 0, 0),
-            font=self.font_b
-        )
-
-        right_x = self.width - 260
-
-        self.draw.text((right_x, 10), "Wydruk wewnętrzny", fill=(0, 0, 0), font=self.font_b)
-        self.draw.text((right_x, 35), f"Data: {datetime.now().strftime('%d/%m/%Y')}", fill=(0, 0, 0), font=self.font_b)
-        self.draw.text((right_x, 60), "Wygenerowany w Dingo", fill=(0, 0, 0), font=self.font)
 
     # ================= TABLE =================
 
     def _draw_table(self):
         y = self.HEADER_H
         start_x = self.NAME_W + self.LABEL_W
-
-        center = start_x + (self.days * self.CELL_W) // 2
-        self._draw_centered_text(center, y - 60, "Dni miesiąca", self.font_b)
 
         table_bottom = self.HEADER_H + len(self.employees) * 3 * self.CELL_H
 
@@ -106,7 +100,7 @@ class ImageScheduleExporter:
                 ["Pn", "Wt", "Śr", "Cz", "Pt", "S", "N"][wd],
                 fill=(0, 0, 0),
                 font=self.font,
-                anchor="mm"
+                anchor="mm",
             )
 
         summary_x = start_x + self.days * self.CELL_W
@@ -129,7 +123,7 @@ class ImageScheduleExporter:
         for i, txt in enumerate(["od", "do", "h"]):
             self.draw.rectangle(
                 [self.NAME_W, y + i * self.CELL_H, self.NAME_W + self.LABEL_W, y + (i + 1) * self.CELL_H],
-                outline=self.GRID
+                outline=self.GRID,
             )
             self._draw_centered_text(self.NAME_W + self.LABEL_W // 2, y + i * self.CELL_H + 5, txt, self.font)
 
@@ -155,7 +149,7 @@ class ImageScheduleExporter:
 
                 end_text = self._format_hour(ds.end)
                 if ds.crosses_midnight():
-                    end_text += "+1"  # zmiana nocna - koniec leży w kolejnej dobie
+                    end_text += "+1"
 
                 self.draw.text((x + self.CELL_W // 2, y + self.CELL_H // 2), self._format_hour(ds.start), fill=(0, 0, 0), font=self.font, anchor="mm")
                 self.draw.text((x + self.CELL_W // 2, y + self.CELL_H + self.CELL_H // 2), end_text, fill=(0, 0, 0), font=self.font, anchor="mm")
@@ -197,11 +191,7 @@ class ImageScheduleExporter:
         self.draw.text((x - w // 2, y - h // 2), text, fill=fill, font=font)
 
 
-def export_schedule_to_image(schedule, year, month, path, shop=None, employees=None):
-    if not is_dino_style(shop):
-        from export.security_image_exporter import export_security_schedule_to_image
-        return export_security_schedule_to_image(schedule, year, month, path, shop=shop, employees=employees)
-
-    exporter = ImageScheduleExporter(schedule, year, month, shop=shop, employees=employees)
+def export_security_schedule_to_image(schedule, year, month, path, shop=None, employees=None):
+    exporter = SecurityScheduleImageExporter(schedule, year, month, shop=shop, employees=employees)
     exporter.export(path)
     return True
