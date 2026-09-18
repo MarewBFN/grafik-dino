@@ -126,6 +126,13 @@ poza jakimkolwiek warunkiem), więc każdy mechanizm, który iteruje
   (nazwa na sztywno) - niewidoczne dla klienta w normalnym użyciu, ale
   niespójne z brandingiem Enyo, gdyby ktoś zajrzał do AppData.
 
+### Odłożone na później (świadomie NIE zrobione)
+
+- **Branding instalatora/appki** - `release_channel.py` (domyślny kanał
+  `"dino"`), `dla inno.iss`, `Dingo! - narzędzie do grafików pracy.spec`,
+  `dingo_icon.ico`. Wymaga decyzji o nazwie/ikonie dla builda Enyo, nie
+  prostej zamiany tekstu - wraca do tego później.
+
 ### Poziom 3 - decyzje architektoniczne (nie da się rozstrzygnąć samym gotowym audytem)
 
 - ~~Czy dropdown profili ma przestać pokazywać Dino~~ - **ZROBIONE**
