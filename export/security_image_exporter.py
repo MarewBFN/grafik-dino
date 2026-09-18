@@ -51,8 +51,7 @@ class SecurityScheduleImageExporter:
             self.font_b = self.font
 
         self.GRID = (0, 0, 0)
-        self.SATURDAY = (225, 225, 225)
-        self.SUNDAY = (200, 200, 200)
+        self.TITLE_BG = (237, 237, 237)
 
     def render(self):
         """Rysuje grafik i zwraca gotowy obraz - bez zapisu, żeby ten sam
@@ -88,20 +87,14 @@ class SecurityScheduleImageExporter:
         y = self.HEADER_H
         start_x = self.NAME_W + self.LABEL_W
 
-        table_bottom = self.HEADER_H + len(self.employees) * 3 * self.CELL_H
-
         for d in range(1, self.days + 1):
             x = start_x + (d - 1) * self.CELL_W
             wd = calendar.weekday(self.year, self.month, d)
 
-            color = self.SUNDAY if wd == 6 else self.SATURDAY if wd == 5 else None
-            if color:
-                self.draw.rectangle([x, y - 40, x + self.CELL_W, table_bottom], fill=color)
-
             self.draw.rectangle([x, y - 40, x + self.CELL_W, y - 20], outline=self.GRID)
             self.draw.text((x + self.CELL_W // 2, y - 30), str(d), fill=(0, 0, 0), font=self.font, anchor="mm")
 
-            self.draw.rectangle([x, y - 20, x + self.CELL_W, y], outline=self.GRID)
+            self.draw.rectangle([x, y - 20, x + self.CELL_W, y], fill=self.TITLE_BG, outline=self.GRID)
             self.draw.text(
                 (x + self.CELL_W // 2, y - 10),
                 ["Pn", "Wt", "Śr", "Cz", "Pt", "S", "N"][wd],
@@ -115,6 +108,7 @@ class SecurityScheduleImageExporter:
 
         for i, h in enumerate(headers):
             x = summary_x + i * 80
+            self.draw.rectangle([x, y - 40, x + 80, y], fill=self.TITLE_BG)
             self._draw_centered_text(x + 40, y - 40, h, self.font)
 
         for emp in self.employees:
@@ -124,12 +118,13 @@ class SecurityScheduleImageExporter:
     # ================= EMPLOYEE =================
 
     def _draw_employee(self, emp, y):
-        self.draw.rectangle([0, y, self.NAME_W, y + 3 * self.CELL_H], outline=self.GRID)
+        self.draw.rectangle([0, y, self.NAME_W, y + 3 * self.CELL_H], fill=self.TITLE_BG, outline=self.GRID)
         self._draw_centered_text(self.NAME_W // 2, y + self.CELL_H, emp.display_name(), self.font)
 
         for i, txt in enumerate(["od", "do", "h"]):
             self.draw.rectangle(
                 [self.NAME_W, y + i * self.CELL_H, self.NAME_W + self.LABEL_W, y + (i + 1) * self.CELL_H],
+                fill=self.TITLE_BG,
                 outline=self.GRID,
             )
             self._draw_centered_text(self.NAME_W + self.LABEL_W // 2, y + i * self.CELL_H + 5, txt, self.font)
