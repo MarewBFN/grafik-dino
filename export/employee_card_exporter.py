@@ -23,7 +23,7 @@ from datetime import datetime
 
 from PIL import Image, ImageDraw, ImageFont
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Border, Font, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 _TITLE = "Lista obecności miesięczna pracownika"
 _COLUMNS = ["Dzień", "Wejście", "Wyjście", "Ilość godzin", "Dzienne / Nocne", "Podpis pracownika"]
@@ -148,6 +148,7 @@ class _EmployeeCardImageExporter:
             self.font_b = self.font
 
         self.BLACK = (0, 0, 0)
+        self.TITLE_BG = (237, 237, 237)
 
     def render(self):
         """Rysuje kartę i zwraca gotowy obraz - bez zapisu, żeby ten sam
@@ -193,19 +194,22 @@ class _EmployeeCardImageExporter:
         row_h = block_h // 3
         for i, (label, value) in enumerate(left_rows):
             ry = y + i * row_h
+            value_x = left_x + left_w // 2
+            self.draw.rectangle([left_x, ry, value_x, ry + row_h], fill=self.TITLE_BG)
             self.draw.rectangle([left_x, ry, left_x + left_w, ry + row_h], outline=self.BLACK)
             self.draw.text((left_x + 6, ry + row_h // 2), label, fill=self.BLACK, font=self.font, anchor="lm")
-            value_x = left_x + left_w // 2
             self.draw.line([(value_x, ry), (value_x, ry + row_h)], fill=self.BLACK)
             self.draw.text((value_x + 6, ry + row_h // 2), value, fill=self.BLACK, font=self.font, anchor="lm")
 
         right_row_h = block_h // 2
+        right_label_h = 22
         right_rows = [
             ("Imię i nazwisko pracownika", self.employee.display_name()),
             ("Stanowisko", _location_name(self.shop, self.employee)),
         ]
         for i, (label, value) in enumerate(right_rows):
             ry = y + i * right_row_h
+            self.draw.rectangle([right_x, ry, right_x + right_w, ry + right_label_h], fill=self.TITLE_BG)
             self.draw.rectangle([right_x, ry, right_x + right_w, ry + right_row_h], outline=self.BLACK)
             self.draw.text((right_x + 6, ry + 4), label, fill=self.BLACK, font=self.font, anchor="la")
             self.draw.text((right_x + 6, ry + right_row_h - 6), value, fill=self.BLACK, font=self.font_b, anchor="lb")
@@ -223,7 +227,7 @@ class _EmployeeCardImageExporter:
 
         header_h = 36
         for i, header in enumerate(_COLUMNS):
-            self.draw.rectangle([col_x[i], y, col_x[i + 1], y + header_h], outline=self.BLACK)
+            self.draw.rectangle([col_x[i], y, col_x[i + 1], y + header_h], fill=self.TITLE_BG, outline=self.BLACK)
             self._centered_text((col_x[i] + col_x[i + 1]) // 2, y + header_h // 2, header, self.font)
         y += header_h
 
@@ -239,7 +243,7 @@ class _EmployeeCardImageExporter:
 
         total = self.schedule.total_hours_for_employee(self.employee)
         footer_h = 30
-        self.draw.rectangle([col_x[0], y, col_x[3], y + footer_h], outline=self.BLACK)
+        self.draw.rectangle([col_x[0], y, col_x[3], y + footer_h], fill=self.TITLE_BG, outline=self.BLACK)
         self.draw.text((col_x[0] + 6, y + footer_h // 2), "Razem ilość godzin:", fill=self.BLACK, font=self.font, anchor="lm")
         self.draw.rectangle([col_x[3], y, col_x[4], y + footer_h], outline=self.BLACK)
         self._centered_text((col_x[3] + col_x[4]) // 2, y + footer_h // 2, str(total), self.font_b)
@@ -288,6 +292,7 @@ _THIN_BORDER = Border(
     top=Side(style="thin"), bottom=Side(style="thin"),
 )
 _ALIGN_CENTER = Alignment(horizontal="center", vertical="center")
+_FILL_TITLE = PatternFill(start_color="EDEDED", end_color="EDEDED", fill_type="solid")
 
 
 def _write_employee_sheet(ws, schedule, year, month, shop, employee):
@@ -299,16 +304,21 @@ def _write_employee_sheet(ws, schedule, year, month, shop, employee):
         ws.cell(row=2, column=c).border = _DASHED_BOTTOM
 
     ws.cell(row=3, column=1, value="Rok").font = Font(bold=True)
+    ws.cell(row=3, column=1).fill = _FILL_TITLE
     ws.cell(row=3, column=2, value=year)
     ws.cell(row=4, column=1, value="M-c").font = Font(bold=True)
+    ws.cell(row=4, column=1).fill = _FILL_TITLE
     ws.cell(row=4, column=2, value=f"{month:02d}")
     ws.cell(row=5, column=1, value="Norma").font = Font(bold=True)
+    ws.cell(row=5, column=1).fill = _FILL_TITLE
 
     ws.cell(row=3, column=3, value="Imię i nazwisko pracownika").font = Font(bold=True)
+    ws.cell(row=3, column=3).fill = _FILL_TITLE
     ws.merge_cells(start_row=3, start_column=4, end_row=3, end_column=last_col)
     ws.cell(row=3, column=4, value=employee.display_name())
 
     ws.cell(row=4, column=3, value="Stanowisko").font = Font(bold=True)
+    ws.cell(row=4, column=3).fill = _FILL_TITLE
     ws.merge_cells(start_row=4, start_column=4, end_row=4, end_column=last_col)
     ws.cell(row=4, column=4, value=_location_name(shop, employee))
 
@@ -318,6 +328,7 @@ def _write_employee_sheet(ws, schedule, year, month, shop, employee):
         cell.font = Font(bold=True)
         cell.alignment = _ALIGN_CENTER
         cell.border = _THIN_BORDER
+        cell.fill = _FILL_TITLE
 
     row = header_row + 1
     for day, start, end, hours, label in _day_rows(schedule, employee):
@@ -332,6 +343,8 @@ def _write_employee_sheet(ws, schedule, year, month, shop, employee):
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
     footer_label = ws.cell(row=row, column=1, value="Razem ilość godzin:")
     footer_label.font = Font(bold=True)
+    for c in range(1, 4):
+        ws.cell(row=row, column=c).fill = _FILL_TITLE
     total_cell = ws.cell(row=row, column=4, value=total)
     total_cell.font = Font(bold=True)
     total_cell.alignment = _ALIGN_CENTER
