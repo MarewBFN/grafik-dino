@@ -476,3 +476,44 @@ niezwiązany `last_project.json` użytkownika (własne dane testowe,
 | Plik | Przywrócić do main? |
 |---|---|
 | `demo/install_test_shapes_project.py` | NIE - czysto lokalny/demonstracyjny, specyficzny dla tej sesji testowej |
+
+### Naprawiony bug: ręczne "wolne" (OFF) nie blokowało zmian duty_rotation, gdy is_day_off nie było ustawione (2026-09-19)
+
+**Zgłoszenie użytkownika:** generator zwracał OPTIMAL, ale zapisany grafik
+miał niepokryty dzień, mimo że fizycznie 2 wolnych pracowników z 4-osobowej
+załogi powinno wystarczyć. Zweryfikowane na realnym `last_project.json`
+użytkownika (nie problem ze starym .exe - użytkownik testował przez
+`python main.py` na aktualnym branchu).
+
+**Root cause:** `ui/grid_view.py` ma DRUGĄ, niezależną od
+`ScheduleController.set_day_free()` ścieżkę ustawiania "wolne" (akcja "OFF"
+w dropdownie na komórce, ok. linia 1337) - czyści `start`/`end` i ustawia
+`is_locked=True`, ale NIE ustawia `is_day_off=True`.
+`duty_rotation_manual_constraint.py` (dodany w poprzedniej turze) zakładał,
+że taki dzień jest "już obsłużony generycznie" przez `add_day_off_constraints`
+(sprawdza `is_day_off`) i nic nie wymuszał dla `is_locked` + pusty `start`.
+Skutek: solver miał wolną rękę przypisać temu pracownikowi zmianę duty,
+spełniając sobie coverage WEWNĘTRZNIE (model raportował OPTIMAL) - ale
+`solution_mapper` (patrz `[SKIP LOCKED]`) i tak nic nie zapisywał dla tej
+komórki, bo `is_locked=True`. Efekt: pozornie kompletny grafik z
+niepokrytym dniem, mimo statusu OPTIMAL. Stary model
+(`manual_constraint.py`) nie ma tego problemu - traktuje `is_locked` + pusty
+`start` jako wystarczający sygnał samodzielnie, nie zależy od `is_day_off`.
+
+**Naprawa:** `duty_rotation_manual_constraint.py` teraz też traktuje
+`is_locked` + pusty `start` jako wystarczający sygnał (jak stary model) -
+wymusza `x[e,d,s]==0` na każdej z pięciu zmian duty tego
+pracownika/dnia, niezależnie od tego, czy `is_day_off` jest ustawione.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/duty_rotation_manual_constraint.py` | `if not getattr(day_state, "start", None): continue` -> wymusza `x[e,d,s]==0` na wszystkich zmianach duty przed `continue` | TAK |
+| `tests/test_duty_rotation_manual_constraint.py` (+2 testy) | Izolowany (dokładnie replikuje pola ustawiane przez `ui/grid_view.py`, nie `ScheduleController`) + end-to-end (4-osobowa placówka, 2 zablokowane "OFF", sprawdza że pozostali 2 faktycznie pokrywają dzień w zapisanym wyniku) | TAK |
+
+**Weryfikacja:** 439/440 testów przechodzi (1 świadomie pominięty, bez
+zmian), 2 nowe testy, zero regresji. Naprawa zweryfikowana bezpośrednio na
+zgłoszonym przez użytkownika `last_project.json` - wszystkie 4 wcześniej
+niepokryte dni (`test_9_17_split` dni 7/8, `test_8_16_split` dzień 12,
+`test_anchor_0830` dzień 9) teraz poprawnie pokryte przez pozostałych
+wolnych pracowników, status OPTIMAL. Plik przeliczony i zapisany ponownie
+(lokalnie, `last_project.json` jest w `.gitignore`).

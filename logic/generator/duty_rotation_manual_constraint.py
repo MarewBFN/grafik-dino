@@ -94,11 +94,23 @@ def add_duty_rotation_manual_shift_constraint(
                 continue
 
             if not getattr(day_state, "start", None):
-                # Zablokowany jako "wolne" (puste godziny) - zero przypisań
-                # tego dnia i tak jest dozwolonym stanem dla
-                # duty_rotation_coverage (miękkie/twarde pokrycie sprawdza
-                # to na poziomie całej lokalizacji, nie pojedynczego
-                # pracownika), więc nie trzeba nic wymuszać.
+                # Zablokowany jako "wolne" (puste godziny) - MUSI wymusić
+                # zero na każdej zmianie duty tego pracownika/dnia, tak jak
+                # robi to add_manual_shift_constraints (manual_constraint.py)
+                # dla starego modelu. Wcześniejszy komentarz zakładał, że to
+                # "już obsłużone generycznie" przez add_day_off_constraints
+                # (sprawdza is_day_off) - błędnie: ui/grid_view.py ma DRUGĄ,
+                # niezależną ścieżkę ustawiania "wolne" (akcja "OFF" w
+                # dropdownie), która czyści start/end i ustawia is_locked,
+                # ale NIE ustawia is_day_off. Bez tego wymuszenia solver miał
+                # wolną rękę przypisać temu pracownikowi zmianę duty (spełniał
+                # sobie tak coverage WEWNĘTRZNIE, model raportował OPTIMAL),
+                # a solution_mapper i tak nie zapisywał tego do wyniku (bo
+                # is_locked=True) - efekt: pozornie kompletny grafik z
+                # niepokrytym dniem. Zweryfikowane empirycznie na
+                # last_project.json użytkownika.
+                for s in duty_shift_ids:
+                    model.Add(x[e, d, s] == 0)
                 continue
 
             shift = _match_duty_shift(day_state, rotation, duty_shifts)
