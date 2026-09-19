@@ -16,6 +16,35 @@ czegokolwiek dla Enyo, dopisz wiersz do tabeli niżej. Jeśli coś zostaje
 tylko *ukryte* (kod istnieje, ale nieosiągalny z UI/configu), zaznacz to
 wprost w kolumnie Akcja - to inna sytuacja niż fizyczne usunięcie pliku.
 
+## Zasady robocze dla pracy nad constraintami/generatorem (2026-09-19)
+
+Ustalone z użytkownikiem, obowiązują dla dalszej pracy nad generatorem:
+
+1. **Modyfikacja vs nowy plik:** jeśli potrzebna zmiana to tylko drobna
+   korekta zachowania istniejącego constrainta - zmień go w miejscu.
+   Nowy, osobny plik/funkcja tylko gdy potrzebne zachowanie jest
+   *znacząco* inne od tego, co już istnieje. (Nie dotyczy Dino - tam
+   nadal zero zmian zachowania, punkt niżej.)
+2. **Dino vs Enyo:** nigdy nie zmieniaj zachowania constraintów pisanych
+   pod Dino. Można zmieniać zachowanie constraintów Enyo. Wspólny/
+   generyczny kod (`base_specs.py`, `hours_constraint.py` itd.) wolno
+   zmieniać, jeśli zmiana jest prawdziwym bugiem (nie kwestią gustu) i
+   jest przetestowana na pełnym zestawie danych Dino.
+3. **Pokrycie > nadgodziny, ZAWSZE:** generator ma wolno przypisać
+   dowolną ilość nadgodzin komukolwiek, byleby zapewnić pełne pokrycie
+   obiektu przez cały miesiąc. Zweryfikowane 2026-09-19, że domyślna
+   konfiguracja już to gwarantuje: `duty_rotation_coverage`/
+   `duty_rotation_no24h` = MANDATORY (twarde, model/shop_config.py),
+   `balance`/`monthly_hours`/`max_consecutive` = PREFERRED (miękkie) -
+   więc w niedoborze obsady generator dokłada nadgodziny zamiast
+   zostawiać dziurę w grafiku. Priorytet "Umowa" i preferencja 12h+12h
+   (ten branch) są celowo zawsze miękkie z tego samego powodu - nigdy nie
+   mogą zablokować pokrycia.
+   **Świadomie NIE zabezpieczone:** dropdown w Konfiguracji nadal
+   pozwala ręcznie ustawić `balance`/`monthly_hours` na MANDATORY dla
+   dowolnego profilu (w tym Enyo) - użytkownik zdecydował zostawić to
+   bez zmian, mimo że taka ręczna zmiana złamałaby tę zasadę.
+
 ## Jak czytać kolumny
 
 - **Akcja** - `USUNIĘTY` (plik/kod skasowany), `UKRYTY` (kod zostaje,
