@@ -409,3 +409,47 @@ preferencja podziału powinna być per-lokalizacja wyłączalna (podobnie jak
 `nie_chce_24h` per-pracownik), zamiast globalnej dla każdej placówki z
 rotacją 24/7. Żadna zmiana kodu nie została zrobiona w tym kroku - to
 tylko obserwacja z testu na realnych danych.
+
+## Sweep testów: L4/urlop i różne długości zmian (2026-09-19)
+
+Na żądanie użytkownika: sweep testów sprawdzający, jak generator reaguje
+"przed" i "po" wygenerowaniu na różne ILOŚCI L4/urlopu, oraz czy
+gate/coverage/rest/kalkulacja minut duty_rotation generalizują się poza
+jedyny dotąd testowany, zahardkodowany zestaw godzin (06:00/18:00/22:00).
+**Wynik: żaden błąd produkcyjny nie został znaleziony - tylko nowe testy,
+kod generatora bez zmian.**
+
+### Nowe pliki testowe
+
+| Plik | Co sprawdza | Przywrócić do main? |
+|---|---|---|
+| `tests/test_leave_sick_generation_sweep.py` (31 testów) | Sweep 0%/26%/48%/74%/100% miesiąca L4/urlopu (osobno i mieszane), "przed" (`monthly_hours_status`) i "po" (pełny `AutoScheduleGenerator.generate()`) - na ścieżce rotacji 24/7 (Enyo) I zwykłej (Dino open/close). Dodatkowo: pula 2 pracowników z długim L4 -> obsada 24/7 fizycznie niemożliwa - sprawdza, że generator zgłasza to jako `success=False` + niepustą diagnostykę, z pełnym rollbackiem grafiku, zamiast zwrócić błędny wynik. | TAK - ogólne, nie-Enyo-specyficzne testy generatora |
+| `tests/test_duty_rotation_shift_length_variants.py` (27 testów) | To samo gate/coverage/rest/preferencja/kalkulacja minut co istniejące testy duty_rotation, ale przy 5 różnych "kształtach" zmian zamiast jedynego dotąd testowanego (06:00/18:00/22:00): "8/8" (24h @08, realny wzorzec PGE Ustka), "7/7" (24h @07), "8/16" i "9/17" (podział asymetryczny 8h+16h, dwa różne anchory), anchor na pół godziny (08:30). Plus 3 pełne uruchomienia generatora na kształtach 1:1 z realnymi danymi klienta (PGE Ustka, Ubojnia GOSZ) i na nowym kształcie (tydzień @09:00-17:00 + weekend @06:00, dwa niezależne anchory w jednym projekcie). | TAK - ogólne testy duty_rotation, nie Enyo-specyficzne |
+
+### Co potwierdzono (wszystko już działało poprawnie, bez zmian w kodzie)
+
+- **Obsada 24/7 zawsze pełna niezależnie od ilości L4/urlopu** - dopóki
+  pozostali pracownicy fizycznie wystarczają, pokrycie (MANDATORY) trzyma
+  się w 100% na każdym punkcie sweepu (0-100% miesiąca).
+- **Brak fikcyjnego "dobijania" nadgodzin** - target/worked po
+  wygenerowaniu zawsze spójne z klamrowaną formułą (poprawka z poprzedniej
+  tury), także przy minutach 12h/24h zmian rotacji, nie tylko przy
+  "zwykłych" zmianach o stałej długości.
+- **Graceful infeasibility** - scenariusz fizycznie niemożliwy do pokrycia
+  (2 pracowników, jeden na długim L4) daje kontrolowane `success=False` z
+  diagnostyką, a stan grafiku wraca dokładnie do sprzed próby generowania
+  (bez żadnych częściowych przypisań).
+- **Gate/coverage/rest/preferencja duty_rotation są w pełni generyczne** -
+  żaden z mechanizmów nie okazał się przypadkiem przywiązany do
+  06:00/18:00/22:00 - te same reguły (11h odpoczynku dla połówek, (N-1)×24h
+  dla pełnej doby, dokładnie 1 osoba na typ zmiany) trzymają się
+  identycznie przy dowolnych, w tym niecałogodzinnych, godzinach startu.
+- Jedyny "błąd" znaleziony podczas pisania tych testów był we własnych
+  fixture'ach testowych (m.in. profil "zerowy" bez ról `is_opener`/`is_meat`
+  dla Dino okazał się strukturalnie niewykonalny niezależnie od L4 -
+  wymóg obsady działu mięsnego jest realną, wcześniej istniejącą regułą
+  Dino, nie błędem), nie w kodzie generatora.
+
+**Weryfikacja:** pełny zestaw testów - **437/438 przechodzi, 1 świadomie
+pominięty** (bez zmian względem stanu przed tą turą; 58 nowych testów, 0
+regresji).
