@@ -29,7 +29,8 @@ def monthly_hours_status(schedule, shop, employee) -> dict:
 
     leave_minutes = leave_days * daily_minutes
     sick_minutes = sick_days * daily_minutes
-    target_minutes = int(nominal_minutes * employee.employment_fraction - leave_minutes - sick_minutes)
+    # Przycięte do 0 - patrz ten sam fix w add_monthly_hours_constraint.
+    target_minutes = max(0, int(nominal_minutes * employee.employment_fraction - leave_minutes - sick_minutes))
 
     worked_minutes = schedule.total_minutes_for_employee(employee)
     over_minutes = max(0, worked_minutes - target_minutes)

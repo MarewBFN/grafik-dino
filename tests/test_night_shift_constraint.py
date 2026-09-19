@@ -290,12 +290,14 @@ class HoursAccountingTests(unittest.TestCase):
         shop = ShopConfig(2026, 8)
         shop.locations["site1"] = _location_with_night()  # 8h window
         emp = _employee_at(employment_fraction=1.0)
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
 
         model = cp_model.CpModel()
         x = {(0, 1, s): model.NewBoolVar(f"x_{s}") for s in ALL_SHIFTS}
 
         add_balance_constraint(
-            model, x, [emp], [1], shop, ALL_SHIFTS, soft=True, shift_night=SHIFT_NIGHT,
+            model, x, [emp], [1], schedule, shop, ALL_SHIFTS, soft=True, shift_night=SHIFT_NIGHT,
         )
         model.Add(x[0, 1, SHIFT_NIGHT] == 1)
         for s in ALL_SHIFTS:

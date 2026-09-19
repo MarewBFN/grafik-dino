@@ -188,7 +188,7 @@ def _build_rest_11h(ctx, soft):
 
 def _build_balance(ctx, soft):
     return add_balance_constraint(
-        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts,
+        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
         soft=soft, trace=ctx.trace, shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
     )
 

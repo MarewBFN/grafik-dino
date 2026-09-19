@@ -206,3 +206,70 @@ zablokowane godziny zachowane w wyniku.
 tłumaczy niewykonalność językiem Dino ("brak pracownika otwarcia") nawet
 dla profilu Enyo, gdzie to pojęcie nie istnieje - myląca diagnostyka.
 Niezgłoszone do naprawy, czeka na decyzję.
+
+## Generator "pod klucz" dla Enyo (2026-09-19)
+
+Realizacja pełnej listy wymagań generatora dla Enyo (obłożenie, L4/urlop,
+równy podział godzin, "nie chce 24h w weekendy", 24h przerwy między
+zmianami 24h, preferencja 12h+12h, priorytet "Umowa"). Mapowanie wymagań
+na kod - co już istniało (wykorzystane bez zmian) i co jest nowe:
+
+| Wymaganie | Status |
+|---|---|
+| Obłożenie 24/7 | ✅ już istniało - `duty_rotation_coverage_constraint` |
+| Obłożenie w konkretnych godzinach otwarcia (nie-24/7) | ✅ już istniało - generyczna reguła `min_staff_with_role` (scope `open`+`close`) z kreatora profilu, ten sam mechanizm co obsada otwarcia/zamknięcia u Dino |
+| L4/urlop | ✅ już istniało (`add_leave_constraints`) + naprawiony błąd celu godzinowego (patrz niżej) |
+| Dni ręcznie zablokowane | ✅ naprawione w poprzedniej turze (`duty_rotation_manual_constraint.py`) |
+| Równy podział godzin "w miarę możliwości" | ✅ już istniało - `add_workload_balance_penalty` (generyczne, już wpięte dla Enyo) |
+| "Nie chce 24h w weekendy" | ✅ już istniało - `add_duty_rotation_no24h_gate_constraint` |
+| Min. 24h przerwy między zmianami 24h | ✅ już istniało, i to w wersji dokładniejszej niż proszona - `duty_rotation_rest_constraint.py` liczy (N-1)×24h wg liczby chętnych/zdolnych do rotacji, nigdy mniej niż 24h |
+| Preferencja 12h+12h zamiast 24h | 🆕 NOWE - `logic/generator/duty_rotation_preference.py` |
+| Priorytet "Umowa" w nominalnym czasie pracy | 🆕 NOWE - `logic/generator/priority_hours_constraint.py` |
+| Bug L4/urlop w nominalnym czasie pracy (zgłoszony) | 🐛 ZNALEZIONY I NAPRAWIONY - `hours_constraint.py` + `monthly_hours_status.py` (dotyczy też Dino, autoryzowane) |
+
+### Nowe pliki (czysto Enyo, addytywne)
+
+| Plik | Co robi | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/duty_rotation_preference.py` | Miękka kara za każde przypisanie `weekend_full` - zachęca solver do wyboru 12h+12h zamiast 24h, gdy oba warianty są osiągalne (nigdy nie blokuje 24h, gdy podział niemożliwy) | TAK |
+| `logic/generator/priority_hours_constraint.py` | Bardzo mocno ważony (10000) term "niedobór poniżej nominału" TYLKO dla pracowników z rolą `umowa` - działa niezależnie od tego, czy balance/monthly_hours są w ogóle włączone dla profilu | TAK |
+| `logic/generator/custom_profile_wiring.py` (`build_objective_terms`) | Podpięcie obu powyższych | NIE (main nie ma pojęcia "Umowa"/duty_rotation split - to specyficzne dla Enyo, ale bez szkody, gdyby zostało) |
+| `tests/test_priority_hours_and_duty_preference.py` (nowy, 5 testów) | Izolowane + end-to-end przez `AutoScheduleGenerator` - zweryfikowane empirycznie: pracownik "Umowa" trafia dokładnie w nominał (176h) przy realnym niedoborze (8 pracowników / 31 dni rotacji), reszta dostaje co zostało; przy 2 dostępnych pracownikach na weekend solver w 100% wybiera 12h+12h zamiast 24h | TAK |
+
+**Decyzje podjęte z użytkownikiem:** priorytet "Umowa" jako bardzo wysoka
+waga miękka (nie twardy MANDATORY) - generator ma zawsze znaleźć
+rozwiązanie, nawet gdy w danym miesiącu fizycznie zabraknie godzin dla
+wszystkich Umowa (np. przez L4 innych).
+
+### Naprawiony bug: cel godzinowy dla L4/urlopu (dotyczy Dino i Enyo)
+
+**Problem** (znaleziony na żądanie użytkownika, potwierdzony liczbowo):
+`add_monthly_hours_constraint`/`add_balance_constraint`
+(`logic/generator/hours_constraint.py`) liczyły cel jako
+`nominał - L4 - urlop`, bez dolnego ograniczenia na 0.
+
+- Pracownik na L4/urlopie przez **cały miesiąc** → cel wychodził **ujemny**
+  (np. -87.5h dla pełnego etatu, marzec, 8.5h/dzień).
+- Generator poprawnie przydzielał mu 0 godzin, ale skoro cel był ujemny,
+  `add_monthly_hours_constraint` liczyło to jako **87.5h fikcyjnej
+  "nadwyżki"** w funkcji celu - kara dla kogoś, kto nic złego nie zrobił.
+- Przy `monthly_hours` = MANDATORY to samo mogło zrobić model
+  **niewykonalnym w ogóle** (górna granica pasma schodziła poniżej 0,
+  sprzecznie z `total_minutes >= 0`).
+- `add_balance_constraint` miała ten sam problem w gorszej wersji - **w
+  ogóle nie odejmowała L4/urlopu** od celu przed tą poprawką.
+
+**Naprawa** (za zgodą użytkownika, dotyczy też Dino):
+
+| Plik | Zmiana | Testy Dino |
+|---|---|---|
+| `logic/generator/hours_constraint.py::add_monthly_hours_constraint` | `target_minutes` przycięty do min. 0 | ✅ |
+| `logic/generator/hours_constraint.py::add_balance_constraint` | Dodane odejmowanie L4/urlopu (nowy parametr `schedule`) + przycięcie do 0 | ✅ |
+| `logic/generator/base_specs.py::_build_balance` | Przekazanie `ctx.schedule` do zmienionej sygnatury | ✅ |
+| `logic/monthly_hours_status.py` | Ten sam clamp - używane przez podświetlanie "Nadgodziny" w gridzie/eksportach (musi zostać w synchronizacji z generatorem) | ✅ |
+| `tests/test_night_shift_constraint.py` | Zaktualizowane jedno wywołanie `add_balance_constraint` pod nową sygnaturę | ✅ |
+| `tests/test_hours_leave_sick_target.py` (nowy, 5 testów) | Regresja: pełny miesiąc L4/urlop → cel=0, zero fikcyjnej kary, MANDATORY nie jest już niewykonalny; częściowy L4/urlop → liczby bez zmian względem sprzed poprawki | ✅ |
+
+**Weryfikacja:** pełny zestaw testów (Dino + Enyo) - **379/380 przechodzi,
+1 świadomie pominięty** (bez zmian względem stanu przed tą turą). Zero
+regresji na danych Dino.

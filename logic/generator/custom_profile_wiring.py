@@ -11,11 +11,13 @@ import functools
 
 from logic.generator import base_specs, generic_rules
 from logic.generator.constraint_registry import ConstraintSpec
+from logic.generator.duty_rotation_preference import add_prefer_weekend_split_over_full_penalty
 from logic.generator.objective import (
     add_open_close_penalty,
     add_work_balance_penalty,
     add_workload_balance_penalty,
 )
+from logic.generator.priority_hours_constraint import add_priority_hours_shortfall_penalty
 from model.custom_profile import RULE_TYPE_MIN_STAFF_WITH_ROLE, CustomBusinessProfile
 
 
@@ -90,4 +92,21 @@ def build_objective_terms(ctx, *_args, **_kwargs) -> list:
     terms.extend(add_open_close_penalty(
         ctx.x, ctx.employees, ctx.trade_days, ctx.shift_open, ctx.shift_close
     ))
+
+    # Priorytet "Umowa" (patrz priority_hours_constraint.py) - działa
+    # niezależnie od tego, czy balance/monthly_hours są w ogóle włączone
+    # dla tego profilu.
+    terms.extend(add_priority_hours_shortfall_penalty(
+        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
+        shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
+    ))
+
+    # Preferencja 12h+12h zamiast 24h w weekend dla lokalizacji z rotacją
+    # 24/7 (patrz duty_rotation_preference.py) - no-op dla projektów bez
+    # duty_rotation (grupa pusta).
+    if ctx.duty_shifts is not None:
+        terms.extend(add_prefer_weekend_split_over_full_penalty(
+            ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.duty_shifts,
+        ))
+
     return terms
