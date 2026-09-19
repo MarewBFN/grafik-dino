@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 from ui.time_input import TimeInputWidget
+from model.business_profile import get_profile
 
 
 def _parse_time(value: str) -> QTime:
@@ -48,14 +49,19 @@ class DayOverrideDialog(QDialog):
         self.end_edit = TimeInputWidget()
         self.end_edit.set_time_str(self.current_hours[1])
 
-        self.holiday_box = QCheckBox("Dzień wolny ustawowo")
-        self.holiday_box.setChecked(self.day in self.shop_config.public_holidays)
-
         form.addRow("Otwarcie", self.start_edit)
         form.addRow("Zamknięcie", self.end_edit)
 
         root.addLayout(form)
-        root.addWidget(self.holiday_box)
+
+        # "Dzień wolny ustawowo" ma sens tylko dla profili z kalendarzem
+        # handlowym (patrz BusinessProfile.uses_trade_calendar) - inaczej
+        # ten checkbox konfigurowałby coś, co i tak nic nie robi.
+        self.holiday_box = None
+        if get_profile(self.shop_config.business_type).uses_trade_calendar:
+            self.holiday_box = QCheckBox("Dzień wolny ustawowo")
+            self.holiday_box.setChecked(self.day in self.shop_config.public_holidays)
+            root.addWidget(self.holiday_box)
 
         row = QHBoxLayout()
         reset_btn = QPushButton("Przywróć domyślne")
@@ -96,5 +102,5 @@ class DayOverrideDialog(QDialog):
         self.result_mode = "save"
         self.result_start = start_str
         self.result_end = end_str
-        self.result_holiday = self.holiday_box.isChecked()
+        self.result_holiday = self.holiday_box.isChecked() if self.holiday_box else False
         self.accept()

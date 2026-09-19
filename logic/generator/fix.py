@@ -17,7 +17,9 @@ def setup_fix_hints_and_penalties(
     SHIFT_OPEN,
     SHIFT_CLOSE,
     START_SHIFT_MAP,
-    END_SHIFT_MAP
+    END_SHIFT_MAP,
+    shift_night=None,
+    duty_shifts=None,
 ):
     """
     FIX MODE — stabilna wersja:
@@ -64,6 +66,7 @@ def setup_fix_hints_and_penalties(
     # ⏱️ NOMINAL (ważne — ale nie HARD)
     # ==================================================
     from logic.utils.time_utils import get_effective_daily_hours
+    from logic.generator.hours_constraint import _shift_minutes_by_type, _duration_overrides_for_employee
 
     nominal_hours = shop.get_full_time_nominal_hours()
     nominal_minutes = nominal_hours * 60
@@ -71,6 +74,9 @@ def setup_fix_hints_and_penalties(
     for e, emp in enumerate(employees):
 
         shift_minutes = int(get_effective_daily_hours(emp, shop) * 60)
+        minutes_by_shift = _shift_minutes_by_type(
+            all_shifts, shift_minutes, _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts),
+        )
 
         leave_days = 0
         sick_days = 0
@@ -98,10 +104,9 @@ def setup_fix_hints_and_penalties(
         model.Add(
             total_worked ==
             sum(
-                x[e, d, s] * shift_minutes
+                x[e, d, s] * minutes_by_shift[s]
                 for d in days
                 for s in all_shifts
-                if s != 14
             )
         )
 
@@ -153,7 +158,12 @@ def setup_fix_hints_and_penalties(
             start = getattr(day_state, "start", None)
             end = getattr(day_state, "end", None)
 
-            if start and end:
+            if start and end and shift_night is not None:
+                night_hours = shop.get_location(emp).get_night_shift_hours()
+                if night_hours and (start, end) == night_hours:
+                    current_shift = shift_night
+
+            if current_shift is None and start and end:
                 hours = shop.get_open_hours_for_day(d)
                 if hours:
                     open_time, close_time = hours

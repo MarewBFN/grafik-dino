@@ -7,6 +7,7 @@ WARN_YELLOW = "#fff0b3"
 ERR_RED = "#ffd0cf"
 SHIFT_MORNING = "#dbeafe"
 SHIFT_CLOSE = "#ede9fe"
+SHIFT_NIGHT = "#c7d2fe"
 TEXT_MAIN = "#1f2937"
 TEXT_MUTED = "#6b7280"
 GRID_BORDER = "#cbd5e1"
@@ -216,6 +217,33 @@ QFrame#sidebarHero {
     background: #eaf0fd;
     border: 1px solid #d7e5fb;
     border-radius: 16px;
+}
+
+QFrame#locationSwitcher {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+}
+
+QPushButton#locationSwitcherArrow {
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-weight: 700;
+    color: #475569;
+}
+
+QPushButton#locationNameButton {
+    background: transparent;
+    border: none;
+    padding: 4px 6px;
+    text-align: center;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+QPushButton#locationNameButton:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
 }
 
 QLabel#titleLabel {

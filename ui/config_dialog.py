@@ -7,11 +7,14 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFormLayout,
     QGridLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -19,9 +22,12 @@ from PySide6.QtWidgets import (
     QWidget,
     QFrame,
 )
-from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
+from ui.profile_wizard_dialog import ProfileWizardDialog
+from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.constraint_policy import ConstraintPolicy
+from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile, visible_profiles
+from model.location import normalize_duty_rotation
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
 
@@ -37,20 +43,6 @@ REST_11H_MODE_OPTIONS = (
     ("Uproszczony (2 zmiany — szybszy)", "simplified"),
 )
 
-POLICY_LABELS = (
-    ("rest_11h", "Odpoczynek 11 h"),
-    ("open", "Obsada otwarcia"),
-    ("close", "Obsada zamknięcia"),
-    ("meat", "Mięso na zmianach"),
-    ("meat_coverage", "Mięso przez cały dzień"),
-    ("availability", "Dostępność pracownika"),
-    ("no_night", "Zakaz pracy nocnej"),
-    ("no_afternoon", "Zakaz pracy popołudniami"),
-    ("monthly_hours", "Godziny miesięczne"),
-    ("balance", "Bilans godzin"),
-    ("max_consecutive", "Dni pod rząd"),
-)
-
 def _parse_time(value: str) -> QTime:
     if not value:
         return QTime(0, 0)
@@ -62,6 +54,7 @@ class ConfigDialog(QDialog):
     def __init__(self, parent, shop_config):
         super().__init__(parent)
         self.shop_config = shop_config
+        self.profile = get_profile(shop_config.business_type)
         self.setWindowTitle("Konfiguracja")
         self.setModal(True)
         self.resize(720, 560)
@@ -75,16 +68,65 @@ class ConfigDialog(QDialog):
     def _build_ui(self):
         root = QVBoxLayout(self)
 
-        title = QLabel("Konfiguracja sklepu")
+        title = QLabel("Konfiguracja obiektu")
         title.setObjectName("sectionLabel")
         root.addWidget(title)
+
+        name_row = QHBoxLayout()
+        name_row.addWidget(QLabel("Nazwa placówki:"))
+        self.name_edit = QLineEdit(self.shop_config.name)
+        self.name_edit.setPlaceholderText("np. Moja Firma")
+        name_row.addWidget(self.name_edit, 1)
+        root.addLayout(name_row)
+
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(QLabel("Profil działalności:"))
+        self.business_type_selector = QComboBox()
+        self.business_type_selector.setMinimumWidth(220)
+        self._reload_business_type_selector()
+        self.business_type_selector.currentIndexChanged.connect(self._on_business_type_changed)
+        profile_row.addWidget(self.business_type_selector)
+
+        # Zarządzanie profilami (tworzenie/edycja/kasowanie) schowane dla
+        # Enyo - klient ma dokładnie jeden, gotowy profil "Ochrona" i nie
+        # zarządza profilami przez UI (patrz ENYO_ONLY_CHANGES.md). Guziki
+        # i cała logika kliknięć zostają - tylko setVisible(False), żeby nie
+        # tracić funkcjonalności na wypadek powrotu do main.
+        new_profile_btn = QPushButton("Nowy profil...")
+        new_profile_btn.setObjectName("secondaryButton")
+        new_profile_btn.clicked.connect(self._open_profile_wizard)
+        new_profile_btn.setVisible(False)
+        profile_row.addWidget(new_profile_btn)
+
+        self.edit_profile_btn = QPushButton("Edytuj profil...")
+        self.edit_profile_btn.setObjectName("secondaryButton")
+        self.edit_profile_btn.clicked.connect(self._open_profile_wizard_for_edit)
+        self.edit_profile_btn.setVisible(False)
+        profile_row.addWidget(self.edit_profile_btn)
+
+        self.delete_profile_btn = QPushButton("Usuń profil...")
+        self.delete_profile_btn.setObjectName("dangerButton")
+        self.delete_profile_btn.clicked.connect(self._delete_current_profile)
+        self.delete_profile_btn.setVisible(False)
+        profile_row.addWidget(self.delete_profile_btn)
+
+        self._sync_edit_profile_button()
+
+        profile_row.addStretch()
+        root.addLayout(profile_row)
+
+        # Domyślnie puste - _build_sundays_tab() nadpisuje tylko gdy profil
+        # faktycznie ma kalendarz handlowy (patrz niżej), a _save() zawsze
+        # czyta ten słownik.
+        self.sunday_checks = {}
 
         self.tabs = QTabWidget()
         tabs = self.tabs
         root.addWidget(tabs, 1)
 
         tabs.addTab(self._build_hours_tab(), "Godziny otwarcia")
-        tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
+        if self.profile.uses_trade_calendar:
+            tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
         tabs.addTab(self._build_limits_tab(), "Limity")
         tabs.addTab(self._build_generator_rules_tab(), "Zasady generatora")
 
@@ -103,46 +145,124 @@ class ConfigDialog(QDialog):
         help_btn.clicked.connect(self._open_tutorial)
         root.addWidget(buttons)
 
+    def _reload_business_type_selector(self):
+        current = self.business_type_selector.currentData() or self.shop_config.business_type
+        self.business_type_selector.blockSignals(True)
+        self.business_type_selector.clear()
+        for profile in visible_profiles():
+            self.business_type_selector.addItem(profile.display_name, profile.key)
+        idx = self.business_type_selector.findData(current)
+        self.business_type_selector.setCurrentIndex(idx if idx >= 0 else 0)
+        self.business_type_selector.blockSignals(False)
+        self.business_type_selector.setEnabled(self.business_type_selector.count() > 1)
+
+    def _on_business_type_changed(self):
+        # Seed sensible default policies for a just-picked profile's rules,
+        # without clobbering anything the user already tuned in a previous
+        # session for it. The "Zasady generatora" tab itself was built for
+        # whichever profile was active when this dialog opened and doesn't
+        # re-render live - reopen Config after switching to edit these.
+        from model.business_profile import get_custom_profile
+
+        self._sync_edit_profile_button()
+
+        business_type = self.business_type_selector.currentData()
+        custom = get_custom_profile(business_type)
+        if custom is None:
+            return
+        from logic.generator.custom_profile_wiring import default_policies
+        for key, policy in default_policies(custom).items():
+            self.shop_config.constraint_policies.setdefault(key, policy)
+
+    def _on_advanced_toggled(self, checked):
+        self.advanced_container.setVisible(checked)
+        self.advanced_toggle_btn.setText(
+            "Ukryj ustawienia zaawansowane" if checked else "Pokaż ustawienia zaawansowane"
+        )
+
+    def _sync_edit_profile_button(self):
+        from model.business_profile import get_custom_profile
+
+        business_type = self.business_type_selector.currentData()
+        is_custom = get_custom_profile(business_type) is not None
+        self.edit_profile_btn.setEnabled(is_custom)
+        self.delete_profile_btn.setEnabled(is_custom)
+
+    def _open_profile_wizard(self):
+        wizard = ProfileWizardDialog(self)
+        if wizard.exec() != QDialog.Accepted or not wizard.new_profile_key:
+            return
+        self._reload_business_type_selector()
+        idx = self.business_type_selector.findData(wizard.new_profile_key)
+        if idx >= 0:
+            self.business_type_selector.setCurrentIndex(idx)
+
+    def _open_profile_wizard_for_edit(self):
+        from model.business_profile import get_custom_profile
+
+        business_type = self.business_type_selector.currentData()
+        custom = get_custom_profile(business_type)
+        if custom is None:
+            return
+
+        wizard = ProfileWizardDialog(self, existing=custom)
+        if wizard.exec() != QDialog.Accepted or not wizard.new_profile_key:
+            return
+        # Same key as before (the wizard reuses it on edit), so re-select it
+        # mainly to refresh the display name shown in the dropdown.
+        self._reload_business_type_selector()
+        idx = self.business_type_selector.findData(wizard.new_profile_key)
+        if idx >= 0:
+            self.business_type_selector.setCurrentIndex(idx)
+
+    def _delete_current_profile(self):
+        from model.business_profile import get_custom_profile, unregister_custom_profile
+        from model.custom_profile_store import delete_custom_profile
+
+        business_type = self.business_type_selector.currentData()
+        custom = get_custom_profile(business_type)
+        if custom is None:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Usuń profil",
+            f"Usunąć profil \"{custom.display_name}\"? Projekty, które go już "
+            "używają, przy następnym otwarciu przełączą się na profil Dino "
+            "(nic w nich nie zostanie skasowane).",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            delete_custom_profile(business_type)
+        except OSError as exc:
+            QMessageBox.critical(self, "Błąd", f"Nie udało się usunąć profilu: {exc}")
+            return
+        unregister_custom_profile(business_type)
+
+        if self.shop_config.business_type == business_type:
+            self.shop_config.business_type = DEFAULT_BUSINESS_TYPE
+
+        self._reload_business_type_selector()
+        self._sync_edit_profile_button()
+
     def _build_hours_tab(self):
         page = QWidget()
         outer = QVBoxLayout(page)
         outer.setContentsMargins(20, 20, 20, 20)
         outer.setSpacing(12)
 
-        card = QFrame()
-        card.setObjectName("configCard")
-        layout = QGridLayout(card)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setHorizontalSpacing(14)
-        layout.setVerticalSpacing(10)
-
-        self.open_edits = {}
-        days = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
-
-        for row, name in enumerate(days):
-            label = QLabel(name)
-            label.setStyleSheet("font-weight: 600;")
-            layout.addWidget(label, row, 0)
-
-            start, end = self.shop_config.open_hours[row]
-
-            start_edit = TimeInputWidget()
-            start_edit.set_time_str(start)
-
-            end_edit = TimeInputWidget()
-            end_edit.set_time_str(end)
-
-            layout.addWidget(start_edit, row, 1)
-            layout.addWidget(QLabel("—"), row, 2, Qt.AlignCenter)
-            layout.addWidget(end_edit, row, 3)
-
-            self.open_edits[row] = (start_edit, end_edit)
-
-        outer.addWidget(card)
+        self.hours_editor = WeeklyHoursEditor(self.shop_config.open_hours)
+        outer.addWidget(self.hours_editor)
 
         hint = QLabel(
             "Godziny pracy dla pojedynczego dnia możesz zmienić ręcznie, "
-            "klikając dwukrotnie na nagłówek tego dnia w grafiku (np. „Wt 22”)."
+            "klikając dwukrotnie na nagłówek tego dnia w grafiku (np. „Wt 22”).\n"
+            "Działalność całodobowa: ustaw np. 00:00–23:45 (godziny "
+            "przechodzące przez północ nie są jeszcze wspierane)."
         )
         hint.setObjectName("mutedHint")
         hint.setWordWrap(True)
@@ -207,6 +327,22 @@ class ConfigDialog(QDialog):
         self.max_consecutive.setFixedWidth(70)
         self.max_consecutive.setValue(self.shop_config.constraints.get("max_consecutive_days", 4))
         form_gen.addRow("Maksymalna liczba dni pod rząd:", self.max_consecutive)
+
+        self.standard_daily_hours = QDoubleSpinBox()
+        # 23.75h zamiast 24h: przy dosłownych 24h "koniec zmiany" liczony
+        # jako godzina zegarowa wychodzi identyczny z "początkiem" (traci się
+        # przeniesienie na kolejny dzień), więc zmiana byłaby nierozróżnialna
+        # od pustej - patrz get_effective_daily_hours.
+        self.standard_daily_hours.setRange(1.0, 23.75)
+        self.standard_daily_hours.setSingleStep(0.25)
+        self.standard_daily_hours.setSuffix(" h")
+        self.standard_daily_hours.setFixedWidth(80)
+        self.standard_daily_hours.setValue(self.shop_config.standard_daily_hours)
+        self.standard_daily_hours.setToolTip(
+            "Bazowy wymiar zmiany dla pracownika na pełnym etacie (1/1). "
+            "Inne wymiary etatu to ułamek tej wartości."
+        )
+        form_gen.addRow("Standardowy wymiar zmiany (pełny etat):", self.standard_daily_hours)
         layout.addLayout(form_gen)
 
         # Jedna karta na obie flagi zamiast osobnej ramki na każdy checkbox.
@@ -231,12 +367,45 @@ class ConfigDialog(QDialog):
 
         layout.addWidget(flags_card)
 
-        # --- Sekcja: Obsada ---
-        staff_label = QLabel("MINIMALNA OBSADA PRACOWNIKÓW")
-        staff_label.setObjectName("groupLabel")
-        layout.addWidget(staff_label)
+        # --- Sekcja: Rotacja 24/7 (widoczna tylko gdy projekt jej faktycznie
+        # używa - patrz LocationConfig.duty_rotation / ShopConfig.duty_rotation).
+        # Na razie jedyny UI dla tego mechanizmu - reszta konfiguracji
+        # (godziny okien) jest programowa, patrz demo/install_demo.py.
+        self._duty_rotation_configs = [
+            cfg for cfg in (
+                self.shop_config.get_duty_rotation(),
+                *(loc.get_duty_rotation() for loc in self.shop_config.locations.values()),
+            )
+            if cfg
+        ]
+        self.only_12_24h = None
+        if self._duty_rotation_configs:
+            duty_label = QLabel("ROTACJA 24/7")
+            duty_label.setObjectName("groupLabel")
+            layout.addWidget(duty_label)
 
-        form_staff = QFormLayout()
+            duty_card = QFrame()
+            duty_card.setObjectName("configCard")
+            duty_layout = QVBoxLayout(duty_card)
+
+            self.only_12_24h = QCheckBox("Używaj tylko zmian 12/24h")
+            self.only_12_24h.setCursor(Qt.PointingHandCursor)
+            self.only_12_24h.setChecked(bool(self._duty_rotation_configs[0].get("only_12_24h")))
+            self.only_12_24h.setToolTip(
+                "Włączone: KAŻDY dzień tygodnia (nie tylko weekend) używa "
+                "zmiany 24h albo dwóch zmian po 12h - zmiany 16h/8h w "
+                "tygodniu nigdy się wtedy nie przydzielają."
+            )
+            duty_layout.addWidget(self.only_12_24h)
+            layout.addWidget(duty_card)
+
+        # --- Sekcja: Obsada (tylko dino_retail - min_open_staff/
+        # min_close_staff to koncepty specyficzne dla tego profilu, patrz
+        # model/constraints.py:223 - dla innych profili nie robią nic, więc
+        # pokazywanie ich byłoby polem-widmo. Widżety tworzymy zawsze (żeby
+        # nie trzeba było osobno zabezpieczać _save() poniżej, wzorem
+        # self.only_12_24h), tylko nie trafiają do layoutu, gdy schowane -
+        # patrz ENYO_ONLY_CHANGES.md.
         self.min_open = QSpinBox()
         self.min_open.setRange(1, 10)
         self.min_open.setFixedWidth(70)
@@ -247,16 +416,37 @@ class ConfigDialog(QDialog):
         self.min_close.setFixedWidth(70)
         self.min_close.setValue(self.shop_config.constraints.get("min_close_staff", 3))
 
-        form_staff.addRow("Pracowników na otwarciu (rano):", self.min_open)
-        form_staff.addRow("Pracowników na zamknięciu (wieczór):", self.min_close)
-        layout.addLayout(form_staff)
+        if self.shop_config.business_type == DEFAULT_BUSINESS_TYPE:
+            staff_label = QLabel("MINIMALNA OBSADA PRACOWNIKÓW")
+            staff_label.setObjectName("groupLabel")
+            layout.addWidget(staff_label)
+
+            form_staff = QFormLayout()
+            form_staff.addRow("Pracowników na otwarciu (rano):", self.min_open)
+            form_staff.addRow("Pracowników na zamknięciu (wieczór):", self.min_close)
+            layout.addLayout(form_staff)
 
         layout.addStretch()
         return page
 
     def _build_generator_rules_tab(self):
         page = QWidget()
-        layout = QVBoxLayout(page)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+
+        # policy_grid poniżej rośnie z liczbą reguł custom profilu (kreator
+        # pozwala dodać dowolnie wiele) - bez scrolla ta zakładka (i przyciski
+        # dialogu) wypadały poza okno. Wzorem sidebaru głównego okna
+        # (ui/main_window.py::_build_left_panel).
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        page_layout.addWidget(scroll)
+
+        host = QWidget()
+        scroll.setWidget(host)
+        layout = QVBoxLayout(host)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
@@ -265,13 +455,31 @@ class ConfigDialog(QDialog):
         policy_label.setObjectName("groupLabel")
         layout.addWidget(policy_label)
 
+        # Strojenie polityk/wag to coś, czego nowy użytkownik zwykle nie
+        # potrzebuje na starcie (sensowne domyślne wartości już tam są) -
+        # schowane za przełącznik, żeby zakładka nie przytłaczała przy
+        # pierwszym otwarciu.
+        self.advanced_toggle_btn = QPushButton("Pokaż ustawienia zaawansowane")
+        self.advanced_toggle_btn.setObjectName("secondaryButton")
+        self.advanced_toggle_btn.setCheckable(True)
+        self.advanced_toggle_btn.setChecked(False)
+        self.advanced_toggle_btn.toggled.connect(self._on_advanced_toggled)
+        layout.addWidget(self.advanced_toggle_btn)
+
+        self.advanced_container = QWidget()
+        advanced_layout = QVBoxLayout(self.advanced_container)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_layout.setSpacing(15)
+        self.advanced_container.setVisible(False)
+        layout.addWidget(self.advanced_container)
+
         policy_info = QLabel(
             "Wymagane: reguła musi być spełniona. "
             "Preferowane: solver może ją naruszyć za karę."
         )
         policy_info.setStyleSheet("color: #6b7280; font-size: 11px;")
         policy_info.setWordWrap(True)
-        layout.addWidget(policy_info)
+        advanced_layout.addWidget(policy_info)
 
         form_solver = QFormLayout()
         self.solver_time_limit = QSpinBox()
@@ -287,15 +495,16 @@ class ConfigDialog(QDialog):
             "generowanie — przydatne do zwiększenia na słabszym sprzęcie."
         )
         form_solver.addRow("Limit czasu generatora:", self.solver_time_limit)
-        layout.addLayout(form_solver)
+        advanced_layout.addLayout(form_solver)
 
         policy_grid = QGridLayout()
         policy_grid.setHorizontalSpacing(12)
         policy_grid.setVerticalSpacing(7)
         self.policy_selectors = {}
-        split_at = (len(POLICY_LABELS) + 1) // 2
+        policy_labels = self.profile.policy_labels
+        split_at = (len(policy_labels) + 1) // 2
 
-        for index, (policy_name, label) in enumerate(POLICY_LABELS):
+        for index, (policy_name, label) in enumerate(policy_labels):
             row = index % split_at
             column = (index // split_at) * 2
             selector = QComboBox()
@@ -305,18 +514,26 @@ class ConfigDialog(QDialog):
             current_policy = self.shop_config.constraint_policies.get(
                 policy_name, ConstraintPolicy.PREFERRED
             )
-            if policy_name == "balance":
+            if policy_name == "balance" and current_policy == ConstraintPolicy.MANDATORY:
+                # MANDATORY zrobiłby grafik niewykonalnym za każdym razem, gdy
+                # nie da się trafić dokładnie w bilans - nigdy nie pokazujemy
+                # ani nie zachowujemy tej wartości. DISABLED (np. profil
+                # ochrony, gdzie klient świadomie nie chce bilansu wcale)
+                # zostaje nietknięty.
                 current_policy = ConstraintPolicy.PREFERRED
             selector.setCurrentIndex(selector.findData(current_policy))
             if policy_name == "balance":
                 selector.setEnabled(False)
-                selector.setToolTip("Bilans godzin zawsze pozostaje preferowany.")
+                selector.setToolTip(
+                    "Bilans godzin edytowalny tylko programowo (np. przy "
+                    "definiowaniu profilu) - tu tylko podgląd."
+                )
             policy_grid.addWidget(QLabel(label + ":"), row, column)
             policy_grid.addWidget(selector, row, column + 1)
             self.policy_selectors[policy_name] = selector
 
-        rest_row = len(POLICY_LABELS) % split_at
-        rest_column = (len(POLICY_LABELS) // split_at) * 2
+        rest_row = len(policy_labels) % split_at
+        rest_column = (len(policy_labels) // split_at) * 2
         self.rest_11h_mode_selector = QComboBox()
         self.rest_11h_mode_selector.setMinimumWidth(125)
         for text, value in REST_11H_MODE_OPTIONS:
@@ -329,13 +546,13 @@ class ConfigDialog(QDialog):
             "Standardowy: dokładne godziny zmian.\n"
             "Uproszczony: tylko klasa zmiany (rano/popołudnie) — po zmianie "
             "popołudniowej następny dzień może być tylko popołudniowy albo wolny. "
-            "Szybszy na słabszym sprzęcie; sensowny tylko dla sklepów z dokładnie "
+            "Szybszy na słabszym sprzęcie; sensowny tylko dla obiektów z dokładnie "
             "dwoma typami zmian."
         )
         policy_grid.addWidget(QLabel("Tryb liczenia odpoczynku 11h:"), rest_row, rest_column)
         policy_grid.addWidget(self.rest_11h_mode_selector, rest_row, rest_column + 1)
 
-        layout.addLayout(policy_grid)
+        advanced_layout.addLayout(policy_grid)
 
         hint = QLabel(
             "Te reguły możesz swobodnie zmieniać i testować, jak zachowuje się "
@@ -353,13 +570,13 @@ class ConfigDialog(QDialog):
     def _build_tutorial_steps(self):
         return [
             TutorialStep(
-                "Konfiguracja sklepu",
+                "Konfiguracja obiektu",
                 "Tutaj ustawiasz zasady, według których generator układa grafik: "
                 "godziny otwarcia, niedziele handlowe, limity i zasady generatora.",
             ),
             TutorialStep(
                 "Godziny otwarcia",
-                "Ustaw godziny pracy sklepu osobno dla każdego dnia tygodnia.",
+                "Ustaw godziny pracy obiektu osobno dla każdego dnia tygodnia.",
                 target=self.tabs,
                 on_show=lambda: self.tabs.setCurrentIndex(0),
             ),
@@ -373,7 +590,7 @@ class ConfigDialog(QDialog):
             TutorialStep(
                 "Limity",
                 "Maksymalna liczba dni z rzędu oraz minimalna liczba pracowników "
-                "na otwarciu i zamknięciu sklepu.",
+                "na otwarciu i zamknięciu.",
                 target=self.tabs,
                 on_show=lambda: self.tabs.setCurrentIndex(2),
             ),
@@ -419,17 +636,21 @@ class ConfigDialog(QDialog):
 
     def _save(self):
         try:
-            for wd, (start_input, end_input) in self.open_edits.items():
-                start_str = start_input.get_time_str()
-                end_str = end_input.get_time_str()
-                
+            self.shop_config.name = self.name_edit.text().strip()
+            self.shop_config.business_type = self.business_type_selector.currentData()
+
+            for wd, (start_str, end_str) in self.hours_editor.get_hours().items():
                 start_qt = _parse_time(start_str)
                 end_qt = _parse_time(end_str)
 
                 if end_qt <= start_qt:
                     day_names = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
-                    raise ValueError(f"Zamknięcie musi być później niż otwarcie w dniu: {day_names[wd]}.")
-                
+                    raise ValueError(
+                        f"Zamknięcie musi być później niż otwarcie tego samego dnia ({day_names[wd]}). "
+                        "Zmiany przechodzące przez północ nie są jeszcze wspierane — dla działalności "
+                        "całodobowej ustaw np. 00:00–23:45."
+                    )
+
                 self.shop_config.open_hours[wd] = (start_str, end_str)
 
             self.shop_config.trade_sundays = {
@@ -437,17 +658,35 @@ class ConfigDialog(QDialog):
             }
 
             self.shop_config.constraints["max_consecutive_days"] = self.max_consecutive.value()
+            self.shop_config.standard_daily_hours = self.standard_daily_hours.value()
             self.shop_config.constraints["min_open_staff"] = self.min_open.value()
             self.shop_config.constraints["min_close_staff"] = self.min_close.value()
             self.shop_config.constraints["enforce_11h_rest"] = True
             self.shop_config.constraints["enforce_meat_coverage"] = True
             self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
             self.shop_config.constraints["highlight_max_consecutive"] = self.hl_consecutive.isChecked()
+
+            if self.only_12_24h is not None:
+                only_12_24h_value = self.only_12_24h.isChecked()
+                if self.shop_config.duty_rotation:
+                    merged = dict(self.shop_config.duty_rotation)
+                    merged["only_12_24h"] = only_12_24h_value
+                    self.shop_config.duty_rotation = normalize_duty_rotation(merged)
+                for loc in self.shop_config.locations.values():
+                    if loc.duty_rotation:
+                        merged = dict(loc.duty_rotation)
+                        merged["only_12_24h"] = only_12_24h_value
+                        loc.duty_rotation = normalize_duty_rotation(merged)
             self.shop_config.constraints["rest_11h_mode"] = self.rest_11h_mode_selector.currentData()
             self.shop_config.constraints["solver_time_limit_seconds"] = self.solver_time_limit.value()
             for policy_name, selector in self.policy_selectors.items():
                 self.shop_config.constraint_policies[policy_name] = selector.currentData()
-            self.shop_config.constraint_policies["balance"] = ConstraintPolicy.PREFERRED
+                # "balance" ma disabled selector (patrz konstrukcja wyżej) -
+                # jego currentData() już poprawnie odzwierciedla wartość
+                # ustawioną programowo (np. DISABLED dla profilu ochrony) i
+                # nie trzeba (ani nie wolno) jej tu nadpisywać z powrotem na
+                # PREFERRED, bo to by cofnęło taką decyzję przy każdym
+                # otwarciu i zapisaniu Konfiguracji.
         except Exception as exc:
             QMessageBox.critical(self, "Błąd konfiguracji", str(exc))
             return
