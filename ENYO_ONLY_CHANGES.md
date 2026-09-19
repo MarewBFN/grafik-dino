@@ -302,3 +302,110 @@ wszystkich Umowa (np. przez L4 innych).
 **Weryfikacja:** pełny zestaw testów (Dino + Enyo) - **379/380 przechodzi,
 1 świadomie pominięty** (bez zmian względem stanu przed tą turą). Zero
 regresji na danych Dino.
+
+## Dane testowe z realnych grafików klienta (2026-09-19)
+
+Wyłącznie przygotowanie danych testowych - **żaden plik produkcyjny nie
+został zmieniony w tym kroku**. Źródło: użytkownik ręcznie przepisał ze
+zdjęć papierowych kart grafiku prawdziwego klienta (firma
+ochroniarska/serwisowa, 9 placówek), część odczytów jawnie oznaczona jako
+niepewna/nieczytelna.
+
+### Nowe pliki (czysto addytywne, dane testowe)
+
+| Plik | Co robi | Przywrócić do main? |
+|---|---|---|
+| `demo/install_client_sample_data.py` | Rejestruje tymczasowy profil biznesowy `ochrona_dane_klienta_test` (role: `umowa`, `nie_chce_24h`) w `%LOCALAPPDATA%\GrafikDino\custom_profiles.json` i zapisuje `test_data/dane_klienta_ochrona.json` - analogicznie do `demo/install_demo.py`, ale z realnymi nazwiskami/wzorcem zmian zamiast syntetycznych danych | NIE - dane jednego konkretnego klienta testowego, nie mają sensu w main |
+| `test_data/dane_klienta_ochrona.json` | Gotowy projekt (2 lokalizacje, 11 pracowników, październik 2026, pusty grafik) do otwarcia w programie po uruchomieniu skryptu wyżej | NIE (jw.) |
+
+**Jak użyć:** uruchom `python demo/install_client_sample_data.py` **na
+własnej maszynie Windows** (rejestracja profilu zapisuje się do
+`%LOCALAPPDATA%`, które nie istnieje w środowisku, w którym te dane
+zostały przygotowane) - dopiero potem otwórz
+`test_data/dane_klienta_ochrona.json` przez "Plik -> Otwórz projekt..." w
+programie. Bez tego kroku program nie rozpozna `business_type`
+(`get_custom_profile()` zwróci `None`) i cofnie się do generatora Dino
+zamiast Enyo.
+
+### Placówki, które PASUJĄ do dzisiejszego modelu duty_rotation (2/9)
+
+`normalize_duty_rotation()` (`model/location.py`) wymaga **kompletnego**
+schematu rotacji - nie da się skonfigurować samej zmiany dziennej bez
+nocnej (albo samego 24h bez wariantu podziału). Tylko te dwie placówki
+miały w danych źródłowych wystarczające potwierdzenie obu wymaganych
+elementów schematu:
+
+1. **Ubojnia Drobiu GOSZ - waga/biuro** (7 pracowników) - potwierdzony
+   wzorzec 8:00-20:00 (dzień) + 20:00-8:00 (noc), naprzemiennie, każdego
+   dnia tygodnia. Wszyscy pracownicy dostali rolę `nie_chce_24h`, bo w
+   realnych danych nigdy nie widać pojedynczej zmiany 24h w tej placówce.
+2. **PGE Ustka, ul. Westerplatte 4** (4 z 6 wypisanych pracowników - 2
+   nazwiska nieczytelne/skreślone, pominięte) - potwierdzony wzorzec "8/8"
+   powtarzający się codziennie, czyli zmiana 24h. Żaden pracownik NIE
+   dostał `nie_chce_24h` - świadomie, żeby zobaczyć, czy nowa preferencja
+   12h+12h (patrz niżej) zacznie w praktyce sugerować podział, którego ta
+   konkretna placówka historycznie nigdy nie stosowała.
+
+### Placówki, które NIE pasują do dzisiejszego modelu (7/9) - do wyjaśnienia z klientem
+
+Zgodnie z instrukcją: żadna z nich nie została "dociągnięta na siłę" do
+modelu duty_rotation. Każda wymaga innej zmiany w produkcyjnym kodzie
+(albo po prostu więcej danych od klienta), zanim da się ją sensownie
+zamodelować:
+
+| Placówka | Dlaczego nie pasuje |
+|---|---|
+| **GZUK** | W danych źródłowych widać pojedyncze liczby (godziny), nie pary start/koniec zmiany - nie da się odróżnić, czy to krótka wizyta, czy fragment dłuższej zmiany, bez zgadywania. Potwierdza własne podejrzenie użytkownika. |
+| **Lakpol** | To samo co GZUK - pojedyncze liczby, nie pary zmian. |
+| **Brico Marche Wejcherowo** | Widać tylko zmianę dzienną, brak jakiegokolwiek potwierdzonego wzorca nocnego/uzupełniającego w źródle - `normalize_duty_rotation()` wymaga kompletnego schematu (dzień+noc), nie da się skonfigurować samej połowy. |
+| **Bricomarche Lębork** | Ten sam problem co Wejcherowo - brak potwierdzonego wzorca nocnego. |
+| **Łeba Apartamenty** | Godziny w źródle nieczytelne - nie da się odczytać nawet w przybliżeniu, więc nie ma z czego zbudować wzorca bez zgadywania. |
+| **Nadleśnictwo Cewice** (obie tabele) | Główna tabela: brak jakichkolwiek czytelnych godzin. Osobna tabela "Sprzątanie": to inna rola/inny wzorzec pracy niż ochrona (dzienna, bez zmiany nocnej) - potwierdza własną obserwację użytkownika, że to nie pasuje do rotacji 24/7. |
+| **MZGK Krzywoustego** | W źródle jest tylko ogólne wrażenie zakresu godzin, bez konkretnych par X/Y - zbyt mało, żeby zbudować cokolwiek bez wymyślania danych. |
+
+**Rekomendacja:** przed próbą zakodowania którejkolwiek z tych 7 placówek
+- doprecyzować z klientem konkretne godziny start/koniec każdej zmiany
+(najlepiej w formacie X/Y jak reszta danych), a dla Nadleśnictwa/GZUK/Lakpol
+ustalić, czy to w ogóle model rotacji 24h, czy zupełnie inny typ grafiku
+(pojedyncze wizyty, zmiana czysto dzienna) - może wymagać nowego,
+osobnego mechanizmu w generatorze, nie tylko nowej konfiguracji istniejącego.
+
+### Rzeczy niepewne/nieczytelne do potwierdzenia z Michałem
+
+- Ubojnia Drobiu GOSZ: wpisy przy datach 7/15 i 7/16 w źródle nie zostały
+  odzwierciedlone w wygenerowanym JSON (niejasne, czy to inny wzorzec czy
+  błąd odczytu) - do sprawdzenia bezpośrednio na oryginalnym zdjęciu.
+- Kto konkretnie z 7 pracowników Ubojni realizuje który z 4 typów zmian
+  (dzień/noc) w danym dniu - w tej wersji danych to generator dobiera
+  sam, ale realny, już ustalony grafik może mieć konkretne, stałe pary/
+  kolejność, których nie było widać wprost w źródle.
+- PGE Ustka: 2 z 6 wypisanych nazwisk nieczytelne/skreślone - pominięte
+  w danych testowych (tylko 4 pracowników zamiast 6).
+- Nikt w żadnej z 2 placówek nie ma ustawionej flagi "Umowa" - z samych
+  zdjęć nie da się stwierdzić, kto ją ma. Profil definiuje tę rolę, więc
+  da się ją zaznaczyć ręcznie w UI (Edytuj pracownika) po potwierdzeniu.
+- Wszystkie pozostałe niepewne odczyty oznaczone wprost przez użytkownika
+  przy pierwotnym przepisywaniu danych (patrz oryginalna wiadomość) -
+  niniejszy plik nie duplikuje ich słowo w słowo, tylko te, które wpływają
+  bezpośrednio na wygenerowany plik testowy powyżej.
+
+### Wynik weryfikacji (uruchomienie generatora na tych danych)
+
+`AutoScheduleGenerator.generate()` na `dane_klienta_ochrona.json` (październik
+2026, limit solvera 60s) zwraca **OPTIMAL / success=True** - pełne pokrycie
+obu placówek, żadnej infeasibility.
+
+**Obserwacja warta uwagi klienta:** dla PGE Ustka - placówki, gdzie
+historyczne dane ZAWSZE pokazują pojedynczą zmianę 24h i żaden pracownik
+nie ma tu `nie_chce_24h` - solver mimo to na części dni (np. pracownik
+Kaufman M., dni 4-5) wybrał podział 12h+12h zamiast zmiany 24h. To
+bezpośredni efekt nowej miękkiej preferencji
+`duty_rotation_preference.py` (dodanej na życzenie użytkownika jako ogólny
+mechanizm Enyo) - pokrycie jest poprawne w obu wariantach, ale wynik nie
+odzwierciedla stylu pracy, jaki ta konkretna placówka historycznie
+stosowała. To nie błąd generatora (obie zmiany są dozwolone i pokrywają
+dobę), ale różnica w praktyce warta przedyskutowania z klientem: czy
+preferencja podziału powinna być per-lokalizacja wyłączalna (podobnie jak
+`nie_chce_24h` per-pracownik), zamiast globalnej dla każdej placówki z
+rotacją 24/7. Żadna zmiana kodu nie została zrobiona w tym kroku - to
+tylko obserwacja z testu na realnych danych.

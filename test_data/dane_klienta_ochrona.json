@@ -1,0 +1,404 @@
+{
+  "schedule": {
+    "year": 2026,
+    "month": 10,
+    "is_generated": false,
+    "employees": [
+      {
+        "first_name": "?",
+        "last_name": "Gołębiewski",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      },
+      {
+        "first_name": "M.",
+        "last_name": "Kaufman",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "pge_ustka_westerplatte",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      },
+      {
+        "first_name": "K.",
+        "last_name": "Korzyński",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "pge_ustka_westerplatte",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Krauze",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Krefft",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      },
+      {
+        "first_name": "Z.",
+        "last_name": "Krzysztofiak",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "pge_ustka_westerplatte",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Młyński",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Piepiórka",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      },
+      {
+        "first_name": "J.",
+        "last_name": "Pośpiech",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "pge_ustka_westerplatte",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Stencel",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Szyca",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "days": {}
+      }
+    ]
+  },
+  "shop_config": {
+    "year": 2026,
+    "month": 10,
+    "name": "Dane klienta (test) - Ubojnia Drobiu GOSZ + PGE Ustka",
+    "business_type": "ochrona_dane_klienta_test",
+    "locations": {
+      "ubojnia_gosz_waga_biuro": {
+        "key": "ubojnia_gosz_waga_biuro",
+        "name": "Ubojnia Drobiu GOSZ - waga/biuro",
+        "open_hours": {
+          "0": [
+            "05:30",
+            "23:00"
+          ],
+          "1": [
+            "05:30",
+            "22:45"
+          ],
+          "2": [
+            "05:30",
+            "22:45"
+          ],
+          "3": [
+            "05:30",
+            "22:45"
+          ],
+          "4": [
+            "05:30",
+            "22:45"
+          ],
+          "5": [
+            "05:30",
+            "22:45"
+          ],
+          "6": [
+            "05:30",
+            "22:45"
+          ]
+        },
+        "trade_sundays": [],
+        "public_holidays": [],
+        "day_overrides": {},
+        "constraints": {
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "max_consecutive_days": 4
+        },
+        "is_24_7": false,
+        "duty_rotation": {
+          "weekend_half_a": {
+            "start": "08:00",
+            "end": "20:00"
+          },
+          "weekend_half_b": {
+            "start": "20:00",
+            "end": "08:00"
+          },
+          "weekend_full": {
+            "start": "08:00"
+          },
+          "only_12_24h": true
+        }
+      },
+      "pge_ustka_westerplatte": {
+        "key": "pge_ustka_westerplatte",
+        "name": "PGE Ustka, ul. Westerplatte 4",
+        "open_hours": {
+          "0": [
+            "05:30",
+            "23:00"
+          ],
+          "1": [
+            "05:30",
+            "22:45"
+          ],
+          "2": [
+            "05:30",
+            "22:45"
+          ],
+          "3": [
+            "05:30",
+            "22:45"
+          ],
+          "4": [
+            "05:30",
+            "22:45"
+          ],
+          "5": [
+            "05:30",
+            "22:45"
+          ],
+          "6": [
+            "05:30",
+            "22:45"
+          ]
+        },
+        "trade_sundays": [],
+        "public_holidays": [],
+        "day_overrides": {},
+        "constraints": {
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "max_consecutive_days": 4
+        },
+        "is_24_7": false,
+        "duty_rotation": {
+          "weekend_half_a": {
+            "start": "08:00",
+            "end": "20:00"
+          },
+          "weekend_half_b": {
+            "start": "20:00",
+            "end": "08:00"
+          },
+          "weekend_full": {
+            "start": "08:00"
+          },
+          "only_12_24h": true
+        }
+      }
+    },
+    "open_hours": {
+      "0": [
+        "05:30",
+        "23:00"
+      ],
+      "1": [
+        "05:30",
+        "22:45"
+      ],
+      "2": [
+        "05:30",
+        "22:45"
+      ],
+      "3": [
+        "05:30",
+        "22:45"
+      ],
+      "4": [
+        "05:30",
+        "22:45"
+      ],
+      "5": [
+        "05:30",
+        "22:45"
+      ],
+      "6": [
+        "05:30",
+        "22:45"
+      ]
+    },
+    "night_shift": null,
+    "duty_rotation": null,
+    "quick_mode_presets": [],
+    "trade_sundays": [],
+    "day_overrides": {},
+    "constraints": {
+      "max_consecutive_days": 4,
+      "min_open_staff": 3,
+      "min_close_staff": 3,
+      "force_fulltime_845": true,
+      "rest_11h_mode": "standard",
+      "solver_time_limit_seconds": 60
+    },
+    "cell_display_mode": "compact",
+    "public_holidays": [],
+    "standard_daily_hours": 8.0,
+    "constraint_policies": {
+      "rest_11h": "MANDATORY",
+      "meat": "PREFERRED",
+      "balance": "DISABLED",
+      "max_consecutive": "PREFERRED",
+      "open": "MANDATORY",
+      "close": "MANDATORY",
+      "monthly_hours": "DISABLED",
+      "meat_coverage": "PREFERRED",
+      "availability": "PREFERRED",
+      "no_night": "PREFERRED",
+      "no_afternoon": "PREFERRED",
+      "duty_rotation_coverage": "MANDATORY",
+      "duty_rotation_no24h": "MANDATORY"
+    }
+  }
+}
