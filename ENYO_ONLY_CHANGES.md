@@ -453,3 +453,26 @@ kod generatora bez zmian.**
 **Weryfikacja:** pełny zestaw testów - **437/438 przechodzi, 1 świadomie
 pominięty** (bez zmian względem stanu przed tą turą; 58 nowych testów, 0
 regresji).
+
+### Projekt do wizualnej inspekcji kształtów rotacji w programie (2026-09-19)
+
+Na żądanie użytkownika: `demo/install_test_shapes_project.py` (nowy plik,
+wzorowany na `demo/install_client_sample_data.py`) zbiera WSZYSTKIE
+placówki z powyższego sweepu testów (2 realne z danych klienta + 5
+syntetycznych kształtów: 7/7, 8/16, 9/17, anchor 08:30, tydzień
+09:00-17:00+weekend 06:00) w jeden projekt, zapisywany prosto do
+`last_project.json` (auto-wczytywany przy starcie programu) - żeby dało
+się je zobaczyć/wygenerować w realnym UI, nie tylko przez asercje pytest.
+Rejestruje profil `test_duty_rotation_shapes` w prawdziwym
+`%LOCALAPPDATA%` (na maszynie użytkownika, nie w sandboxie) - działa od
+razu po `python demo/install_test_shapes_project.py` + `python main.py`.
+
+Zweryfikowane przed przekazaniem: `AutoScheduleGenerator.generate()` na
+całym projekcie (30 pracowników, 7 lokalizacji, październik 2026) ->
+**OPTIMAL**, pełne pokrycie każdej placówki każdego dnia. Poprzedni,
+niezwiązany `last_project.json` użytkownika (własne dane testowe,
+"Test"-owe nazwiska) skasowany za jego zgodą przed nadpisaniem.
+
+| Plik | Przywrócić do main? |
+|---|---|
+| `demo/install_test_shapes_project.py` | NIE - czysto lokalny/demonstracyjny, specyficzny dla tej sesji testowej |
