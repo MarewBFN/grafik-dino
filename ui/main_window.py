@@ -37,6 +37,7 @@ from export.employee_card_exporter import (
     sanitize_filename_part,
 )
 from logic.schedule_controller import ScheduleController
+from ui.marquee_text import MarqueeButton, MarqueeLabel
 from model.business_profile import DEFAULT_BUSINESS_TYPE
 from model.location import format_open_hours_summary
 from model.month_schedule import MonthSchedule
@@ -339,7 +340,7 @@ class MainWindow(QMainWindow):
         self.btn_location_prev.clicked.connect(lambda: self._cycle_location(-1))
         switcher_layout.addWidget(self.btn_location_prev)
 
-        self.btn_location_name = QPushButton("")
+        self.btn_location_name = MarqueeButton("")
         self.btn_location_name.setObjectName("locationNameButton")
         self.btn_location_name.setCursor(Qt.PointingHandCursor)
         self.btn_location_name.setToolTip("Wybierz placówkę")
@@ -557,6 +558,11 @@ class MainWindow(QMainWindow):
 
         self.quick_preset_buttons: dict[str, QPushButton] = {}
 
+        self.btn_add_quick_preset = QPushButton("+ Dodaj własne...")
+        self.btn_add_quick_preset.setObjectName("secondaryButton")
+        self.btn_add_quick_preset.clicked.connect(self._open_quick_mode_settings)
+        layout.addWidget(self.btn_add_quick_preset)
+
         # --- panel godzin (tylko dla "Praca") ---
         self.time_panel = QWidget(self)
         time_layout = QHBoxLayout(self.time_panel)
@@ -613,8 +619,9 @@ class MainWindow(QMainWindow):
         grid_header_layout = QHBoxLayout(self.grid_header_bar)
         grid_header_layout.setContentsMargins(4, 4, 4, 4)
 
-        self.grid_header_location_label = QLabel("")
+        self.grid_header_location_label = MarqueeLabel("")
         self.grid_header_location_label.setObjectName("sectionLabel")
+        self.grid_header_location_label.setMaximumWidth(260)
         grid_header_layout.addWidget(self.grid_header_location_label)
         grid_header_layout.addStretch(1)
 
@@ -766,7 +773,7 @@ class MainWindow(QMainWindow):
             self.selected_location_key = next(iter(locations), None)
 
         location = locations.get(self.selected_location_key)
-        self.btn_location_name.setText(location.name if location else "—")
+        self.btn_location_name.setFullText(location.name if location else "—")
 
         multiple = len(locations) > 1
         self.btn_location_prev.setEnabled(multiple)
@@ -777,7 +784,7 @@ class MainWindow(QMainWindow):
     def _update_grid_header_bar(self):
         locations = self.shop_config.locations if self.shop_config else {}
         location = locations.get(self.selected_location_key)
-        self.grid_header_location_label.setText(location.name if location else "")
+        self.grid_header_location_label.setFullText(location.name if location else "")
         self.grid_header_hours_label.setText(
             format_open_hours_summary(location) if location else ""
         )
@@ -1196,10 +1203,25 @@ class MainWindow(QMainWindow):
         self._sync_everything()
 
     def _open_header_menu(self, day, global_pos):
-        hours = self.shop_config.get_open_hours_for_day(day)
-        if not hours:
-            weekday = self.shop_config.weekday(day)
-            hours = self.shop_config.get_open_hours_for_weekday(weekday)
+        # Ta kolumna nagłówka jest osadzona w kontekście aktualnie
+        # przeglądanej lokalizacji (patrz _sync_grid location_filter) - dzień
+        # nadpisany tu musi trafić do JEJ day_overrides/public_holidays, bo
+        # to je czyta generator (shop.get_location(emp), patrz
+        # model/location.py), a nie projektowe ShopConfig.day_overrides.
+        from model.business_profile import get_profile
+
+        location = self.shop_config.locations.get(self.selected_location_key)
+        if location is not None:
+            uses_trade_calendar = get_profile(self.shop_config.business_type).uses_trade_calendar
+            hours = location.get_open_hours_for_day(self.schedule.year, self.schedule.month, day, uses_trade_calendar)
+            if not hours:
+                weekday = location.weekday(self.schedule.year, self.schedule.month, day)
+                hours = location.open_hours.get(weekday)
+        else:
+            hours = self.shop_config.get_open_hours_for_day(day)
+            if not hours:
+                weekday = self.shop_config.weekday(day)
+                hours = self.shop_config.get_open_hours_for_weekday(weekday)
 
         dialog = DayOverrideDialog(self, day, hours, self.shop_config)
         result = dialog.exec()
@@ -1207,24 +1229,27 @@ class MainWindow(QMainWindow):
         if result != QDialog.Accepted:
             return
 
+        target_overrides = location.day_overrides if location is not None else self.shop_config.day_overrides
+        target_holidays = location.public_holidays if location is not None else self.shop_config.public_holidays
+
         # Undo must restore both the schedule and this day-specific shop setup.
         self.controller.snapshot()
         if dialog.result_mode == "reset":
-            self.shop_config.day_overrides.pop(day, None)
-            self.shop_config.public_holidays.discard(day)
+            target_overrides.pop(day, None)
+            target_holidays.discard(day)
         elif dialog.result_mode == "save":
-            self.shop_config.day_overrides[day] = (dialog.result_start, dialog.result_end)
+            target_overrides[day] = (dialog.result_start, dialog.result_end)
             if dialog.result_holiday:
-                self.shop_config.public_holidays.add(day)
+                target_holidays.add(day)
             else:
-                self.shop_config.public_holidays.discard(day)
+                target_holidays.discard(day)
 
         self._update_nominal_hours_label()
         self._sync_grid()
         self.statusBar().showMessage("Zaktualizowano godziny dnia.", 2500)
 
     def _open_config(self):
-        dialog = ConfigDialog(self, self.shop_config)
+        dialog = ConfigDialog(self, self.shop_config, location_key=self.selected_location_key)
         if dialog.exec() != QDialog.Accepted:
             return
         self._update_nominal_hours_label()
@@ -1830,12 +1855,6 @@ class MainWindow(QMainWindow):
                 "Przełącza między pełnym widokiem grafiku a kompaktowym, "
                 "czytelnym jak kartka papieru.",
                 target=self.btn_expand_view,
-            ),
-            TutorialStep(
-                "Okres rozliczeniowy",
-                "Włącz, jeśli chcesz dostroić długość już przypisanych zmian do "
-                "celu godzinowego pracownika, bez ponownego generowania grafiku.",
-                target=self.btn_settlement_toggle,
             ),
             TutorialStep(
                 "Gotowe!",

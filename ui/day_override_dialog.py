@@ -54,6 +54,12 @@ class DayOverrideDialog(QDialog):
 
         root.addLayout(form)
 
+        self.closed_check = QCheckBox("Nieczynne tego dnia")
+        self.closed_check.toggled.connect(self._on_closed_toggled)
+        root.addWidget(self.closed_check)
+        if not self.current_hours[0] or not self.current_hours[1]:
+            self.closed_check.setChecked(True)
+
         # "Dzień wolny ustawowo" ma sens tylko dla profili z kalendarzem
         # handlowym (patrz BusinessProfile.uses_trade_calendar) - inaczej
         # ten checkbox konfigurowałby coś, co i tak nic nie robi.
@@ -80,11 +86,23 @@ class DayOverrideDialog(QDialog):
         buttons.accepted.connect(self._save)
         root.addWidget(buttons)
 
+    def _on_closed_toggled(self, checked):
+        self.start_edit.setEnabled(not checked)
+        self.end_edit.setEnabled(not checked)
+
     def _reset_to_default(self):
         self.result_mode = "reset"
         self.accept()
 
     def _save(self):
+        if self.closed_check.isChecked():
+            self.result_mode = "save"
+            self.result_start = None
+            self.result_end = None
+            self.result_holiday = self.holiday_box.isChecked() if self.holiday_box else False
+            self.accept()
+            return
+
         start_str = self.start_edit.get_time_str()
         end_str = self.end_edit.get_time_str()
 

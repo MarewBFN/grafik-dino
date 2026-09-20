@@ -208,15 +208,24 @@ class LocationConfig:
     def is_sunday(self, year: int, month: int, day: int) -> bool:
         return self.weekday(year, month, day) == 6
 
-    def is_trade_day(self, year: int, month: int, day: int) -> bool:
+    def is_trade_day(self, year: int, month: int, day: int, uses_trade_calendar: bool = True) -> bool:
+        # "Dni handlowe" (święta/niedziele handlowe) to koncept specyficzny
+        # dla profili z kalendarzem handlowym (patrz BusinessProfile.
+        # uses_trade_calendar, ShopConfig.is_trade_day - ta metoda ma tu ten
+        # sam parametr z tego samego powodu). Profile bez tego konceptu (np.
+        # ochrona) mają wszystkie dni, w tym niedziele, normalnie pracujące -
+        # inaczej KAŻDA niedziela wychodziłaby "zamknięta" (trade_sundays
+        # puste domyślnie), mimo że użytkownik nigdy jej tak nie oznaczył.
+        if not uses_trade_calendar:
+            return True
         if day in self.public_holidays:
             return False
         if self.is_sunday(year, month, day):
             return day in self.trade_sundays
         return True
 
-    def get_open_hours_for_day(self, year: int, month: int, day: int):
-        if not self.is_trade_day(year, month, day):
+    def get_open_hours_for_day(self, year: int, month: int, day: int, uses_trade_calendar: bool = True):
+        if not self.is_trade_day(year, month, day, uses_trade_calendar):
             return None
 
         if day in self.day_overrides:

@@ -101,6 +101,51 @@ class ScheduleController:
         ds.is_locked = True
         ds.shift_class = None
 
+    def copy_day_snapshot(self, emp, day) -> dict:
+        """Pełny, kopiowalny stan dnia (do wklejenia gdzie indziej przez
+        paste_day_snapshot) - w odróżnieniu od samych start/end, obejmuje też
+        urlop/L4/zmianę pełnodobową (24h)/zablokowany typ zmiany (rano/
+        popołudnie), których set_day_hours nie umie odtworzyć."""
+        ds = self.schedule.get_day(emp, day)
+        return {
+            "start": ds.start,
+            "end": ds.end,
+            "is_leave": ds.is_leave,
+            "is_sick": getattr(ds, "is_sick", False),
+            "is_full_day": getattr(ds, "is_full_day", False),
+            "shift_class": ds.shift_class,
+        }
+
+    def paste_day_snapshot(self, emp, day, snapshot: dict) -> None:
+        """Wklej stan dnia skopiowany przez copy_day_snapshot(). Deleguje do
+        istniejących set_day_*() (snapshot/undo, is_locked, ważność godzin
+        nocnych itd. - patrz set_day_hours) zamiast nadpisywać dane wprost,
+        więc każdy typ dnia dostaje dokładnie taką walidację, jaką miałby
+        wpisany ręcznie."""
+        if snapshot.get("is_leave"):
+            self.set_day_leave(emp, day)
+        elif snapshot.get("is_sick"):
+            self.set_day_sick(emp, day)
+        elif snapshot.get("shift_class"):
+            self.set_shift_class(emp, day, snapshot["shift_class"])
+        elif snapshot.get("is_full_day"):
+            self.set_day_full_day_shift(emp, day, snapshot["start"])
+        elif snapshot.get("start") is None or snapshot.get("end") is None:
+            self.set_day_free(emp, day)
+        else:
+            self.set_day_hours(emp, day, snapshot["start"], snapshot["end"])
+
+    def set_day_full_day_shift(self, emp, day, start):
+        ds = self.schedule.get_day(emp, day)
+
+        if ds.is_locked and ds.is_full_day and ds.start == start:
+            return
+
+        self.snapshot()
+        self.schedule.set_day_full_day_shift(emp, day, start)
+        ds.is_locked = True
+        ds.shift_class = None
+
     def set_day_leave(self, emp, day):
         ds = self.schedule.get_day(emp, day)
 
@@ -216,7 +261,7 @@ class ScheduleController:
                 ds.start = start
                 ds.end = end
             else:
-                hours = self.shop_config.get_open_hours_for_day(day)
+                hours = self.shop_config.get_location(emp).get_open_hours_for_day(day)
                 if hours:
                     ds.start, ds.end = hours
 

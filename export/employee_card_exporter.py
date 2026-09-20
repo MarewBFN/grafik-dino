@@ -8,13 +8,14 @@ kolumnach, z miejscem na odręczny podpis. Niezależny od
 `export/security_*_exporter.py` - uniwersalny dla każdego profilu
 działalności, nie warunkowany business_type.
 
-Dwie wartości na karcie są na razie świadomie przybliżone, do
-potwierdzenia z klientem - patrz "plan profil ochrona (analiza
-specyfikacji klienta).md", sekcja 16:
-- "Norma" (nominalny wymiar godzin na miesiąc) zostaje pusta,
-- klasyfikacja "Dzienna/Nocna" używa progu ">0 godzin w oknie 22-6",
-  najprostszej interpretacji definicji pracy w porze nocnej z kodeksu
-  pracy - to może się zmienić, gdy klient doprecyzuje.
+"Norma" (nominalny wymiar godzin na miesiąc) na razie świadomie zostaje
+pusta, do potwierdzenia z klientem - patrz "plan profil ochrona (analiza
+specyfikacji klienta).md", sekcja 16.
+
+Kolumny "Godziny dzienne"/"Godziny nocne" liczą, ile z godzin danej zmiany
+przypada w oknie 22:00-06:00 (pora nocna wg kodeksu pracy) a ile poza nim -
+patrz _night_minutes()/_day_night_hours(). Karta ma tylko jedną komórkę na
+podpis, na dole strony (nie osobną kolumnę na każdy dzień).
 """
 
 import calendar
@@ -26,7 +27,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 _TITLE = "Lista obecności miesięczna pracownika"
-_COLUMNS = ["Dzień", "Wejście", "Wyjście", "Ilość godzin", "Dzienne / Nocne", "Podpis pracownika"]
+_COLUMNS = ["Dzień", "Wejście", "Wyjście", "Ilość godzin", "Godziny dzienne", "Godziny nocne"]
 
 _NIGHT_WINDOW_START = 22 * 60  # 22:00 w minutach od północy
 _NIGHT_WINDOW_END = 6 * 60  # 06:00 w minutach od północy (następnej doby)
@@ -67,12 +68,26 @@ def _night_minutes(ds) -> int:
     return night
 
 
-def _shift_label(ds) -> str:
-    """"" dla dni bez zmiany/urlopu/L4 (kolumny 2-5 mają być wtedy
-    puste), inaczej "Nocna"/"Dzienna"."""
+def _format_minutes(total_minutes: int) -> str:
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{hours}:{minutes:02d}"
+
+
+def _day_night_hours(ds) -> tuple[str, str]:
+    """(godziny dzienne, godziny nocne) danego dnia, jako stringi "H:MM" -
+    puste dla dni bez zmiany/urlopu/L4 (kolumny mają być wtedy puste,
+    zgodnie z resztą wiersza)."""
     if ds.is_empty() or ds.is_leave or getattr(ds, "is_sick", False):
-        return ""
-    return "Nocna" if _night_minutes(ds) > 0 else "Dzienna"
+        return "", ""
+
+    duration = ds.total_duration()
+    if duration is None:
+        return "", ""
+
+    total = int(duration.total_seconds() // 60)
+    night = _night_minutes(ds)
+    day = total - night
+    return _format_minutes(day), _format_minutes(night)
 
 
 def _format_hour(time_str):
@@ -97,21 +112,26 @@ def _location_name(shop, employee) -> str:
 
 
 def _day_rows(schedule, employee):
-    """(dzień, wejście, wyjście, ilość_godzin, etykieta) dla każdego dnia
-    miesiąca - puste stringi dla dni bez zmiany/urlopu/L4 (bez zer, bez
-    znaków specjalnych, zgodnie ze specyfikacją)."""
+    """(dzień, wejście, wyjście, ilość_godzin, godziny_dzienne,
+    godziny_nocne) dla każdego dnia miesiąca - puste stringi dla dni bez
+    zmiany/urlopu/L4 (bez zer, bez znaków specjalnych, zgodnie ze
+    specyfikacją)."""
     rows = []
     for day in range(1, schedule.days_in_month + 1):
         ds = schedule.get_day(employee, day)
         if ds.is_empty() or ds.is_leave or getattr(ds, "is_sick", False):
-            rows.append((day, "", "", "", ""))
+            rows.append((day, "", "", "", "", ""))
             continue
 
         end_text = _format_hour(ds.end)
         if ds.crosses_midnight():
             end_text += "+1"
 
-        rows.append((day, _format_hour(ds.start), end_text, ds.total_as_str() or "", _shift_label(ds)))
+        day_hours, night_hours = _day_night_hours(ds)
+        rows.append((
+            day, _format_hour(ds.start), end_text, ds.total_as_str() or "",
+            day_hours, night_hours,
+        ))
 
     return rows
 
@@ -233,8 +253,8 @@ class _EmployeeCardImageExporter:
 
         row_h = 24
         rows = _day_rows(self.schedule, self.employee)
-        for day, start, end, hours, label in rows:
-            values = [str(day), start, end, hours, label, ""]
+        for day, start, end, hours, day_hours, night_hours in rows:
+            values = [str(day), start, end, hours, day_hours, night_hours]
             for i, val in enumerate(values):
                 self.draw.rectangle([col_x[i], y, col_x[i + 1], y + row_h], outline=self.BLACK)
                 if val:
@@ -247,7 +267,14 @@ class _EmployeeCardImageExporter:
         self.draw.text((col_x[0] + 6, y + footer_h // 2), "Razem ilość godzin:", fill=self.BLACK, font=self.font, anchor="lm")
         self.draw.rectangle([col_x[3], y, col_x[4], y + footer_h], outline=self.BLACK)
         self._centered_text((col_x[3] + col_x[4]) // 2, y + footer_h // 2, str(total), self.font_b)
+        # Jedyna komórka na podpis na całej karcie (bez kolumny na podpis w
+        # każdym dniu) - podpisana, bo bez nagłówka kolumny nie byłoby wiadomo,
+        # co to za puste pole.
         self.draw.rectangle([col_x[4], y, col_x[6], y + footer_h], outline=self.BLACK)
+        self.draw.text(
+            (col_x[4] + 6, y + footer_h // 2), "Podpis pracownika:",
+            fill=self.BLACK, font=self.font, anchor="lm",
+        )
 
         return y + footer_h
 
@@ -331,8 +358,8 @@ def _write_employee_sheet(ws, schedule, year, month, shop, employee):
         cell.fill = _FILL_TITLE
 
     row = header_row + 1
-    for day, start, end, hours, label in _day_rows(schedule, employee):
-        values = [day, start, end, hours, label, ""]
+    for day, start, end, hours, day_hours, night_hours in _day_rows(schedule, employee):
+        values = [day, start, end, hours, day_hours, night_hours]
         for i, val in enumerate(values):
             cell = ws.cell(row=row, column=i + 1, value=val if val != "" else None)
             cell.alignment = _ALIGN_CENTER
@@ -348,6 +375,11 @@ def _write_employee_sheet(ws, schedule, year, month, shop, employee):
     total_cell = ws.cell(row=row, column=4, value=total)
     total_cell.font = Font(bold=True)
     total_cell.alignment = _ALIGN_CENTER
+    # Jedyna komórka na podpis na całym arkuszu (bez kolumny na podpis w
+    # każdym dniu) - w wierszu stopki, pod kolumnami godzin dziennych/nocnych.
+    ws.merge_cells(start_row=row, start_column=5, end_row=row, end_column=last_col)
+    signature_cell = ws.cell(row=row, column=5, value="Podpis pracownika:")
+    signature_cell.font = Font(bold=True)
     for c in range(1, last_col + 1):
         ws.cell(row=row, column=c).border = _THIN_BORDER
 

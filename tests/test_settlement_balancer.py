@@ -67,6 +67,25 @@ class ClassifyEditableSideTests(unittest.TestCase):
 
         self.assertIsNone(classify_editable_side(ds, shop, WORK_DAYS[0]))
 
+    def test_uses_the_employees_own_location_hours_not_the_project_default(self):
+        """Locations are the source of truth for the generator (and this
+        balancer) - a shift matching the employee's OWN location's open/close
+        time must classify correctly even when that differs from the
+        project-wide default (ShopConfig.open_hours)."""
+        shop = ShopConfig(2026, 8)  # project default: 05:30-22:45/23:00
+        loc = LocationConfig(key="site1", name="Site 1")
+        for wd in range(7):
+            loc.open_hours[wd] = ("08:00", "20:00")
+        shop.locations["site1"] = loc
+        schedule = MonthSchedule(2026, 8)
+        emp = Employee("Testowy", "Pracownik", daily_hours=8, location_key="site1")
+        schedule.add_employee(emp)
+
+        ds = schedule.get_day(emp, WORK_DAYS[0])
+        ds.set_hours("08:00", "16:30")  # opens with this location's own open time
+
+        self.assertEqual(classify_editable_side(ds, shop, WORK_DAYS[0], emp=emp), "end")
+
     def test_leave_day_is_not_editable(self):
         schedule, shop, emp = _make_schedule()
         ds = schedule.get_day(emp, WORK_DAYS[0])

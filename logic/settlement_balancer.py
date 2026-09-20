@@ -29,7 +29,7 @@ def compute_safe_adjustment_bounds(emp, shop):
     return (-_MAX_TRIM_MINUTES, _MAX_EXTEND_MINUTES)
 
 
-def classify_editable_side(ds, shop, day):
+def classify_editable_side(ds, shop, day, emp=None):
     """Która krawędź zmiany jest "bezpieczna" do ruszenia w danym dniu.
 
     Zwraca "start", "end" albo None (dzień pusty/urlop/L4/nie-handlowy —
@@ -47,7 +47,10 @@ def classify_editable_side(ds, shop, day):
         # balance_employee_hours - tylko nie da się go tu "dotrimować".
         return None
 
-    hours = shop.get_open_hours_for_day(day)
+    # Godziny WŁASNEJ lokalizacji pracownika (emp=None tylko dla wywołań bez
+    # znanego pracownika - fallback na godziny projektu) - Lokalizacje są
+    # źródłem prawdy dla generatora, patrz model/location.py.
+    hours = shop.get_location(emp).get_open_hours_for_day(day) if emp is not None else shop.get_open_hours_for_day(day)
     if not hours:
         return None
 
@@ -122,7 +125,7 @@ def balance_employee_hours(schedule, shop, employee, target_minutes):
         day for day in days
         if shop.is_trade_day(day)
         and (
-            classify_editable_side(schedule.get_day(employee, day), shop, day) is not None
+            classify_editable_side(schedule.get_day(employee, day), shop, day, emp=employee) is not None
             or schedule.get_day(employee, day).crosses_midnight()
         )
     ]
@@ -160,7 +163,7 @@ def balance_employee_hours(schedule, shop, employee, target_minutes):
             break
 
         ds = schedule.get_day(employee, day)
-        side = classify_editable_side(ds, shop, day)
+        side = classify_editable_side(ds, shop, day, emp=employee)
         if side is None:
             continue
 

@@ -30,7 +30,10 @@ class SchedulePresenter:
                 tooltip="Urlop",
             )
 
-        if not self.shop_config.is_trade_day(day):
+        # Nieczynne = brak handlowej niedzieli/święta ALBO dzień jawnie
+        # oznaczony "Nieczynne" (patrz WeeklyHoursEditor/DayOverrideDialog) -
+        # get_open_hours_for_day() sprawdza oba, per lokalizacja pracownika.
+        if not self.shop_config.get_location(emp).get_open_hours_for_day(day):
             return CellView(bg=theme.BG_DISABLED)
 
         if not s or not e:

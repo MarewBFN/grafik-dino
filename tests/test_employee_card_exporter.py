@@ -10,9 +10,9 @@ if str(ROOT) not in sys.path:
 from openpyxl import load_workbook
 
 from export.employee_card_exporter import (
+    _day_night_hours,
     _location_name,
     _night_minutes,
-    _shift_label,
     export_employee_card_to_image,
     export_employee_cards_to_excel,
 )
@@ -27,37 +27,37 @@ class NightMinutesTests(unittest.TestCase):
         ds = DaySchedule()
         ds.set_hours("08:00", "16:00")
         self.assertEqual(_night_minutes(ds), 0)
-        self.assertEqual(_shift_label(ds), "Dzienna")
+        self.assertEqual(_day_night_hours(ds), ("8:00", "0:00"))
 
     def test_classic_night_shift_is_fully_night(self):
         ds = DaySchedule()
         ds.set_hours("22:00", "06:00")
         self.assertEqual(_night_minutes(ds), 480)
-        self.assertEqual(_shift_label(ds), "Nocna")
+        self.assertEqual(_day_night_hours(ds), ("0:00", "8:00"))
 
     def test_partial_night_overlap(self):
         ds = DaySchedule()
         ds.set_hours("20:00", "23:00")
         self.assertEqual(_night_minutes(ds), 60)
-        self.assertEqual(_shift_label(ds), "Nocna")
+        self.assertEqual(_day_night_hours(ds), ("2:00", "1:00"))
 
     def test_full_day_shift_counts_as_night(self):
         ds = DaySchedule()
         ds.set_full_day_shift("06:00")
         self.assertEqual(_night_minutes(ds), 480)
-        self.assertEqual(_shift_label(ds), "Nocna")
+        self.assertEqual(_day_night_hours(ds), ("16:00", "8:00"))
 
-    def test_empty_leave_and_sick_days_have_no_label(self):
+    def test_empty_leave_and_sick_days_have_no_hours(self):
         empty = DaySchedule()
-        self.assertEqual(_shift_label(empty), "")
+        self.assertEqual(_day_night_hours(empty), ("", ""))
 
         leave = DaySchedule()
         leave.set_leave()
-        self.assertEqual(_shift_label(leave), "")
+        self.assertEqual(_day_night_hours(leave), ("", ""))
 
         sick = DaySchedule()
         sick.set_sick()
-        self.assertEqual(_shift_label(sick), "")
+        self.assertEqual(_day_night_hours(sick), ("", ""))
 
 
 class LocationNameTests(unittest.TestCase):
@@ -118,7 +118,7 @@ class ExcelCardExportTests(unittest.TestCase):
             # Wiersz nagłówka tabeli to 7, dzień 1 to wiersz 8, dzień 2 (urlop) to wiersz 9.
             leave_row = 9
             self.assertEqual(ws.cell(row=leave_row, column=1).value, 2)
-            for col in range(2, 6):
+            for col in range(2, 7):
                 self.assertIsNone(ws.cell(row=leave_row, column=col).value)
 
     def test_footer_sum_matches_total_hours(self):

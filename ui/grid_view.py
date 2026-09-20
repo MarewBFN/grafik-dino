@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 from logic.constraint_presenter import ConstraintPresenter
 from logic.duty_coverage_presenter import is_day_fully_covered, project_uses_duty_rotation
+from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.monthly_hours_status import monthly_hours_status
 from logic.schedule_presenter import SchedulePresenter
 from logic.utils.time_utils import classify_shift_as_morning_or_afternoon
@@ -143,6 +144,54 @@ def _build_no_afternoon_icon(size: int = 32) -> QIcon:
     return QIcon(pixmap)
 
 
+def _build_no_24h_icon(size: int = 32) -> QIcon:
+    """"24h" + prohibition slash, for the 'nie_chce_24h' custom role (no
+    asset file) - same hand-drawn style as _build_no_night_icon/
+    _build_no_afternoon_icon."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+
+    font = QFont()
+    font.setBold(True)
+    font.setPointSize(int(size * 0.34))
+    painter.setFont(font)
+    painter.setPen(QColor("#37474f"))
+    painter.drawText(QRectF(0, 0, size, size), Qt.AlignCenter, "24h")
+
+    _draw_prohibition_slash(painter, size)
+    painter.end()
+
+    return QIcon(pixmap)
+
+
+def _build_contract_icon(size: int = 32) -> QIcon:
+    """Small document/contract badge, for the 'umowa' custom role (no asset
+    file) - same hand-drawn style as the other restriction/role icons."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+
+    margin_x, margin_y = size * 0.26, size * 0.12
+    page = QRectF(margin_x, margin_y, size - 2 * margin_x, size - 2 * margin_y)
+    painter.setPen(QPen(QColor("#37474f"), max(1.2, size * 0.06)))
+    painter.setBrush(QBrush(QColor("#eceff1")))
+    painter.drawRoundedRect(page, size * 0.04, size * 0.04)
+
+    line_pen = QPen(QColor("#37474f"), max(1.0, size * 0.045))
+    painter.setPen(line_pen)
+    for i in range(3):
+        ly = page.top() + page.height() * (0.32 + i * 0.22)
+        painter.drawLine(QPointF(page.left() + size * 0.08, ly), QPointF(page.right() - size * 0.08, ly))
+
+    painter.end()
+    return QIcon(pixmap)
+
+
 @lru_cache(maxsize=128)
 def _emoji_icon(emoji: str, size: int = 64) -> QIcon:
     """Render one emoji character as a badge icon (no asset file), for
@@ -195,6 +244,10 @@ def _employee_restriction_icons(table, employee):
         icons.append(table.icon_no_night)
     if getattr(employee, "no_afternoon", False):
         icons.append(table.icon_no_afternoon)
+    if employee.has_role("umowa"):
+        icons.append(table.icon_contract)
+    if employee.has_role(NIE_CHCE_24H_ROLE_KEY):
+        icons.append(table.icon_no_24h)
     return icons
 
 
@@ -422,6 +475,8 @@ class ScheduleGrid(QTableWidget):
         self.icon_manager = _build_star_icon()
         self.icon_no_night = _build_no_night_icon()
         self.icon_no_afternoon = _build_no_afternoon_icon()
+        self.icon_contract = _build_contract_icon()
+        self.icon_no_24h = _build_no_24h_icon()
 
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -610,7 +665,12 @@ class ScheduleGrid(QTableWidget):
 
         header = self.horizontalHeader()
         if isinstance(header, DayHeaderView):
-            header.overridden_days = set(self.shop_config.day_overrides.keys())
+            # Nadpisania są teraz per-lokalizacja (patrz
+            # main_window.py::_open_header_menu) - znacznik w nagłówku musi
+            # patrzeć na tę samą lokalizację, którą ta siatka pokazuje.
+            location = self.shop_config.locations.get(self._location_filter)
+            overrides = location.day_overrides if location else self.shop_config.day_overrides
+            header.overridden_days = set(overrides.keys())
             header.update()
 
         if self.settlement_mode:
@@ -665,8 +725,9 @@ class ScheduleGrid(QTableWidget):
         # nie ogólne godziny projektu - ten nagłówek jest teraz osadzony w
         # kontekście jednej, aktualnie przeglądanej lokalizacji.
         location = self.shop_config.locations.get(self._location_filter)
+        uses_trade_calendar = get_profile(self.shop_config.business_type).uses_trade_calendar
         hours = (
-            location.get_open_hours_for_day(self.schedule.year, self.schedule.month, day)
+            location.get_open_hours_for_day(self.schedule.year, self.schedule.month, day, uses_trade_calendar)
             if location else self.shop_config.get_open_hours_for_day(day)
         )
         if hours:
@@ -674,8 +735,9 @@ class ScheduleGrid(QTableWidget):
         else:
             hours_text = "Nieczynne tego dnia"
 
+        overrides = location.day_overrides if location else self.shop_config.day_overrides
         override_text = ""
-        if day in self.shop_config.day_overrides:
+        if day in overrides:
             override_text = "\n⚠ Godziny pracy zmienione ręcznie dla tego dnia."
 
         return f"{hours_text}{override_text}\nKliknij dwukrotnie, aby zmienić godziny pracy lub status dnia."
@@ -776,7 +838,12 @@ class ScheduleGrid(QTableWidget):
                 self.setItem(row, day, item)
                 continue
 
-            if not self.shop_config.is_trade_day(day):
+            # Nieczynne = brak handlowej niedzieli/święta (is_trade_day) ALBO
+            # dzień jawnie oznaczony "Nieczynne" (patrz WeeklyHoursEditor/
+            # DayOverrideDialog - (None, None) w open_hours/day_overrides) -
+            # get_open_hours_for_day() już sprawdza oba, per lokalizacja
+            # tego pracownika (patrz model/location.py).
+            if not self.shop_config.get_location(emp).get_open_hours_for_day(day):
                 item.setBackground(QBrush(QColor(theme.BG_DISABLED)))
                 self.setItem(row, day, item)
                 continue
@@ -1085,22 +1152,14 @@ class ScheduleGrid(QTableWidget):
                 return
 
             if event.matches(QKeySequence.Copy):
-                ds = self.schedule.get_day(emp, day)
-                self._clipboard_day = {
-                    "start": ds.start,
-                    "end": ds.end,
-                    "is_leave": ds.is_leave,
-                    "is_sick": getattr(ds, "is_sick", False),
-                }
+                self._clipboard_day = self.controller.copy_day_snapshot(emp, day)
                 if self.main_window:
                     self.main_window.statusBar().showMessage("Skopiowano dzień.", 2000)
                 return
 
             if event.matches(QKeySequence.Paste):
                 if self._clipboard_day:
-                    self.controller.set_day_hours(
-                        emp, day, self._clipboard_day["start"], self._clipboard_day["end"]
-                    )
+                    self.controller.paste_day_snapshot(emp, day, self._clipboard_day)
                     self._sync_and_keep_position(row, col)
                 return
 
@@ -1251,14 +1310,11 @@ class ScheduleGrid(QTableWidget):
         action = menu.exec(global_pos)
         
         if action == act_copy:
-            self._clipboard_day = {
-                "start": ds.start, "end": ds.end, 
-                "is_leave": ds.is_leave, "is_sick": getattr(ds, "is_sick", False)
-            }
+            self._clipboard_day = self.controller.copy_day_snapshot(emp, day)
             if self.main_window:
                 self.main_window.statusBar().showMessage("Skopiowano dzień.", 2000)
         elif action == act_paste:
-            self.controller.set_day_hours(emp, day, self._clipboard_day["start"], self._clipboard_day["end"])
+            self.controller.paste_day_snapshot(emp, day, self._clipboard_day)
             self.refresh()
         elif action == act_unlock:
             self.controller.snapshot() # Ręczny zapis przed manipulacją obiektem

@@ -51,9 +51,15 @@ def _parse_time(value: str) -> QTime:
 
 
 class ConfigDialog(QDialog):
-    def __init__(self, parent, shop_config):
+    def __init__(self, parent, shop_config, location_key=None):
         super().__init__(parent)
         self.shop_config = shop_config
+        # Zakładka "Godziny otwarcia" edytuje godziny TEJ lokalizacji wprost
+        # (dokładnie te same dane co Konfiguracja -> Lokalizacje), zamiast
+        # osobnego, projektowego ShopConfig.open_hours - patrz _build_hours_tab/
+        # _save(). location_key=None (np. stare wywołania/testy) -> fallback
+        # na project-wide ShopConfig.open_hours jak dawniej.
+        self.location = shop_config.locations.get(location_key) if location_key else None
         self.profile = get_profile(shop_config.business_type)
         self.setWindowTitle("Konfiguracja")
         self.setModal(True)
@@ -68,16 +74,29 @@ class ConfigDialog(QDialog):
     def _build_ui(self):
         root = QVBoxLayout(self)
 
+        # Sekcja "Nazwa i Profil placówki" schowana dla Enyo - klient ma
+        # dokładnie jedną placówkę (kilka lokalizacji w jej ramach, patrz
+        # ui/locations_dialog.py) i jeden gotowy profil "Ochrona", więc nie
+        # ma czego tu zmieniać (patrz też new_profile_btn/edit_profile_btn/
+        # delete_profile_btn niżej, schowane tym samym wzorcem). Widgety i
+        # cała logika zapisu zostają w pełni działające - tylko owinięte w
+        # kontener .hide()owany, żeby nie tracić funkcjonalności na wypadek
+        # powrotu do main.
+        self.facility_header = QWidget()
+        facility_header_layout = QVBoxLayout(self.facility_header)
+        facility_header_layout.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(self.facility_header)
+
         title = QLabel("Konfiguracja obiektu")
         title.setObjectName("sectionLabel")
-        root.addWidget(title)
+        facility_header_layout.addWidget(title)
 
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel("Nazwa placówki:"))
         self.name_edit = QLineEdit(self.shop_config.name)
         self.name_edit.setPlaceholderText("np. Moja Firma")
         name_row.addWidget(self.name_edit, 1)
-        root.addLayout(name_row)
+        facility_header_layout.addLayout(name_row)
 
         profile_row = QHBoxLayout()
         profile_row.addWidget(QLabel("Profil działalności:"))
@@ -113,7 +132,9 @@ class ConfigDialog(QDialog):
         self._sync_edit_profile_button()
 
         profile_row.addStretch()
-        root.addLayout(profile_row)
+        facility_header_layout.addLayout(profile_row)
+
+        self.facility_header.hide()
 
         # Domyślnie puste - _build_sundays_tab() nadpisuje tylko gdy profil
         # faktycznie ma kalendarz handlowy (patrz niżej), a _save() zawsze
@@ -124,11 +145,21 @@ class ConfigDialog(QDialog):
         tabs = self.tabs
         root.addWidget(tabs, 1)
 
-        tabs.addTab(self._build_hours_tab(), "Godziny otwarcia")
+        # Indeksy zakładek śledzone jawnie (zamiast zakładanych na sztywno w
+        # _build_tutorial_steps()), bo "Niedziele handlowe" dodaje się
+        # warunkowo, a "Limity" (self.limits_tab niżej) w tej wersji wcale -
+        # sztywne indeksy 0/1/2/3 rozjeżdżałyby się z rzeczywistą zawartością
+        # self.tabs i celowały by w złą zakładkę.
+        self._tab_index_hours = tabs.addTab(self._build_hours_tab(), "Godziny otwarcia")
+        self._tab_index_sundays = None
         if self.profile.uses_trade_calendar:
-            tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
-        tabs.addTab(self._build_limits_tab(), "Limity")
-        tabs.addTab(self._build_generator_rules_tab(), "Zasady generatora")
+            self._tab_index_sundays = tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
+        # Zakładka "Limity" nieużywana przez Enyo - schowana z UI, ale
+        # _build_limits_tab() zostaje wywoływane (self.limits_tab niżej), bo
+        # _save() nadal czyta stąd wartości domyślne (max_consecutive_days,
+        # standard_daily_hours, ...) tak jak wcześniej.
+        self.limits_tab = self._build_limits_tab()
+        self._tab_index_generator = tabs.addTab(self._build_generator_rules_tab(), "Zasady generatora")
 
         buttons = QDialogButtonBox()
         help_btn = QPushButton("Pomoc")
@@ -255,7 +286,13 @@ class ConfigDialog(QDialog):
         outer.setContentsMargins(20, 20, 20, 20)
         outer.setSpacing(12)
 
-        self.hours_editor = WeeklyHoursEditor(self.shop_config.open_hours)
+        if self.location is not None:
+            location_label = QLabel(f"Edytujesz godziny otwarcia w placówce {self.location.name}")
+            location_label.setObjectName("sectionLabel")
+            outer.addWidget(location_label)
+
+        hours_source = self.location.open_hours if self.location is not None else self.shop_config.open_hours
+        self.hours_editor = WeeklyHoursEditor(hours_source)
         outer.addWidget(self.hours_editor)
 
         hint = QLabel(
@@ -568,48 +605,43 @@ class ConfigDialog(QDialog):
         return page
 
     def _build_tutorial_steps(self):
-        return [
+        steps = [
             TutorialStep(
                 "Konfiguracja obiektu",
                 "Tutaj ustawiasz zasady, według których generator układa grafik: "
-                "godziny otwarcia, niedziele handlowe, limity i zasady generatora.",
+                "godziny otwarcia i zasady generatora.",
             ),
             TutorialStep(
                 "Godziny otwarcia",
                 "Ustaw godziny pracy obiektu osobno dla każdego dnia tygodnia.",
                 target=self.tabs,
-                on_show=lambda: self.tabs.setCurrentIndex(0),
+                on_show=lambda: self.tabs.setCurrentIndex(self._tab_index_hours),
             ),
-            TutorialStep(
+        ]
+        if self._tab_index_sundays is not None:
+            steps.append(TutorialStep(
                 "Niedziele handlowe",
                 "Zaznacz, które niedziele w tym miesiącu są handlowe — tylko one "
                 "będą uwzględnione przy generowaniu grafiku.",
                 target=self.tabs,
-                on_show=lambda: self.tabs.setCurrentIndex(1),
-            ),
-            TutorialStep(
-                "Limity",
-                "Maksymalna liczba dni z rzędu oraz minimalna liczba pracowników "
-                "na otwarciu i zamknięciu.",
-                target=self.tabs,
-                on_show=lambda: self.tabs.setCurrentIndex(2),
-            ),
-            TutorialStep(
-                "Limit czasu generatora",
-                "Ile czasu solver ma na znalezienie grafiku. Dłuższy limit daje "
-                "lepsze wyniki, ale wydłuża generowanie.",
-                target=self.solver_time_limit,
-                on_show=lambda: self.tabs.setCurrentIndex(3),
-            ),
-            TutorialStep(
-                "Zasady generatora",
-                "Dla każdej reguły wybierz Wymagane (musi być spełniona) albo "
-                "Preferowane (solver może ją naruszyć, jeśli nie ma innego wyjścia) — "
-                "śmiało testuj różne ustawienia i dopasuj je do swojej placówki.",
-                target=self.policy_selectors["rest_11h"],
-                on_show=lambda: self.tabs.setCurrentIndex(3),
-            ),
-        ]
+                on_show=lambda: self.tabs.setCurrentIndex(self._tab_index_sundays),
+            ))
+        steps.append(TutorialStep(
+            "Limit czasu generatora",
+            "Ile czasu solver ma na znalezienie grafiku. Dłuższy limit daje "
+            "lepsze wyniki, ale wydłuża generowanie.",
+            target=self.solver_time_limit,
+            on_show=lambda: self.tabs.setCurrentIndex(self._tab_index_generator),
+        ))
+        steps.append(TutorialStep(
+            "Zasady generatora",
+            "Dla każdej reguły wybierz Wymagane (musi być spełniona) albo "
+            "Preferowane (solver może ją naruszyć, jeśli nie ma innego wyjścia) — "
+            "śmiało testuj różne ustawienia i dopasuj je do swojej placówki.",
+            target=self.policy_selectors["rest_11h"],
+            on_show=lambda: self.tabs.setCurrentIndex(self._tab_index_generator),
+        ))
+        return steps
 
     def _start_tutorial(self, on_finished=None):
         existing = getattr(self, "_tutorial_overlay", None)
@@ -640,18 +672,20 @@ class ConfigDialog(QDialog):
             self.shop_config.business_type = self.business_type_selector.currentData()
 
             for wd, (start_str, end_str) in self.hours_editor.get_hours().items():
-                start_qt = _parse_time(start_str)
-                end_qt = _parse_time(end_str)
+                if start_str and end_str:
+                    start_qt = _parse_time(start_str)
+                    end_qt = _parse_time(end_str)
 
-                if end_qt <= start_qt:
-                    day_names = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
-                    raise ValueError(
-                        f"Zamknięcie musi być później niż otwarcie tego samego dnia ({day_names[wd]}). "
-                        "Zmiany przechodzące przez północ nie są jeszcze wspierane — dla działalności "
-                        "całodobowej ustaw np. 00:00–23:45."
-                    )
+                    if end_qt <= start_qt:
+                        day_names = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
+                        raise ValueError(
+                            f"Zamknięcie musi być później niż otwarcie tego samego dnia ({day_names[wd]}). "
+                            "Zmiany przechodzące przez północ nie są jeszcze wspierane — dla działalności "
+                            "całodobowej ustaw np. 00:00–23:45."
+                        )
 
-                self.shop_config.open_hours[wd] = (start_str, end_str)
+                target_hours = self.location.open_hours if self.location is not None else self.shop_config.open_hours
+                target_hours[wd] = (start_str, end_str)  # (None, None) = dzień "Nieczynne"
 
             self.shop_config.trade_sundays = {
                 day for day, box in self.sunday_checks.items() if box.isChecked()

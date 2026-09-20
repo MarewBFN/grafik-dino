@@ -32,13 +32,12 @@ class _LocationRow(QFrame):
     pełne godziny otwarcia na każdy dzień tygodnia (WeeklyHoursEditor),
     checkbox "24/7" (zastępuje dawne ręczne pole "Zmiana nocna" - godziny
     nocne generator wykrywa teraz sam z tych godzin otwarcia, patrz
-    LocationConfig.get_night_shift_hours()) oraz progi obsady, które
-    faktycznie nadpisują generator dla pracowników przypisanych do tej
+    LocationConfig.get_night_shift_hours()) oraz progi obsady (self.thresholds_container),
+    które faktycznie nadpisują generator dla pracowników przypisanych do tej
     lokalizacji (patrz logic/generator/base_specs.py::_build_max_consecutive
-    i logic/generator/generic_rules.py::build_min_staff_with_role) - progi,
-    których generator nie czyta per-lokalizacja (min_open_staff/
-    min_close_staff dla wbudowanego profilu dino_retail), celowo nie są tu
-    pokazywane, bo nic by nie robiły."""
+    i logic/generator/generic_rules.py::build_min_staff_with_role) - schowane
+    na prośbę klienta (patrz thresholds_container.hide() niżej), ale wciąż w
+    pełni działające, żeby nie zgubić już zapisanych nadpisań per-lokalizacja."""
 
     def __init__(
         self, on_remove, name="", open_hours=None, is_24_7=False,
@@ -60,6 +59,10 @@ class _LocationRow(QFrame):
         top = QHBoxLayout()
         self.name_edit = QLineEdit(name)
         self.name_edit.setPlaceholderText("np. Galeria Płn")
+        # Długa nazwa lokalizacji "rozjeżdżała" lewy pasek boczny i przyciski
+        # menu w main_window.py (patrz też ui/marquee_text.py) - twardy limit
+        # tutaj, żeby nie dało się jej w ogóle wpisać.
+        self.name_edit.setMaxLength(35)
         top.addWidget(self.name_edit, 1)
 
         self.remove_btn = QPushButton("Usuń")
@@ -68,16 +71,38 @@ class _LocationRow(QFrame):
         top.addWidget(self.remove_btn)
         outer.addLayout(top)
 
+        is_24_7_row = QHBoxLayout()
         self.is_24_7_check = QCheckBox("Działalność całodobowa (24/7)")
         self.is_24_7_check.setChecked(bool(is_24_7))
         self.is_24_7_check.toggled.connect(self._on_24_7_toggled)
-        outer.addWidget(self.is_24_7_check)
+        is_24_7_row.addWidget(self.is_24_7_check)
+        is_24_7_row.addStretch()
+
+        # Domyślnie zwinięte (self._hours_expanded=False) dla czytelności
+        # listy lokalizacji - widoczne tylko gdy 24/7 wyłączone, bo dla 24/7
+        # cały tydzień jest i tak zawsze 00:00-23:45 (patrz _on_24_7_toggled).
+        self._hours_expanded = False
+        self.toggle_hours_btn = QPushButton("Rozwiń")
+        self.toggle_hours_btn.setObjectName("secondaryButton")
+        self.toggle_hours_btn.clicked.connect(self._toggle_hours_expanded)
+        is_24_7_row.addWidget(self.toggle_hours_btn)
+        outer.addLayout(is_24_7_row)
 
         self.hours_editor = WeeklyHoursEditor(open_hours)
         self.hours_editor.setEnabled(not is_24_7)
         outer.addWidget(self.hours_editor)
 
-        thresholds = QHBoxLayout()
+        self._update_hours_visibility()
+
+        # "Progi obsady dla tej lokalizacji" schowane na prośbę klienta -
+        # widgety zostają w pełni działające (constraints_overrides() niżej
+        # nadal je czyta, więc istniejące nadpisania per-lokalizacja
+        # zapisane w projekcie nie giną przy zapisie), tylko owinięte w
+        # kontener .hide()owany, tym samym wzorcem co
+        # ConfigDialog.facility_header/limits_tab.
+        self.thresholds_container = QWidget()
+        thresholds = QHBoxLayout(self.thresholds_container)
+        thresholds.setContentsMargins(0, 0, 0, 0)
         thresholds.addWidget(QLabel("Progi obsady dla tej lokalizacji:"))
 
         self.max_consecutive_spin = QSpinBox()
@@ -101,12 +126,26 @@ class _LocationRow(QFrame):
             self.rule_spins[rule_key] = spin
 
         thresholds.addStretch()
-        outer.addLayout(thresholds)
+        outer.addWidget(self.thresholds_container)
+        self.thresholds_container.hide()
 
     def _on_24_7_toggled(self, checked):
         if checked:
             self.hours_editor.set_hours({wd: ("00:00", "23:45") for wd in range(7)})
         self.hours_editor.setEnabled(not checked)
+        self._update_hours_visibility()
+
+    def _toggle_hours_expanded(self):
+        self._hours_expanded = not self._hours_expanded
+        self._update_hours_visibility()
+
+    def _update_hours_visibility(self):
+        is_24_7 = self.is_24_7_check.isChecked()
+        # Dla 24/7 cały tydzień jest zawsze 00:00-23:45 - nie ma czego
+        # edytować, więc ani przycisk, ani sam edytor się nie pokazują.
+        self.toggle_hours_btn.setVisible(not is_24_7)
+        self.hours_editor.setVisible(not is_24_7 and self._hours_expanded)
+        self.toggle_hours_btn.setText("Zwiń" if self._hours_expanded else "Rozwiń")
 
     def name(self) -> str:
         return self.name_edit.text().strip()
@@ -149,9 +188,7 @@ class LocationsDialog(QDialog):
             "Zmianę nocną generator wykrywa teraz sam z godzin otwarcia "
             "(dowolna godzina między 22:00 a 6:00) - nie trzeba jej już "
             "ustawiać ręcznie. Zaznacz \"24/7\", jeśli placówka jest czynna "
-            "całodobowo przez cały tydzień.\n"
-            "Progi obsady poniżej nadpisują wartości domyślne tylko dla "
-            "pracowników przypisanych do tej lokalizacji."
+            "całodobowo przez cały tydzień."
         )
         hint.setObjectName("mutedHint")
         hint.setWordWrap(True)
@@ -202,7 +239,12 @@ class LocationsDialog(QDialog):
 
         add_btn = QPushButton("Dodaj lokalizację")
         add_btn.setObjectName("secondaryButton")
-        add_btn.clicked.connect(lambda: self._add_location_row())
+        # Godziny z zakładki Konfiguracja -> "Godziny otwarcia" jako punkt
+        # startowy dla nowej lokalizacji (patrz hint tam) - i tak od razu
+        # edytowalne osobno dla tej lokalizacji poniżej, zanim się zapisze.
+        add_btn.clicked.connect(
+            lambda: self._add_location_row(open_hours=dict(self.shop_config.open_hours))
+        )
         outer.addWidget(add_btn)
 
         outer.addStretch()
@@ -276,6 +318,8 @@ class LocationsDialog(QDialog):
 
                 hours = row.hours_editor.get_hours()
                 for wd, (start, end) in hours.items():
+                    if not start or not end:
+                        continue  # dzień oznaczony "Nieczynne"
                     if _parse_time(end) <= _parse_time(start):
                         day_names = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
                         raise ValueError(

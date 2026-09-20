@@ -140,6 +140,56 @@ def test_location_config_open_hours_use_explicit_year_month_day():
     assert loc.get_open_hours_for_day(2026, 3, 2) == ("08:00", "20:00")
 
 
+# --- uses_trade_calendar: Sunday must not silently close for profiles that
+# don't use a trade calendar (Dino-era leftover: trade_sundays is empty by
+# default, so every Sunday used to read as closed regardless of profile) ---
+
+
+def test_sunday_is_open_when_profile_does_not_use_trade_calendar():
+    loc = LocationConfig(key="a", name="A", open_hours={6: ("08:00", "20:00")})
+    # 2026-03-01 is a Sunday. trade_sundays is empty (never explicitly marked).
+    assert loc.is_trade_day(2026, 3, 1, uses_trade_calendar=False) is True
+    assert loc.get_open_hours_for_day(2026, 3, 1, uses_trade_calendar=False) == ("08:00", "20:00")
+
+
+def test_sunday_is_closed_by_default_when_profile_uses_trade_calendar():
+    loc = LocationConfig(key="a", name="A", open_hours={6: ("08:00", "20:00")})
+    assert loc.is_trade_day(2026, 3, 1, uses_trade_calendar=True) is False
+    assert loc.get_open_hours_for_day(2026, 3, 1, uses_trade_calendar=True) is None
+
+
+def test_sunday_open_hours_default_matches_the_old_trade_calendar_behavior():
+    """uses_trade_calendar defaults to True (unspecified) - preserves
+    behavior for any caller that doesn't know about business profiles."""
+    loc = LocationConfig(key="a", name="A", open_hours={6: ("08:00", "20:00")})
+    assert loc.get_open_hours_for_day(2026, 3, 1) is None
+
+
+def test_public_holiday_is_ignored_when_profile_does_not_use_trade_calendar():
+    loc = LocationConfig(key="a", name="A", open_hours={0: ("08:00", "20:00")}, public_holidays={2})
+    # 2026-03-02 is a Monday, marked as a public holiday.
+    assert loc.get_open_hours_for_day(2026, 3, 2, uses_trade_calendar=False) == ("08:00", "20:00")
+
+
+def test_shop_get_location_resolves_uses_trade_calendar_from_the_profile():
+    from model.business_profile import register_custom_profile
+    from model.custom_profile import CustomBusinessProfile
+
+    profile = CustomBusinessProfile(
+        key="custom_test_sunday_not_closed", display_name="Test", roles=[], rules=[],
+    )
+    register_custom_profile(profile)
+
+    shop = ShopConfig(2026, 3)
+    shop.business_type = profile.key
+    loc = LocationConfig(key="site1", name="Site 1", open_hours={6: ("08:00", "20:00")})
+    shop.locations["site1"] = loc
+    emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1")
+
+    # 2026-03-01 is a Sunday - must stay open for a profile without a trade calendar.
+    assert shop.get_location(emp).get_open_hours_for_day(1) == ("08:00", "20:00")
+
+
 # --- format_open_hours_summary (pasek nad tabelą grafiku) ---
 
 

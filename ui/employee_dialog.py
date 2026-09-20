@@ -144,6 +144,15 @@ class EmployeeDialog(QDialog):
         for role in self.profile.roles:
             if self._role_is_hidden(role):
                 continue
+            if role.key == NIE_CHCE_24H_ROLE_KEY:
+                # Ten klucz ma dedykowany checkbox niżej (self.no_24h_check),
+                # gated na _project_uses_duty_rotation() - poza rotacją 24/7
+                # nic go nie czyta (patrz logic/generator/duty_rotation_constraint.py),
+                # więc pokazywanie go tu drugi raz byłoby martwym duplikatem:
+                # oba pisały do tego samego Employee.custom_roles["nie_chce_24h"],
+                # a _save() niżej i tak zawsze nadpisywał tę wartość stanem
+                # self.no_24h_check, gdy oba były widoczne naraz.
+                continue
             checkbox = QCheckBox(role.label)
             if role.description:
                 checkbox.setToolTip(role.description)

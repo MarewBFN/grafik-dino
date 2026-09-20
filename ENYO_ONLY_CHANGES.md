@@ -517,3 +517,194 @@ niepokryte dni (`test_9_17_split` dni 7/8, `test_8_16_split` dzień 12,
 `test_anchor_0830` dzień 9) teraz poprawnie pokryte przez pozostałych
 wolnych pracowników, status OPTIMAL. Plik przeliczony i zapisany ponownie
 (lokalnie, `last_project.json` jest w `.gitignore`).
+
+## Runda UI/UX + bug fixy na życzenie klienta (2026-09-20)
+
+Duża, wieloczęściowa runda: kilka rzeczy ukrytych dla Enyo (tabela niżej) +
+kilka realnych bugów naprawionych (dotyczą też Dino, gdzie nie zaznaczono
+inaczej). Ustalone z użytkownikiem: "Progi obsady" per-lokalizacja i cała
+sekcja "Nazwa i Profil placówki"/zakładka "Limity" w Konfiguracji - tylko
+ukryte (`.hide()`), dane i mechanizm w generatorze zostają w pełni
+działające, tym samym wzorcem co wcześniejsze `settlement_section.hide()`.
+
+### Ukryte dla Enyo (dane/logika zostają)
+
+| Co | Gdzie | Notatka |
+|---|---|---|
+| Sekcja "Progi obsady dla tej lokalizacji" (dni pod rząd + progi `min. N osób z rolą X`) | `ui/locations_dialog.py::_LocationRow` (`self.thresholds_container`) | Generator nadal je czyta (`base_specs.py`, `generic_rules.py`) - tylko niedostępne z UI |
+| Sekcja "Nazwa i Profil placówki" (nazwa placówki + wybór profilu biznesowego) | `ui/config_dialog.py` (`self.facility_header`) | Klient ma jeden, gotowy profil "Ochrona" i jedną placówkę (kilka lokalizacji) |
+| Zakładka "Limity" (limity dni pod rząd, wymiar zmiany, rotacja 24/7 "tylko 12/24h", flagi) | `ui/config_dialog.py` (`self.limits_tab`, budowany ale nie dodany do `self.tabs`) | Nieużywana przez klienta - wartości zostają na ostatnio zapisanych/domyślnych |
+| Krok samouczka "Okres rozliczeniowy" | `ui/main_window.py::_build_tutorial_steps` | Celował w `btn_settlement_toggle`, który jest schowany (`settlement_section.hide()`) - usunięty, nie tylko ukryty, bo wskazywałby na niewidoczny przycisk |
+| Krok samouczka "Limity" + indeksy zakładek na sztywno | `ui/config_dialog.py::_build_tutorial_steps` (osobny, wewnętrzny samouczek tego okna, uruchamiany przyciskiem "Pomoc"/przy pierwszym otwarciu) | Krok "Limity" usunięty (zakładka schowana); "Niedziele handlowe" pokazuje się tylko gdy realnie istnieje (`self._tab_index_sundays`); indeksy zakładek śledzone jawnie zamiast `setCurrentIndex(2)`/`(3)` na sztywno, bo teraz się przesuwają |
+
+Numeracja kroków obu samouczków ("Krok X z Y", `ui/tutorial_overlay.py`) była
+już policzona dynamicznie z `len(steps)` - usuwanie kroków nie tworzy "dziur".
+
+### Naprawiony bug: godziny otwarcia nieużywane spójnie przez generator
+
+**Problem:** projekt ma dwa niezależne miejsca na "godziny otwarcia" -
+`ShopConfig.open_hours` (Konfiguracja -> "Godziny otwarcia", poziom
+projektu) i `LocationConfig.open_hours` (Lokalizacje, poziom lokalizacji).
+Zgodne tylko raz, przy tworzeniu lokalizacji - potem edycja jednego nie
+aktualizuje drugiego. Ustalone z użytkownikiem: **lokalizacja jest źródłem
+prawdy**. Kilka miejsc czytało jednak zawsze godziny projektu:
+
+| Plik | Naprawione | Notatka |
+|---|---|---|
+| `logic/generator/objective.py::add_morning_afternoon_balance_penalty` | TAK | Przebudowane: godziny liczone teraz per pracownik/lokalizacja WEWNĄTRZ pętli po pracownikach (wcześniej raz na dzień, przed pętlą) |
+| `logic/settlement_balancer.py::classify_editable_side` | TAK | Nowy parametr `emp` (opcjonalny, dla zgodności wstecznej) |
+| `logic/generator/solution_mapper.py` (blok debug "VERIFY AFTER SAVE") | TAK | Kosmetyczne (tylko `print`), ale poprawione dla spójności |
+| `logic/generator/trace.py::build_random_project` | TAK | Generator danych testowych/stress, nie produkcyjna logika |
+| `logic/schedule_controller.py::set_shift` (gałąź WORK bez podanych start/end) | TAK | |
+| `logic/generator/meat_constraint.py`, `meat_light_budget.py`, `logic/generator/diagnostics.py::build_infeasibility_summary` | NIE | Świadomie pominięte - koncepty specyficzne dla profilu `dino_retail` (mięso, `min_open_staff`/`min_close_staff`), który jest wykluczony z `visible_profiles()` w tym buildzie - nieosiągalne dla Enyo, a naprawa wymagałaby przebudowy z pojedynczej siatki "cały dzień" na siatkę per-lokalizacja bez żadnej korzyści dla klienta |
+
+**Dodatkowo znaleziony, powiązany bug (ta sama przyczyna):**
+`ui/main_window.py::_open_header_menu` (dwuklik na nagłówku dnia w
+gridzie) zapisywał ręczne nadpisanie godzin/święta na
+`shop_config.day_overrides`/`public_holidays` (poziom projektu) zamiast na
+`day_overrides`/`public_holidays` AKTUALNIE przeglądanej lokalizacji -
+generator (przez `shop.get_location(emp)`) w ogóle tego nie widział.
+Naprawione: teraz pisze do `self.shop_config.locations[selected_location_key]`.
+To też naprawia zgłoszony bug tooltipów w gridzie (nie odświeżały się po
+zmianie godzin) - `ui/grid_view.py::_day_header_tooltip`/nagłówkowy znacznik
+"zmienione ręcznie" czytały już poprawnie per-lokalizacyjne dane, tylko
+zapis szedł w złe miejsce.
+
+**"Godziny otwarcia" w Konfiguracji nie zniknęła** - po feedbacku klienta
+(2026-09-20) edytuje teraz wprost godziny AKTUALNIE WYBRANEJ lokalizacji
+(`ui/config_dialog.py::ConfigDialog.__init__(location_key=...)`, przekazywane
+z `main_window.py::_open_config` jako `self.selected_location_key`) -
+dokładnie te same dane co w oknie Lokalizacje dla tej lokalizacji, z
+etykietą "Edytujesz godziny otwarcia w placówce X" nad edytorem. `ui/
+locations_dialog.py` "Dodaj lokalizację" nadal zaciąga
+`ShopConfig.open_hours` jako punkt startowy dla NOWEJ lokalizacji - to pole
+zostaje w modelu jako "zamrożony" szablon początkowy, ale nie ma już
+własnej zakładki do edycji.
+
+### Inne naprawione bugi (ogólne, nie Enyo-specyficzne)
+
+- **Kopiuj/wklej dnia w gridzie nie działało dla nocnych/24h/urlopu/L4/
+  zablokowanego typu zmiany** - `ui/grid_view.py` (Ctrl+C/Ctrl+V i menu
+  kontekstowe) wklejało wyłącznie start/end przez `set_day_hours`, gubiąc
+  resztę stanu i po cichu odrzucając wklejenie, gdy `end<=start` (noc/24h).
+  Nowe `ScheduleController.copy_day_snapshot()`/`paste_day_snapshot()`
+  przenoszą pełny stan dnia, delegując do istniejących `set_day_*()` (więc
+  ta sama walidacja co przy ręcznym wpisywaniu). Uwaga do świadomości: w
+  `ui/main_window.py` jest DRUGI, martwy zestaw kopiuj/wklej (`_ctx_copy`/
+  `_ctx_paste`/`_open_day_context_menu`, podpięty jako `on_context_menu`) -
+  nigdy nieużywany, bo `ScheduleGrid.contextMenuEvent` buduje własne menu i
+  nie wywołuje tego callbacku. Nietknięty w tej turze (poza zakresem
+  zgłoszenia), ale klient/main powinien wiedzieć, że tamta, bogatsza wersja
+  menu (Rano/Zamknięcie/Zablokuj rano/popołudnie) jest dziś nieosiągalna.
+- **Dwa checkboxy "nie chce 24h" w oknie Edytuj pracownika** -
+  `ui/employee_dialog.py` pokazywał generyczny checkbox z pętli ról profilu
+  ORAZ dedykowany `self.no_24h_check` (gated na `_project_uses_duty_rotation()`)
+  jednocześnie, gdy oba warunki były spełnione - `_save()` zawsze nadpisywał
+  wynik dedykowanym, czyniąc generyczny martwym w tym scenariuszu. Ten klucz
+  (`nie_chce_24h`) ma sens WYŁĄCZNIE w kontekście rotacji 24/7, więc usunięty
+  z generycznej pętli ról całkowicie - dedykowany checkbox (poprawnie gated)
+  zostaje jedynym.
+- **Checkbox "Zmiana nocna (22:00-6:00)" w edycji dnia** -
+  `ui/day_edit_dialog.py` - stara funkcjonalność sprzed automatycznego
+  wykrywania nocy z godzin otwarcia. Usunięty; ręczne wpisanie configured
+  night window (np. 22:00/06:00) bezpośrednio w pola Start/Koniec działa
+  teraz wprost (walidacja `_save()` akceptuje `end<=start` tylko gdy to
+  dokładnie skonfigurowane okno nocne, tak jak `schedule_controller.py`).
+
+### Nowe funkcje na życzenie klienta
+
+- **Limit 35 znaków na nazwę lokalizacji** (`ui/locations_dialog.py`) +
+  nowy `ui/marquee_text.py` (`MarqueeButton`/`MarqueeLabel`) - długa nazwa
+  nie wpływa już na `sizeHint`/szerokość paska bocznego w
+  `ui/main_window.py`; gdy nazwa i tak się nie mieści, przewija się w
+  kółko (marquee) zamiast rozjeżdżać layout.
+- **Karty pracy pracowników** (`export/employee_card_exporter.py`) - kolumna
+  "Dzienne / Nocne" (etykieta) rozdzielona na "Godziny dzienne"/"Godziny
+  nocne" (liczba godzin per dzień, próg 22:00-06:00). Usunięta kolumna na
+  podpis w każdym dniu - zostaje jedna komórka na podpis na dole strony
+  (podpisana "Podpis pracownika:", w JPG/PDF i w Excelu).
+- **Przycisk "+ Dodaj własne..." w trybie szybkim** (`ui/main_window.py`) -
+  otwiera istniejące okno `QuickModeSettingsDialog` (wcześniej dostępne
+  tylko przez Konfiguracja -> "Ustawienia trybu szybkiego").
+- **Ikony przy nazwie pracownika** dla roli `umowa` (dokument) i
+  `nie_chce_24h` (przekreślone "24h") - `ui/grid_view.py`
+  (`_build_contract_icon`/`_build_no_24h_icon`, ta sama technika co
+  istniejące `_build_no_night_icon`/`_build_no_afternoon_icon`).
+- **Toggle "Nieczynne" per dzień tygodnia/dzień z nadpisaniem** -
+  `ui/weekly_hours_editor.py` (współdzielony przez Konfiguracja ->
+  "Godziny otwarcia" i Lokalizacje) oraz `ui/day_override_dialog.py`
+  (dwuklik na nagłówku dnia w gridzie). Zamknięty dzień reprezentowany jako
+  `(None, None)` - konwencja, którą `get_open_hours_for_day()` już
+  rozumiał, tylko UI nie umiało jej wcześniej wyprodukować.
+
+**Weryfikacja:** pełny zestaw testów zielony (patrz commit), plus nowe
+testy: `tests/test_copy_paste_day.py`, `tests/test_closed_day_toggle.py`,
+`tests/test_grid_view_day_header_tooltip.py`, rozszerzenia w
+`tests/test_employee_card_exporter.py`, `tests/test_settlement_balancer.py`,
+`tests/test_night_shift_manual_editing.py`.
+
+### Doprecyzowanie po feedbacku klienta (2026-09-20, ta sama runda)
+
+- **Nieczynny dzień wyszarza komórki w gridzie** (jak dawniej w Dino) -
+  `ui/grid_view.py::_fill_day_cells` i `logic/schedule_presenter.py::
+  get_cell_view` sprawdzały dotąd tylko `shop_config.is_trade_day(day)`
+  (poziom projektu, tylko święta/niedziele handlowe) - teraz sprawdzają
+  `shop.get_location(emp).get_open_hours_for_day(day) is None`, co pokrywa
+  ORAZ nowy toggle "Nieczynne" (dowolny dzień tygodnia/nadpisanie), ORAZ
+  jest poprawnie per-lokalizacyjne.
+- **Konfiguracja -> "Godziny otwarcia" edytuje wybraną lokalizację
+  wprost** - patrz wyżej (zastępuje poprzednie zachowanie "tylko szablon
+  dla nowych lokalizacji" z tej samej rundy, na wyraźne życzenie klienta).
+- **Zwijanie/rozwijanie godzin otwarcia w oknie Lokalizacje** -
+  `ui/locations_dialog.py::_LocationRow` - przycisk "Rozwiń"/"Zwiń"
+  wycentrowany w prawo w wierszu z checkboxem "Działalność całodobowa
+  (24/7)" (wycentrowanym w lewo), pokazuje/chowa `WeeklyHoursEditor`.
+  Domyślnie zwinięte (czytelność listy lokalizacji). Dla lokalizacji 24/7
+  ani przycisk, ani edytor się nie pokazują (nie ma czego edytować - cały
+  tydzień to zawsze 00:00-23:45).
+
+**Weryfikacja:** pełny zestaw testów zielony, plus nowe testy w
+`tests/test_location_presentation.py` (wyszarzanie zamkniętych dni) i
+nowy `tests/test_location_hours_editing_ui.py` (edycja godzin lokalizacji
+przez Konfigurację + zwijanie/rozwijanie w Lokalizacjach).
+
+### Naprawiony bug: niedziela wyszarzona mimo braku niedzieli handlowej (2026-09-20, ta sama runda)
+
+**Zgłoszenie użytkownika:** grafik wyszarzał niedzielę w gridzie, mimo że
+nie została oznaczona jako "niepracująca" - i to niezależnie od tego, czy
+w Dino niedziela zostałaby kiedyś zaznaczona jako pracująca (domyślnie nie).
+
+**Root cause:** `ShopConfig.is_trade_day()` już dawno miał zabezpieczenie
+"profile bez kalendarza handlowego (`BusinessProfile.uses_trade_calendar`)
+traktują każdy dzień jako normalny, roboczy" - ale `LocationConfig.
+is_trade_day()`/`get_open_hours_for_day()` (poziom lokalizacji) NIGDY tego
+zabezpieczenia nie miały, bo LocationConfig nie zna `business_type`.
+Dopóki cały kod czytał godziny z poziomu `ShopConfig` wprost, bug był
+niewidoczny - ujawnił się dopiero, gdy w tej samej rundzie (feedback
+"lokalizacja jest źródłem prawdy") przełączono `ui/grid_view.py`/`logic/
+schedule_presenter.py` na `shop.get_location(emp)`. Efekt: dla profilu
+Enyo (bez kalendarza handlowego) KAŻDA niedziela wychodziła "zamknięta"
+(`trade_sundays` puste domyślnie), niezależnie od realnych godzin otwarcia
+tej lokalizacji.
+
+**Naprawa:** `LocationConfig.is_trade_day()`/`get_open_hours_for_day()`
+dostały nowy parametr `uses_trade_calendar` (domyślnie `True` - zachowuje
+stare zachowanie dla wywołań, które go nie podają). `_LocationView`
+(`model/shop_config.py`, to co zwraca `shop.get_location(emp)`) liczy tę
+flagę raz, z `get_profile(shop.business_type).uses_trade_calendar`, i
+przekazuje ją dalej - naprawia to od razu CAŁY generator (wszystkie miejsca
+idące przez `shop.get_location(emp)`), bez osobnych poprawek per plik.
+Dwa pozostałe miejsca czytające `LocationConfig` wprost (bez konkretnego
+pracownika - `ui/grid_view.py::_day_header_tooltip`, `ui/main_window.py::
+_open_header_menu`) dostały tę samą flagę jawnie.
+
+| Plik | Zmiana |
+|---|---|
+| `model/location.py` | Nowy param `uses_trade_calendar=True` w `is_trade_day`/`get_open_hours_for_day` |
+| `model/shop_config.py` (`_LocationView`, `get_location`) | Liczy i przekazuje flagę z profilu projektu |
+| `ui/grid_view.py::_day_header_tooltip` | Jawnie przekazuje flagę do bezpośredniego wywołania na `LocationConfig` |
+| `ui/main_window.py::_open_header_menu` | j.w. |
+| `tests/test_location.py` (+5 testów), `tests/test_location_presentation.py` (+1 test) | Niedziela zostaje otwarta dla profilu bez kalendarza handlowego; zachowanie Dino (`uses_trade_calendar=True`) bez zmian |
+
+**Weryfikacja:** pełny zestaw testów zielony, zero regresji na danych Dino
+(domyślny `uses_trade_calendar=True` zachowuje dokładnie stare zachowanie).

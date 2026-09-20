@@ -462,40 +462,57 @@ class SchedulePresenterNightShiftTests(unittest.TestCase):
 
 
 class DayEditDialogNightShiftTests(unittest.TestCase):
-    def test_toggling_night_checkbox_fills_and_locks_fields(self):
-        dialog = DayEditDialog(night_hours=NIGHT_HOURS)
-        dialog.night_check.setChecked(True)
+    """The "Zmiana nocna" checkbox was removed (old functionality from when
+    night shifts were a separate shift type) - typing the location's
+    configured night window (e.g. 22:00/06:00) directly into Start/Koniec is
+    now the only, and directly usable, way to enter one."""
 
-        self.assertEqual(dialog.start_edit.get_time_str(), "22:00")
-        self.assertEqual(dialog.end_edit.get_time_str(), "06:00")
-        self.assertFalse(dialog.start_edit.isEnabled())
-        self.assertFalse(dialog.end_edit.isEnabled())
+    def test_typing_the_configured_night_window_computes_duration(self):
+        dialog = DayEditDialog(night_hours=NIGHT_HOURS)
+        dialog.start_edit.set_time_str("22:00")
+        dialog.end_edit.set_time_str("06:00")
+
         self.assertEqual(dialog.duration_label.text(), "Czas pracy: 8:00")
 
-    def test_save_with_night_checkbox_returns_configured_window(self):
+    def test_save_with_typed_night_window_returns_it(self):
         dialog = DayEditDialog(night_hours=NIGHT_HOURS)
-        dialog.night_check.setChecked(True)
+        dialog.start_edit.set_time_str("22:00")
+        dialog.end_edit.set_time_str("06:00")
         dialog.accept = lambda: None  # avoid closing a real (nonexistent) event loop
         dialog._save()
 
         self.assertEqual(dialog.result_mode, "hours")
         self.assertEqual((dialog.result_start, dialog.result_end), NIGHT_HOURS)
 
-    def test_existing_night_shift_day_preselects_checkbox(self):
+    def test_existing_night_shift_day_prefills_start_and_end(self):
         dialog = DayEditDialog(start="22:00", end="06:00", night_hours=NIGHT_HOURS)
-        self.assertTrue(dialog.night_check.isChecked())
+        self.assertEqual(dialog.start_edit.get_time_str(), "22:00")
+        self.assertEqual(dialog.end_edit.get_time_str(), "06:00")
 
-    def test_no_night_hours_means_no_checkbox(self):
+    def test_overnight_range_rejected_when_location_has_no_night_window(self):
         dialog = DayEditDialog(night_hours=None)
-        self.assertIsNone(dialog.night_check)
+        dialog.start_edit.set_time_str("22:00")
+        dialog.end_edit.set_time_str("06:00")
+        dialog.accept = lambda: None
 
-    def test_unchecking_night_reenables_fields_within_open_hours(self):
-        dialog = DayEditDialog(open_start="05:30", open_end="22:45", night_hours=NIGHT_HOURS)
-        dialog.night_check.setChecked(True)
-        dialog.night_check.setChecked(False)
+        with patch("ui.day_edit_dialog.QMessageBox.critical") as mock_critical:
+            dialog._save()
 
-        self.assertTrue(dialog.start_edit.isEnabled())
-        self.assertTrue(dialog.end_edit.isEnabled())
+        mock_critical.assert_called_once()
+
+    def test_arbitrary_overnight_range_rejected_even_with_a_configured_night_window(self):
+        """Only the exact configured window is accepted through - any other
+        "end earlier than start" range stays a plain input error, same as
+        logic/schedule_controller.py::set_day_hours."""
+        dialog = DayEditDialog(night_hours=NIGHT_HOURS)
+        dialog.start_edit.set_time_str("23:00")
+        dialog.end_edit.set_time_str("05:00")
+        dialog.accept = lambda: None
+
+        with patch("ui.day_edit_dialog.QMessageBox.critical") as mock_critical:
+            dialog._save()
+
+        mock_critical.assert_called_once()
 
 
 class MainWindowNoNightWarningTests(unittest.TestCase):
@@ -606,6 +623,64 @@ class EditDayLocationHoursBugTests(unittest.TestCase):
         mock_dialog.assert_called_once()
         self.assertEqual(mock_dialog.call_args.kwargs["open_start"], "08:00")
         self.assertEqual(mock_dialog.call_args.kwargs["open_end"], "20:00")
+
+
+class HeaderDayOverrideLocationRoutingTests(unittest.TestCase):
+    """_open_header_menu() used to write day_overrides/public_holidays onto
+    the project-wide ShopConfig even though the generator (and the grid's
+    own tooltip/header-marker) reads them per-location - so a manual "day
+    override" set from the grid header silently had zero effect on the
+    generator for any employee assigned to a real location."""
+
+    def _make_window(self, shop, schedule, location_key):
+        window = MainWindow.__new__(MainWindow)
+        window.shop_config = shop
+        window.schedule = schedule
+        window.selected_location_key = location_key
+        window.controller = MagicMock()
+        window._update_nominal_hours_label = MagicMock()
+        window._sync_grid = MagicMock()
+        window.statusBar = MagicMock(return_value=MagicMock())
+        return window
+
+    def _fake_dialog(self, result_start="09:00", result_end="17:00", holiday=False):
+        dialog = MagicMock()
+        dialog.exec.return_value = QDialog.Accepted
+        dialog.result_mode = "save"
+        dialog.result_start = result_start
+        dialog.result_end = result_end
+        dialog.result_holiday = holiday
+        return dialog
+
+    def test_override_is_written_to_the_selected_locations_own_dict(self):
+        shop = ShopConfig(2026, 8)
+        loc = LocationConfig(key="site1", name="Site 1")
+        shop.locations["site1"] = loc
+        schedule = MonthSchedule(2026, 8)
+        window = self._make_window(shop, schedule, "site1")
+
+        with patch("ui.main_window.DayOverrideDialog", return_value=self._fake_dialog()):
+            window._open_header_menu(3, None)
+
+        self.assertEqual(loc.day_overrides.get(3), ("09:00", "17:00"))
+        self.assertNotIn(3, shop.day_overrides)
+
+    def test_reset_removes_the_override_from_the_selected_location(self):
+        shop = ShopConfig(2026, 8)
+        loc = LocationConfig(key="site1", name="Site 1")
+        loc.day_overrides[3] = ("09:00", "17:00")
+        shop.locations["site1"] = loc
+        schedule = MonthSchedule(2026, 8)
+        window = self._make_window(shop, schedule, "site1")
+
+        reset_dialog = MagicMock()
+        reset_dialog.exec.return_value = QDialog.Accepted
+        reset_dialog.result_mode = "reset"
+
+        with patch("ui.main_window.DayOverrideDialog", return_value=reset_dialog):
+            window._open_header_menu(3, None)
+
+        self.assertNotIn(3, loc.day_overrides)
 
 
 class OpenNewProjectCustomProfilePolicyBugTests(unittest.TestCase):

@@ -31,17 +31,24 @@ class _LocationView:
     shop.get_location(emp).get_open_hours_for_day(d) the same way it calls
     shop.get_open_hours_for_day(d) today, regardless of which one it got."""
 
-    def __init__(self, location: LocationConfig, year: int, month: int, fallback_constraints: dict):
+    def __init__(
+        self, location: LocationConfig, year: int, month: int, fallback_constraints: dict,
+        uses_trade_calendar: bool = True,
+    ):
         self._location = location
         self._year = year
         self._month = month
         self._fallback_constraints = fallback_constraints
+        self._uses_trade_calendar = uses_trade_calendar
 
     def weekday(self, day: int) -> int:
         return self._location.weekday(self._year, self._month, day)
 
+    def is_trade_day(self, day: int) -> bool:
+        return self._location.is_trade_day(self._year, self._month, day, self._uses_trade_calendar)
+
     def get_open_hours_for_day(self, day: int):
-        return self._location.get_open_hours_for_day(self._year, self._month, day)
+        return self._location.get_open_hours_for_day(self._year, self._month, day, self._uses_trade_calendar)
 
     def get_night_shift_hours(self):
         return self._location.get_night_shift_hours()
@@ -354,7 +361,10 @@ class ShopConfig:
         zwraca `self` - dokładnie dzisiejsza, jednolokalizacyjna ścieżka.
         """
         if self.locations and employee.location_key in self.locations:
-            return _LocationView(self.locations[employee.location_key], self.year, self.month, self.constraints)
+            return _LocationView(
+                self.locations[employee.location_key], self.year, self.month, self.constraints,
+                uses_trade_calendar=get_profile(self.business_type).uses_trade_calendar,
+            )
         return self
 
     # ==========================================================

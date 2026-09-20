@@ -184,13 +184,12 @@ def save_solution(
         saved_open = 0
         saved_close = 0
 
-        hours = shop.get_open_hours_for_day(d)
-        if not hours:
-            continue
-
-        open_t, close_t = hours
-
         for emp in employees:
+            hours = shop.get_location(emp).get_open_hours_for_day(d)
+            if not hours:
+                continue
+            open_t, close_t = hours
+
             ds = schedule.get_day(emp, d)
 
             if not ds.start or not ds.end:

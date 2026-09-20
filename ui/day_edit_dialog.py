@@ -1,6 +1,5 @@
 from PySide6.QtCore import QTime
 from PySide6.QtWidgets import (
-    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -31,9 +30,15 @@ class DayEditDialog(QDialog):
         self.setMinimumWidth(420)
 
         self.daily_hours = daily_hours
-        # Sztywny blok zmiany nocnej tej lokalizacji, o ile skonfigurowany
-        # (Etap B/D planu zmian nocnych) - jedyny wariant "przez północ",
-        # jaki ten dialog w ogóle pozwala wybrać (patrz _on_night_toggled).
+        # Skonfigurowane okno zmiany nocnej tej lokalizacji, o ile istnieje
+        # (patrz LocationConfig.get_night_shift_hours()) - jedyny wariant
+        # "koniec wcześniej niż start" (przejście przez północ), jaki
+        # ręczne wpisanie godzin tutaj może zaakceptować bez błędu (patrz
+        # _save()/_update_duration()). Bez osobnego checkboxa "Zmiana nocna"
+        # (usunięty - był starą funkcjonalnością sprzed automatycznego
+        # wykrywania nocy z godzin otwarcia, patrz LocationConfig): po prostu
+        # wpisz 22:00/06:00 (albo jaki tam jest night_hours) normalnie w pola
+        # Start/Koniec.
         self.night_hours = night_hours
         self._manual_end = False
         self._updating = False
@@ -70,12 +75,11 @@ class DayEditDialog(QDialog):
 
         root.addLayout(form)
 
-        self.night_check = None
         if self.night_hours:
             night_start, night_end = self.night_hours
-            self.night_check = QCheckBox(f"Zmiana nocna ({night_start}–{night_end})")
-            self.night_check.toggled.connect(self._on_night_toggled)
-            root.addWidget(self.night_check)
+            hint = QLabel(f"Zmiana nocna tej lokalizacji: {night_start}–{night_end}.")
+            hint.setObjectName("mutedHint")
+            root.addWidget(hint)
 
         self.duration_label = QLabel("Czas pracy: 0:00")
         self.duration_label.setObjectName("metricValue")
@@ -114,23 +118,8 @@ class DayEditDialog(QDialog):
             self._manual_end = True
             self.end_edit.set_time_str(end)
 
-        if self.night_check is not None and self.night_hours and (start, end) == self.night_hours:
-            self.night_check.setChecked(True)
-
-    def _on_night_toggled(self, checked):
-        if checked:
-            night_start, night_end = self.night_hours
-            self._updating = True
-            self.start_edit.set_time_str(night_start)
-            self.end_edit.set_time_str(night_end)
-            self._updating = False
-            self._manual_end = True
-            self.start_edit.setEnabled(False)
-            self.end_edit.setEnabled(False)
-        else:
-            self.start_edit.setEnabled(True)
-            self.end_edit.setEnabled(True)
-        self._update_duration()
+    def _is_configured_night_shift(self, start_str, end_str) -> bool:
+        return bool(self.night_hours) and (start_str, end_str) == self.night_hours
 
     def _suggest_end(self):
         if self._manual_end:
@@ -163,15 +152,17 @@ class DayEditDialog(QDialog):
         self._update_duration()
 
     def _update_duration(self):
-        start_qt = _parse_time(self.start_edit.get_time_str())
-        end_qt = _parse_time(self.end_edit.get_time_str())
+        start_str = self.start_edit.get_time_str()
+        end_str = self.end_edit.get_time_str()
+        start_qt = _parse_time(start_str)
+        end_qt = _parse_time(end_str)
 
         secs = start_qt.secsTo(end_qt)
         if secs < 0:
-            # Tylko zmiana nocna (patrz _on_night_toggled) legalnie kończy
-            # się "wcześniej" niż zaczyna - w tym jednym przypadku to
-            # przejście przez północ, nie błąd.
-            if self.night_check is not None and self.night_check.isChecked():
+            # Tylko dokładnie skonfigurowana zmiana nocna tej lokalizacji
+            # legalnie kończy się "wcześniej" niż zaczyna - w tym jednym
+            # przypadku to przejście przez północ, nie błąd.
+            if self._is_configured_night_shift(start_str, end_str):
                 secs += 24 * 3600
             else:
                 secs = 0
@@ -194,26 +185,23 @@ class DayEditDialog(QDialog):
         self.accept()
 
     def _save(self):
-        if self.night_check is not None and self.night_check.isChecked():
-            # Sztywny blok - zapisujemy dokładnie skonfigurowane okno,
-            # niezależnie od tego, co zostało w polach start/end (są i tak
-            # wyłączone w tym trybie, patrz _on_night_toggled).
-            self.result_mode = "hours"
-            self.result_start, self.result_end = self.night_hours
-            self.accept()
-            return
-
         start_str = self.start_edit.get_time_str()
         end_str = self.end_edit.get_time_str()
 
         start_qt = _parse_time(start_str)
         end_qt = _parse_time(end_str)
 
-        if end_qt <= start_qt:
+        is_night = self._is_configured_night_shift(start_str, end_str)
+        if end_qt <= start_qt and not is_night:
             QMessageBox.critical(self, "Błąd", "Koniec musi być później niż start.")
             return
 
-        if start_qt < self._open_start_qt or end_qt > self._open_end_qt:
+        # Ominięcie ostrzeżenia o wyjściu poza godziny otwarcia dla
+        # skonfigurowanej zmiany nocnej: start/end nie są tu porównywalne
+        # wprost jako godziny w obrębie jednej doby (przejście przez
+        # północ), a i tak jest to rozpoznane, poprawne okno tej lokalizacji
+        # (patrz LocationConfig.get_night_shift_hours()).
+        if not is_night and (start_qt < self._open_start_qt or end_qt > self._open_end_qt):
             reply = QMessageBox.question(
                 self,
                 "Godziny poza godzinami otwarcia",
