@@ -28,6 +28,16 @@ def get_effective_daily_hours(emp, shop):
     return minutes / 60
 
 
+def is_next_calendar_month(old_year: int, old_month: int, new_year: int, new_month: int) -> bool:
+    """Czy (new_year, new_month) to dokładnie jeden miesiąc kalendarzowy po
+    (old_year, old_month) - używane przy przejmowaniu "pamięci poprzedniego
+    miesiąca" (patrz ui/main_window.py::_save_date_clicked): skok o więcej
+    niż jeden miesiąc (albo wstecz) czyni koniec ostatniej zmiany starego
+    grafiku nieaktualnym (między miesiącami był z pewnością pełny
+    odpoczynek), więc nie ma sensu go przejmować."""
+    return old_year * 12 + old_month + 1 == new_year * 12 + new_month
+
+
 def classify_shift_as_morning_or_afternoon(shift_start, shift_end, shop_open_dt, shop_close_dt):
     """Classify a shift based on the actual shop opening/closing window.
 

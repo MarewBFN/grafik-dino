@@ -36,6 +36,7 @@ from logic.generator.duty_rotation_constraint import (
 )
 from logic.generator.duty_rotation_rest_constraint import add_duty_rotation_rest_constraint
 from logic.generator.duty_rotation_manual_constraint import add_duty_rotation_manual_shift_constraint
+from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
 
 
 GENERIC_WEIGHTS = {
@@ -148,18 +149,24 @@ def _build_always_on_specs():
 
 
 def _build_rest_11h(ctx, soft):
+    # "Pamięć poprzedniego miesiąca" schowana na razie (patrz
+    # model/month_schedule.py::PREVIOUS_MONTH_MEMORY_ENABLED) - schedule=None
+    # sprawia, że _add_previous_month_rest_constraint() w obu funkcjach
+    # niżej wychodzi natychmiast, bez żadnego wpływu na dzień 1.
+    prev_month_schedule = ctx.schedule if PREVIOUS_MONTH_MEMORY_ENABLED else None
+
     mode = ctx.shop.constraints.get("rest_11h_mode", "standard")
     if mode == "simplified":
         violations = add_rest_11h_constraint_simplified(
             ctx.model, ctx.x, ctx.employees, ctx.days, ctx.trade_days,
             ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
-            soft=soft, trace=ctx.trace,
+            shop=ctx.shop, schedule=prev_month_schedule, soft=soft, trace=ctx.trace,
         )
     else:
         violations = add_rest_11h_constraint(
             ctx.model, ctx.x, ctx.employees, ctx.days, ctx.trade_days, ctx.shop,
             ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
-            soft=soft, trace=ctx.trace,
+            schedule=prev_month_schedule, soft=soft, trace=ctx.trace,
         )
 
     # add_rest_11h_constraint(_simplified) builds its windows purely from
@@ -180,7 +187,7 @@ def _build_rest_11h(ctx, soft):
     if ctx.duty_shifts is not None:
         violations = list(violations) + add_duty_rotation_rest_constraint(
             ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.duty_shifts,
-            soft=soft, trace=ctx.trace,
+            schedule=prev_month_schedule, soft=soft, trace=ctx.trace,
         )
 
     return violations

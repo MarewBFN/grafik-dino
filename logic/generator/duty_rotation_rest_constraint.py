@@ -70,7 +70,44 @@ def _required_rest(key: str, rotation_capable_count: int) -> timedelta:
     return timedelta(hours=24 * max(rotation_capable_count - 1, 1))
 
 
-def add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shifts, soft=False, trace=None):
+def _add_previous_month_rest_constraint(model, x, employees, shop, duty_shifts, schedule, days_sorted, rotation, indices, soft, violations):
+    """"Pamięć poprzedniego miesiąca" (model.month_schedule.PreviousMonthShiftEnd)
+    - dzień 1 nie ma poprzedniego dnia W TYM MODELU, więc bez tego nic nie
+    chroniłoby początku miesiąca przed zbyt wczesnym startem względem
+    faktycznego końca ostatniej zmiany poprzedniego miesiąca. W
+    przeciwieństwie do pętli niżej, nie znamy TYPU tamtej zmiany (tylko
+    koniec + czy wchodziła w dzień 1 - patrz PreviousMonthShiftEnd), więc
+    zamiast ewentualnego (N-1)x24h po weekend_full stosujemy tu zawsze
+    standardowe 11h (spójnie z rest_constraint.py dla trybu zwykłego)."""
+    if schedule is None or not days_sorted:
+        return
+
+    d1 = days_sorted[0]
+    keys_d1 = _keys_for_day(rotation, shop.weekday(d1))
+
+    for e in indices:
+        carry = schedule.get_previous_month_end_shift(employees[e])
+        if carry is None:
+            continue
+
+        end_prev = _anchor(0 if carry.crosses_midnight else -1, carry.end)
+
+        for key2 in keys_d1:
+            s2 = duty_shifts[key2]
+            start2, _ = _shift_start_end_anchored(key2, rotation[key2], 0)
+
+            if start2 - end_prev >= MIN_REST:
+                continue
+
+            if not soft:
+                model.Add(x[e, d1, s2] == 0)
+            else:
+                v = model.NewBoolVar(f"duty_rest_violation_prevmonth_e{e}_{key2}")
+                model.Add(x[e, d1, s2] <= v)
+                violations.append(v)
+
+
+def add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shifts, schedule=None, soft=False, trace=None):
     """Sprawdza nie tylko dzień d wobec d+1, ale d wobec każdego późniejszego
     dnia w obrębie widoku (`_lookahead_days_for`) - (N-1)x24h po weekend_full
     może przekraczać 24h już przy N>=3, więc samo "jutro" (jak wystarcza
@@ -94,6 +131,8 @@ def add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shif
         # przechodzących przez północ - taniej sprawdzić kilka dni za dużo
         # niż zgubić realny konflikt na granicy.
         lookahead_days = int(max_required.total_seconds() // 86400) + 2
+
+        _add_previous_month_rest_constraint(model, x, employees, shop, duty_shifts, schedule, days_sorted, rotation, indices, soft, violations)
 
         for i, d in enumerate(days_sorted):
             keys_today = _keys_for_day(rotation, shop.weekday(d))

@@ -37,10 +37,12 @@ from export.employee_card_exporter import (
     sanitize_filename_part,
 )
 from logic.schedule_controller import ScheduleController
+from logic.utils.time_utils import is_next_calendar_month
+from ui.previous_month_shift_dialog import PreviousMonthShiftDialog
 from ui.marquee_text import MarqueeButton, MarqueeLabel
 from model.business_profile import DEFAULT_BUSINESS_TYPE
 from model.location import format_open_hours_summary
-from model.month_schedule import MonthSchedule
+from model.month_schedule import MonthSchedule, PREVIOUS_MONTH_MEMORY_ENABLED
 from model.shop_config import ShopConfig
 from persistence.project_io import assign_missing_location_keys, load_project, save_project
 from ui.config_dialog import ConfigDialog
@@ -678,6 +680,13 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Wyczyść grafik", self._clear_schedule)
         edit_menu.addAction("Wyczyść auto", self._clear_generated)
 
+        if PREVIOUS_MONTH_MEMORY_ENABLED:
+            edit_menu.addSeparator()
+            edit_menu.addAction(
+                "Godziny zakończenia z poprzedniego miesiąca...",
+                self._open_previous_month_shift_dialog,
+            )
+
         config_menu.addAction("Generator", self._open_config)
         config_menu.addAction("Lokalizacje", self._open_locations_dialog)
         config_menu.addAction("Ustawienia trybu szybkiego", self._open_quick_mode_settings)
@@ -926,6 +935,8 @@ class MainWindow(QMainWindow):
 
         if msg_box.clickedButton() == btn_yes:
             self._loading = True
+            old_year, old_month = self.year, self.month
+            old_schedule = self.schedule
             self.year = new_year
             self.month = new_month
             self.date_display_label.setText(f"{self.month:02d}.{self.year}")
@@ -939,6 +950,8 @@ class MainWindow(QMainWindow):
             # samymi pracownikami.
             self.shop_config.reset_for_new_month(self.year, self.month)
             self.schedule = MonthSchedule(self.year, self.month, employees=self.schedule.employees)
+            if PREVIOUS_MONTH_MEMORY_ENABLED and is_next_calendar_month(old_year, old_month, new_year, new_month):
+                self._carry_over_previous_month_end_shifts(old_schedule)
             self.controller = ScheduleController(self.schedule, self.shop_config)
 
             self._update_nominal_hours_label()
@@ -954,6 +967,29 @@ class MainWindow(QMainWindow):
             self.date_edit_widget.hide()
             self.date_display_label.show()
             self.btn_change_date.show()
+
+    def _carry_over_previous_month_end_shifts(self, old_schedule: MonthSchedule) -> None:
+        """"Pamięć poprzedniego miesiąca" (patrz PreviousMonthShiftEnd) -
+        dla każdego pracownika przejmuje z KOŃCZĄCEGO SIĘ grafiku (jeszcze w
+        pamięci, o krok przed zastąpieniem self.schedule w
+        _save_date_clicked) koniec jego ostatniej zmiany w ostatnim dniu
+        tamtego miesiąca, żeby generator/rest-constraint w nowym miesiącu
+        wiedziały, kiedy naprawdę mieli ostatni odpoczynek (patrz
+        logic/generator/rest_constraint.py,
+        logic/generator/duty_rotation_rest_constraint.py). Pomija dni puste
+        (wolne/urlop/L4) - tam nie ma żadnego "końca" do przejęcia."""
+        last_day = old_schedule.days_in_month
+        for emp in old_schedule.employees:
+            ds = old_schedule.get_day(emp, last_day)
+            if ds.is_empty() or ds.end is None:
+                continue
+            self.schedule.set_previous_month_end_shift(emp, ds.end, ds.crosses_midnight())
+
+    def _open_previous_month_shift_dialog(self):
+        dialog = PreviousMonthShiftDialog(self.schedule, self)
+        if dialog.exec() == QDialog.Accepted:
+            dialog.apply_to_schedule()
+            self._sync_everything()
 
     def _on_generate_clicked(self):
         self._generate_schedule(force=True)
@@ -1845,9 +1881,25 @@ class MainWindow(QMainWindow):
                 target=self.grid,
             ),
             TutorialStep(
+                "Kopiuj / wklej dzień",
+                "Zaznacz dzień pracownika, wciśnij Ctrl+C, a potem Ctrl+V na "
+                "innym dniu, żeby skopiować cały jego stan - działa też dla "
+                "urlopu, L4, zmiany nocnej i zmiany 24h.",
+                target=self.grid,
+            ),
+            TutorialStep(
+                "Ikony przy pracowniku",
+                "Ikony obok nazwiska pracownika pokazują jego role: dokument - "
+                "priorytet „Umowa” w rozliczaniu godzin, przekreślone „24h” - "
+                "pracownik nie chce pojedynczych zmian 24h przy rotacji służby.",
+                target=self.grid,
+            ),
+            TutorialStep(
                 "Tryb szybki",
                 "Najszybszy sposób na ręczne zmiany: wybierz typ zmiany, ustaw "
-                "godziny i klikaj kolejne komórki w siatce.",
+                "godziny i klikaj kolejne komórki w siatce. Przyciskiem "
+                "„+ Dodaj własne...” zdefiniujesz własne, nazwane przedziały "
+                "czasowe.",
                 target=self.btn_quick_mode,
             ),
             TutorialStep(

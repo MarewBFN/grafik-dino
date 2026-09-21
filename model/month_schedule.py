@@ -1,9 +1,44 @@
 import calendar
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Dict
 
 from model.day_schedule import DaySchedule
 from model.employee import Employee
+
+# Schowane na prośbę użytkownika (2026-09-21) - okazało się zbyt łatwo
+# wywoływać nim niewyjaśnione INFEASIBLE (patrz ENYO_ONLY_CHANGES.md,
+# "Naprawiony bug: infeasible bez wyjaśnienia..."), więc mechanizm zostaje
+# na razie wyłączony do dalszej decyzji. Sprawdzane w:
+# - ui/main_window.py (przejęcie automatyczne przy zmianie miesiąca +
+#   pozycja menu Edycja -> "Godziny zakończenia z poprzedniego miesiąca..."),
+# - logic/generator/base_specs.py::_build_rest_11h (wpływ na generator),
+# - ui/grid_view.py::_previous_month_last_day_if_shown (kolumna w gridzie).
+# Sam mechanizm (model/PreviousMonthShiftEnd, dialog, constrainty, testy)
+# zostaje w pełni działający w kodzie - tylko nieosiągalny z UI/generatora.
+PREVIOUS_MONTH_MEMORY_ENABLED = False
+
+
+@dataclass(frozen=True)
+class PreviousMonthShiftEnd:
+    """"Pamięć poprzedniego miesiąca" (tego samego projektu) - koniec
+    ostatniej zmiany jednego pracownika w ostatnim dniu miesiąca
+    poprzedzającego ten MonthSchedule. Przejmowane automatycznie przy
+    zmianie miesiąca w tym samym projekcie (patrz
+    ui/main_window.py::_save_date_clicked) albo wpisywane ręcznie, gdy
+    nie ma czego przejąć (nowy projekt / brak poprzedniego miesiąca w
+    tej sesji).
+
+    `crosses_midnight` jednoznacznie umieszcza `end` na osi czasu
+    względem dnia 1 tego miesiąca - dokładnie ten sam wzorzec co
+    DaySchedule.crosses_midnight(): True = zmiana wchodzi już w dzień 1,
+    False = zmiana kończy się jeszcze w (nieistniejącym w tym projekcie)
+    ostatnim dniu poprzedniego miesiąca. Bez tej flagi sam `end` byłby
+    niejednoznaczny (np. "06:00" mogłoby oznaczać zarówno "skończył o
+    6 rano tuż przed dniem 1", jak i "skończył o 6 rano W dniu 1")."""
+
+    end: str  # "HH:MM"
+    crosses_midnight: bool
 
 
 class MonthSchedule:
@@ -19,6 +54,12 @@ class MonthSchedule:
         # Docelowa liczba minut w miesiącu per pracownik (funkcja "Okres
         # rozliczeniowy") — None/brak wpisu oznacza brak ustalonego celu.
         self.settlement_targets: Dict[Employee, int] = {}
+
+        # "Pamięć poprzedniego miesiąca" - patrz PreviousMonthShiftEnd.
+        # Brak wpisu = brak danych (świeży projekt, albo pracownik dodany
+        # dopiero w tym miesiącu) - generator wtedy po prostu nie dokłada
+        # żadnego dodatkowego ograniczenia na dzień 1 dla tego pracownika.
+        self.previous_month_end_shifts: Dict[Employee, PreviousMonthShiftEnd] = {}
 
         if employees:
             for emp in employees:
@@ -42,6 +83,7 @@ class MonthSchedule:
         self.employees.remove(employee)
         del self._data[employee]
         self.settlement_targets.pop(employee, None)
+        self.previous_month_end_shifts.pop(employee, None)
 
     def get_settlement_target(self, employee: Employee) -> int | None:
         return self.settlement_targets.get(employee)
@@ -51,6 +93,17 @@ class MonthSchedule:
             self.settlement_targets.pop(employee, None)
         else:
             self.settlement_targets[employee] = minutes
+
+    def get_previous_month_end_shift(self, employee: Employee) -> PreviousMonthShiftEnd | None:
+        return self.previous_month_end_shifts.get(employee)
+
+    def set_previous_month_end_shift(
+        self, employee: Employee, end: str | None, crosses_midnight: bool = False
+    ) -> None:
+        if end is None:
+            self.previous_month_end_shifts.pop(employee, None)
+        else:
+            self.previous_month_end_shifts[employee] = PreviousMonthShiftEnd(end, crosses_midnight)
 
     def get_day(self, employee: Employee, day: int) -> DaySchedule:
         self._validate_day(day)
@@ -205,6 +258,7 @@ class MonthSchedule:
         self.employees = snapshot.employees
         self._data = snapshot._data
         self.settlement_targets = snapshot.settlement_targets
+        self.previous_month_end_shifts = snapshot.previous_month_end_shifts
 
     def _validate_day(self, day: int) -> None:
         if day < 1 or day > self.days_in_month:
@@ -232,6 +286,14 @@ class MonthSchedule:
                     "employment_fraction": e.employment_fraction,
                     "availability": e.availability,
                     "settlement_target_minutes": self.settlement_targets.get(e),
+                    "previous_month_shift_end": (
+                        self.previous_month_end_shifts[e].end
+                        if e in self.previous_month_end_shifts else None
+                    ),
+                    "previous_month_shift_crosses_midnight": (
+                        self.previous_month_end_shifts[e].crosses_midnight
+                        if e in self.previous_month_end_shifts else None
+                    ),
                     "days": {
                         day: {
                             "start": ds.start,
@@ -284,6 +346,12 @@ class MonthSchedule:
             target_minutes = ed.get("settlement_target_minutes")
             if target_minutes is not None:
                 sched.set_settlement_target(emp, target_minutes)
+
+            prev_end = ed.get("previous_month_shift_end")
+            if prev_end is not None:
+                sched.set_previous_month_end_shift(
+                    emp, prev_end, ed.get("previous_month_shift_crosses_midnight", False)
+                )
 
             for day in range(1, sched.days_in_month + 1):
                 ds = sched.get_day(emp, day)

@@ -707,4 +707,124 @@ _open_header_menu`) dostały tę samą flagę jawnie.
 | `tests/test_location.py` (+5 testów), `tests/test_location_presentation.py` (+1 test) | Niedziela zostaje otwarta dla profilu bez kalendarza handlowego; zachowanie Dino (`uses_trade_calendar=True`) bez zmian |
 
 **Weryfikacja:** pełny zestaw testów zielony, zero regresji na danych Dino
+
+## Pamięć poprzedniego miesiąca (2026-09-21)
+
+Nowy mechanizm generatora (nie ukrywanie ani bug fix) - dotyczy zarówno
+Enyo, jak i Dino jednakowo. Zmiana miesiąca w tym samym projekcie
+("Zmień datę", `ui/main_window.py::_save_date_clicked`) tworzy zupełnie
+nowy `MonthSchedule` - do tej pory generator/GUI całkiem traciły, o której
+godzinie każdy pracownik faktycznie skończył ostatnią zmianę w poprzednim
+miesiącu, więc dzień 1 nowego miesiąca nigdy nie był chroniony 11h rest
+constraintem względem tamtego końca (pierwszy dzień modelu nie ma "dnia
+0" do porównania - luka istniała od zawsze, nie tylko przy tej funkcji).
+
+**Zakres (świadomie wąski, ustalony z użytkownikiem):** jeden punkt danych
+na pracownika - koniec ostatniej zmiany poprzedniego miesiąca + czy ta
+zmiana wchodziła już w dzień 1 (`crosses_midnight`). Nie zawiera: generator
+"widzący" miesiąc +1 (do przodu) ani otwartej/nieskończonej rotacji
+zmianowej - to osobne, odłożone propozycje klienta.
+
+**CP-SAT - zbadane przed kodowaniem:** obsada rotacji 24/7
+(`add_duty_rotation_coverage_constraint`) NIE wymagała żadnej zmiany.
+Okna zmian są ustalonymi godzinami zegarowymi per lokalizacja i
+interlockują dzień-w-dzień z założenia (koniec jednej zmiany = start
+następnej) - "dziura" na starcie dnia 1 nigdy nie była osobną zmienną w
+modelu, więc nie ma czego "zamykać". Jedyne realne ryzyko to przydzielenie
+TEJ SAMEJ osoby zbyt wcześnie po jej faktycznym końcu z poprzedniego
+miesiąca - a to już w całości załatwia rozszerzenie rest constraintu o
+wirtualne zakotwiczenie "dzień -1/0" względem dnia 1, tym samym wzorcem co
+istniejące porównania dzień-do-dnia w `duty_rotation_rest_constraint.py`.
+Ponieważ zapamiętujemy tylko koniec + `crosses_midnight` (nie TYP tamtej
+zmiany), granica z poprzednim miesiącem zawsze używa standardowego 11h,
+nigdy podwyższonego "doba za dobę" (N-1)×24h po `weekend_full` - to
+świadome uproszczenie, zgodne z wąskim zakresem zadania.
+
+| Plik | Zmiana |
+|---|---|
+| `model/month_schedule.py` | Nowy `PreviousMonthShiftEnd(end, crosses_midnight)` + `MonthSchedule.previous_month_end_shifts` (Dict[Employee, ...], ten sam wzorzec co `settlement_targets`) - żyje na `MonthSchedule`, nie `ShopConfig`, bo zmienia tożsamość co miesiąc (opisuje "tuż przed TYM miesiącem", nie coś, co ma bezwarunkowo przetrwać `reset_for_new_month`); serializacja inline w `to_dict()`/`from_dict()` |
+| `logic/utils/time_utils.py` | `is_next_calendar_month()` - przejęcie tylko gdy nowy miesiąc jest dokładnie kolejnym kalendarzowym po starym (skok o >1 miesiąc/wstecz = koniec sprzed dawna, nieprzydatny) |
+| `ui/main_window.py::_save_date_clicked` | Przed nadpisaniem `self.schedule` czyta ostatni dzień STAREGO grafiku per pracownik (`ds.end`, `ds.crosses_midnight()`) i zapisuje na nowym `MonthSchedule` (`_carry_over_previous_month_end_shifts`) |
+| `ui/previous_month_shift_dialog.py` (nowy) + menu Edycja | Ręczny fallback - lista pracowników, `TimeInputWidget` (koniec zmiany) + checkbox "Zmiana wchodzi w dzień 1"; jedyne miejsce, z którego można wpisać tę pamięć od zera (kolumna w gridzie pokazuje się dopiero, gdy dane już istnieją) |
+| `logic/generator/rest_constraint.py` | `add_rest_11h_constraint`/`_simplified` dostały opcjonalny `schedule=` - nowa `_add_previous_month_rest_constraint()` zakotwicza koniec z poprzedniego miesiąca względem startu dnia 1 (ten sam wzorzec `_anchor()` co niżej); `_simplified` liczy tę granicę zawsze DOKŁADNYMI godzinami (mamy prawdziwy zapisany koniec), nie klasą zmiany - jedyny wyjątek od jej zwykłej, zgrubnej logiki |
+| `logic/generator/duty_rotation_rest_constraint.py` | `add_duty_rotation_rest_constraint` dostało opcjonalny `schedule=` - `_add_previous_month_rest_constraint()` analogicznie, zawsze standardowe 11h (patrz wyżej) |
+| `logic/generator/base_specs.py` | `_build_rest_11h` przekazuje `schedule=ctx.schedule` do wszystkich trzech wywołań |
+| `ui/theme.py` | Nowe `BG_PREVIOUS_MONTH_HEADER`/`BG_PREVIOUS_MONTH_CELL` |
+| `ui/grid_view.py` | Nowa, czysto informacyjna kolumna PRZED dniem 1 (numer ostatniego dnia poprzedniego miesiąca), widoczna tylko gdy choć jeden widoczny pracownik ma dane; `DayHeaderView` maluje ją pełnym innym tłem (zwykłe `QTableWidgetItem.setBackground()` nie działa w nagłówku - arkusz stylów ma pierwszeństwo); wszystkie miejsca liczące `dzień == kolumna` (kliknięcia/menu kontekstowe/skróty klawiszowe/kolumny podsumowania) przeliczone przez nowy `_prev_col_offset`/`_column_to_day()` |
+| `tests/test_previous_month_memory.py` (nowy, 23 testy) | Przejęcie przy zmianie miesiąca (w tym guard `is_next_calendar_month`), rest constraint (zwykły/uproszczony/rotacja 24/7) na granicy z poprzednim miesiącem, pojawianie/znikanie kolumny w gridzie, round-trip zapisu/wczytania |
+
+**Weryfikacja:** pełny zestaw testów zielony (505 passed, 1 skipped),
+zero regresji na istniejących testach rest/duty_rotation/grid/night_shift.
 (domyślny `uses_trade_calendar=True` zachowuje dokładnie stare zachowanie).
+
+### Naprawiony bug: "infeasible" bez wyjaśnienia, gdy pamięć poprzedniego miesiąca blokuje otwarcie (2026-09-21)
+
+**Zgłoszenie użytkownika:** włączenie tej funkcji wywalało `INFEASIBLE`
+nawet na pustym (niczego jeszcze nie wygenerowanym) grafiku.
+
+**Odtworzone:** domyślny profil (min_open_staff=3, `open` MANDATORY) +
+kilku/wszystkich pracowników z tą samą godziną końca poprzedniego miesiąca
+(np. `DEFAULT_END_TIME = "22:00"` z `ui/previous_month_shift_dialog.py`,
+pozostawioną bez zmian po zaznaczeniu "Mam dane" dla wielu osób naraz) -
+przerwa do domyślnego otwarcia (05:30) wynosi tylko 7.5h, mniej niż
+wymagane 11h, więc `_add_previous_month_rest_constraint`
+(`rest_constraint.py`) **poprawnie** blokuje WSZYSTKICH od otwarcia dnia
+1 - to jest prawidłowe egzekwowanie realnego wymogu Kodeksu pracy, który
+wcześniej (przed tą funkcją) był po prostu cicho ignorowany na granicy
+miesięcy. Problem nie był w matematyce constraintu, tylko w tym, że
+`build_infeasibility_summary` (`logic/generator/diagnostics.py`) nic nie
+wiedziała o tej nowej przyczynie - użytkownik dostawał generyczny,
+niezrozumiały komunikat zamiast wskazania konkretnej przyczyny.
+
+**Naprawa:**
+- `logic/generator/diagnostics.py` - nowa `_previous_month_rest_gap_hours()`
+  (ta sama arytmetyka co `rest_constraint.py::_anchor`) + rozszerzenie
+  pętli dnia 1 dla polityk `open`/`close`: pracownik, któremu przerwa do
+  `target_time` wynosi <11h, trafia teraz do `blocked_by_previous_month`
+  zamiast cicho do "niemożliwych" - gdy to WŁAŚNIE oni robią obsadę
+  niewykonalną, komunikat wprost wskazuje "pamięć poprzedniego miesiąca"
+  i podpowiada menu Edycja -> "Godziny zakończenia z poprzedniego
+  miesiąca...".
+- `ui/previous_month_shift_dialog.py` - dopisane ostrzeżenie w opisie
+  okna: ta sama (albo zgadnięta) godzina dla wielu osób naraz może
+  zablokować wszystkich jednocześnie na początku miesiąca.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/diagnostics.py` | `_previous_month_rest_gap_hours()` + rozszerzony `build_infeasibility_summary()` | TAK - dotyczy każdego projektu (Dino i Enyo), nie tylko Enyo |
+| `ui/previous_month_shift_dialog.py` | Dopisane ostrzeżenie w tekście informacyjnym | TAK |
+| `tests/test_previous_month_memory.py` (+4 testy) | Odtworzenie zgłoszonego scenariusza (izolowane `build_infeasibility_summary` + end-to-end `ScheduleController.generate_schedule`), sprawdzenie że wystarczająca przerwa / brak danych NIE są fałszywie zgłaszane | TAK |
+
+**Weryfikacja:** zgłoszony scenariusz teraz zwraca precyzyjny komunikat
+zamiast generycznego; pełny zestaw testów zielony, zero regresji.
+
+### Mechanizm schowany na razie na życzenie użytkownika (2026-09-21)
+
+Mimo naprawy diagnostyki wyżej, użytkownik zdecydował schować cały
+mechanizm "pamięć poprzedniego miesiąca" do dalszej decyzji - zbyt łatwo
+było wywołać nim mylące `INFEASIBLE`, a klient nie miał jeszcze okazji
+przetestować poprawki. Ustalone: ukryć CAŁY mechanizm (nie tylko ręczne
+okno), żeby nie zostawić auto-przejęcia działającego po cichu bez łatwego
+sposobu podejrzenia/poprawienia danych.
+
+**Jak:** nowa stała `model/month_schedule.py::PREVIOUS_MONTH_MEMORY_ENABLED
+= False`, sprawdzana w trzech punktach wpięcia (kod całego mechanizmu -
+model, dialog, constrainty, testy - zostaje w pełni działający, tylko
+nieosiągalny):
+
+| Plik | Co sprawdza flagę |
+|---|---|
+| `ui/main_window.py` | Nie dodaje pozycji menu Edycja "Godziny zakończenia z poprzedniego miesiąca..."; `_save_date_clicked` nie wywołuje `_carry_over_previous_month_end_shifts` |
+| `logic/generator/base_specs.py::_build_rest_11h` | Przekazuje `schedule=None` zamiast `ctx.schedule` do wszystkich trzech wywołań rest constraintu - `_add_previous_month_rest_constraint` w obu plikach wychodzi natychmiast |
+| `ui/grid_view.py::_previous_month_last_day_if_shown` | Zwraca `None` bezwarunkowo - kolumna nigdy się nie pojawia, nawet gdyby dane istniały (np. z zapisanego wcześniej projektu) |
+
+**Uwaga dla testów:** `from X import Y` wiąże nazwę lokalnie w każdym z
+tych trzech modułów osobno - włączenie flagi w testach wymaga patchowania
+`ui.main_window.PREVIOUS_MONTH_MEMORY_ENABLED`/`ui.grid_view.
+PREVIOUS_MONTH_MEMORY_ENABLED` (per moduł-konsument), nie samego
+`model.month_schedule.PREVIOUS_MONTH_MEMORY_ENABLED` - trzy testy w
+`tests/test_previous_month_memory.py`, które sprawdzają zachowanie
+WŁĄCZONEGO mechanizmu, robią to teraz jawnie.
+
+**Przywrócić do main?** DO USTALENIA razem z resztą tego mechanizmu -
+patrz sekcja "Pamięć poprzedniego miesiąca" wyżej.

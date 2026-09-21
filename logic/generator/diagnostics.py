@@ -174,6 +174,21 @@ def preflight_supply(schedule, shop) -> list[dict[str, Any]]:
     return report
 
 
+def _previous_month_rest_gap_hours(schedule, employee, target_time: str, fmt: str = "%H:%M") -> float | None:
+    """Godziny odpoczynku między końcem zmiany z poprzedniego miesiąca (patrz
+    model/month_schedule.py::PreviousMonthShiftEnd) a `target_time` w dniu 1
+    tego miesiąca - None, gdy dla tego pracownika nie ma takiej pamięci.
+    Ta sama arytmetyka co logic/generator/rest_constraint.py::_anchor."""
+    carry = schedule.get_previous_month_end_shift(employee)
+    if carry is None:
+        return None
+    end = datetime.strptime(carry.end, fmt)
+    target = datetime.strptime(target_time, fmt)
+    end_dt = datetime(2000, 1, 1, end.hour, end.minute) + timedelta(days=0 if carry.crosses_midnight else -1)
+    target_dt = datetime(2000, 1, 1, target.hour, target.minute)
+    return (target_dt - end_dt).total_seconds() / 3600
+
+
 def build_infeasibility_summary(schedule, shop) -> list[str]:
     """Return client-readable causes that can be proven from the input data."""
     messages: list[str] = []
@@ -202,6 +217,7 @@ def build_infeasibility_summary(schedule, shop) -> list[str]:
 
             fixed = []
             possible = []
+            blocked_by_previous_month = []
             for employee in schedule.employees:
                 state = schedule.get_day(employee, day)
                 if state.is_leave or getattr(state, "is_sick", False) or getattr(state, "is_day_off", False):
@@ -210,13 +226,34 @@ def build_infeasibility_summary(schedule, shop) -> list[str]:
                 if state.is_locked:
                     if matches:
                         fixed.append(employee)
-                else:
-                    possible.append(employee)
+                    continue
+
+                # Dzień 1 jest jedynym, gdzie "pamięć poprzedniego miesiąca"
+                # (patrz PreviousMonthShiftEnd) może wykluczyć kogoś, kto
+                # inaczej wyglądałby na "możliwego" - bez tego ta funkcja
+                # nie tłumaczyła w ogóle, że to ona jest przyczyną
+                # niewykonalności (patrz logic/generator/rest_constraint.py::
+                # _add_previous_month_rest_constraint, ta sama arytmetyka).
+                if day == 1:
+                    gap = _previous_month_rest_gap_hours(schedule, employee, target_time)
+                    if gap is not None and gap < 11:
+                        blocked_by_previous_month.append(employee)
+                        continue
+
+                possible.append(employee)
 
             if len(fixed) > required:
                 add(
                     f"Dzień {day}: zablokowano {len(fixed)} osoby na {label}, "
                     f"a wymagane są dokładnie {required}."
+                )
+            elif len(fixed) + len(possible) < required and blocked_by_previous_month:
+                add(
+                    f"Dzień {day}: pamięć poprzedniego miesiąca blokuje "
+                    f"{len(blocked_by_previous_month)} os. z wymaganych do pracy na {label} "
+                    "(przerwa do końca ich ostatniej zmiany poprzedniego miesiąca jest "
+                    "krótsza niż 11h) - sprawdź Edycja -> \"Godziny zakończenia z "
+                    "poprzedniego miesiąca...\"."
                 )
             elif len(fixed) + len(possible) < required:
                 add(

@@ -31,6 +31,7 @@ from logic.schedule_presenter import SchedulePresenter
 from logic.utils.time_utils import classify_shift_as_morning_or_afternoon
 from model.business_profile import get_profile
 from model.constraint_policy import ConstraintPolicy
+from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
 from utils import resource_path
 from ui import theme
 
@@ -417,10 +418,31 @@ class DayHeaderView(QHeaderView):
     def __init__(self, orientation, parent=None):
         super().__init__(orientation, parent)
         self.overridden_days = set()
+        # Ile kolumn PRZED dniem 1 (dziś: 0 albo 1, kolumna "pamięć
+        # poprzedniego miesiąca" - patrz ScheduleGrid.build()) - potrzebne,
+        # żeby przełożyć logicalIndex z powrotem na numer dnia dla
+        # overridden_days (który wciąż operuje na surowych numerach dni).
+        self.col_offset = 0
+        # Indeks kolumny "pamięć poprzedniego miesiąca", albo None gdy jej
+        # nie ma w ogóle w tym renderze - patrz ScheduleGrid.build().
+        self.info_column = None
 
     def paintSection(self, painter, rect, logicalIndex):
+        if logicalIndex == self.info_column:
+            # Zwykłe QTableWidgetItem.setBackground() nie działa w nagłówku
+            # (patrz docstring klasy) - to jedyny sposób, żeby ta kolumna
+            # miała WYRAŹNIE inne tło niż zwykłe dni, sygnalizując, że to
+            # dane czysto informacyjne z poprzedniego miesiąca.
+            painter.save()
+            painter.fillRect(rect, QColor(theme.BG_PREVIOUS_MONTH_HEADER))
+            painter.setPen(QColor(theme.TEXT_MAIN))
+            text = self.model().headerData(logicalIndex, self.orientation(), Qt.DisplayRole)
+            painter.drawText(rect, Qt.AlignCenter, str(text) if text is not None else "")
+            painter.restore()
+            return
+
         super().paintSection(painter, rect, logicalIndex)
-        if logicalIndex in self.overridden_days:
+        if (logicalIndex - self.col_offset) in self.overridden_days:
             painter.save()
             painter.fillRect(
                 rect.left(),
@@ -446,6 +468,11 @@ class ScheduleGrid(QTableWidget):
         # w ogóle ma jakąś wybraną placówkę. Patrz też właściwość
         # _visible_employees niżej.
         self._location_filter = None
+
+        # Ile kolumn PRZED kolumną dnia 1 - 1 gdy pokazywana jest kolumna
+        # "pamięć poprzedniego miesiąca" (patrz build()/_column_to_day()),
+        # inaczej 0. Przeliczane od nowa w każdym build().
+        self._prev_col_offset = 0
 
         self.on_edit_day = None
         self.on_edit_employee = None
@@ -646,7 +673,13 @@ class ScheduleGrid(QTableWidget):
         days = self.schedule.days_in_month
         weekday_names = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"]
 
+        prev_month_last_day = self._previous_month_last_day_if_shown()
+        self._prev_col_offset = 1 if prev_month_last_day is not None else 0
+        offset = self._prev_col_offset
+
         headers = ["Pracownik"]
+        if prev_month_last_day is not None:
+            headers.append(f"Poprz.\n{prev_month_last_day}")
         for day in range(1, days + 1):
             wd = calendar.weekday(self.schedule.year, self.schedule.month, day)
             headers.append(f"{weekday_names[wd]}\n{day}")
@@ -658,8 +691,17 @@ class ScheduleGrid(QTableWidget):
         self.setHorizontalHeaderLabels(headers)
         self.setRowCount(len(self._visible_employees) + len(self._summary_rows()))
 
+        if prev_month_last_day is not None:
+            info_header_item = self.horizontalHeaderItem(1)
+            if info_header_item:
+                info_header_item.setToolTip(
+                    "Koniec ostatniej zmiany z poprzedniego miesiąca (dzień "
+                    f"{prev_month_last_day}) - dane informacyjne, nieedytowalne tutaj i "
+                    "niebędące częścią tego grafiku."
+                )
+
         for day in range(1, days + 1):
-            header_item = self.horizontalHeaderItem(day)
+            header_item = self.horizontalHeaderItem(day + offset)
             if header_item:
                 header_item.setToolTip(self._day_header_tooltip(day))
 
@@ -671,10 +713,12 @@ class ScheduleGrid(QTableWidget):
             location = self.shop_config.locations.get(self._location_filter)
             overrides = location.day_overrides if location else self.shop_config.day_overrides
             header.overridden_days = set(overrides.keys())
+            header.col_offset = offset
+            header.info_column = 1 if prev_month_last_day is not None else None
             header.update()
 
         if self.settlement_mode:
-            target_header_item = self.horizontalHeaderItem(days + 6)
+            target_header_item = self.horizontalHeaderItem(days + offset + 6)
             if target_header_item:
                 target_header_item.setToolTip(
                     "Docelowa liczba godzin w miesiącu dla tego pracownika.\n"
@@ -687,12 +731,14 @@ class ScheduleGrid(QTableWidget):
         # 180 * 1.3 = 234, rounded up further so up to 3 role badges + name +
         # fraction + 2 restriction icons all fit without crowding/eliding.
         self.setColumnWidth(0, 260)
-        for col in range(1, days + 1):
+        if prev_month_last_day is not None:
+            self.setColumnWidth(1, 30 if self.compact_mode else 60)
+        for col in range(1 + offset, days + offset + 1):
             if self.compact_mode:
                 self.setColumnWidth(col, 30)
             else:
                 self.setColumnWidth(col, 60)
-        for col in range(days + 1, self.columnCount()):
+        for col in range(days + offset + 1, self.columnCount()):
             self.setColumnWidth(col, 60)
 
         self.verticalHeader().setVisible(False)
@@ -742,6 +788,61 @@ class ScheduleGrid(QTableWidget):
 
         return f"{hours_text}{override_text}\nKliknij dwukrotnie, aby zmienić godziny pracy lub status dnia."
 
+    def _previous_month_last_day_if_shown(self) -> int | None:
+        """Numer ostatniego dnia poprzedniego miesiąca, jeśli kolumna
+        "pamięć poprzedniego miesiąca" ma się w ogóle pokazać w tym
+        renderze (patrz PreviousMonthShiftEnd) - None gdy ŻADEN aktualnie
+        widoczny pracownik nie ma takich danych, więc kolumna w ogóle się
+        nie pojawia (nie pokazujemy pustej/domyślnej)."""
+        if not PREVIOUS_MONTH_MEMORY_ENABLED:
+            return None
+        has_data = any(
+            self.schedule.get_previous_month_end_shift(emp) is not None
+            for emp in self._visible_employees
+        )
+        if not has_data:
+            return None
+
+        if self.schedule.month > 1:
+            prev_year, prev_month = self.schedule.year, self.schedule.month - 1
+        else:
+            prev_year, prev_month = self.schedule.year - 1, 12
+        return calendar.monthrange(prev_year, prev_month)[1]
+
+    def _column_to_day(self, col: int) -> int | None:
+        """Numer dnia kalendarzowego odpowiadający kolumnie `col`, albo
+        None gdy `col` to kolumna nazwiska / "pamięć poprzedniego
+        miesiąca" / podsumowania - patrz _prev_col_offset w build()."""
+        if not self.schedule:
+            return None
+        day = col - self._prev_col_offset
+        if 1 <= day <= self.schedule.days_in_month:
+            return day
+        return None
+
+    def _fill_previous_month_cell(self, row, emp):
+        if not self._prev_col_offset:
+            return
+
+        item = QTableWidgetItem()
+        item.setTextAlignment(Qt.AlignCenter)
+        item.setBackground(QBrush(QColor(theme.BG_PREVIOUS_MONTH_CELL)))
+        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+        carry = self.schedule.get_previous_month_end_shift(emp)
+        if carry is not None:
+            item.setText(f"{carry.end} →" if carry.crosses_midnight else carry.end)
+            crossing_note = (
+                " Zmiana wchodziła już w dzień 1 tego miesiąca."
+                if carry.crosses_midnight else ""
+            )
+            item.setToolTip(
+                f"Koniec ostatniej zmiany w poprzednim miesiącu: {carry.end}.{crossing_note}\n"
+                "Dane informacyjne - nieedytowalne tutaj."
+            )
+
+        self.setItem(row, 1, item)
+
     def refresh(self):
         if not self.schedule or not self.shop_config:
             return
@@ -765,6 +866,7 @@ class ScheduleGrid(QTableWidget):
 
         for row, emp in enumerate(self._visible_employees):
             self._fill_employee_name(row, emp)
+            self._fill_previous_month_cell(row, emp)
             self._fill_day_cells(row, emp, days, presenter, constraint_presenter, hl_consecutive)
             self._fill_summary_cells(row, emp, days)
 
@@ -809,7 +911,7 @@ class ScheduleGrid(QTableWidget):
                 item.setToolTip(
                     f"Zablokowany typ zmiany: {label} — generator dobierze godzinę."
                 )
-                self.setItem(row, day, item)
+                self.setItem(row, day + self._prev_col_offset, item)
                 continue
 
             if getattr(ds, "is_locked", False) and not ds.start and not ds.end and not ds.is_leave and not getattr(ds, "is_sick", False):
@@ -821,21 +923,21 @@ class ScheduleGrid(QTableWidget):
                 
                 item.setBackground(brush)
                 item.setToolTip("Dzień wolny (Zablokowany: Generator nie zmieni tego ustawienia)")
-                self.setItem(row, day, item)
+                self.setItem(row, day + self._prev_col_offset, item)
                 continue
 
             if hasattr(ds, "is_sick") and ds.is_sick:
                 item.setText("🤒")
                 item.setBackground(QBrush(QColor("#FFA07A")))
                 item.setToolTip("Chorobowe")
-                self.setItem(row, day, item)
+                self.setItem(row, day + self._prev_col_offset, item)
                 continue
 
             if ds.is_leave:
                 item.setText("🌴")
                 item.setBackground(QBrush(QColor(theme.OK_GREEN)))
                 item.setToolTip("Urlop")
-                self.setItem(row, day, item)
+                self.setItem(row, day + self._prev_col_offset, item)
                 continue
 
             # Nieczynne = brak handlowej niedzieli/święta (is_trade_day) ALBO
@@ -845,7 +947,7 @@ class ScheduleGrid(QTableWidget):
             # tego pracownika (patrz model/location.py).
             if not self.shop_config.get_location(emp).get_open_hours_for_day(day):
                 item.setBackground(QBrush(QColor(theme.BG_DISABLED)))
-                self.setItem(row, day, item)
+                self.setItem(row, day + self._prev_col_offset, item)
                 continue
 
             cell_view = presenter.get_cell_view(emp, day)
@@ -914,7 +1016,7 @@ class ScheduleGrid(QTableWidget):
                     item.setBackground(QBrush(QColor(theme.ERR_RED)))
                     item.setToolTip("\n".join(v.message for v in error if v.message))
 
-            self.setItem(row, day, item)
+            self.setItem(row, day + self._prev_col_offset, item)
 
     def _fill_summary_cells(self, row, emp, days):
         items = [
@@ -924,7 +1026,7 @@ class ScheduleGrid(QTableWidget):
             QTableWidgetItem(self.schedule.total_with_leave_and_sick_for_employee(emp)),
         ]
 
-        for idx, item in enumerate(items, start=days + 1):
+        for idx, item in enumerate(items, start=days + self._prev_col_offset + 1):
             item.setTextAlignment(Qt.AlignCenter)
             item.setBackground(QBrush(QColor(theme.BG_PANEL)))
             self.setItem(row, idx, item)
@@ -951,7 +1053,7 @@ class ScheduleGrid(QTableWidget):
             overtime_item.setToolTip("Nadgodziny ponad miesięczny limit godzin pełnego etatu.")
         else:
             overtime_item.setBackground(QBrush(QColor(theme.BG_PANEL)))
-        self.setItem(row, days + 5, overtime_item)
+        self.setItem(row, days + self._prev_col_offset + 5, overtime_item)
 
         if self.settlement_mode:
             target_minutes = self.schedule.get_settlement_target(emp)
@@ -965,7 +1067,7 @@ class ScheduleGrid(QTableWidget):
             target_item.setBackground(QBrush(QColor(theme.ACCENT_SOFT)))
             target_item.setData(Qt.UserRole, (emp, "settlement_target"))
             target_item.setToolTip("Dwuklik, aby ustawić docelową liczbę godzin w miesiącu.")
-            self.setItem(row, days + 6, target_item)
+            self.setItem(row, days + self._prev_col_offset + 6, target_item)
 
     def _fill_validation_rows(self, emp_count, days, constraint_presenter):
         # Definiujemy wiersze podsumowania
@@ -978,6 +1080,13 @@ class ScheduleGrid(QTableWidget):
             name_item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
             self.setItem(row, 0, name_item)
 
+            if self._prev_col_offset:
+                # Kolumna "pamięć poprzedniego miesiąca" nie ma znaczenia
+                # dla wierszy podsumowania - te dotyczą TEGO miesiąca.
+                info_filler = QTableWidgetItem("")
+                info_filler.setBackground(QBrush(QColor(theme.BG_PANEL)))
+                self.setItem(row, 1, info_filler)
+
             for day in range(1, days + 1):
                 if key == "coverage":
                     # Rotacja 24/7 - sprawdzane niezależnie od reszty tej
@@ -989,7 +1098,7 @@ class ScheduleGrid(QTableWidget):
                     item.setBackground(QBrush(QColor(theme.OK_GREEN if covered else theme.ERR_RED)))
                     if not covered:
                         item.setToolTip("Brak pełnego pokrycia doby (24h) tego dnia.")
-                    self.setItem(row, day, item)
+                    self.setItem(row, day + self._prev_col_offset, item)
                     continue
 
                 # Liczniki dla danego dnia
@@ -1087,10 +1196,10 @@ class ScheduleGrid(QTableWidget):
                     if view.tooltip:
                         item.setToolTip(view.tooltip)
 
-                self.setItem(row, day, item)
+                self.setItem(row, day + self._prev_col_offset, item)
 
             # Wypełnienie komórek sumarycznych (ostatnie 5 kolumn) szarym kolorem
-            for col in range(days + 1, days + 6):
+            for col in range(days + self._prev_col_offset + 1, days + self._prev_col_offset + 6):
                 filler = QTableWidgetItem("")
                 filler.setBackground(QBrush(QColor(theme.BG_PANEL)))
                 self.setItem(row, col, filler)
@@ -1129,16 +1238,15 @@ class ScheduleGrid(QTableWidget):
         row = self.currentRow()
         col = self.currentColumn()
         emp_count = len(self._visible_employees)
-        days = self.schedule.days_in_month
+        day = self._column_to_day(col)
 
         if (
             0 <= row < emp_count
-            and 1 <= col <= days
+            and day is not None
             and self.shop_config
-            and self.shop_config.is_trade_day(col)
+            and self.shop_config.is_trade_day(day)
         ):
             emp = self._visible_employees[row]
-            day = col
 
             if event.key() in (Qt.Key_1, Qt.Key_2):
                 code = "1" if event.key() == Qt.Key_1 else "2"
@@ -1189,9 +1297,9 @@ class ScheduleGrid(QTableWidget):
             return
 
         emp_count = len(self._visible_employees)
-        days = self.schedule.days_in_month
+        day = self._column_to_day(col)
 
-        if row < emp_count and 1 <= col <= days:
+        if row < emp_count and day is not None:
             if (
                 self.main_window.quick_mode_enabled
                 and self.main_window.quick_selected_shift
@@ -1204,8 +1312,9 @@ class ScheduleGrid(QTableWidget):
 
         emp_count = len(self._visible_employees)
         days = self.schedule.days_in_month
+        day = self._column_to_day(col)
 
-        if self.settlement_mode and row < emp_count and col == days + 6:
+        if self.settlement_mode and row < emp_count and col == days + self._prev_col_offset + 6:
             self._edit_settlement_target(self._visible_employees[row])
             return
 
@@ -1213,14 +1322,14 @@ class ScheduleGrid(QTableWidget):
             self.on_edit_employee(self._visible_employees[row])
             return
 
-        if row < emp_count and 1 <= col <= days:
+        if row < emp_count and day is not None:
             if (
                 self.main_window.quick_mode_enabled
                 and self.main_window.quick_selected_shift
             ):
                 self._apply_quick_shift(row, col)
             elif self.on_edit_day:
-                self.on_edit_day(self._visible_employees[row], col)
+                self.on_edit_day(self._visible_employees[row], day)
 
     def _edit_settlement_target(self, emp):
         # Ta sama wartość, co kolumna "Razem" w siatce.
@@ -1268,9 +1377,10 @@ class ScheduleGrid(QTableWidget):
 
     def _handle_header_double_click(self, col):
         # 4. Dwuklik na nagłówku
-        if 1 <= col <= self.schedule.days_in_month:
+        day = self._column_to_day(col)
+        if day is not None:
             if self.on_header_menu:
-                self.on_header_menu(col, None)
+                self.on_header_menu(day, None)
 
     def contextMenuEvent(self, event):
         # 100% pewna metoda na wyłapanie prawego przycisku myszy w Qt
@@ -1285,13 +1395,12 @@ class ScheduleGrid(QTableWidget):
             return
             
         emp_count = len(self._visible_employees)
-        days = self.schedule.days_in_month
+        day = self._column_to_day(col)
 
-        if row >= emp_count or not (1 <= col <= days):
+        if row >= emp_count or day is None:
             return
 
         emp = self._visible_employees[row]
-        day = col
         ds = self.schedule.get_day(emp, day)
         
         menu = QMenu(self)
@@ -1340,7 +1449,9 @@ class ScheduleGrid(QTableWidget):
             return
 
         emp = self._visible_employees[row]
-        day = col
+        day = self._column_to_day(col)
+        if day is None:
+            return
         shift = self.main_window.quick_selected_shift
 
         start = None
