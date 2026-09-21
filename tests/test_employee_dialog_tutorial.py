@@ -26,7 +26,6 @@ FORBIDDEN_PHRASES = [
     "Nazwa i Profil placówki",
     "Okres rozliczeniowy",
     "poprzedniego miesiąca",
-    "Rotacja służby 24/7",
 ]
 
 

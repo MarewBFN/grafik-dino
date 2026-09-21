@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QFrame,
 )
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
+from ui.duty_rotation_editor import DutyRotationEditor
 from ui.profile_wizard_dialog import ProfileWizardDialog
 from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.constraint_policy import ConstraintPolicy
@@ -304,6 +305,17 @@ class ConfigDialog(QDialog):
         hint.setObjectName("mutedHint")
         hint.setWordWrap(True)
         outer.addWidget(hint)
+
+        # Rotacja służby 24/7 jest z natury per-lokalizacja (LocationConfig.
+        # duty_rotation) - nie ma sensownego project-wide odpowiednika, więc
+        # w przeciwieństwie do godzin otwarcia wyżej ten edytor pokazuje się
+        # tylko, gdy to okno wie, którą lokalizację edytuje (patrz
+        # self.location w __init__). Ten sam widget co w oknie Lokalizacje
+        # (ui/locations_dialog.py) - jedno źródło prawdy.
+        self.duty_rotation_editor = None
+        if self.location is not None:
+            self.duty_rotation_editor = DutyRotationEditor(self.location.duty_rotation)
+            outer.addWidget(self.duty_rotation_editor)
 
         outer.addStretch()
         return page
@@ -690,6 +702,12 @@ class ConfigDialog(QDialog):
 
                 target_hours = self.location.open_hours if self.location is not None else self.shop_config.open_hours
                 target_hours[wd] = (start_str, end_str)  # (None, None) = dzień "Nieczynne"
+
+            if self.duty_rotation_editor is not None:
+                try:
+                    self.location.duty_rotation = self.duty_rotation_editor.get_duty_rotation()
+                except ValueError as exc:
+                    raise ValueError(f"Rotacja służby 24/7: {exc}") from exc
 
             self.shop_config.trade_sundays = {
                 day for day, box in self.sunday_checks.items() if box.isChecked()

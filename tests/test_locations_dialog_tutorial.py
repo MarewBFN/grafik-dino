@@ -24,12 +24,14 @@ from ui.locations_dialog import LOCATIONS_TUTORIAL_FLAG, LocationsDialog
 
 # Features hidden from the client (see ENYO_ONLY_CHANGES.md) that a tutorial
 # must never reference, because they'd point at something invisible/unclickable.
+# "Rotacja służby 24/7" was hidden (no UI existed) when this test was first
+# written - ui/duty_rotation_editor.py now gives it a real, working editor
+# here, so it's no longer forbidden; see ENYO_ONLY_CHANGES.md.
 FORBIDDEN_PHRASES = [
     "Progi obsady",
     "Nazwa i Profil placówki",
     "Okres rozliczeniowy",
     "poprzedniego miesiąca",
-    "Rotacja służby 24/7",
 ]
 
 
@@ -38,6 +40,7 @@ def _known_widgets(dialog):
     for row in dialog._location_rows:
         widgets.add(row.is_24_7_check)
         widgets.add(row.toggle_hours_btn)
+        widgets.add(row.duty_rotation_editor.enabled_check)
     return widgets
 
 

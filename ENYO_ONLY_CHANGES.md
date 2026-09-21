@@ -857,3 +857,103 @@ dało się przypadkiem pomylić buildów/aktualizacji między klientami.
 Enyo) nie mają sensu na `main`, poza samym mechanizmem kanałów
 (`release_channel.py`/`update_checker.py`/`scripts/build_release.ps1`),
 który już tam jest.
+
+## Krytyczne braki znalezione przy pierwszym teście świeżego exe (2026-09-21)
+
+Użytkownik przetestował faktycznie zainstalowany `EnyoSetup.exe` (nie
+`python main.py` z ręcznie wczytanym `last_project.json`) i znalazł dwa
+osobne, poważne braki - oba **blokujące realne użycie przez klienta**.
+Poprawione w tej samej rundzie, ale **build `Output/EnyoSetup.exe` z
+poprzedniej sekcji jest już NIEAKTUALNY** - trzeba go przebudować przed
+przekazaniem klientowi.
+
+### Brak 1: brak jakiejkolwiek konfiguracji "Ochrona" na świeżej maszynie
+
+**Przyczyna:** `%LOCALAPPDATA%\GrafikDino\custom_profiles.json` (profile
+biznesowe) to plik per-maszynowy - NIE jest częścią instalatora ani repo.
+Dotąd jedynym sposobem, żeby cokolwiek się tam znalazło, było ręczne
+uruchomienie `demo/install_*.py` (skrypt Pythona, wymaga źródeł repo) -
+żaden taki krok nie jest częścią instalacji EXE. Do tego zarządzanie
+profilami w UI jest dla Enyo świadomie schowane (klient nie może sam
+stworzyć profilu przez kreator). Efekt: świeża instalacja u klienta
+startowałaby z `visible_profiles()` zwracającym PUSTĄ listę (wyklucza
+dino_retail) - kreator pierwszego uruchomienia nie miałby czego
+zaproponować, klient utknąłby na starcie.
+
+Na maszynie deweloperskiej (tej, na której testowano) profil
+`custom_ochrona` akurat ISTNIAŁ, ale z porzuconej, wczesnej wersji sprzed
+właściwego mechanizmu `LocationConfig.duty_rotation` - miał jedną rolę
+`"Obłożenie"` (checkbox per pracownik), zamiast aktualnych `"Umowa"`/`"Nie
+chce 24h"`. Stąd zgłoszenie: dodając pracownika przez świeże exe widać
+tylko stary, porzucony toggle "Obłożenie".
+
+**Naprawa:** `model/business_profile.py::_ensure_default_ochrona_profile()`
+(wywoływane bezwarunkowo przy imporcie modułu, czyli przy każdym starcie
+aplikacji) - synchronizuje `custom_ochrona` do jedynego, kanonicznego
+kształtu (`build_default_ochrona_profile()`: role `umowa`/`nie_chce_24h`,
+`rules=[]` - pokrycie 24/7 liczy się już w całości automatycznie z
+`LocationConfig.duty_rotation`, nie przez regułę profilu). Naprawia
+zarówno brak profilu (świeża maszyna), jak i już zarejestrowany, ale
+przestarzały (ta maszyna deweloperska - potwierdzone, plik na dysku
+faktycznie się poprawił po samym imporcie modułu).
+
+**Świadomie unconditional na tym branchu** (nie za flagą typu
+`RELEASE_CHANNEL`) - ten sam wzorzec co `visible_profiles()` wykluczające
+dino_retail: cały branch jest dedykowany Enyo, więc nie ma potrzeby
+warunkowania per-build, a `RELEASE_CHANNEL` w repo i tak zawsze zostaje
+"dino" (patrz sekcja wyżej), więc warunkowanie na nim uczyniłoby to
+nietestowalnym przy zwykłym `python main.py` z tego brancha.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/business_profile.py` | `DEFAULT_OCHRONA_PROFILE_KEY`, `build_default_ochrona_profile()`, `_ensure_default_ochrona_profile()`, wywołane przy imporcie modułu | NIE - Enyo-specyficzne, usunąć przy ewentualnym mergu do main |
+| `ui/first_run_wizard.py` | Usunięty z hinta kroku "Branża" fragment wspominający "Sklep (Dino)" - myląca wzmianka o profilu wykluczonym z tego pickera | TAK (kosmetyka, neutralna też dla main) |
+| `tests/test_default_ochrona_profile.py` (nowy) | Auto-provisioning: brakujący profil, przestarzały profil (dokładnie odtworzony przypadek "Obłożenie"), już poprawny profil NIE jest nadpisywany bez potrzeby, awaria zapisu na dysk nie wywraca importu | TAK |
+
+### Brak 2: brak UI do konfiguracji "Rotacja służby 24/7" dla lokalizacji
+
+Mechanizm generatora (`LocationConfig.duty_rotation`, pięć okien czasowych
++ `only_12_24h`) istniał w pełni od dawna (patrz sekcja "Generator pod
+klucz dla Enyo"), ale **nie było ŻADNEGO okna w UI, które by go
+ustawiało** - dane trafiały tam wyłącznie przez skrypty
+`demo/install_*.py`. Efekt zgłoszony przez użytkownika: nowa lokalizacja
+nie da się skonfigurować pod rotację 24/7, a wiersz podsumowania
+"Obłożenie" (patrz `logic/duty_coverage_presenter.py`) nigdy się nie
+pokazuje, bo pokazuje się tylko, gdy jakaś lokalizacja faktycznie ma
+`duty_rotation` ustawione - co bez tego UI nigdy nie mogło się zdarzyć dla
+nowo tworzonego projektu.
+
+**Naprawa:** nowy współdzielony widget `ui/duty_rotation_editor.py::
+DutyRotationEditor` (ten sam wzorzec co `WeeklyHoursEditor` - jedno źródło
+prawdy dla dwóch okien), osadzony w:
+- `ui/locations_dialog.py::_LocationRow` - pod sekcją "Progi obsady"
+- `ui/config_dialog.py` (zakładka "Godziny otwarcia", tylko gdy okno wie,
+  którą lokalizację edytuje - `self.location`, patrz wcześniejsza runda)
+
+**Uproszczenie UI (decyzja z użytkownikiem, 2026-09-20 - patrz sekcja
+"Pamięć poprzedniego miesiąca" wyżej, ta sama rozmowa):** zamiast
+niezależnej kontroli nad wszystkimi 5 oknami czasowymi, użytkownik wpisuje
+TYLKO start/koniec jednej zmiany na kontekst (tydzień, weekend) - drugą
+połowę (i start zmiany 24h w weekend) program dolicza automatycznie jako
+dopełnienie do 24h. We wszystkich dotychczasowych lokalizacjach klienta
+(`last_project.json`, `demo/install_client_sample_data.py`) każda para
+zmian faktycznie dopełnia się dokładnie w ten sposób, więc to nie jest
+uproszczenie kosztem realnych przypadków - to jedyny kształt, jaki
+kiedykolwiek widzieliśmy w danych klienta.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `ui/duty_rotation_editor.py` (nowy) | `DutyRotationEditor` - checkbox włączający, `only_12_24h`, 2 pola czasu (tydzień) + 2 pola (weekend), walidacja przez istniejące `normalize_duty_rotation()` | TAK - generyczne, nie Enyo-specyficzne (duty_rotation to mechanizm generatora dostępny dla każdego profilu) |
+| `ui/locations_dialog.py` | Nowa sekcja w `_LocationRow`, `_save()` czyta `row.duty_rotation_editor.get_duty_rotation()` (było: `loc.duty_rotation = old.duty_rotation`, czyli zawsze zachowanie starej wartości - teraz faktycznie edytowalne), nowy krok samouczka | TAK |
+| `ui/config_dialog.py` | Analogiczna sekcja w zakładce "Godziny otwarcia" (tylko z `self.location`), `_save()` zapisuje | TAK |
+| `tests/test_duty_rotation_editor.py` (nowy) | Round-trip, automatyczne dopełnianie do 24h, `only_12_24h` chowa pola tygodnia, walidacja błędów | TAK |
+
+**Weryfikacja:** end-to-end - zapisanie lokalizacji przez `LocationsDialog`
+z włączoną rotacją 24/7 poprawnie ustawia `LocationConfig.duty_rotation`,
+i `project_uses_duty_rotation()` (warunek pokazania wiersza "Obłożenie")
+poprawnie zwraca `True` dla pracownika przypisanego do tej lokalizacji.
+
+**Do zrobienia po tej naprawie:** `Output/EnyoSetup.exe` zbudowany w
+poprzedniej sekcji trzeba PRZEBUDOWAĆ (zawiera kod sprzed tych poprawek) -
+jeśli w GitHub Release z tagu `v1.0.0-enyo` już wgrano stary plik, trzeba
+go zastąpić nowym.

@@ -180,3 +180,67 @@ def _load_persisted_custom_profiles() -> None:
 
 
 _load_persisted_custom_profiles()
+
+
+# --- Enyo-only: auto-provision the "Ochrona" profile (branch integration/
+# enyo-only, patrz ENYO_ONLY_CHANGES.md "Auto-provisioning profilu Ochrona")
+# -------------------------------------------------------------------------
+#
+# Ten build ma profile management (ProfileWizardDialog i wszystkie wejścia
+# do niego) świadomie schowane z UI - klient nigdy nie tworzy/nie edytuje
+# profilu samodzielnie. Ale %LOCALAPPDATA%\GrafikDino\custom_profiles.json
+# NIE jest częścią instalatora (to per-maszynowy plik danych, nie
+# repo/build) - świeża instalacja na maszynie klienta zaczyna z ZUPEŁNIE
+# pustym magazynem profili. Bez tego bloku visible_profiles() (wyklucza
+# dino_retail) zwracałaby pustą listę, więc kreator pierwszego uruchomienia
+# (ui/first_run_wizard.py) nie miałby czego zaproponować, a klient
+# utknąłby na starcie bez żadnego działającego profilu.
+#
+# Synchronizowane BEZWARUNKOWO przy każdym starcie (nie tylko gdy brakuje),
+# żeby też naprawić już zarejestrowany, ale przestarzały profil - znalezione
+# podczas testów na tej maszynie: profil "custom_ochrona" z porzuconą rolą
+# "Obłożenie" (checkbox per pracownik) sprzed właściwego mechanizmu
+# LocationConfig.duty_rotation, który dziś liczy obłożenie automatycznie
+# per lokalizacja, nie jako ręczną flagę pracownika.
+DEFAULT_OCHRONA_PROFILE_KEY = "custom_ochrona"
+
+
+def build_default_ochrona_profile():
+    """Kanoniczna definicja profilu "Ochrona" dla klienta Enyo - jedyne
+    źródło prawdy (żadnych innych miejsc, gdzie ten kształt jest wpisany
+    na sztywno). Role bez rules=[]: obsada/pokrycie 24/7 liczy się w całości
+    automatycznie z LocationConfig.duty_rotation (patrz logic/generator/
+    duty_rotation_*.py), a nie przez generyczny mechanizm reguł profilu."""
+    from model.custom_profile import CustomBusinessProfile, RoleDefinition
+
+    return CustomBusinessProfile(
+        key=DEFAULT_OCHRONA_PROFILE_KEY,
+        display_name="Ochrona",
+        roles=[
+            RoleDefinition(key="umowa", label="Umowa", show_summary_row=False),
+            RoleDefinition(key="nie_chce_24h", label="Nie chce 24h", show_summary_row=False),
+        ],
+        rules=[],
+    )
+
+
+def _ensure_default_ochrona_profile() -> None:
+    canonical = build_default_ochrona_profile()
+    current = CUSTOM_PROFILES.get(DEFAULT_OCHRONA_PROFILE_KEY)
+    if current is not None and current.to_dict() == canonical.to_dict():
+        return
+
+    try:
+        from model.custom_profile_store import save_custom_profile
+        save_custom_profile(canonical)
+    except Exception:
+        # Same defensive fallback as _load_persisted_custom_profiles() - a
+        # missing/broken app-data location must not break importing this
+        # module. register_custom_profile() below still makes the profile
+        # usable for THIS run even if it couldn't be persisted to disk.
+        pass
+
+    register_custom_profile(canonical)
+
+
+_ensure_default_ochrona_profile()

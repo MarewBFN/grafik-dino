@@ -186,9 +186,7 @@ class FirstRunWizardDialog(QDialog):
             self._hint(
                 "Wybierz profil działalności najbliższy tej placówce - decyduje "
                 "o tym, jakie role, zasady i wiersze podsumowania zobaczysz w "
-                "grafiku. \"Sklep (Dino)\" to gotowy, w pełni skonfigurowany "
-                "profil retail; dla innej działalności (np. ochrona) użyj \"+ "
-                "Nowa branża...\", żeby zbudować własny."
+                "grafiku."
             ),
             self.profile_picker,
         )

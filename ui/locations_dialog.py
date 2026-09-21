@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ui.duty_rotation_editor import DutyRotationEditor
 from ui.slug import slugify
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.weekly_hours_editor import WeeklyHoursEditor
@@ -42,12 +43,15 @@ class _LocationRow(QFrame):
     lokalizacji (patrz logic/generator/base_specs.py::_build_max_consecutive
     i logic/generator/generic_rules.py::build_min_staff_with_role) - schowane
     na prośbę klienta (patrz thresholds_container.hide() niżej), ale wciąż w
-    pełni działające, żeby nie zgubić już zapisanych nadpisań per-lokalizacja."""
+    pełni działające, żeby nie zgubić już zapisanych nadpisań per-lokalizacja.
+    Na końcu: edytor "Rotacja służby 24/7" (patrz ui/duty_rotation_editor.py) -
+    jedyne miejsce w UI, w którym da się skonfigurować LocationConfig.duty_rotation
+    dla nowej albo istniejącej lokalizacji."""
 
     def __init__(
         self, on_remove, name="", open_hours=None, is_24_7=False,
         max_consecutive_days=None, rule_defs=(), rule_overrides=None,
-        original_key=None,
+        original_key=None, duty_rotation=None,
     ):
         super().__init__()
         self.setObjectName("configCard")
@@ -133,6 +137,9 @@ class _LocationRow(QFrame):
         thresholds.addStretch()
         outer.addWidget(self.thresholds_container)
         self.thresholds_container.hide()
+
+        self.duty_rotation_editor = DutyRotationEditor(duty_rotation)
+        outer.addWidget(self.duty_rotation_editor)
 
     def _on_24_7_toggled(self, checked):
         if checked:
@@ -241,6 +248,7 @@ class LocationsDialog(QDialog):
                 max_consecutive_days=loc.constraints.get("max_consecutive_days"),
                 rule_overrides=loc.constraints,
                 original_key=key,
+                duty_rotation=loc.duty_rotation,
             )
 
         self.add_btn = QPushButton("Dodaj lokalizację")
@@ -273,6 +281,7 @@ class LocationsDialog(QDialog):
     def _add_location_row(
         self, name="", open_hours=None, is_24_7=False,
         max_consecutive_days=None, rule_overrides=None, original_key=None,
+        duty_rotation=None,
     ):
         row = _LocationRow(
             self._remove_location_row, name, open_hours, is_24_7=is_24_7,
@@ -280,6 +289,7 @@ class LocationsDialog(QDialog):
             rule_defs=self._location_rule_defs,
             rule_overrides=rule_overrides,
             original_key=original_key,
+            duty_rotation=duty_rotation,
         )
         self._location_rows.append(row)
         self.locations_container.addWidget(row)
@@ -333,6 +343,14 @@ class LocationsDialog(QDialog):
                     "pracuje wcale.",
                     target=first_row.toggle_hours_btn,
                 ))
+            steps.append(TutorialStep(
+                "Rotacja służby 24/7",
+                "Dla placówek z ciągłą obsadą (np. ochrona): zaznacz, żeby "
+                "generator przydzielał wyłącznie zmiany pokrywające całą dobę, "
+                "zamiast zwykłych godzin otwarcia. Wpisz godziny podziału doby - "
+                "reszta (druga zmiana, start 24h w weekend) dolicza się sama.",
+                target=first_row.duty_rotation_editor.enabled_check,
+            ))
         steps.append(TutorialStep(
             "Zapisz",
             "Zapisz zmiany, żeby zaczęły obowiązywać w grafiku i w generatorze.",
@@ -398,20 +416,25 @@ class LocationsDialog(QDialog):
                             "całodobowej zaznacz \"24/7\"."
                         )
 
+                try:
+                    duty_rotation = row.duty_rotation_editor.get_duty_rotation()
+                except ValueError as exc:
+                    raise ValueError(f"Rotacja służby 24/7 dla lokalizacji „{name}”: {exc}") from exc
+
                 loc = LocationConfig(
                     key=key, name=name,
                     open_hours=hours,
                     constraints=row.constraints_overrides(),
                     is_24_7=row.is_24_7_check.isChecked(),
+                    duty_rotation=duty_rotation,
                 )
                 old = self.shop_config.locations.get(row.original_key)
                 if old is not None:
                     # Pola bez UI w tym oknie (dziedziny handlowe, święta,
-                    # nadpisania dni, rotacja służby) - zachowane bez zmian.
+                    # nadpisania dni) - zachowane bez zmian.
                     loc.trade_sundays = old.trade_sundays
                     loc.public_holidays = old.public_holidays
                     loc.day_overrides = old.day_overrides
-                    loc.duty_rotation = old.duty_rotation
                 new_locations[key] = loc
 
             self.shop_config.locations = new_locations
