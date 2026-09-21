@@ -101,6 +101,14 @@ class _LocationRow(QFrame):
         self.hours_editor.setEnabled(not is_24_7)
         outer.addWidget(self.hours_editor)
 
+        # "Rotacja służby 24/7" podpięta wprost pod checkbox 24/7 wyżej,
+        # zamiast osobnego przełącznika (decyzja z użytkownikiem, patrz
+        # docstring DutyRotationEditor) - dla lokalizacji czynnej całodobowo
+        # zwykłe godziny otwarcia i tak nie mają znaczenia (cały tydzień
+        # 00:00-23:45), więc to miejsce zajmuje konfiguracja zmian rotacji.
+        self.duty_rotation_editor = DutyRotationEditor(duty_rotation)
+        outer.addWidget(self.duty_rotation_editor)
+
         self._update_hours_visibility()
 
         # "Progi obsady dla tej lokalizacji" schowane na prośbę klienta -
@@ -138,9 +146,6 @@ class _LocationRow(QFrame):
         outer.addWidget(self.thresholds_container)
         self.thresholds_container.hide()
 
-        self.duty_rotation_editor = DutyRotationEditor(duty_rotation)
-        outer.addWidget(self.duty_rotation_editor)
-
     def _on_24_7_toggled(self, checked):
         if checked:
             self.hours_editor.set_hours({wd: ("00:00", "23:45") for wd in range(7)})
@@ -154,10 +159,13 @@ class _LocationRow(QFrame):
     def _update_hours_visibility(self):
         is_24_7 = self.is_24_7_check.isChecked()
         # Dla 24/7 cały tydzień jest zawsze 00:00-23:45 - nie ma czego
-        # edytować, więc ani przycisk, ani sam edytor się nie pokazują.
+        # edytować, więc ani przycisk, ani sam edytor godzin się nie
+        # pokazują - to miejsce zajmuje konfiguracja rotacji służby
+        # (patrz DutyRotationEditor - podpięta wprost pod ten sam checkbox).
         self.toggle_hours_btn.setVisible(not is_24_7)
         self.hours_editor.setVisible(not is_24_7 and self._hours_expanded)
         self.toggle_hours_btn.setText("Zwiń" if self._hours_expanded else "Rozwiń")
+        self.duty_rotation_editor.setVisible(is_24_7)
 
     def name(self) -> str:
         return self.name_edit.text().strip()
@@ -331,8 +339,12 @@ class LocationsDialog(QDialog):
         if first_row is not None:
             steps.append(TutorialStep(
                 "Działalność całodobowa (24/7)",
-                "Zaznacz, jeśli ta placówka jest czynna całodobowo przez cały "
-                "tydzień - wtedy godziny otwarcia nie mają już znaczenia.",
+                "Zaznacz, jeśli ta placówka ma ciągłą obsadę (np. ochrona) - "
+                "godziny otwarcia znikają (nie mają tu znaczenia), a zamiast "
+                "nich pojawia się konfiguracja rotacji służby: generator "
+                "przydzieli wyłącznie zmiany pokrywające całą dobę. Wpisz "
+                "godziny podziału doby - reszta (druga zmiana, start 24h w "
+                "weekend) dolicza się sama.",
                 target=first_row.is_24_7_check,
             ))
             if not first_row.is_24_7_check.isChecked():
@@ -343,14 +355,6 @@ class LocationsDialog(QDialog):
                     "pracuje wcale.",
                     target=first_row.toggle_hours_btn,
                 ))
-            steps.append(TutorialStep(
-                "Rotacja służby 24/7",
-                "Dla placówek z ciągłą obsadą (np. ochrona): zaznacz, żeby "
-                "generator przydzielał wyłącznie zmiany pokrywające całą dobę, "
-                "zamiast zwykłych godzin otwarcia. Wpisz godziny podziału doby - "
-                "reszta (druga zmiana, start 24h w weekend) dolicza się sama.",
-                target=first_row.duty_rotation_editor.enabled_check,
-            ))
         steps.append(TutorialStep(
             "Zapisz",
             "Zapisz zmiany, żeby zaczęły obowiązywać w grafiku i w generatorze.",
@@ -416,10 +420,12 @@ class LocationsDialog(QDialog):
                             "całodobowej zaznacz \"24/7\"."
                         )
 
-                try:
-                    duty_rotation = row.duty_rotation_editor.get_duty_rotation()
-                except ValueError as exc:
-                    raise ValueError(f"Rotacja służby 24/7 dla lokalizacji „{name}”: {exc}") from exc
+                duty_rotation = None
+                if row.is_24_7_check.isChecked():
+                    try:
+                        duty_rotation = row.duty_rotation_editor.get_duty_rotation()
+                    except ValueError as exc:
+                        raise ValueError(f"Rotacja służby 24/7 dla lokalizacji „{name}”: {exc}") from exc
 
                 loc = LocationConfig(
                     key=key, name=name,

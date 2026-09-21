@@ -40,7 +40,6 @@ def _known_widgets(dialog):
     for row in dialog._location_rows:
         widgets.add(row.is_24_7_check)
         widgets.add(row.toggle_hours_btn)
-        widgets.add(row.duty_rotation_editor.enabled_check)
     return widgets
 
 

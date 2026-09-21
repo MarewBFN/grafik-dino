@@ -957,3 +957,86 @@ poprawnie zwraca `True` dla pracownika przypisanego do tej lokalizacji.
 poprzedniej sekcji trzeba PRZEBUDOWAĆ (zawiera kod sprzed tych poprawek) -
 jeśli w GitHub Release z tagu `v1.0.0-enyo` już wgrano stary plik, trzeba
 go zastąpić nowym.
+
+## Scalenie przełącznika rotacji 24/7 z "Działalność całodobowa" (2026-09-21)
+
+Poprawka UX na wyraźne życzenie użytkownika, zaraz po poprzedniej sekcji
+("Brak 2"): `DutyRotationEditor` dostał WŁASNY, osobny checkbox "Rotacja
+służby 24/7" obok już istniejącego "Działalność całodobowa (24/7)"
+(`is_24_7_check`) w `ui/locations_dialog.py` - dwa niezależne przełączniki
+robiące de facto to samo, mylące. Ustalone: **żadnego nowego checkboxa** -
+widget rotacji ma być wprost podpięty pod istniejący `is_24_7_check`.
+
+**Zmiana:**
+- `ui/duty_rotation_editor.py` - usunięty `enabled_check` (i cała logika
+  go dotycząca) z widgetu całkowicie. Widget nie ma już własnego pojęcia
+  "włączony/wyłączony" - zawsze pokazuje `only_12_24h_check` +
+  `weekend_container` (`weekday_container` chowany tylko przez
+  `only_12_24h`). Decyzję "czy w ogóle pokazać/zapisać ten widget"
+  podejmuje wyłącznie okno, które go osadza.
+- `ui/locations_dialog.py::_LocationRow` - `duty_rotation_editor`
+  osadzony pod sekcją godzin (przed "Progi obsady"),
+  `_update_hours_visibility()` pokazuje go dokładnie wtedy, gdy
+  `is_24_7_check.isChecked()`; `_save()` czyta
+  `row.duty_rotation_editor.get_duty_rotation()` TYLKO gdy checkbox jest
+  zaznaczony (inaczej `duty_rotation=None`), błąd walidacji owinięty w
+  komunikat wskazujący nazwę lokalizacji. Krok samouczka "Rotacja służby
+  24/7" (osobny) usunięty - tekst kroku "Działalność całodobowa (24/7)"
+  rozszerzony o wyjaśnienie efektu na rotację.
+- `ui/config_dialog.py` - CAŁA sekcja rotacji 24/7 (import, budowa
+  widgetu w `_build_hours_tab()`, zapis w `_save()`) USUNIĘTA. To okno
+  edytuje godziny jednej, już wybranej lokalizacji i nie ma własnego
+  `is_24_7_check` do podpięcia - edycja rotacji zostaje wyłącznie w
+  `ui/locations_dialog.py`.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `ui/duty_rotation_editor.py` | Usunięty `enabled_check`, widget zawsze "aktywny" (`get_duty_rotation()` zawsze liczy i zwraca) | TAK |
+| `ui/locations_dialog.py` | Widoczność/zapis podpięte pod `is_24_7_check`; krok samouczka scalony | TAK |
+| `ui/config_dialog.py` | Sekcja rotacji 24/7 usunięta (brak `is_24_7_check` w tym oknie) | N/D (cofnięcie wcześniejszego dodatku z tej samej rundy) |
+| `tests/test_duty_rotation_editor.py` | Przepisany pod API bez `enabled_check` | TAK |
+| `tests/test_locations_dialog_tutorial.py` | `_known_widgets()` bez `duty_rotation_editor.enabled_check`; "Rotacja służby 24/7" zdjęta z `FORBIDDEN_PHRASES` (funkcja już nie ukryta) | TAK |
+| `tests/test_employee_dialog_tutorial.py`, `tests/test_quick_mode_settings_dialog_tutorial.py`, `tests/test_main_window_tutorial_content.py` | Ta sama korekta `FORBIDDEN_PHRASES` dla spójności | TAK |
+
+**Weryfikacja:** pełny zestaw testów zielony (551 passed, 1 skipped).
+
+## Czyszczenie plików `*.flag` przy deinstalacji (2026-09-21)
+
+**Zgłoszenie użytkownika:** odinstalowanie Dingo albo Enyo powinno kasować
+wszystkie znaczniki "widziano samouczek" (`*.flag`) tworzone przez
+aplikację w runtime - domyślny deinstalator Inno Setup kasuje tylko pliki
+wpisane jawnie w `[Files]` (czyli to, co zainstalował), więc pliki
+tworzone PO instalacji, przy pierwszym uruchomieniu, zostawałyby
+osierocone. Przy ponownej instalacji (reinstall/upgrade) samouczki
+"pamiętałyby" błędnie, że użytkownik już je widział.
+
+Zweryfikowane przez grep: wszystkie 5 istniejących znaczników
+(`CONFIG_TUTORIAL_FLAG` w `ui/config_dialog.py`, `EMPLOYEE_TUTORIAL_FLAG`,
+`LOCATIONS_TUTORIAL_FLAG`, `QUICK_MODE_TUTORIAL_FLAG`, oraz
+`first_run.flag` w `ui/main_window.py`) trzymają się jednego wzorca
+(`*.flag`) i są tworzone w katalogu roboczym aplikacji (`{app}`, bo skróty
+w `[Icons]` nie ustawiają `WorkingDir` - ten sam katalog co
+`last_project.json`).
+
+**Naprawa:** nowa sekcja `[UninstallDelete]` w obu instalatorach
+(identyczna treść, osobne pliki):
+
+```
+[UninstallDelete]
+Type: files; Name: "{app}\*.flag"
+```
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `enyo.iss` | Nowa sekcja `[UninstallDelete]` | N/D (plik sam w sobie Enyo-specyficzny) |
+| `dla inno.iss` | Ta sama sekcja `[UninstallDelete]` (kanał Dingo/główny) | TAK - to jest instalator main |
+
+**Weryfikacja:** `ISCC.exe enyo.iss` kompiluje się bez błędów po dodaniu
+sekcji, `Output/EnyoSetup.exe` przebudowany. Nie testowane empirycznie
+(faktyczna instalacja+deinstalacja na czystej maszynie) - tylko składnia
+`.iss` i zgodność wzorca z realnymi nazwami plików flag w kodzie.
+
+**Do zrobienia po tej naprawie:** `Output/EnyoSetup.exe` przebudowany
+razem z powyższym scaleniem checkboxa 24/7 (ta sama runda) - jeśli w
+GitHub Release z tagu `v1.0.0-enyo` już wgrano stary plik, trzeba go
+zastąpić nowym (trzeci raz).

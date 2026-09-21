@@ -5,9 +5,15 @@ from ui.time_input import TimeInputWidget
 
 
 class DutyRotationEditor(QFrame):
-    """Edytor "Rotacja służby 24/7" (LocationConfig.duty_rotation) - jedno
-    źródło prawdy współdzielone przez ui/locations_dialog.py i
-    ui/config_dialog.py (ten sam wzorzec co ui/weekly_hours_editor.py).
+    """Edytor "Rotacja służby 24/7" (LocationConfig.duty_rotation).
+
+    Świadomie BEZ własnego checkboxa włączającego - ta funkcjonalność jest
+    podpięta wprost pod istniejący checkbox "Działalność całodobowa (24/7)"
+    (LocationConfig.is_24_7) w ui/locations_dialog.py::_LocationRow, żeby nie
+    dublować tego samego pytania do użytkownika dwoma osobnymi przełącznikami
+    (decyzja z użytkownikiem, 2026-09-21). Widoczność całego widgetu
+    (setVisible) i to, czy get_duty_rotation() w ogóle jest wołane, kontroluje
+    wywołujący na podstawie TEGO checkboxa - patrz _LocationRow._update_hours_visibility()/_save().
 
     Schemat modelu (patrz model/location.py::normalize_duty_rotation) ma
     5 okien czasowych (weekday_long/short, weekend_full, weekend_half_a/b) +
@@ -27,19 +33,14 @@ class DutyRotationEditor(QFrame):
         self.setObjectName("configCard")
         outer = QVBoxLayout(self)
 
-        self.enabled_check = QCheckBox("Rotacja służby 24/7 (np. ochrona)")
-        self.enabled_check.toggled.connect(self._update_visibility)
-        outer.addWidget(self.enabled_check)
-
-        self._hint = QLabel(
-            "Zamiast zwykłych godzin otwarcia: generator przydziela wyłącznie "
-            "te zmiany, dokładnie pokrywające całą dobę, każdego dnia - "
-            "niezależnie od \"Działalność całodobowa (24/7)\" wyżej (to osobny, "
-            "wyspecjalizowany model generowania, nie skrót do godzin otwarcia)."
+        hint = QLabel(
+            "Rotacja służby 24/7: generator przydzieli wyłącznie te zmiany, "
+            "dokładnie pokrywające całą dobę, każdego dnia (zamiast zwykłych "
+            "godzin otwarcia/zamknięcia)."
         )
-        self._hint.setObjectName("mutedHint")
-        self._hint.setWordWrap(True)
-        outer.addWidget(self._hint)
+        hint.setObjectName("mutedHint")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
 
         self.only_12_24h_check = QCheckBox(
             "Używaj tylko zmian 12h/24h (każdy dzień tygodnia, nie tylko weekend)"
@@ -74,15 +75,10 @@ class DutyRotationEditor(QFrame):
         self.set_duty_rotation(duty_rotation)
 
     def _update_visibility(self) -> None:
-        enabled = self.enabled_check.isChecked()
-        self._hint.setVisible(enabled)
-        self.only_12_24h_check.setVisible(enabled)
-        self.weekend_container.setVisible(enabled)
-        self.weekday_container.setVisible(enabled and not self.only_12_24h_check.isChecked())
+        self.weekday_container.setVisible(not self.only_12_24h_check.isChecked())
 
     def set_duty_rotation(self, duty_rotation: dict | None) -> None:
         duty_rotation = duty_rotation or {}
-        self.enabled_check.setChecked(bool(duty_rotation))
         self.only_12_24h_check.setChecked(bool(duty_rotation.get("only_12_24h", False)))
 
         weekend_a = duty_rotation.get("weekend_half_a") or {"start": "08:00", "end": "20:00"}
@@ -95,15 +91,13 @@ class DutyRotationEditor(QFrame):
 
         self._update_visibility()
 
-    def get_duty_rotation(self) -> dict | None:
-        """None gdy wyłączona - może rzucić ValueError (patrz
-        normalize_duty_rotation) przy sprzecznych godzinach (start == koniec
-        którejś pary) - wywołujący (LocationsDialog._save()/ConfigDialog._save())
-        ma to złapać i pokazać użytkownikowi, tym samym wzorcem co reszta
-        walidacji w tych oknach."""
-        if not self.enabled_check.isChecked():
-            return None
-
+    def get_duty_rotation(self) -> dict:
+        """Może rzucić ValueError (patrz normalize_duty_rotation) przy
+        sprzecznych godzinach (start == koniec którejś pary) - wywołujący
+        (LocationsDialog._save()) ma to złapać i pokazać użytkownikowi, tym
+        samym wzorcem co reszta walidacji w tym oknie. Wywołujący decyduje,
+        czy w ogóle wołać tę metodę (patrz docstring klasy) - nie ma tu
+        "wyłączonego" stanu do sprawdzenia."""
         only_12_24h = self.only_12_24h_check.isChecked()
         weekend_start = self.weekend_start.get_time_str()
         weekend_end = self.weekend_end.get_time_str()
