@@ -370,5 +370,142 @@ class MonthPickerDialogTests(unittest.TestCase):
         self.assertIn("gotowy", describe_month_state(project.get(2026, 4)).lower())
 
 
+# ---------------------------------------------------------------------------
+# 6. Zasięg zmian konfiguracji/lokalizacji/pracowników - tylko ten miesiąc
+#    i miesiące utworzone od teraz, NIE wstecz i NIE do już istniejących
+#    późniejszych miesięcy (świadoma decyzja, patrz
+#    logic/utils/time_utils.py::month_scope_note).
+# ---------------------------------------------------------------------------
+
+class MonthScopeIsolationTests(unittest.TestCase):
+    def _window_with_months(self, *months):
+        """MainWindow z podanymi (year, month) już utworzonymi w projekcie,
+        wszystkie startujące z identyczną, domyślną konfiguracją - tak jakby
+        użytkownik po kolei je odwiedził."""
+        window = MainWindow.__new__(MainWindow)
+        first_year, first_month = months[0]
+        window.year, window.month = first_year, first_month
+        window.schedule = MonthSchedule(first_year, first_month)
+        window.shop_config = ShopConfig(first_year, first_month)
+        window.project = MonthlyProject()
+        window.project.put(first_year, first_month, window.schedule, window.shop_config)
+        window.date_display_label = MagicMock()
+        window.statusBar = MagicMock(return_value=MagicMock())
+        window._update_nominal_hours_label = MagicMock()
+        window._sync_everything = MagicMock()
+
+        for year, month in months[1:]:
+            window._switch_to_month(year, month)
+
+        return window
+
+    def test_location_self_heals_to_first_when_switching_to_a_month_without_it(self):
+        from model.location import LocationConfig
+
+        window = self._window_with_months((2026, 1), (2026, 2))
+        window.shop_config.locations["sklep_b"] = LocationConfig(key="sklep_b", name="Sklep B")
+        window.selected_location_key = "sklep_b"
+        window.btn_location_name = MagicMock()
+        window.btn_location_prev = MagicMock()
+        window.btn_location_next = MagicMock()
+        window.grid_header_location_label = MagicMock()
+        window.grid_header_hours_label = MagicMock()
+
+        window._switch_to_month(2026, 1)  # miesiąc bez "sklep_b"
+        window._update_location_switcher()
+
+        self.assertEqual(window.selected_location_key, next(iter(window.shop_config.locations)))
+        window.btn_location_name.setFullText.assert_called_with(
+            window.shop_config.locations[window.selected_location_key].name
+        )
+
+    def test_config_edit_does_not_retroactively_affect_already_existing_later_months(self):
+        window = self._window_with_months((2026, 1), (2026, 2), (2026, 3))
+
+        window._switch_to_month(2026, 1)
+        window.shop_config.constraints["min_open_staff"] = 99
+
+        self.assertEqual(window.project.get(2026, 2)[1].constraints["min_open_staff"], 3)
+        self.assertEqual(window.project.get(2026, 3)[1].constraints["min_open_staff"], 3)
+
+    def test_config_edit_does_not_affect_earlier_months(self):
+        window = self._window_with_months((2026, 1), (2026, 2))
+
+        window.shop_config.constraints["min_open_staff"] = 99  # na miesiącu 2
+
+        self.assertEqual(window.project.get(2026, 1)[1].constraints["min_open_staff"], 3)
+
+    def test_config_edit_is_inherited_by_a_brand_new_month_created_afterwards(self):
+        window = self._window_with_months((2026, 1),)
+        window.shop_config.constraints["min_open_staff"] = 99
+
+        window._switch_to_month(2026, 2)  # nowy miesiąc, tworzony po edycji
+
+        self.assertEqual(window.shop_config.constraints["min_open_staff"], 99)
+
+    def test_new_employee_does_not_appear_in_other_already_existing_months(self):
+        window = self._window_with_months((2026, 1), (2026, 2))
+
+        window._switch_to_month(2026, 1)
+        emp = Employee(last_name="Kowalski", first_name="Jan")
+        window.schedule.add_employee(emp)
+
+        self.assertEqual(window.project.get(2026, 2)[0].employees, [])
+
+
+class MonthScopeNoteTests(unittest.TestCase):
+    def test_format_month_label(self):
+        from logic.utils.time_utils import format_month_label
+
+        self.assertEqual(format_month_label(2026, 1), "Styczeń 2026")
+        self.assertEqual(format_month_label(2026, 1, capitalize=False), "styczeń 2026")
+
+    def test_scope_note_mentions_the_month_and_the_isolation_rule(self):
+        from logic.utils.time_utils import month_scope_note
+
+        note = month_scope_note(2026, 5)
+        self.assertIn("maj 2026", note)
+        self.assertIn("dotychczasowe ustawienia", note)
+
+    def test_config_dialog_shows_scope_note(self):
+        from ui.config_dialog import ConfigDialog
+
+        shop = ShopConfig(2026, 5)
+        dialog = ConfigDialog(None, shop)
+        note = _find_label(dialog, "quickInfoHint")
+        self.assertIsNotNone(note)
+        self.assertIn("maj 2026", note.text())
+
+    def test_locations_dialog_shows_scope_note(self):
+        from ui.locations_dialog import LocationsDialog
+
+        shop = ShopConfig(2026, 6)
+        dialog = LocationsDialog(None, shop)
+        note = _find_label(dialog, "quickInfoHint")
+        self.assertIsNotNone(note)
+        self.assertIn("czerwiec 2026", note.text())
+
+    def test_employee_dialog_shows_scope_note_when_shop_config_given(self):
+        from ui.employee_dialog import EmployeeDialog
+
+        shop = ShopConfig(2026, 7)
+        dialog = EmployeeDialog(None, shop_config=shop)
+        note = _find_label(dialog, "quickInfoHint")
+        self.assertIsNotNone(note)
+        self.assertIn("lipiec 2026", note.text())
+
+    def test_employee_dialog_survives_without_shop_config(self):
+        from ui.employee_dialog import EmployeeDialog
+
+        dialog = EmployeeDialog(None, shop_config=None)
+        self.assertIsNone(_find_label(dialog, "quickInfoHint"))
+
+
+def _find_label(widget, object_name):
+    from PySide6.QtWidgets import QLabel
+
+    return widget.findChild(QLabel, object_name)
+
+
 if __name__ == "__main__":
     unittest.main()

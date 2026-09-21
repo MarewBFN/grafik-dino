@@ -1048,3 +1048,35 @@ tam-i-z-powrotem między miesiącami zachowuje dane, pamięć poprzedniego
 miesiąca liczy się poprawnie niezależnie od kolejności odwiedzin, round-trip
 zapisu/wczytania (`.myp` nowego formatu + wsteczna kompatybilność ze
 starym) zachowuje wszystkie miesiące.
+
+### Doprecyzowanie zasięgu edycji: tylko ten miesiąc + nowe kolejne (2026-09-21)
+
+Użytkownik zapytał, czy edycja konfiguracji/dodanie lokalizacji/pracownika
+"wycieka" do innych miesięcy, i poprosił o sprawdzenie konkretnego
+scenariusza: dodajemy nową lokalizację, mając ją otwartą wczytujemy
+poprzedni miesiąc - czy program się nie wywali/nie pokaże niczego.
+
+**Sprawdzone na żywym `MainWindow()`:** ten scenariusz już działał
+poprawnie dzięki `_update_location_switcher()` (istniejący mechanizm
+samonaprawy - `self.selected_location_key not in locations` -> fallback na
+`next(iter(locations))`, czyli pierwszą lokalizację TEGO miesiąca) -
+zero zmian kodu potrzebnych tutaj.
+
+**Druga, subtelniejsza rzecz sprawdzona tym samym eksperymentem:** edycja
+configu (np. `min_open_staff`) na miesiącu N NIE propaguje się do już
+istniejących, PÓŹNIEJSZYCH miesięcy (N+1, N+2...) - tylko do nowo
+tworzonych od tego momentu. Użytkownik: to jest pożądane zachowanie
+(bezpieczne - nic nie zmienia się po cichu w miesiącu, który mógł już
+zostać wygenerowany/sprawdzony), więc bez zmian w logice - tylko dopisana
+jawna notka w GUI, żeby klient wiedział, czego się spodziewać, zamiast
+się tego domyślać.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/utils/time_utils.py` | `MONTH_NAMES_PL`, `format_month_label()`, `month_scope_note()` - wspólny tekst dla trzech okien niżej | TAK |
+| `ui/month_picker_dialog.py` | Nazwy miesięcy przeniesione na współdzielone `MONTH_NAMES_PL` (usunięta duplikacja) | TAK |
+| `ui/config_dialog.py`, `ui/locations_dialog.py`, `ui/employee_dialog.py` | Nowa notka (`quickInfoHint`) na górze okna: "Zmiany w tym oknie dotyczą tylko miesiąca X i miesięcy utworzonych od teraz..." | TAK |
+| `tests/test_monthly_project.py` (+11 testów) | `MonthScopeIsolationTests` (samonaprawa lokalizacji, izolacja configu/pracowników wstecz i do już istniejących późniejszych miesięcy, dziedziczenie przez nowo tworzone), `MonthScopeNoteTests` (obecność i treść notki w trzech oknach) | TAK |
+
+**Weryfikacja:** pełny zestaw testów zielony (587 passed, 1 skipped),
+zero regresji.

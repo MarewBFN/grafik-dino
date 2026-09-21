@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from logic.utils.time_utils import MONTH_NAMES_PL
 from model.monthly_project import (
     MONTH_STATE_EDITING,
     MONTH_STATE_EMPTY,
@@ -20,11 +21,6 @@ from model.monthly_project import (
     describe_month_state,
     month_state_class,
 )
-
-_MONTH_NAMES = [
-    "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec",
-    "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień",
-]
 
 # Ten sam trójstopniowy podział co model/monthly_project.py::month_state_class -
 # szary (brak danych) / żółty (w trakcie edycji) / zielony (grafik gotowy).
@@ -61,7 +57,7 @@ class _MonthTile(QFrame):
         layout.setContentsMargins(14, 12, 14, 10)
         layout.setSpacing(4)
 
-        name_label = QLabel(_MONTH_NAMES[month - 1])
+        name_label = QLabel(MONTH_NAMES_PL[month - 1].capitalize())
         name_label.setObjectName("monthTileName")
         layout.addWidget(name_label)
 

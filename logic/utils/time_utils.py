@@ -38,6 +38,41 @@ def is_next_calendar_month(old_year: int, old_month: int, new_year: int, new_mon
     return old_year * 12 + old_month + 1 == new_year * 12 + new_month
 
 
+MONTH_NAMES_PL = [
+    "styczeń", "luty", "marzec", "kwiecień", "maj", "czerwiec",
+    "lipiec", "sierpień", "wrzesień", "październik", "listopad", "grudzień",
+]
+
+
+def format_month_label(year: int, month: int, *, capitalize: bool = True) -> str:
+    """"Styczeń 2026" (albo "styczeń 2026" z capitalize=False, do wstawienia
+    w środku zdania) - współdzielone przez ui/month_picker_dialog.py i
+    notatki o zasięgu zmian konfiguracji/lokalizacji/pracowników w
+    ui/config_dialog.py, ui/locations_dialog.py, ui/employee_dialog.py."""
+    name = MONTH_NAMES_PL[month - 1]
+    if capitalize:
+        name = name.capitalize()
+    return f"{name} {year}"
+
+
+def month_scope_note(year: int, month: int) -> str:
+    """Tekst wyjaśniający zasięg zmian wprowadzanych w oknach Konfiguracja/
+    Lokalizacje/Pracownik - pamięć wielu miesięcy (model/monthly_project.py)
+    sprawia, że każdy miesiąc ma własny, niezależny ShopConfig/MonthSchedule,
+    więc te okna zawsze edytują TYLKO jeden, konkretny miesiąc (plus
+    dziedziczą go miesiące utworzone od teraz - patrz ui/main_window.py::
+    _switch_to_month). Świadoma decyzja (2026-09-21): zmiana NIE propaguje
+    się automatycznie do już istniejących, późniejszych miesięcy, żeby nic
+    nie zmieniało się po cichu w miesiącu, który mógł już zostać
+    sprawdzony/wygenerowany - stąd ta notka, żeby klient wiedział, czego się
+    spodziewać, zamiast się tego domyślać."""
+    return (
+        f"Zmiany w tym oknie dotyczą tylko miesiąca {format_month_label(year, month, capitalize=False)} "
+        "i miesięcy utworzonych od teraz. Wcześniejsze miesiące oraz już "
+        "istniejące późniejsze miesiące zachowują swoje dotychczasowe ustawienia."
+    )
+
+
 def previous_calendar_month(year: int, month: int) -> tuple[int, int]:
     """(year, month) kalendarzowo bezpośrednio poprzedzający podany miesiąc,
     z przeniesieniem roku wstecz na granicy stycznia. Używane przez pamięć

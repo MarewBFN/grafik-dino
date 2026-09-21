@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from logic.utils.time_utils import month_scope_note
 from ui.duty_rotation_editor import DutyRotationEditor
 from ui.slug import slugify
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
@@ -206,6 +207,11 @@ class LocationsDialog(QDialog):
         hint.setObjectName("mutedHint")
         hint.setWordWrap(True)
         root.addWidget(hint)
+
+        scope_note = QLabel(month_scope_note(self.shop_config.year, self.shop_config.month))
+        scope_note.setObjectName("quickInfoHint")
+        scope_note.setWordWrap(True)
+        root.addWidget(scope_note)
 
         # Lista lokalizacji rośnie bez ograniczeń - bez scrolla treść tego
         # okna (i przyciski Zapisz/Anuluj) wypadałyby poza ekran przy kilku

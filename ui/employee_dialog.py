@@ -25,6 +25,7 @@ from model.employee import Employee
 from model.business_profile import get_profile
 from model.constraint_policy import ConstraintPolicy
 from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
+from logic.utils.time_utils import month_scope_note
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 
 EMPLOYEE_TUTORIAL_FLAG = "employee_tutorial_seen.flag"
@@ -84,6 +85,12 @@ class EmployeeDialog(QDialog):
         title = QLabel("Dane pracownika")
         title.setObjectName("sectionLabel")
         root.addWidget(title)
+
+        if self.shop_config is not None:
+            scope_note = QLabel(month_scope_note(self.shop_config.year, self.shop_config.month))
+            scope_note.setObjectName("quickInfoHint")
+            scope_note.setWordWrap(True)
+            root.addWidget(scope_note)
 
         # Karta ról rośnie z liczbą ról custom profilu (kreator pozwala
         # dodać dowolnie wiele) - bez scrolla treść (i przyciski Zapisz/
