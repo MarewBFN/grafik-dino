@@ -613,6 +613,10 @@ class ConfigDialog(QDialog):
             ),
             TutorialStep(
                 "Godziny otwarcia",
+                "Ta zakładka edytuje wprost godziny otwarcia aktualnie wybranej "
+                "lokalizacji (te same dane co w oknie Lokalizacje) - osobno dla "
+                "każdego dnia tygodnia. Dzień możesz też oznaczyć „Nieczynne”."
+                if self.location is not None else
                 "Ustaw godziny pracy obiektu osobno dla każdego dnia tygodnia.",
                 target=self.tabs,
                 on_show=lambda: self.tabs.setCurrentIndex(self._tab_index_hours),

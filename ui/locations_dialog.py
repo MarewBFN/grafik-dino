@@ -1,4 +1,6 @@
-from PySide6.QtCore import QTime
+import os
+
+from PySide6.QtCore import QTime, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -16,8 +18,11 @@ from PySide6.QtWidgets import (
 )
 
 from ui.slug import slugify
+from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig
+
+LOCATIONS_TUTORIAL_FLAG = "locations_tutorial_seen.flag"
 
 
 def _parse_time(value: str) -> QTime:
@@ -174,6 +179,7 @@ class LocationsDialog(QDialog):
         self.setModal(True)
         self.resize(720, 560)
         self._build_ui()
+        QTimer.singleShot(0, self._maybe_show_tutorial)
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -237,27 +243,31 @@ class LocationsDialog(QDialog):
                 original_key=key,
             )
 
-        add_btn = QPushButton("Dodaj lokalizację")
-        add_btn.setObjectName("secondaryButton")
+        self.add_btn = QPushButton("Dodaj lokalizację")
+        self.add_btn.setObjectName("secondaryButton")
         # Godziny z zakładki Konfiguracja -> "Godziny otwarcia" jako punkt
         # startowy dla nowej lokalizacji (patrz hint tam) - i tak od razu
         # edytowalne osobno dla tej lokalizacji poniżej, zanim się zapisze.
-        add_btn.clicked.connect(
+        self.add_btn.clicked.connect(
             lambda: self._add_location_row(open_hours=dict(self.shop_config.open_hours))
         )
-        outer.addWidget(add_btn)
+        outer.addWidget(self.add_btn)
 
         outer.addStretch()
 
         buttons = QDialogButtonBox()
+        help_btn = QPushButton("Pomoc")
+        help_btn.setObjectName("secondaryButton")
         cancel_btn = QPushButton("Anuluj")
         cancel_btn.setObjectName("secondaryButton")
-        save_btn = QPushButton("Zapisz")
-        save_btn.setObjectName("primaryButton")
+        self.save_btn = QPushButton("Zapisz")
+        self.save_btn.setObjectName("primaryButton")
+        buttons.addButton(help_btn, QDialogButtonBox.HelpRole)
         buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
-        buttons.addButton(save_btn, QDialogButtonBox.AcceptRole)
+        buttons.addButton(self.save_btn, QDialogButtonBox.AcceptRole)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self._save)
+        help_btn.clicked.connect(self._open_tutorial)
         root.addWidget(buttons)
 
     def _add_location_row(
@@ -293,6 +303,65 @@ class LocationsDialog(QDialog):
             row.remove_btn.setToolTip(
                 "Projekt musi mieć co najmniej jedną lokalizację." if only_one else ""
             )
+
+    def _build_tutorial_steps(self):
+        first_row = self._location_rows[0] if self._location_rows else None
+        steps = [
+            TutorialStep(
+                "Lokalizacje",
+                "Tutaj zarządzasz osobnymi obiektami/placówkami w ramach tego "
+                "projektu - każda ma własne godziny otwarcia.",
+            ),
+            TutorialStep(
+                "Dodaj lokalizację",
+                "Kliknij, żeby dodać kolejną placówkę do projektu.",
+                target=self.add_btn,
+            ),
+        ]
+        if first_row is not None:
+            steps.append(TutorialStep(
+                "Działalność całodobowa (24/7)",
+                "Zaznacz, jeśli ta placówka jest czynna całodobowo przez cały "
+                "tydzień - wtedy godziny otwarcia nie mają już znaczenia.",
+                target=first_row.is_24_7_check,
+            ))
+            if not first_row.is_24_7_check.isChecked():
+                steps.append(TutorialStep(
+                    "Godziny otwarcia",
+                    "Przyciskiem „Rozwiń” pokażesz godziny osobno dla każdego dnia "
+                    "tygodnia. Zaznacz „Nieczynne” przy dniu, w którym placówka nie "
+                    "pracuje wcale.",
+                    target=first_row.toggle_hours_btn,
+                ))
+        steps.append(TutorialStep(
+            "Zapisz",
+            "Zapisz zmiany, żeby zaczęły obowiązywać w grafiku i w generatorze.",
+            target=self.save_btn,
+        ))
+        return steps
+
+    def _start_tutorial(self, on_finished=None):
+        existing = getattr(self, "_tutorial_overlay", None)
+        if existing is not None:
+            existing.deleteLater()
+        self._tutorial_overlay = TutorialOverlay(self, self._build_tutorial_steps(), on_finished=on_finished)
+        self._tutorial_overlay.start()
+
+    def _open_tutorial(self):
+        self._start_tutorial()
+
+    def _maybe_show_tutorial(self):
+        if os.path.exists(LOCATIONS_TUTORIAL_FLAG):
+            return
+
+        def mark_seen():
+            try:
+                with open(LOCATIONS_TUTORIAL_FLAG, "w") as f:
+                    f.write("seen")
+            except OSError:
+                pass
+
+        self._start_tutorial(on_finished=mark_seen)
 
     def _save(self):
         try:

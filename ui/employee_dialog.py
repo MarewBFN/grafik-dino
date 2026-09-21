@@ -1,6 +1,7 @@
 import dataclasses
+import os
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -24,6 +25,9 @@ from model.employee import Employee
 from model.business_profile import get_profile
 from model.constraint_policy import ConstraintPolicy
 from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
+from ui.tutorial_overlay import TutorialOverlay, TutorialStep
+
+EMPLOYEE_TUTORIAL_FLAG = "employee_tutorial_seen.flag"
 
 # RoleDef.key values that map directly onto an Employee dataclass field
 # (the six legacy Dino flags). Any other key lives in Employee.custom_roles
@@ -53,6 +57,7 @@ class EmployeeDialog(QDialog):
         # Wygląd pochodzi ze wspólnego arkusza stylów aplikacji (ui/theme.py).
         self._build_ui()
         self._fill_from_employee()
+        QTimer.singleShot(0, self._maybe_show_tutorial)
 
     def _role_is_hidden(self, role) -> bool:
         """True when this role's linked_policy (e.g. Dino's meat roles ->
@@ -136,9 +141,9 @@ class EmployeeDialog(QDialog):
         content_layout.addLayout(form)
 
         # --- Role i ograniczenia: jedna karta zamiast osobnej ramki na checkbox ---
-        flags_card = QFrame()
-        flags_card.setObjectName("configCard")
-        flags_layout = QVBoxLayout(flags_card)
+        self.flags_card = QFrame()
+        self.flags_card.setObjectName("configCard")
+        flags_layout = QVBoxLayout(self.flags_card)
         flags_layout.setSpacing(10)
 
         for role in self.profile.roles:
@@ -187,11 +192,17 @@ class EmployeeDialog(QDialog):
             )
             flags_layout.addWidget(self.no_24h_check)
 
-        content_layout.addWidget(flags_card)
+        content_layout.addWidget(self.flags_card)
         content_layout.addStretch()
 
         # --- Dolny pasek przycisków ---
         button_row = QHBoxLayout()
+
+        help_btn = QPushButton("Pomoc")
+        help_btn.setObjectName("secondaryButton")
+        help_btn.setMinimumHeight(34)
+        help_btn.clicked.connect(self._open_tutorial)
+        button_row.addWidget(help_btn)
 
         # Przycisk Usuń (w lewym rogu)
         if self.employee:
@@ -200,7 +211,7 @@ class EmployeeDialog(QDialog):
             self.delete_btn.setMinimumHeight(34)
             self.delete_btn.clicked.connect(self._delete_employee)
             button_row.addWidget(self.delete_btn)
-        
+
         # Spacer przesuwa resztę na prawo
         button_row.addItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
@@ -211,14 +222,14 @@ class EmployeeDialog(QDialog):
         cancel_btn.setMinimumWidth(80)
         cancel_btn.clicked.connect(self.reject)
 
-        save_btn = QPushButton("Zapisz")
-        save_btn.setObjectName("primaryButton")
-        save_btn.setMinimumHeight(34)
-        save_btn.setMinimumWidth(100)
-        save_btn.clicked.connect(self._save)
+        self.save_btn = QPushButton("Zapisz")
+        self.save_btn.setObjectName("primaryButton")
+        self.save_btn.setMinimumHeight(34)
+        self.save_btn.setMinimumWidth(100)
+        self.save_btn.clicked.connect(self._save)
 
         button_row.addWidget(cancel_btn)
-        button_row.addWidget(save_btn)
+        button_row.addWidget(self.save_btn)
 
         root.addLayout(button_row)
 
@@ -266,6 +277,69 @@ class EmployeeDialog(QDialog):
         if self.location_combo is not None:
             idx = self.location_combo.findData(self.employee.location_key)
             self.location_combo.setCurrentIndex(idx if idx >= 0 else 0)
+
+    def _build_tutorial_steps(self):
+        steps = [
+            TutorialStep(
+                "Dane pracownika",
+                "Tutaj ustawiasz podstawowe dane pracownika: imię, nazwisko, "
+                "wymiar etatu oraz role wykorzystywane przez generator.",
+            ),
+            TutorialStep(
+                "Wymiar etatu",
+                "Wybierz wymiar etatu pracownika - od tego zależy jego docelowa "
+                "liczba godzin w miesiącu.",
+                target=self.employment_fraction,
+            ),
+        ]
+        if self.location_combo is not None:
+            steps.append(TutorialStep(
+                "Lokalizacja",
+                "Wybierz placówkę, do której przypisany jest ten pracownik.",
+                target=self.location_combo,
+            ))
+        steps.append(TutorialStep(
+            "Role",
+            "Zaznacz role tego pracownika - generator używa ich przy układaniu "
+            "grafiku (np. kto ma priorytet w przydzielaniu godzin).",
+            target=self.flags_card,
+        ))
+        if self.no_24h_check is not None:
+            steps.append(TutorialStep(
+                "Nie chce pracować zmian 24h",
+                "Zaznacz, jeśli ta osoba nie powinna dostawać pojedynczej zmiany "
+                "24h przy rotacji służby - dostanie wtedy dwie zmiany po 12h.",
+                target=self.no_24h_check,
+            ))
+        steps.append(TutorialStep(
+            "Zapisz",
+            "Zapisz dane pracownika.",
+            target=self.save_btn,
+        ))
+        return steps
+
+    def _start_tutorial(self, on_finished=None):
+        existing = getattr(self, "_tutorial_overlay", None)
+        if existing is not None:
+            existing.deleteLater()
+        self._tutorial_overlay = TutorialOverlay(self, self._build_tutorial_steps(), on_finished=on_finished)
+        self._tutorial_overlay.start()
+
+    def _open_tutorial(self):
+        self._start_tutorial()
+
+    def _maybe_show_tutorial(self):
+        if os.path.exists(EMPLOYEE_TUTORIAL_FLAG):
+            return
+
+        def mark_seen():
+            try:
+                with open(EMPLOYEE_TUTORIAL_FLAG, "w") as f:
+                    f.write("seen")
+            except OSError:
+                pass
+
+        self._start_tutorial(on_finished=mark_seen)
 
     def _save(self):
         ln = self.last_name.text().strip()

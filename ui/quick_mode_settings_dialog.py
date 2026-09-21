@@ -1,3 +1,6 @@
+import os
+
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -14,6 +17,9 @@ from PySide6.QtWidgets import (
 )
 from model.shop_config import normalize_quick_mode_presets
 from ui.time_input import TimeInputWidget
+from ui.tutorial_overlay import TutorialOverlay, TutorialStep
+
+QUICK_MODE_TUTORIAL_FLAG = "quick_mode_tutorial_seen.flag"
 
 
 class _PresetRow(QFrame):
@@ -78,6 +84,7 @@ class QuickModeSettingsDialog(QDialog):
         self.result_presets = None
         self._rows: list[_PresetRow] = []
         self._build_ui(presets or [])
+        QTimer.singleShot(0, self._maybe_show_tutorial)
 
     def _build_ui(self, presets):
         root = QVBoxLayout(self)
@@ -113,19 +120,23 @@ class QuickModeSettingsDialog(QDialog):
 
         self._rows_layout.addStretch()
 
-        add_btn = QPushButton("Dodaj przedział")
-        add_btn.setObjectName("secondaryButton")
-        add_btn.clicked.connect(lambda: self._add_row())
-        root.addWidget(add_btn)
+        self.add_btn = QPushButton("Dodaj przedział")
+        self.add_btn.setObjectName("secondaryButton")
+        self.add_btn.clicked.connect(lambda: self._add_row())
+        root.addWidget(self.add_btn)
 
         buttons = QDialogButtonBox()
+        help_btn = QPushButton("Pomoc")
+        help_btn.setObjectName("secondaryButton")
         cancel_btn = QPushButton("Anuluj")
-        save_btn = QPushButton("Zapisz")
-        save_btn.setObjectName("primaryButton")
+        self.save_btn = QPushButton("Zapisz")
+        self.save_btn.setObjectName("primaryButton")
+        buttons.addButton(help_btn, QDialogButtonBox.HelpRole)
         buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
-        buttons.addButton(save_btn, QDialogButtonBox.AcceptRole)
+        buttons.addButton(self.save_btn, QDialogButtonBox.AcceptRole)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self._save)
+        help_btn.clicked.connect(self._open_tutorial)
         root.addWidget(buttons)
 
     def _add_row(self, name="", start="08:00", end="16:00", full_day=False):
@@ -138,6 +149,59 @@ class QuickModeSettingsDialog(QDialog):
         self._rows.remove(row)
         row.setParent(None)
         row.deleteLater()
+
+    def _build_tutorial_steps(self):
+        steps = [
+            TutorialStep(
+                "Ustawienia trybu szybkiego",
+                "Zdefiniuj własne, nazwane przedziały czasowe - każdy pojawi się "
+                "jako osobny przycisk w trybie szybkim, zamiast ręcznego "
+                "wpisywania godzin.",
+            ),
+            TutorialStep(
+                "Dodaj przedział",
+                "Kliknij, żeby dodać nowy przedział czasowy.",
+                target=self.add_btn,
+            ),
+        ]
+        if self._rows:
+            steps.append(TutorialStep(
+                "Nazwa i godziny",
+                "Nadaj przedziałowi nazwę (np. „Zmiana 16h”) i ustaw godziny "
+                "start/koniec. Zaznacz „Cała doba (24h)”, jeśli przedział ma "
+                "trwać całą dobę.",
+                target=self._rows[0],
+            ))
+        steps.append(TutorialStep(
+            "Zapisz",
+            "Zapisz przedziały - od razu pojawią się jako przyciski w trybie "
+            "szybkim.",
+            target=self.save_btn,
+        ))
+        return steps
+
+    def _start_tutorial(self, on_finished=None):
+        existing = getattr(self, "_tutorial_overlay", None)
+        if existing is not None:
+            existing.deleteLater()
+        self._tutorial_overlay = TutorialOverlay(self, self._build_tutorial_steps(), on_finished=on_finished)
+        self._tutorial_overlay.start()
+
+    def _open_tutorial(self):
+        self._start_tutorial()
+
+    def _maybe_show_tutorial(self):
+        if os.path.exists(QUICK_MODE_TUTORIAL_FLAG):
+            return
+
+        def mark_seen():
+            try:
+                with open(QUICK_MODE_TUTORIAL_FLAG, "w") as f:
+                    f.write("seen")
+            except OSError:
+                pass
+
+        self._start_tutorial(on_finished=mark_seen)
 
     def _save(self):
         raw = []
