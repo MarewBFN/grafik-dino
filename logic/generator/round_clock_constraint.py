@@ -106,9 +106,20 @@ def add_round_clock_gate_constraint(
             "round-clock tile shifts and the old OPEN/CLOSE/START/END/NIGHT model are mutually exclusive per employee",
         )
 
+    all_round_clock_ids = set(round_clock_shifts)
+
+    # Nikt w projekcie nie ma skonfigurowanej rotacji całodobowej - prosta
+    # blokada bez dotykania standard_daily_hours w ogóle (istotne dla
+    # testów z mockowanym ShopConfig, patrz round_clock_rest_constraint.py).
+    if not any(shop.get_location(emp).get_round_clock_start_hour() for emp in employees):
+        for e in range(len(employees)):
+            for d in days:
+                for s in all_round_clock_ids:
+                    model.Add(x[e, d, s] == 0)
+        return
+
     n_tiles = round_clock_tile_count(standard_daily_hours)
     active_ids = set(round_clock_shifts[:n_tiles])
-    all_round_clock_ids = set(round_clock_shifts)
     other_shift_ids = [s for s in all_shifts if s not in all_round_clock_ids]
 
     for e, emp in enumerate(employees):

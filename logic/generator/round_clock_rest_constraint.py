@@ -83,6 +83,13 @@ def add_round_clock_rest_constraint(
 
     violations = []
     groups = group_employees_with_round_clock(employees, shop)
+    if not groups:
+        # Nikt w projekcie nie ma skonfigurowanej rotacji całodobowej - nie
+        # ma czego liczyć, i (istotne dla testów z mockowanym ShopConfig)
+        # nie dotykamy standard_daily_hours w ogóle, skoro n_tiles i tak
+        # nigdzie by się nie przydało.
+        return violations
+
     days_sorted = sorted(days)
     n_tiles = round_clock_tile_count(standard_daily_hours)
 

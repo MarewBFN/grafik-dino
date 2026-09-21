@@ -38,6 +38,12 @@ def add_round_clock_manual_shift_constraint(
             "apply locked/manual day assignments for round-clock employees",
         )
 
+    # Nikt w projekcie nie ma skonfigurowanej rotacji całodobowej - nic do
+    # zrobienia, bez dotykania standard_daily_hours w ogóle (istotne dla
+    # testów z mockowanym ShopConfig, patrz round_clock_rest_constraint.py).
+    if not any(shop.get_location(emp).get_round_clock_start_hour() for emp in employees):
+        return
+
     n_tiles = round_clock_tile_count(standard_daily_hours)
     active_ids = set(round_clock_shifts[:n_tiles])
 
