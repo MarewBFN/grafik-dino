@@ -42,6 +42,12 @@ class ConstraintContext:
     # None dla kodu sprzed tego mechanizmu; AutoScheduleGenerator zawsze
     # przekazuje tu konkretny słownik.
     duty_shifts: dict | None = None
+    # Kafelki rotacji całodobowej "ogólnej" (patrz
+    # logic/generator/round_clock_constraint.py) - lista ID zmian (nie
+    # dict jak duty_shifts, bo wszystkie kafelki są jednakowe, tylko
+    # rozstawione co inną godzinę). None dla kodu sprzed tego mechanizmu;
+    # AutoScheduleGenerator zawsze przekazuje tu konkretną listę.
+    round_clock_shifts: list | None = None
     # Shared state a profile's constraints pass between each other (e.g. Dino's
     # meat-light duty budget). Empty/unused for profiles that don't need it.
     extra: dict = field(default_factory=dict)

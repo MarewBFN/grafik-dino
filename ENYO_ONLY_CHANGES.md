@@ -1080,3 +1080,86 @@ się tego domyślać.
 
 **Weryfikacja:** pełny zestaw testów zielony (587 passed, 1 skipped),
 zero regresji.
+
+## Rotacja całodobowa "ogólna" - godzina rozpoczęcia dla lokalizacji 24/7 (2026-09-21)
+
+Zgłoszenie klienta: dla lokalizacji z zaznaczonym "Działalność całodobowa
+(24/7)" (`LocationConfig.is_24_7`) generator nie potrafił obsadzić środka
+doby. Zweryfikowane empirycznie PRZED napisaniem kodu (uruchomienie
+prawdziwego `AutoScheduleGenerator` na lokalizacji 24/7): mechanizm
+OPEN/CLOSE (`logic/auto_generator.py::START_SHIFT_MAP`/`END_SHIFT_MAP`)
+zakotwicza zmiany tylko na godzinie otwarcia/zamknięcia, z przesunięciami
+do maks. 90/75 minut - to wystarcza na typowy dzień sklepu (~17h), ale przy
+24h otwarcia zawsze zostaje ok. 5-6-godzinna dziura bez nikogo w pracy
+(solver zgłaszał "rozwiązanie", ale środek doby zostawał pusty).
+
+**Rozwiązanie (ustalone z użytkownikiem - dwa pytania przed kodowaniem):**
+nowe pole `LocationConfig.round_clock_start_hour` (tylko dla `is_24_7=True`)
+- generator dzieli dobę na N "kafelków" (zmian) o długości
+`ShopConfig.standard_daily_hours` każda, zaczynających się od podanej
+godziny i rozstawionych równo co `24h/N`, aż wypełnią całą dobę - N liczone
+automatycznie jako `ceil(24h / standard_daily_hours)` (domyślnie 8h → 3
+kafelki), z granicami [2, 6]. Obsada każdego kafelka: DOKŁADNIE ta sama
+reguła co dzisiejsze otwarcie/zamknięcie (`min_open_staff` + wymóg co
+najmniej 1 osoby z rolą "otwiera" i 1 z rolą "mięso") - świadomie
+WYŁĄCZNIE dla profilu Dino (te role nie mają sensu dla innych profili, np.
+Ochrona ma już własny, dedykowany `duty_rotation`).
+
+**Architektura (ten sam wzorzec co `duty_rotation_constraint.py` - Etap B
+"plan profil ochrona"):** nowa rodzina 6 stałych ID zmian
+(`SHIFT_ROUND_1..6`, zawsze w `ALL_SHIFTS`, jak `SHIFT_DUTY_*`) - gate
+(`add_round_clock_gate_constraint`) blokuje je twardo dla każdego
+pracownika bez skonfigurowanej lokalizacji round-clock (i blokuje kafelki
+`>= N` dla wszystkich), rest (`add_round_clock_rest_constraint`, standardowe
+11h - w odróżnieniu od `duty_rotation`'s "doba za dobę" po zmianie 24h,
+żaden kafelek round-clock nie jest tak długi jak doba, więc wystarczy
+sprawdzić dzień d wobec d+1), manual (`add_round_clock_manual_shift_constraint`,
+dopasowanie po samej godzinie startu). Zero zmiany zachowania dla każdego
+istniejącego projektu (żadna lokalizacja nie ma `round_clock_start_hour`
+domyślnie).
+
+**Naprawiony bug znaleziony PODCZAS budowy tej funkcji (nie osobne
+zgłoszenie):** profil Dino wymaga obsady OPEN/CLOSE bezwarunkowo
+(MANDATORY domyślnie) - gdy WSZYSCY pracownicy projektu są na lokalizacji
+round-clock (więc mają `x[e,d,SHIFT_OPEN/CLOSE]` zablokowane przez bramę
+round-clock), `min_open_staff`/`min_close_staff` było strukturalnie
+niespełnialne, robiąc CAŁY miesiąc `INFEASIBLE` (odtworzone empirycznie -
+12 pracowników z rolami otwiera+mięso, generator i tak zgłaszał brak
+rozwiązania). Naprawa: `add_fixed_staff_shift_constraints`
+(`constraints_staff.py`) dostało opcjonalny `employee_indices` (ten sam
+wzorzec co `add_max_consecutive_constraint`) + early-return `[]`, gdy lista
+jest pusta (zamiast wymuszać niespełnialne `total_staff == min_staff` na
+zerze pracowników); `dino_retail_profile.py::_build_open`/`_build_close`
+filtrują teraz pracowników rotacji całodobowej (i, dla spójności, służby
+24/7) z tego wymogu - projekt mieszany (część lokalizacji zwykła, część
+round-clock) nadal poprawnie wymaga obsady open/close od "zwykłych"
+pracowników.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/location.py` | `LocationConfig.round_clock_start_hour`, `set_24_7(False)` czyści je | TAK |
+| `model/shop_config.py` | `_LocationView.get_round_clock_start_hour()`, `ShopConfig.get_round_clock_start_hour()` (zawsze `None` - fallback dla pracownika bez lokalizacji), domyślna polityka `round_clock_coverage: MANDATORY` | TAK |
+| `logic/generator/round_clock_constraint.py` (nowy) | `round_clock_tile_count`/`round_clock_tile_start_hour`, `add_round_clock_gate_constraint`, `add_round_clock_coverage_constraint` | TAK |
+| `logic/generator/round_clock_rest_constraint.py` (nowy) | `add_round_clock_rest_constraint` (11h + pamięć poprzedniego miesiąca) | TAK |
+| `logic/generator/round_clock_manual_constraint.py` (nowy) | `add_round_clock_manual_shift_constraint` | TAK |
+| `logic/generator/constraints_staff.py` | `add_fixed_staff_shift_constraints` - nowy opcjonalny `employee_indices` | TAK |
+| `logic/generator/dino_retail_profile.py` | `_build_round_clock_coverage` (nowy spec), `_open_close_eligible_indices()` (naprawa opisana wyżej) | TAK |
+| `logic/generator/constraints_logic.py`, `availability_constraint.py`, `manual_constraint.py` | Wykluczenie kafelków round-clock z `work_dependency`/`availability`/starego `manual_shift`, ten sam wzorzec co dla `duty_shifts` | TAK |
+| `logic/generator/base_specs.py` | Rejestracja gate/manual (always-on) + rest (w `_build_rest_11h`) | TAK |
+| `logic/generator/solution_mapper.py`, `logic/auto_generator.py`, `logic/generator/constraint_registry.py` | Nowe ID zmian, zapis przydziału do `DaySchedule`, `ConstraintContext.round_clock_shifts` | TAK |
+| `ui/locations_dialog.py` | Pole "Rotacja całodobowa - godzina rozpoczęcia" (tylko dla 24/7) + opis działania w GUI | TAK |
+| `tests/test_round_clock.py` (nowy, 29 testów) | Matematyka kafelków, brama, obsada (end-to-end przez prawdziwy generator - potwierdzona pełna obsada doby bez luki), odpoczynek 11h, ręczna blokada, regresja na buga open/close, GUI | TAK |
+
+**Świadome ograniczenia zakresu (v1):** budżet "mięsa tymczasowego"
+(`is_meat_light`) nie liczy się do obsady kafelków round-clock (budowany
+tylko dla OPEN/CLOSE/START/END); `logic/generator/fix.py` (tryb
+częściowej regeneracji "Napraw") nie wie o kafelkach round-clock -
+zaakceptowane uproszczenia, nieblokujące podstawowej funkcjonalności.
+
+**Weryfikacja:** empirycznie na żywym `AutoScheduleGenerator` (12
+pracowników, lokalizacja 24/7, `round_clock_start_hour="08:00"`) - status
+`OPTIMAL`, sprawdzone dzień po dniu: pełna obsada doby (00:00-08:30,
+08:00-16:30, 16:00-00:30 - zachodzące kafelki, zero luki) tam, gdzie
+wcześniej środek doby zostawał pusty. Pełny zestaw testów zielony (patrz
+liczba w kolejnym wpisie), zero regresji na testach duty_rotation/night_shift/
+open/close/rest_11h.

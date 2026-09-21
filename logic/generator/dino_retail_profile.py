@@ -12,6 +12,7 @@ from logic.generator.constraint_registry import ConstraintContext, ConstraintSpe
 from logic.generator.constraints_staff import add_fixed_staff_shift_constraints
 from logic.generator.meat_constraint import add_meat_constraint, add_meat_coverage_constraint
 from logic.generator.meat_light_budget import build_meat_light_duty
+from logic.generator.round_clock_constraint import add_round_clock_coverage_constraint
 from logic.generator.objective import (
     add_open_close_penalty,
     add_work_balance_penalty,
@@ -30,6 +31,7 @@ CONSTRAINT_WEIGHTS = {
     "meat_light_usage": 400,
     "open": 200,
     "close": 200,
+    "round_clock_coverage": 200,
     "no_night": 5000,
     "no_afternoon": 5000,
     "morning_afternoon_balance": 10000,
@@ -50,6 +52,23 @@ def setup_context(ctx: ConstraintContext) -> None:
     ctx.extra["meat_light_penalties"] = []
 
 
+def _open_close_eligible_indices(ctx):
+    """Pracownicy, dla których stary model OPEN/CLOSE w ogóle ma zastosowanie -
+    wyklucza rotację całodobową "ogólną" (round_clock_constraint.py) i
+    służbę 24/7 (duty_rotation_constraint.py), bo obu tych grup
+    x[e,d,SHIFT_OPEN/CLOSE] jest zablokowane twardo przez ich własne bramy
+    (add_round_clock_gate_constraint/add_duty_rotation_gate_constraint) -
+    bez tego filtra "open"/"close" (MANDATORY domyślnie) żądałyby min_staff
+    od pracowników, którzy strukturalnie NIE MOGĄ go spełnić, robiąc model
+    niewykonalnym za każdym razem, gdy cały projekt (albo cały min_staff)
+    opiera się wyłącznie na takiej lokalizacji."""
+    return [
+        e for e, emp in enumerate(ctx.employees)
+        if not ctx.shop.get_location(emp).get_round_clock_start_hour()
+        and not ctx.shop.get_location(emp).get_duty_rotation()
+    ]
+
+
 def _build_open(ctx, soft):
     min_open = ctx.shop.constraints.get("min_open_staff", 3)
     return add_fixed_staff_shift_constraints(
@@ -57,6 +76,7 @@ def _build_open(ctx, soft):
         soft=soft, trace=ctx.trace,
         meat_light_penalties=ctx.extra["meat_light_penalties"],
         shift_duty_sum=ctx.extra["shift_duty_sum"],
+        employee_indices=_open_close_eligible_indices(ctx),
     )
 
 
@@ -65,6 +85,7 @@ def _build_close(ctx, soft):
     return add_fixed_staff_shift_constraints(
         ctx.model, ctx.x, ctx.employees, ctx.trade_days, ctx.shift_close, min_close,
         soft=soft, trace=ctx.trace,
+        employee_indices=_open_close_eligible_indices(ctx),
         meat_light_penalties=ctx.extra["meat_light_penalties"],
         shift_duty_sum=ctx.extra["shift_duty_sum"],
     )
@@ -105,6 +126,15 @@ def _build_meat_coverage(ctx, soft):
     )
 
 
+def _build_round_clock_coverage(ctx, soft):
+    return add_round_clock_coverage_constraint(
+        ctx.model, ctx.x, ctx.employees, ctx.trade_days, ctx.shop, ctx.round_clock_shifts,
+        ctx.shop.standard_daily_hours, soft=soft, trace=ctx.trace,
+        meat_light_penalties=ctx.extra["meat_light_penalties"],
+        shift_duty_sum=ctx.extra["shift_duty_sum"],
+    )
+
+
 def _build_dino_policy_specs():
     return [
         ConstraintSpec("open", _build_open),
@@ -113,6 +143,11 @@ def _build_dino_policy_specs():
         ConstraintSpec("no_afternoon", _build_no_afternoon),
         ConstraintSpec("meat", _build_meat),
         ConstraintSpec("meat_coverage", _build_meat_coverage),
+        # Kafelki rotacji całodobowej "ogólnej" (round_clock_constraint.py) -
+        # wyłącznie dla Dino, jak "open"/"close" (is_opener/is_meat to role
+        # specyficzne dla tego profilu). Świadomie NIE dla profili custom
+        # (np. Ochrona ma własny, dedykowany duty_rotation).
+        ConstraintSpec("round_clock_coverage", _build_round_clock_coverage),
     ]
 
 

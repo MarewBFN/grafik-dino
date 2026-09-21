@@ -56,6 +56,9 @@ class _LocationView:
     def get_duty_rotation(self):
         return self._location.get_duty_rotation()
 
+    def get_round_clock_start_hour(self) -> str | None:
+        return self._location.round_clock_start_hour if self._location.is_24_7 else None
+
     @property
     def constraints(self) -> dict:
         # LocationConfig always carries all of DEFAULT_LOCATION_CONSTRAINTS
@@ -162,6 +165,12 @@ class ShopConfig:
             # gdy klient faktycznie skonfiguruje ten mechanizm.
             "duty_rotation_coverage": ConstraintPolicy.MANDATORY,
             "duty_rotation_no24h": ConstraintPolicy.MANDATORY,
+            # Rotacja całodobowa "ogólna" (patrz LocationConfig.round_clock_start_hour,
+            # logic/generator/round_clock_constraint.py) - no-op dopóki żadna
+            # lokalizacja nie ma jej ustawionej, ten sam wzorzec co
+            # duty_rotation_coverage wyżej: MANDATORY domyślnie (jak "open"/
+            # "close") nie zmienia zachowania żadnego istniejącego projektu.
+            "round_clock_coverage": ConstraintPolicy.MANDATORY,
         }
         # -----------------------------
         # Override godzin dla konkretnego dnia
@@ -341,6 +350,15 @@ class ShopConfig:
 
     def set_duty_rotation(self, raw: dict | None) -> None:
         self.duty_rotation = normalize_duty_rotation(raw)
+
+    def get_round_clock_start_hour(self) -> str | None:
+        # "Godzina rozpoczęcia" rotacji całodobowej (round_clock_constraint.py)
+        # jest, tak jak `is_24_7`, wyłącznie polem LocationConfig - nie ma
+        # (i nigdy nie miała) odpowiednika na poziomie projektu, więc ten
+        # sam wzorzec co get_duty_rotation() wyżej, ale zawsze None: dotyczy
+        # tylko pracownika bez rozwiązywalnej lokalizacji (patrz get_location()
+        # niżej), dla którego ten mechanizm i tak nigdy nie ma zastosowania.
+        return None
 
     # ==========================================================
     # PRESETY TRYBU SZYBKIEGO
