@@ -38,6 +38,17 @@ def is_next_calendar_month(old_year: int, old_month: int, new_year: int, new_mon
     return old_year * 12 + old_month + 1 == new_year * 12 + new_month
 
 
+def previous_calendar_month(year: int, month: int) -> tuple[int, int]:
+    """(year, month) kalendarzowo bezpośrednio poprzedzający podany miesiąc,
+    z przeniesieniem roku wstecz na granicy stycznia. Używane przez pamięć
+    wielu miesięcy (model/monthly_project.py) do ustalenia, KTÓRY zapamiętany
+    miesiąc jest właściwym źródłem "pamięci poprzedniego miesiąca" dla
+    nowo tworzonego miesiąca - niezależnie od tego, który miesiąc był
+    aktualnie otwarty w chwili przełączenia (patrz ui/main_window.py::
+    _switch_to_month, swobodna nawigacja między miesiącami)."""
+    return (year - 1, 12) if month == 1 else (year, month - 1)
+
+
 def classify_shift_as_morning_or_afternoon(shift_start, shift_end, shop_open_dt, shop_close_dt):
     """Classify a shift based on the actual shop opening/closing window.
 

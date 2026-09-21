@@ -957,3 +957,94 @@ poprawnie zwraca `True` dla pracownika przypisanego do tej lokalizacji.
 poprzedniej sekcji trzeba PRZEBUDOWAĆ (zawiera kod sprzed tych poprawek) -
 jeśli w GitHub Release z tagu `v1.0.0-enyo` już wgrano stary plik, trzeba
 go zastąpić nowym.
+
+## Pamięć wielu miesięcy + odblokowanie pamięci poprzedniego miesiąca (2026-09-21)
+
+Dotychczas "projekt" (`.myp`) to był dokładnie JEDEN miesiąc - zmiana
+miesiąca (`ui/main_window.py::_save_date_clicked`) zawsze bezpowrotnie
+kasowała grafik i pytała o to ostrzegawczym popupem, zachowując tylko
+listę pracowników i `ShopConfig` (lokalizacje/profil/reguły generatora -
+te już wcześniej przeżywały zmianę miesiąca przez `ShopConfig.
+reset_for_new_month`, tylko sam `MonthSchedule` ginął, razem z
+`day_overrides`/`trade_sundays` konkretnego miesiąca, bo `reset_for_new_month`
+zerowało je w miejscu na współdzielonym obiekcie). Użytkownik poprosił o
+możliwość swobodnego poruszania się między miesiącami tego samego projektu
+(np. żeby sprawdzić coś we wcześniejszym miesiącu) bez utraty żadnych
+danych - i o wpięcie do tego mechanizmu pamięci poprzedniego miesiąca
+opisanej wyżej (przywrócone z `PREVIOUS_MONTH_MEMORY_ENABLED = False` do
+`True` w tej samej rundzie - diagnostyka INFEASIBLE, na którą to chowanie
+czekało, była już gotowa).
+
+**Model:** nowy `model/monthly_project.py::MonthlyProject` - kontener
+`Dict[(year, month), (MonthSchedule, ShopConfig)]`, jeden wpis na KAŻDY
+miesiąc kiedykolwiek odwiedzony w tej sesji, nie tylko aktualnie otwarty.
+Każdy miesiąc ma WŁASNY, niezależny `ShopConfig` (kopiowany przez
+`deepcopy` - ten sam, już istniejący wzorzec co undo/redo w
+`logic/schedule_controller.py`) zamiast jednego współdzielonego i zerowanego
+w miejscu - dzięki temu powrót do starego miesiąca pokazuje dokładnie te
+niedziele handlowe/nadpisania dni/święta, jakie tam faktycznie ustawiono.
+
+**`ui/main_window.py::_switch_to_month`** (zastępuje `_save_date_clicked`
+jako jedyną drogę zmiany miesiąca, wołane teraz z nowego okna wyboru -
+patrz niżej): miesiąc już obecny w `self.project` wraca dokładnie taki,
+jaki został zostawiony; naprawdę nowy miesiąc startuje pusty (te same
+pracownicy/lokalizacje/reguły generatora co dziś), z pamięcią końca
+poprzedniego miesiąca doliczoną automatycznie, JEŚLI miesiąc bezpośrednio
+kalendarzowo go poprzedzający już istnieje w projekcie - sprawdzane przez
+`logic/utils/time_utils.py::previous_calendar_month`, NIEZALEŻNIE od tego,
+który miesiąc był aktualnie otwarty przed przełączeniem (swobodna
+nawigacja to umożliwia: użytkownik mógł być na marcu i stamtąd wprost
+utworzyć czerwiec - źródłem pamięci ma być maj, jeśli maj istnieje w
+projekcie, nie marzec). To zastępuje dawne użycie
+`is_next_calendar_month(stary_miesiąc, nowy_miesiąc)` w tym samym miejscu,
+które porównywało do czegokolwiek aktualnie otwartego - `is_next_calendar_month`
+zostaje (własne testy, koncept wciąż poprawny), tylko przestaje być tym,
+co bramkuje to konkretne wywołanie.
+
+**Nowe okno wyboru miesiąca** (`ui/month_picker_dialog.py::MonthPickerDialog`,
+wpięte pod ISTNIEJĄCY przycisk "🗓 Zmień datę" zamiast dawnego inline
+spinboxa) - kalendarz roczny: siatka 4x3 kafelków (jeden na miesiąc),
+strzałki `‹ rok ›` do przełączania roku, przycisk "Dziś". Każdy kafelek
+pokazuje krótki, LICZONY NA ŻYWO (nie osobno logowany - zero ryzyka
+rozjazdu po cofnięciu/edycji) opis stanu z `model/monthly_project.py::
+describe_month_state` - np. "10 lokacji, 8 pracowników, grafik gotowy" /
+"Pusty grafik" - plus kolorowy pasek po lewej (szary/żółty/zielony -
+`month_state_class`). Klik zaznacza, dwuklik od razu przełącza. Przycisk
+"Zmień datę" pokazywał wcześniej inline spinboxy (`year_spin`/`month_spin`/
+`btn_save_date`) - usunięte razem z `_enter_edit_date_mode`/dawnym
+`_save_date_clicked`, bo stały się martwym UI (nieosiągalnym po podpięciu
+przycisku pod nowe okno).
+
+**Zapis/wczytanie** (`persistence/project_io.py`) - nowe
+`save_project_bundle`/`load_project_bundle` zapisują/wczytują CAŁY
+`MonthlyProject` (wszystkie miesiące, plus który jest aktywny) zamiast
+tylko jednego miesiąca; rozumieją też stary, jednomiesięczny format (pliki
+sprzed tej zmiany, i te wciąż zapisywane starym `save_project()` przez
+`demo/*.py`/`logic/generator/trace.py`, które celowo zostały bez zmian -
+tam chodzi o pojedynczy migawkowy plik, nie o cały projekt) - taki plik
+wczytuje się jako jedyny miesiąc świeżego `MonthlyProject`. Wszystkie
+miejsca w `ui/main_window.py` wołające dawne `save_project`/`load_project`
+(zapis `.myp`, autozapis `last_project.json`, wczytanie przy starcie,
+otwarcie z linii poleceń) przełączone na wersje `_bundle`.
+
+Już nie usuwa się NIC nieodwracalnie przy zmianie miesiąca - dawny
+ostrzegawczy popup "Zmiana miesiąca spowoduje usunięcie wszystkich zmian"
+zniknął całkowicie, bo przestał być prawdą.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/monthly_project.py` (nowy) | `MonthlyProject` (kontener) + `describe_month_state`/`month_state_class` (opis/kolor kafelka) | TAK - generyczne, nie Enyo-specyficzne |
+| `persistence/project_io.py` | `save_project_bundle`/`load_project_bundle`, wstecznie kompatybilne ze starym, jednomiesięcznym formatem | TAK |
+| `ui/main_window.py` | `_switch_to_month` (zastępuje `_save_date_clicked`), `_open_month_picker`, `self.project`; usunięte martwe UI inline edycji daty | TAK |
+| `ui/month_picker_dialog.py` (nowy) | `MonthPickerDialog` - kalendarz roczny z kafelkami stanu | TAK |
+| `logic/utils/time_utils.py` | `previous_calendar_month()` - miesiąc bezpośrednio poprzedzający | TAK |
+| `model/month_schedule.py` | `PREVIOUS_MONTH_MEMORY_ENABLED` z powrotem `True` (patrz sekcja "Pamięć poprzedniego miesiąca" wyżej) | TAK |
+| `tests/test_monthly_project.py` (nowy, 25 testów) | Kontener, opis stanu, round-trip zapisu (nowy i stary format), `_switch_to_month` (w tym predecessor niezależny od aktualnie otwartego miesiąca), `MonthPickerDialog` | TAK |
+| `tests/test_previous_month_memory.py` | Klasa `PreviousMonthMemoryHiddenTests` -> `PreviousMonthMemoryEnabledByDefaultTests` (odwrócone asercje - mechanizm jest teraz domyślnie WŁĄCZONY); 3 testy przepięte z `_save_date_clicked`+spinboxy na `_switch_to_month` bezpośrednio | TAK |
+
+**Weryfikacja:** pełny zestaw testów zielony, zero regresji; ręczne
+sprawdzenie na żywym `MainWindow()` (nie mocki) - przełączanie
+tam-i-z-powrotem między miesiącami zachowuje dane, pamięć poprzedniego
+miesiąca liczy się poprawnie niezależnie od kolejności odwiedzin, round-trip
+zapisu/wczytania (`.myp` nowego formatu + wsteczna kompatybilność ze
+starym) zachowuje wszystkie miesiące.

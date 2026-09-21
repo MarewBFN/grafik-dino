@@ -149,10 +149,10 @@ def _build_always_on_specs():
 
 
 def _build_rest_11h(ctx, soft):
-    # "Pamięć poprzedniego miesiąca" schowana na razie (patrz
-    # model/month_schedule.py::PREVIOUS_MONTH_MEMORY_ENABLED) - schedule=None
-    # sprawia, że _add_previous_month_rest_constraint() w obu funkcjach
-    # niżej wychodzi natychmiast, bez żadnego wpływu na dzień 1.
+    # "Pamięć poprzedniego miesiąca" (model/month_schedule.py::
+    # PREVIOUS_MONTH_MEMORY_ENABLED) - gdy wyłączona, schedule=None sprawia,
+    # że _add_previous_month_rest_constraint() w obu funkcjach niżej wychodzi
+    # natychmiast, bez żadnego wpływu na dzień 1.
     prev_month_schedule = ctx.schedule if PREVIOUS_MONTH_MEMORY_ENABLED else None
 
     mode = ctx.shop.constraints.get("rest_11h_mode", "standard")

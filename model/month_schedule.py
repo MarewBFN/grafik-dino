@@ -6,17 +6,15 @@ from typing import Dict
 from model.day_schedule import DaySchedule
 from model.employee import Employee
 
-# Schowane na prośbę użytkownika (2026-09-21) - okazało się zbyt łatwo
-# wywoływać nim niewyjaśnione INFEASIBLE (patrz ENYO_ONLY_CHANGES.md,
-# "Naprawiony bug: infeasible bez wyjaśnienia..."), więc mechanizm zostaje
-# na razie wyłączony do dalszej decyzji. Sprawdzane w:
+# Odkryte z powrotem (2026-09-21) przy okazji pamięci wielu miesięcy - diagnostyka
+# INFEASIBLE (ENYO_ONLY_CHANGES.md, "Naprawiony bug: infeasible bez
+# wyjaśnienia...") była już gotowa, więc nic nie stało na przeszkodzie.
+# Sprawdzane w:
 # - ui/main_window.py (przejęcie automatyczne przy zmianie miesiąca +
 #   pozycja menu Edycja -> "Godziny zakończenia z poprzedniego miesiąca..."),
 # - logic/generator/base_specs.py::_build_rest_11h (wpływ na generator),
 # - ui/grid_view.py::_previous_month_last_day_if_shown (kolumna w gridzie).
-# Sam mechanizm (model/PreviousMonthShiftEnd, dialog, constrainty, testy)
-# zostaje w pełni działający w kodzie - tylko nieosiągalny z UI/generatora.
-PREVIOUS_MONTH_MEMORY_ENABLED = False
+PREVIOUS_MONTH_MEMORY_ENABLED = True
 
 
 @dataclass(frozen=True)
