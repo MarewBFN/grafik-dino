@@ -828,3 +828,32 @@ WŁĄCZONEGO mechanizmu, robią to teraz jawnie.
 
 **Przywrócić do main?** DO USTALENIA razem z resztą tego mechanizmu -
 patrz sekcja "Pamięć poprzedniego miesiąca" wyżej.
+
+## Pierwszy build dla klienta: 1.0.0.enyo (2026-09-21)
+
+Przygotowanie pierwszego instalatora dla klienta Enyo - wydzielony,
+osobny od kanału "dino" (głównego) na każdym poziomie, żeby nigdy nie
+dało się przypadkiem pomylić buildów/aktualizacji między klientami.
+
+**Nowe, osobne pliki (nie modyfikują odpowiedników Dino):**
+
+| Plik | Rola |
+|---|---|
+| `Enyo - Grafik Pracy.spec` | PyInstaller - buduje do `dist\Enyo - Grafik Pracy` (Dingo buduje do `dist\Dingo! - narzędzie do grafików pracy` - osobne foldery, zero ryzyka nadpisania) |
+| `enyo.iss` | Inno Setup - `MyAppName "Enyo - Grafik Pracy"`, osobny `AppId` (`8C714D0B-17B2-4F06-8813-0CACEADBD73D`, inny niż Dingo - to INNY produkt z perspektywy rejestru Windows/deinstalacji, mimo wspólnego kodu), `DefaultDirName={localappdata}\Programs\Enyo\Grafik Pracy`, `OutputBaseFilename=EnyoSetup`, `OutputDir=Output`. Ikona: na razie dziedziczona z `dingo_icon.ico` - **brak osobnej ikony dla Enyo, do zrobienia później** |
+| `version.py` | `APP_VERSION = "1.0.0.enyo"` - na tym branchu na stałe (branch jest dedykowany Enyo), w odróżnieniu od `release_channel.py`, który ZAWSZE zostaje "dino" w repo (patrz istniejący mechanizm `scripts/build_release.ps1 -Channel enyo`, tymczasowo podmienia i przywraca) |
+| `releases/enyo.json` | `latest_version: "1.0.0.enyo"`, `download_url` wskazuje na tag `v1.0.0-enyo`, asset `EnyoSetup.exe` |
+| `.gitignore` | Dodane `Output/` (katalog wyjściowy ISCC.exe) i `*.flag` (znaczniki "widziano samouczek" tworzone lokalnie w runtime, np. `locations_tutorial_seen.flag`) - oba wcześniej nie były ignorowane |
+
+**Zbudowane i zweryfikowane lokalnie:** `scripts/build_release.ps1 -Channel enyo -SpecFile "Enyo - Grafik Pracy.spec"` (PyInstaller, `release_channel.py` poprawnie przywrócone do "dino" po buildzie) → `ISCC.exe enyo.iss` → `Output/EnyoSetup.exe` (~79 MB, nie commitowane, gitignored). Pełny zestaw testów zielony przed i po (534 passed, 1 skipped).
+
+**Świadomie NIE zrobione teraz (poza zasięgiem tego, co dało się zautomatyzować z tego środowiska - brak `gh` CLI):**
+- Rebranding tekstów WEWNĄTRZ aplikacji poza tym, co już wcześniej zneutralizowano (About, samouczek) - instalator/skrót/nazwa okna teraz mówią "Enyo", ale nie przeszukano całej apki pod kątem resztek "Dingo"/"Dino" w tekstach widocznych dla użytkownika.
+- Utworzenie faktycznego GitHub Release z tagu `v1.0.0-enyo` z załącznikiem `EnyoSetup.exe` - wymaga `gh` CLI albo ręcznego kroku przez stronę GitHub, przekazane użytkownikowi osobno jako instrukcja krok po kroku.
+- Wgranie `releases/enyo.json` na branch `main` - `update_checker.py` czyta ten plik ZAWSZE z `main` (URL na sztywno), nie z tego brancha - bez tego kroku sprawdzanie aktualizacji u klienta nigdy nic nie znajdzie, nawet po wydaniu nowszej wersji. Ustalone z użytkownikiem: wykonać to jako osobny, bezpośredni commit na `main` (dotyka tylko nowego pliku, nie kodu aplikacji).
+- Osobna ikona dla Enyo (dziś reużywa `dingo_icon.ico`).
+
+**Przywrócić do main?** NIE - te pliki (branding/wersja specyficzna dla
+Enyo) nie mają sensu na `main`, poza samym mechanizmem kanałów
+(`release_channel.py`/`update_checker.py`/`scripts/build_release.ps1`),
+który już tam jest.
