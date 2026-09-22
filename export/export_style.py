@@ -20,3 +20,17 @@ def is_dino_style(shop) -> bool:
     zanim ten mechanizm istniał."""
     business_type = shop.business_type if shop is not None else DEFAULT_BUSINESS_TYPE
     return business_type == DEFAULT_BUSINESS_TYPE
+
+
+def render_schedule_image(schedule, year, month, shop=None, employees=None):
+    """Renderuje grafik do obrazu (PIL Image), bez zapisu do pliku - ten
+    sam wybór stylu co `is_dino_style()`. Współdzielone przez
+    `export_schedule_to_image`/`export_schedule_to_pdf` (oba tylko
+    zapisują ten gotowy obraz w innym formacie) oraz przez podgląd przed
+    eksportem (`ui/export_preview_dialog.py`), żeby podgląd był dokładnie
+    tym, co trafi do pliku."""
+    from export.image_exporter import ImageScheduleExporter
+    from export.security_image_exporter import SecurityScheduleImageExporter
+
+    exporter_cls = ImageScheduleExporter if is_dino_style(shop) else SecurityScheduleImageExporter
+    return exporter_cls(schedule, year, month, shop=shop, employees=employees).render()

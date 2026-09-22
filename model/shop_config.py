@@ -196,6 +196,21 @@ class ShopConfig:
         # "compact" | "detailed"
         self.cell_display_mode = "compact"
 
+        # Menu Wygląd -> "Widok trybu szybkiego" - jak siatka grafiku
+        # (ui/grid_view.py, przez logic/schedule_presenter.py) wyświetla
+        # godziny zmiany w komórce. "standard" = dzisiejszy wygląd
+        # (HH:MM/HH:MM w osobnych liniach). "fractions" = zwarty zapis
+        # ułamkowy jednej linii, np. "8:00-20:00" -> "8/20" (godzina bez
+        # zera wiodącego, minuty na razie po prostu zaokrąglane do
+        # najbliższej pełnej godziny - patrz schedule_presenter.py).
+        self.hours_display_mode = "standard"
+
+        # Menu Wygląd -> "Legenda kolorów" (ui/grid_legend.py) - domyślnie
+        # ukryta (świadoma decyzja: siatka ma jak najwięcej miejsca od
+        # razu po otwarciu projektu), użytkownik włącza ją ręcznie, gdy
+        # potrzebuje przypomnienia znaczenia kolorów/zakreśleń komórek.
+        self.show_grid_legend = False
+
         # -----------------------------
         # Niedziele handlowe
         # -----------------------------
@@ -404,6 +419,8 @@ class ShopConfig:
             "day_overrides": self.day_overrides,
             "constraints": self.constraints,
             "cell_display_mode": self.cell_display_mode,
+            "hours_display_mode": self.hours_display_mode,
+            "show_grid_legend": self.show_grid_legend,
             "public_holidays": list(self.public_holidays),
             "standard_daily_hours": self.standard_daily_hours,
             "constraint_policies": {
@@ -458,6 +475,8 @@ class ShopConfig:
 
         # UI
         cfg.cell_display_mode = data.get("cell_display_mode", "compact")
+        cfg.hours_display_mode = data.get("hours_display_mode", "standard")
+        cfg.show_grid_legend = data.get("show_grid_legend", False)
         cfg.standard_daily_hours = data.get("standard_daily_hours", 8.0)
 
         # Project files created before this field was added retain the defaults.

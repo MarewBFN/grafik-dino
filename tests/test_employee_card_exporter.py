@@ -11,6 +11,9 @@ from openpyxl import load_workbook
 
 from export.employee_card_exporter import (
     _day_night_hours,
+    _day_rows,
+    _EmployeeCardImageExporter,
+    _format_hour,
     _location_name,
     _night_minutes,
     export_employee_card_to_image,
@@ -20,6 +23,53 @@ from model.day_schedule import DaySchedule
 from model.employee import Employee
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig, DEFAULT_LOCATION_KEY
+
+
+class DayRowsMarkerTests(unittest.TestCase):
+    """_day_rows() - urlop/L4 dostają jawny znacznik w kolumnie "Wejście"
+    zamiast być nieodróżnialne od dnia bez żadnej zmiany (dawniej
+    wszystkie trzy przypadki dawały identyczny pusty wiersz). Koniec
+    zmiany przez północ NIE dostaje już znacznika "+1" (usunięty na
+    życzenie użytkownika)."""
+
+    def _schedule_with_one_employee(self):
+        schedule = MonthSchedule(2026, 8)
+        emp = Employee(last_name="Kowalski", first_name="Adam")
+        schedule.add_employee(emp)
+        return schedule, emp
+
+    def test_leave_day_shows_urlop_in_wejscie_column(self):
+        schedule, emp = self._schedule_with_one_employee()
+        schedule.get_day(emp, 3).set_leave()
+
+        row = next(r for r in _day_rows(schedule, emp) if r[0] == 3)
+
+        self.assertEqual(row, (3, "Urlop", "", "", "", ""))
+
+    def test_sick_day_shows_l4_in_wejscie_column(self):
+        schedule, emp = self._schedule_with_one_employee()
+        schedule.get_day(emp, 3).set_sick()
+
+        row = next(r for r in _day_rows(schedule, emp) if r[0] == 3)
+
+        self.assertEqual(row, (3, "L4", "", "", "", ""))
+
+    def test_day_without_any_shift_stays_blank(self):
+        schedule, emp = self._schedule_with_one_employee()
+
+        row = next(r for r in _day_rows(schedule, emp) if r[0] == 3)
+
+        self.assertEqual(row, (3, "", "", "", "", ""))
+
+    def test_shift_crossing_midnight_has_no_plus_one_marker(self):
+        schedule, emp = self._schedule_with_one_employee()
+        schedule.get_day(emp, 3).set_hours("22:00", "06:00")
+
+        row = next(r for r in _day_rows(schedule, emp) if r[0] == 3)
+
+        self.assertEqual(row[1], "22:00")
+        self.assertEqual(row[2], "6:00")
+        self.assertNotIn("+1", row[2])
 
 
 class NightMinutesTests(unittest.TestCase):
@@ -58,6 +108,21 @@ class NightMinutesTests(unittest.TestCase):
         sick = DaySchedule()
         sick.set_sick()
         self.assertEqual(_day_night_hours(sick), ("", ""))
+
+
+class FormatHourTests(unittest.TestCase):
+    def test_full_hour_keeps_minutes_instead_of_stripping_them(self):
+        self.assertEqual(_format_hour("08:00"), "8:00")
+
+    def test_drops_leading_zero_but_not_minutes(self):
+        self.assertEqual(_format_hour("16:00"), "16:00")
+        self.assertEqual(_format_hour("00:00"), "0:00")
+
+    def test_non_zero_minutes_are_untouched(self):
+        self.assertEqual(_format_hour("08:30"), "8:30")
+
+    def test_empty_string_stays_empty(self):
+        self.assertEqual(_format_hour(""), "")
 
 
 class LocationNameTests(unittest.TestCase):
@@ -106,7 +171,7 @@ class ExcelCardExportTests(unittest.TestCase):
             self.assertEqual(ws.cell(row=3, column=4).value, emp.display_name())
             self.assertEqual(ws.cell(row=4, column=4).value, "Placówka główna")
 
-    def test_leave_day_has_blank_columns_2_to_5(self):
+    def test_leave_day_shows_urlop_marker_and_leaves_the_rest_blank(self):
         schedule, emp = _sample_schedule()
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -118,7 +183,10 @@ class ExcelCardExportTests(unittest.TestCase):
             # Wiersz nagłówka tabeli to 7, dzień 1 to wiersz 8, dzień 2 (urlop) to wiersz 9.
             leave_row = 9
             self.assertEqual(ws.cell(row=leave_row, column=1).value, 2)
-            for col in range(2, 7):
+            # Kolumna 2 to "Wejście" - tam ląduje znacznik "Urlop" zamiast
+            # nieodróżnialnego pustego wiersza (patrz _day_rows()).
+            self.assertEqual(ws.cell(row=leave_row, column=2).value, "Urlop")
+            for col in range(3, 7):
                 self.assertIsNone(ws.cell(row=leave_row, column=col).value)
 
     def test_footer_sum_matches_total_hours(self):
@@ -149,6 +217,19 @@ class ExcelCardExportTests(unittest.TestCase):
 
             wb = load_workbook(path)
             self.assertEqual(len(wb.sheetnames), 2)
+
+
+class ColumnWidthTests(unittest.TestCase):
+    def test_day_and_night_hour_columns_are_equal_width(self):
+        schedule, emp = _sample_schedule()
+        exporter = _EmployeeCardImageExporter(schedule, 2026, 8, None, emp)
+        col_w = exporter._column_widths()
+
+        self.assertEqual(len(col_w), 6)
+        day_w, night_w = col_w[4], col_w[5]
+        # Podział nieparzystej reszty różni się co najwyżej o 1px.
+        self.assertLessEqual(abs(day_w - night_w), 1)
+        self.assertGreater(day_w, 150)
 
 
 class ImageCardExportTests(unittest.TestCase):

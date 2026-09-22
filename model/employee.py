@@ -46,7 +46,9 @@ class Employee:
     location_key: str = field(default="", compare=False)
 
     def display_name(self) -> str:
-        return f"{self.last_name} {self.first_name}"
+        # Imię jest opcjonalne (patrz validate()) - bez niego samo
+        # nazwisko, bez końcowej spacji.
+        return f"{self.last_name} {self.first_name}".strip()
 
     def has_role(self, key: str) -> bool:
         """True if this employee carries role `key`, whether it's one of the
@@ -60,8 +62,8 @@ class Employee:
         if not self.last_name.strip():
             raise ValueError("Nazwisko nie może być puste")
 
-        if not self.first_name.strip():
-            raise ValueError("Imię nie może być puste")
+        # Imię jest opcjonalne - klient może nie znać/nie chcieć podawać
+        # imion pracowników, samo nazwisko wystarcza do identyfikacji.
 
         if self.is_meat and self.is_meat_light:
             raise ValueError("Pracownik nie może mieć jednocześnie flagi mięsa i \"może stanąć na chwilę na mięsie\"")

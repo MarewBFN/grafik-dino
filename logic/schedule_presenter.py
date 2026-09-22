@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from logic.utils.time_utils import format_hours_as_fraction
 from ui import theme
 
 
@@ -20,6 +21,7 @@ class SchedulePresenter:
     def get_cell_view(self, emp, day) -> CellView:
         ds = self.schedule.get_day(emp, day)
         s, e, t = ds.as_rows()
+        fractions = getattr(self.shop_config, "hours_display_mode", "standard") == "fractions"
 
         if ds.is_leave:
             return CellView(
@@ -41,12 +43,20 @@ class SchedulePresenter:
 
         if ds.crosses_midnight():
             # Zmiana nocna (Etap C/D planu zmian nocnych) - koniec leży w
-            # kolejnej dobie kalendarzowej, więc oznaczamy to wprost zamiast
-            # dawać złudzenie, że "06:00" jest tego samego dnia co "22:00".
-            tooltip = f"{s} → {e} (+1)\nSuma: {t}"
+            # kolejnej dobie kalendarzowej. Rozróżnia to wyłącznie tło
+            # (SHIFT_NIGHT) i tooltip - na życzenie użytkownika bez znacznika
+            # "(+1)" w samym tekście komórki (mylące/zbędne, usunięte
+            # całkiem, nie tylko w widoku ułamkowym).
+            tooltip = f"{s} → {e}\nSuma: {t}"
+            if fractions:
+                text_start = format_hours_as_fraction(s, e)
+                text_end = ""
+            else:
+                text_start = s
+                text_end = e
             return CellView(
-                text_start=s,
-                text_end=f"{e} (+1)",
+                text_start=text_start,
+                text_end=text_end,
                 text_total=t,
                 bg=theme.SHIFT_NIGHT,
                 tooltip=tooltip,
@@ -69,6 +79,13 @@ class SchedulePresenter:
                 bg = theme.SHIFT_MORNING
             elif e == close_t:
                 bg = theme.SHIFT_CLOSE
+
+        # "OTW"/"ZAM" wyżej to już zwarte etykiety, nie surowe godziny - nie
+        # ma ich co dodatkowo skracać do ułamka (patrz warunek niżej: tylko
+        # gdy text_start/text_end wciąż są surowymi s/e).
+        if fractions and text_start == s and text_end == e:
+            text_start = format_hours_as_fraction(s, e)
+            text_end = ""
 
         tooltip = f"{s} - {e}\nSuma: {t}"
         return CellView(

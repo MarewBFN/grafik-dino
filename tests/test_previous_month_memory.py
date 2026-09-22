@@ -396,6 +396,22 @@ class GridPreviousMonthColumnTests(unittest.TestCase):
         self.assertEqual(grid.item(0, 1).text(), "22:00")
         self.assertEqual(grid.item(1, 1).text(), "")
 
+    def test_column_header_shows_the_weekday_using_grid_view_naming(self):
+        """31 stycznia 2026 to sobota - nagłówek ma pokazywać dzień
+        tygodnia tym samym skrótem co reszta siatki ("So", nie "Poprz.",
+        patrz ui/grid_view.py::build() weekday_names), w tym samym
+        dwuliniowym formacie "SKRÓT\\ndzień" co kolumny dni tego miesiąca."""
+        shop = ShopConfig(2026, 2)
+        emp = Employee(last_name="Kowalski", first_name="Jan")
+        schedule = MonthSchedule(2026, 2, employees=[emp])
+        schedule.set_previous_month_end_shift(emp, "22:00", False)
+
+        with patch("ui.grid_view.PREVIOUS_MONTH_MEMORY_ENABLED", True):
+            grid = self._grid(schedule, shop)
+
+        header = grid.horizontalHeaderItem(1)
+        self.assertEqual(header.text(), "So\n31")
+
     def test_column_absent_when_nobody_has_data(self):
         shop = ShopConfig(2026, 2)
         emp = Employee(last_name="Kowalski", first_name="Jan")
@@ -554,9 +570,13 @@ class PreviousMonthBlocksDay1DiagnosticsTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 9. Mechanizm odblokowany (2026-09-21, przy okazji pamięci wielu miesięcy) -
 #    patrz model/month_schedule.py::PREVIOUS_MONTH_MEMORY_ENABLED. Ta klasa
-#    sprawdza, że domyślnie (bez żadnego jawnego patchowania flagi) trzy
-#    punkty "wpięcia" - menu, auto-przejęcie przy zmianie miesiąca, wpływ na
-#    generator przez base_specs.py - faktycznie działają.
+#    sprawdza, że domyślnie (bez żadnego jawnego patchowania flagi) dwa
+#    punkty "wpięcia" - auto-przejęcie przy zmianie miesiąca, wpływ na
+#    generator przez base_specs.py - faktycznie działają. Ręczny edytor w
+#    menu Edycja został od tego momentu na stałe schowany (patrz
+#    test_previous_month_dialog_menu_action_is_permanently_hidden niżej i
+#    komentarz w ui/main_window.py::_build_menu_bar) - to był tylko
+#    testowy dostęp do tej samej pamięci, nie osobny mechanizm.
 # ---------------------------------------------------------------------------
 
 class PreviousMonthMemoryEnabledByDefaultTests(unittest.TestCase):
@@ -607,20 +627,36 @@ class PreviousMonthMemoryEnabledByDefaultTests(unittest.TestCase):
 
         self.assertIs(mock_duty_rest.call_args.kwargs.get("schedule"), ctx.schedule)
 
-    def test_menu_action_added_by_default(self):
-        window = MainWindow.__new__(MainWindow)
-        edit_menu = MagicMock()
-        window._clear_schedule = MagicMock()
-        window._clear_generated = MagicMock()
-        window._open_previous_month_shift_dialog = MagicMock()
+    def test_previous_month_dialog_menu_action_is_permanently_hidden(self):
+        """Ręczny edytor "Godziny zakończenia z poprzedniego miesiąca..."
+        (PreviousMonthShiftDialog, wołany przez
+        _open_previous_month_shift_dialog) zniknął z menu Edycja na
+        prośbę użytkownika - był tylko testowym rozwiązaniem i źródłem
+        błędu (patrz PreviousMonthBlocksDay1DiagnosticsTests wyżej).
+        Sama pamięć poprzedniego miesiąca zostaje w pełni aktywna -
+        działa automatycznie przy zmianie miesiąca, co sprawdzają
+        pozostałe testy w tej klasie/pliku.
 
-        # Replay just the relevant slice of _build_menu_bar's Edycja section.
-        from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
-        if PREVIOUS_MONTH_MEMORY_ENABLED:
-            edit_menu.addAction("Godziny zakończenia z poprzedniego miesiąca...", window._open_previous_month_shift_dialog)
+        Sprawdzone przez źródło _build_menu (nie przez żywe menuBar() po
+        pełnej konstrukcji MainWindow) - QMenuBar.addMenu(str) w PySide6
+        potrafi skasować Python-owy wrapper podmenu zaraz po wyjściu z
+        metody budującej, jeśli referencja nie jest nigdzie trzymana
+        (self.edit_menu itp.), więc odpytanie o realne akcje później
+        kończy się "Internal C++ object already deleted" niezależnie od
+        tej zmiany."""
+        import inspect
+        import re
 
-        calls = [c.args[0] for c in edit_menu.addAction.call_args_list]
-        self.assertIn("Godziny zakończenia z poprzedniego miesiąca...", calls)
+        source = inspect.getsource(MainWindow._build_menu)
+        # Nie samego tekstu (zostaje w komentarzu wyjaśniającym decyzję),
+        # tylko faktycznego wywołania rejestrującego akcję w menu - stąd
+        # zwinięcie białych znaków przed porównaniem (wywołanie bywa
+        # zawinięte w wielu liniach).
+        collapsed = re.sub(r"\s+", " ", source)
+        self.assertNotIn(
+            'edit_menu.addAction( "Godziny zakończenia z poprzedniego miesiąca...",',
+            collapsed,
+        )
 
     def test_grid_column_shows_by_default_when_data_present(self):
         shop = ShopConfig(2026, 3)
@@ -660,6 +696,95 @@ class PreviousMonthMemoryEnabledByDefaultTests(unittest.TestCase):
             window.schedule.get_previous_month_end_shift(new_emp),
             PreviousMonthShiftEnd("22:00", False),
         )
+
+
+# ---------------------------------------------------------------------------
+# 10. Informacja o pominiętej pamięci poprzedniego miesiąca w oknie po
+#     generacji (_previous_month_memory_note) - zastępuje ręczny edytor
+#     schowany w sekcji 9: generator już wcześniej po cichu pomijał
+#     sprawdzenie przerwy 11h, gdy nie miał danych (patrz sekcja 2, `if
+#     carry is None: continue`) - teraz o tym dodatkowo informuje w oknie
+#     "Sukces"/"Wersja demo" po udanej generacji, zamiast zostawiać to
+#     niezauważone.
+# ---------------------------------------------------------------------------
+
+class PreviousMonthMemoryNoteTests(unittest.TestCase):
+    def _window(self, employees, carryover_for=()):
+        window = MainWindow.__new__(MainWindow)
+        window.schedule = MonthSchedule(2026, 3, employees=employees)
+        for emp in carryover_for:
+            window.schedule.set_previous_month_end_shift(emp, "22:00", False)
+        return window
+
+    def test_none_when_at_least_one_employee_has_carryover_data(self):
+        emp1 = Employee(last_name="Kowalski", first_name="Jan")
+        emp2 = Employee(last_name="Nowak", first_name="Anna")
+        window = self._window([emp1, emp2], carryover_for=[emp1])
+
+        self.assertIsNone(window._previous_month_memory_note())
+
+    def test_note_when_nobody_has_carryover_data(self):
+        emp = Employee(last_name="Kowalski", first_name="Jan")
+        window = self._window([emp])
+
+        note = window._previous_month_memory_note()
+        self.assertIsNotNone(note)
+        self.assertIn("poprzedniego miesiąca", note)
+
+    def test_none_when_no_employees_at_all(self):
+        window = self._window([])
+        self.assertIsNone(window._previous_month_memory_note())
+
+    def test_none_when_mechanism_disabled(self):
+        emp = Employee(last_name="Kowalski", first_name="Jan")
+        window = self._window([emp])
+
+        with patch("ui.main_window.PREVIOUS_MONTH_MEMORY_ENABLED", False):
+            self.assertIsNone(window._previous_month_memory_note())
+
+    def test_generation_success_message_includes_the_note_for_full_version(self):
+        emp = Employee(last_name="Kowalski", first_name="Jan")
+        window = self._window([emp])
+        window.controller = MagicMock(schedule=window.schedule)
+        window.demo = MagicMock(is_demo=False)
+        window._hide_loading = MagicMock()
+        window._sync_everything = MagicMock()
+        window._update_generate_label = MagicMock()
+
+        with patch("ui.main_window.QMessageBox") as mock_box:
+            window._on_generation_finished({"success": True})
+
+        message = mock_box.information.call_args.args[2]
+        self.assertIn("poprzedniego miesiąca", message)
+
+    def test_generation_success_message_passes_note_through_in_demo_mode(self):
+        emp = Employee(last_name="Kowalski", first_name="Jan")
+        window = self._window([emp])
+        window.controller = MagicMock(schedule=window.schedule)
+        window.demo = MagicMock(is_demo=True)
+        window._hide_loading = MagicMock()
+        window._sync_everything = MagicMock()
+        window._update_generate_label = MagicMock()
+
+        window._on_generation_finished({"success": True})
+
+        note = window.demo.show_after_generate.call_args.kwargs["extra_note"]
+        self.assertIn("poprzedniego miesiąca", note)
+
+    def test_generation_success_message_has_no_note_when_data_present(self):
+        emp = Employee(last_name="Kowalski", first_name="Jan")
+        window = self._window([emp], carryover_for=[emp])
+        window.controller = MagicMock(schedule=window.schedule)
+        window.demo = MagicMock(is_demo=False)
+        window._hide_loading = MagicMock()
+        window._sync_everything = MagicMock()
+        window._update_generate_label = MagicMock()
+
+        with patch("ui.main_window.QMessageBox") as mock_box:
+            window._on_generation_finished({"success": True})
+
+        message = mock_box.information.call_args.args[2]
+        self.assertEqual(message, "Grafik został wygenerowany.")
 
 
 if __name__ == "__main__":

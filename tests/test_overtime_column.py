@@ -56,7 +56,9 @@ def test_grid_has_a_dedicated_nadgodziny_column_next_to_razem():
 
     headers = [grid.horizontalHeaderItem(c).text() for c in range(grid.columnCount())]
     assert headers[days + 4] == "Razem\n(h)"
-    assert headers[days + 5] == "Nadgodziny\n(h)"
+    # Zawinięte na dwie linie ("Nadg-\nodziny") - patrz ui/grid_view.py::build(),
+    # "Nadgodziny" samo nie mieściło się nawet w poszerzonej kolumnie.
+    assert headers[days + 5] == "Nadg-\nodziny\n(h)"
 
     over_row = schedule.employees.index(over)
     under_row = schedule.employees.index(under)

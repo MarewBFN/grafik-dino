@@ -62,15 +62,15 @@ class DemoManager:
         )
         return True
 
-    def show_after_generate(self, parent):
+    def show_after_generate(self, parent, extra_note=None):
         if not self.is_demo:
             return
 
-        QMessageBox.information(
-            parent,
-            "Wersja demo",
-            "Grafik wygenerowany.\n\nAby zapisać lub wyeksportować – wymagana pełna wersja."
-        )
+        message = "Grafik wygenerowany.\n\nAby zapisać lub wyeksportować – wymagana pełna wersja."
+        if extra_note:
+            message += f"\n\n{extra_note}"
+
+        QMessageBox.information(parent, "Wersja demo", message)
 
     def _save(self):
         try:

@@ -28,7 +28,7 @@ from logic.duty_coverage_presenter import is_day_fully_covered, project_uses_dut
 from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.monthly_hours_status import monthly_hours_status
 from logic.schedule_presenter import SchedulePresenter
-from logic.utils.time_utils import classify_shift_as_morning_or_afternoon
+from logic.utils.time_utils import classify_shift_as_morning_or_afternoon, format_hours_as_fraction
 from model.business_profile import get_profile
 from model.constraint_policy import ConstraintPolicy
 from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
@@ -679,11 +679,17 @@ class ScheduleGrid(QTableWidget):
 
         headers = ["Pracownik"]
         if prev_month_last_day is not None:
-            headers.append(f"Poprz.\n{prev_month_last_day}")
+            prev_year, prev_month = self._previous_month_year_month()
+            prev_wd = calendar.weekday(prev_year, prev_month, prev_month_last_day)
+            headers.append(f"{weekday_names[prev_wd]}\n{prev_month_last_day}")
         for day in range(1, days + 1):
             wd = calendar.weekday(self.schedule.year, self.schedule.month, day)
             headers.append(f"{weekday_names[wd]}\n{day}")
-        headers.extend(["Praca\n(h)", "Urlop\n(h)", "L4\n(h)", "Razem\n(h)", "Nadgodziny\n(h)"])
+        # "Nadgodziny" samo w sobie (130px przy tej czcionce) nie mieści
+        # się nawet w poszerzonej kolumnie (patrz setColumnWidth niżej) -
+        # zawinięte na dwie linie w najwęższym możliwym miejscu podziału
+        # (min-max: żadna z dwóch części nie jest szersza niż to konieczne).
+        headers.extend(["Praca\n(h)", "Urlop\n(h)", "L4\n(h)", "Razem\n(h)", "Nadg-\nodziny\n(h)"])
         if self.settlement_mode:
             headers.append("Cel\n(h)")
 
@@ -740,6 +746,12 @@ class ScheduleGrid(QTableWidget):
                 self.setColumnWidth(col, 60)
         for col in range(days + offset + 1, self.columnCount()):
             self.setColumnWidth(col, 60)
+        # "Nadg-\nodziny" (patrz headers.extend wyżej) nie mieści się nawet
+        # zawinięte w standardowych 60px - piąta kolumna podsumowania to
+        # zawsze "Nadgodziny" (Praca/Urlop/L4/Razem/Nadgodziny[/Cel]).
+        nadgodziny_col = days + offset + 5
+        if nadgodziny_col < self.columnCount():
+            self.setColumnWidth(nadgodziny_col, 80)
 
         self.verticalHeader().setVisible(False)
         self.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
@@ -788,6 +800,15 @@ class ScheduleGrid(QTableWidget):
 
         return f"{hours_text}{override_text}\nKliknij dwukrotnie, aby zmienić godziny pracy lub status dnia."
 
+    def _previous_month_year_month(self) -> tuple[int, int]:
+        """(rok, miesiąc) miesiąca bezpośrednio poprzedzającego aktualnie
+        otwarty - współdzielone przez _previous_month_last_day_if_shown()
+        i nagłówek kolumny w build() (potrzebuje tego samego roku/miesiąca,
+        żeby policzyć dzień tygodnia ostatniego dnia)."""
+        if self.schedule.month > 1:
+            return self.schedule.year, self.schedule.month - 1
+        return self.schedule.year - 1, 12
+
     def _previous_month_last_day_if_shown(self) -> int | None:
         """Numer ostatniego dnia poprzedniego miesiąca, jeśli kolumna
         "pamięć poprzedniego miesiąca" ma się w ogóle pokazać w tym
@@ -803,10 +824,7 @@ class ScheduleGrid(QTableWidget):
         if not has_data:
             return None
 
-        if self.schedule.month > 1:
-            prev_year, prev_month = self.schedule.year, self.schedule.month - 1
-        else:
-            prev_year, prev_month = self.schedule.year - 1, 12
+        prev_year, prev_month = self._previous_month_year_month()
         return calendar.monthrange(prev_year, prev_month)[1]
 
     def _column_to_day(self, col: int) -> int | None:
@@ -954,8 +972,19 @@ class ScheduleGrid(QTableWidget):
 
             if self.compact_mode:
                 text = ""
+                # Menu Wygląd -> "Widok trybu szybkiego": w trybie "Ułamki"
+                # widok kompaktowy pokazuje faktyczne godziny zmiany jako
+                # ułamek, godzina początku nad godziną końca (np. "8" nad
+                # "20"), zamiast dotychczasowych skrótów "N"/"1"/"2" - ten
+                # sam format co logic/schedule_presenter.py dla widoku
+                # rozszerzonego. Bez znacznika "(+1)" dla zmian nocnych -
+                # usunięty całkiem na życzenie użytkownika, tło komórki
+                # (SHIFT_NIGHT) i tak odróżnia zmianę przez północ.
+                fraction_mode = getattr(self.shop_config, "hours_display_mode", "standard") == "fractions"
 
-                if ds.start and ds.crosses_midnight():
+                if ds.start and fraction_mode:
+                    text = format_hours_as_fraction(ds.start, ds.end)
+                elif ds.start and ds.crosses_midnight():
                     text = "N"
                 elif ds.start:
                     hours = self.shop_config.get_open_hours_for_day(day)

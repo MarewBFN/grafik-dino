@@ -28,18 +28,18 @@ from PySide6.QtWidgets import (
 )
 
 from export.excel_exporter import export_schedule_to_excel
-from export.image_exporter import export_schedule_to_image
-from export.pdf_exporter import export_schedule_to_pdf
+from export.export_style import render_schedule_image
 from export.employee_card_exporter import (
-    export_employee_card_to_image,
     export_employee_cards_to_excel,
-    export_employee_cards_to_pdf,
+    render_employee_card_image,
+    save_employee_card_pages_to_pdf,
     sanitize_filename_part,
 )
 from logic.schedule_controller import ScheduleController
 from logic.utils.time_utils import previous_calendar_month
+from ui.export_preview_dialog import show_export_preview
 from ui.previous_month_shift_dialog import PreviousMonthShiftDialog
-from ui.marquee_text import MarqueeButton, MarqueeLabel
+from ui.marquee_text import MarqueeLabel, WrappingLocationButton
 from model.business_profile import DEFAULT_BUSINESS_TYPE
 from model.location import format_open_hours_summary
 from model.month_schedule import MonthSchedule, PREVIOUS_MONTH_MEMORY_ENABLED
@@ -55,6 +55,7 @@ from ui.locations_dialog import LocationsDialog
 from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
+from ui.grid_legend import GridLegendWidget
 from ui.grid_view import ScheduleGrid
 from ui.month_picker_dialog import MonthPickerDialog
 from ui.new_project_dialog import NewProjectDialog
@@ -320,7 +321,13 @@ class MainWindow(QMainWindow):
         self.btn_location_prev.clicked.connect(lambda: self._cycle_location(-1))
         switcher_layout.addWidget(self.btn_location_prev)
 
-        self.btn_location_name = MarqueeButton("")
+        # Zawija za długą nazwę na kilka linii (rosnąc w pionie) zamiast
+        # przewijać ją w poziomie (marquee) - na życzenie użytkownika.
+        # Minimalna wysokość rośnie monotonicznie w ramach sesji, więc
+        # przełączenie na krótszą nazwę nie zmniejsza już wysokości tego
+        # wiersza (i nie "rozjeżdża" reszty panelu) - patrz
+        # WrappingLocationButton._rewrap().
+        self.btn_location_name = WrappingLocationButton("")
         self.btn_location_name.setObjectName("locationNameButton")
         self.btn_location_name.setCursor(Qt.PointingHandCursor)
         self.btn_location_name.setToolTip("Wybierz placówkę")
@@ -602,7 +609,13 @@ class MainWindow(QMainWindow):
         self.grid_header_location_label = MarqueeLabel("")
         self.grid_header_location_label.setObjectName("sectionLabel")
         self.grid_header_location_label.setMaximumWidth(260)
-        grid_header_layout.addWidget(self.grid_header_location_label)
+        # Stretch=1 (nie 0): z 0 ta etykieta dostawała dokładnie swój
+        # sizeHint() jako szerokość, bez dostępu do reszty wolnego miejsca w
+        # tym wierszu mimo setMaximumWidth(260) - bug zgłoszony przez
+        # użytkownika (nazwa ucinała się po ~2 znakach). addStretch(1) niżej
+        # nadal spycha grid_header_hours_label w prawo, bo ta etykieta i tak
+        # nie urośnie ponad swój maximumWidth.
+        grid_header_layout.addWidget(self.grid_header_location_label, 1)
         grid_header_layout.addStretch(1)
 
         self.grid_header_hours_label = QLabel("")
@@ -615,12 +628,20 @@ class MainWindow(QMainWindow):
         self.grid.compact_mode = True
         layout.addWidget(self.grid, 1)
 
+        # Legenda kolorów/zakreśleń komórek, zawsze pod siatką - stretch=0,
+        # więc nigdy nie zabiera miejsca siatce (self.grid ma jedyny
+        # stretch>0 w tym layoucie) - patrz _update_grid_legend() (stylizacja
+        # zależna od liczby widocznych pracowników, wołane z _sync_everything).
+        self.grid_legend = GridLegendWidget()
+        layout.addWidget(self.grid_legend, 0)
+
         return panel
 
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("Plik")
         edit_menu = self.menuBar().addMenu("Edycja")
         config_menu = self.menuBar().addMenu("Konfiguracja")
+        wyglad_menu = self.menuBar().addMenu("Wygląd")
         help_menu = self.menuBar().addMenu("Pomoc")
 
         help_menu.addAction("Samouczek", self._open_tutorial)
@@ -658,16 +679,45 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Wyczyść grafik", self._clear_schedule)
         edit_menu.addAction("Wyczyść auto", self._clear_generated)
 
-        if PREVIOUS_MONTH_MEMORY_ENABLED:
-            edit_menu.addSeparator()
-            edit_menu.addAction(
-                "Godziny zakończenia z poprzedniego miesiąca...",
-                self._open_previous_month_shift_dialog,
-            )
+        # Ręczny edytor "Godziny zakończenia z poprzedniego miesiąca..."
+        # (PreviousMonthShiftDialog) schowany na prośbę użytkownika - był
+        # tylko testowym rozwiązaniem (i źródłem błędu: domyślna godzina
+        # "22:00" w dialogu blokowała cały grafik bez wyjaśnienia, patrz
+        # PreviousMonthBlocksDay1DiagnosticsTests). Sama pamięć
+        # poprzedniego miesiąca zostaje w pełni aktywna - działa
+        # automatycznie przy zmianie miesiąca (patrz
+        # _carry_over_previous_month_end_shifts), tylko bez tej ręcznej
+        # furtki do wpisania jej od zera.
 
         config_menu.addAction("Generator", self._open_config)
         config_menu.addAction("Lokalizacje", self._open_locations_dialog)
         config_menu.addAction("Ustawienia trybu szybkiego", self._open_quick_mode_settings)
+
+        # Miejsce na ustawienia wyglądu GUI - na razie tylko jedna pozycja
+        # (jak siatka grafiku pokazuje godziny zmiany), kolejne dojdą tu w
+        # przyszłości. Wzorem "Eksport"/"Karty pracy" w menu Plik: osobny
+        # QMenu zbudowany raz w _build_menu, nie odtwarzany przy każdym
+        # kliknięciu (patrz self._update_hours_display_menu wywoływane z
+        # _sync_everything, żeby stan zaznaczenia nadążał za wczytanym
+        # projektem).
+        hours_display_menu = QMenu("Widok trybu szybkiego", self)
+        self.hours_display_standard_action = hours_display_menu.addAction(
+            "Standardowy (obecny)", lambda: self._set_hours_display_mode("standard")
+        )
+        self.hours_display_standard_action.setCheckable(True)
+        self.hours_display_fractions_action = hours_display_menu.addAction(
+            "Ułamki", lambda: self._set_hours_display_mode("fractions")
+        )
+        self.hours_display_fractions_action.setCheckable(True)
+        wyglad_menu.addMenu(hours_display_menu)
+
+        # Pokaż/ukryj legendę kolorów pod siatką (ui/grid_legend.py) -
+        # domyślnie ukryta (ShopConfig.show_grid_legend=False), patrz
+        # _toggle_grid_legend/_update_grid_legend_menu.
+        self.show_grid_legend_action = wyglad_menu.addAction(
+            "Legenda kolorów", self._toggle_grid_legend
+        )
+        self.show_grid_legend_action.setCheckable(True)
 
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
         help_menu.addAction("Sprawdź aktualizacje", lambda: self._check_updates(manual=True))
@@ -748,12 +798,14 @@ class MainWindow(QMainWindow):
         # które ten drugi przekazuje jako filtr tabeli.
         self._update_location_switcher()
         self._sync_grid()
+        self._update_grid_legend()
         self._update_window_title()
         self._update_state_label()
         self._update_generate_label()
         self._update_settlement_section_visibility()
         self._rebuild_quick_preset_buttons()
         self._update_quick_panel_profile_visibility()
+        self._update_hours_display_menu()
 
     def _update_location_switcher(self):
         """Samonaprawia self.selected_location_key (patrz komentarz w
@@ -867,6 +919,21 @@ class MainWindow(QMainWindow):
         self.grid.build()
         self.grid.refresh()
 
+    def _update_grid_legend(self):
+        """Widoczność legendy (menu Wygląd -> "Legenda kolorów", domyślnie
+        ukryta - patrz ShopConfig.show_grid_legend) i jej wygląd pod siatką
+        (patrz ui/grid_legend.py::GridLegendWidget) - "wyraźnie oddzielona
+        sekcja" gdy widocznych (przefiltrowanych po lokalizacji, tak jak w
+        samej siatce) pracowników jest więcej niż 10, bo przy dużej liczbie
+        wierszy siatka i tak zajmuje większość ekranu. Wołane z
+        _sync_everything() i _toggle_grid_legend()."""
+        visible = bool(self.shop_config and self.shop_config.show_grid_legend)
+        self.grid_legend.setVisible(visible)
+        self.show_grid_legend_action.setChecked(visible)
+
+        visible_count = len(self.grid.get_visible_employees()) if self.grid else 0
+        self.grid_legend.set_compact_section(visible_count > 10)
+
     def _update_window_title(self):
         name = self.shop_config.name if self.shop_config else ""
         prefix = f"Grafik pracy — {name}" if name else "Grafik pracy"
@@ -969,6 +1036,33 @@ class MainWindow(QMainWindow):
                 continue
             self.schedule.set_previous_month_end_shift(emp, ds.end, ds.crosses_midnight())
 
+    def _previous_month_memory_note(self) -> str | None:
+        """Info do okna po udanej generacji, gdy pamięć poprzedniego
+        miesiąca (patrz PREVIOUS_MONTH_MEMORY_ENABLED,
+        _carry_over_previous_month_end_shifts) jest włączona, ale nie ma
+        DANYCH dla ŻADNEGO pracownika tego miesiąca (pierwszy miesiąc
+        projektu / skok przez miesiąc bezpośrednio poprzedzający) -
+        generator po cichu pomija wtedy sprawdzenie przerwy 11h na
+        początku miesiąca względem poprzedniego (patrz
+        logic/generator/rest_constraint.py::_add_previous_month_rest_constraint,
+        `if carry is None: continue`) - warto to zasygnalizować, zamiast
+        zostawiać niezauważone."""
+        if not PREVIOUS_MONTH_MEMORY_ENABLED or not self.schedule.employees:
+            return None
+
+        has_any_carryover = any(
+            self.schedule.get_previous_month_end_shift(emp) is not None
+            for emp in self.schedule.employees
+        )
+        if has_any_carryover:
+            return None
+
+        return (
+            "Uwaga: brak zapamiętanych godzin zakończenia poprzedniego miesiąca - "
+            "przerwa 11h na początku tego miesiąca nie została sprawdzona względem "
+            "poprzedniego miesiąca."
+        )
+
     def _open_previous_month_shift_dialog(self):
         dialog = PreviousMonthShiftDialog(self.schedule, self)
         if dialog.exec() == QDialog.Accepted:
@@ -1012,10 +1106,14 @@ class MainWindow(QMainWindow):
             self.demo.register_generation()
             self._update_generate_label()
 
+            note = self._previous_month_memory_note()
             if self.demo.is_demo:
-                self.demo.show_after_generate(self)
+                self.demo.show_after_generate(self, extra_note=note)
             else:
-                QMessageBox.information(self, "Sukces", "Grafik został wygenerowany.")
+                message = "Grafik został wygenerowany."
+                if note:
+                    message += f"\n\n{note}"
+                QMessageBox.information(self, "Sukces", message)
         else:
             reasons = result.get("infeasibility_reasons", []) if result else []
             reason_text = "\n".join(f"• {reason}" for reason in reasons)
@@ -1299,6 +1397,40 @@ class MainWindow(QMainWindow):
             pass
         self.statusBar().showMessage("Zapisano lokalizacje.", 2500)
 
+    def _set_hours_display_mode(self, mode: str):
+        if self.shop_config is None or self.shop_config.hours_display_mode == mode:
+            return
+        self.shop_config.hours_display_mode = mode
+        self._update_hours_display_menu()
+        self.grid.refresh()
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
+        self.statusBar().showMessage("Zapisano widok trybu szybkiego.", 2500)
+
+    def _update_hours_display_menu(self):
+        """Zaznaczenie w menu Wygląd -> "Widok trybu szybkiego" ma zawsze
+        odzwierciedlać aktualnie wczytany projekt - wołane z
+        _sync_everything(), nie tylko z _set_hours_display_mode()."""
+        mode = self.shop_config.hours_display_mode if self.shop_config else "standard"
+        self.hours_display_standard_action.setChecked(mode == "standard")
+        self.hours_display_fractions_action.setChecked(mode == "fractions")
+
+    def _toggle_grid_legend(self):
+        if self.shop_config is None:
+            return
+        self.shop_config.show_grid_legend = not self.shop_config.show_grid_legend
+        self._update_grid_legend()
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
+        self.statusBar().showMessage(
+            "Pokazano legendę kolorów." if self.shop_config.show_grid_legend else "Ukryto legendę kolorów.",
+            2500,
+        )
+
     def _open_quick_mode_settings(self):
         dialog = QuickModeSettingsDialog(self, self.shop_config.quick_mode_presets)
         if dialog.exec() != QDialog.Accepted:
@@ -1381,9 +1513,20 @@ class MainWindow(QMainWindow):
         )
         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500)
 
+    def _render_visible_schedule_image(self):
+        return render_schedule_image(
+            self.schedule, self.year, self.month, shop=self.shop_config,
+            employees=self.grid.get_visible_employees(),
+        )
+
     def _export_image(self):
         if self.demo.block_export(self):
             return
+
+        image = self._render_visible_schedule_image()
+        if not show_export_preview(image, "Podgląd grafiku — JPG", parent=self):
+            return
+
         path, _ = QFileDialog.getSaveFileName(self, "Eksport JPG", "", "Obraz JPG (*.jpg)")
         if not path:
             return
@@ -1391,15 +1534,17 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith(".jpg"):
             path += ".jpg"
 
-        export_schedule_to_image(
-            self.schedule, self.year, self.month, path, shop=self.shop_config,
-            employees=self.grid.get_visible_employees(),
-        )
+        image.save(path, "JPEG", quality=95)
         self.statusBar().showMessage("Wyeksportowano do JPG.", 2500)
 
     def _export_pdf(self):
         if self.demo.block_export(self):
             return
+
+        image = self._render_visible_schedule_image()
+        if not show_export_preview(image, "Podgląd grafiku — PDF", parent=self):
+            return
+
         path, _ = QFileDialog.getSaveFileName(self, "Eksport PDF", "", "PDF (*.pdf)")
         if not path:
             return
@@ -1407,10 +1552,7 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith(".pdf"):
             path += ".pdf"
 
-        export_schedule_to_pdf(
-            self.schedule, self.year, self.month, path, shop=self.shop_config,
-            employees=self.grid.get_visible_employees(),
-        )
+        image.save(path, "PDF", resolution=150.0)
         self.statusBar().showMessage("Wyeksportowano do PDF.", 2500)
 
     def _pick_single_employee(self, title):
@@ -1479,11 +1621,21 @@ class MainWindow(QMainWindow):
         export_employee_cards_to_excel(self.schedule, self.year, self.month, path, shop=self.shop_config, employees=employees)
         self.statusBar().showMessage("Wyeksportowano karty pracy do Excela.", 2500)
 
+    def _render_employee_card_images(self, employees):
+        return [
+            render_employee_card_image(self.schedule, self.year, self.month, self.shop_config, emp)
+            for emp in employees
+        ]
+
     def _export_employee_cards_image(self):
         if self.demo.block_export(self):
             return
         employees = self._employee_cards_scope_list("Karty pracy — JPG")
         if not employees:
+            return
+
+        images = self._render_employee_card_images(employees)
+        if not show_export_preview(images, "Podgląd kart pracy — JPG", parent=self):
             return
 
         if len(employees) == 1:
@@ -1494,7 +1646,7 @@ class MainWindow(QMainWindow):
             if not path.lower().endswith(".jpg"):
                 path += ".jpg"
 
-            export_employee_card_to_image(self.schedule, self.year, self.month, path, shop=self.shop_config, employee=emp)
+            images[0].save(path, "JPEG", quality=95)
             self.statusBar().showMessage(f"Wyeksportowano kartę pracy {emp.display_name()} do JPG.", 2500)
             return
 
@@ -1502,10 +1654,10 @@ class MainWindow(QMainWindow):
         if not folder:
             return
 
-        for emp in employees:
+        for emp, image in zip(employees, images):
             name_part = sanitize_filename_part(f"{emp.last_name}_{emp.first_name}")
             path = os.path.join(folder, f"Karta_pracy_{name_part}_{self.month:02d}_{self.year}.jpg")
-            export_employee_card_to_image(self.schedule, self.year, self.month, path, shop=self.shop_config, employee=emp)
+            image.save(path, "JPEG", quality=95)
 
         self.statusBar().showMessage(f"Wyeksportowano {len(employees)} kart pracy do JPG.", 2500)
 
@@ -1516,8 +1668,12 @@ class MainWindow(QMainWindow):
         if not employees:
             return
 
+        images = self._render_employee_card_images(employees)
+        if not show_export_preview(images, "Podgląd kart pracy — PDF", parent=self):
+            return
+
         # Jeden dokument PDF niezależnie od liczby pracowników - jedna
-        # strona na pracownika (patrz export_employee_cards_to_pdf), więc
+        # strona na pracownika (patrz save_employee_card_pages_to_pdf), więc
         # w przeciwieństwie do JPG nie ma tu potrzeby wyboru folderu.
         path, _ = QFileDialog.getSaveFileName(self, "Karty pracy — PDF", "", "PDF (*.pdf)")
         if not path:
@@ -1525,7 +1681,7 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith(".pdf"):
             path += ".pdf"
 
-        export_employee_cards_to_pdf(self.schedule, self.year, self.month, path, shop=self.shop_config, employees=employees)
+        save_employee_card_pages_to_pdf(images, path)
         self.statusBar().showMessage(f"Wyeksportowano {len(employees)} kart(y) pracy do PDF.", 2500)
 
     def _update_generate_label(self):
@@ -1554,10 +1710,7 @@ class MainWindow(QMainWindow):
             temp_path = temp_file.name
             temp_file.close()
 
-            export_schedule_to_image(
-                self.schedule, self.year, self.month, temp_path, shop=self.shop_config,
-                employees=self.grid.get_visible_employees(),
-            )
+            self._render_visible_schedule_image().save(temp_path, "JPEG", quality=95)
 
             # 2. printer
             printer = QPrinter(QPrinter.HighResolution)

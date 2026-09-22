@@ -39,7 +39,9 @@ def _schedule_with_night_shift(gap_minutes_short=False):
 
 
 class ExcelExporterNightShiftTests(unittest.TestCase):
-    def test_night_shift_cell_marks_plus_one(self):
+    def test_night_shift_cell_has_no_plus_one_marker(self):
+        """Znacznik "+1" usunięty całkiem na życzenie użytkownika - tylko
+        surowa godzina końca, bez oznaczenia przejścia w kolejną dobę."""
         schedule, shop, emp = _schedule_with_night_shift()
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -56,10 +58,11 @@ class ExcelExporterNightShiftTests(unittest.TestCase):
             total_cell = ws.cell(row=8, column=DAY_1 + 2).value
 
         self.assertEqual(start_cell, "22")
-        self.assertIn("+1", end_cell)
+        self.assertEqual(end_cell, "6")
+        self.assertNotIn("+1", end_cell)
         self.assertEqual(total_cell, "8:00")
 
-    def test_normal_shift_cell_has_no_plus_one(self):
+    def test_normal_shift_cell_is_still_unaffected(self):
         schedule, shop, emp = _schedule_with_night_shift()
 
         with tempfile.TemporaryDirectory() as tmp:

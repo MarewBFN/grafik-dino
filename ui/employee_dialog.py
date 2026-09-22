@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from model.employee import Employee
-from model.business_profile import get_profile
+from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
 from model.constraint_policy import ConstraintPolicy
 from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.utils.time_utils import month_scope_note
@@ -130,8 +130,17 @@ class EmployeeDialog(QDialog):
         self.employment_fraction.addItem("1/4", 0.25)
 
         form.addRow("Nazwisko:", self.last_name)
-        form.addRow("Imię:", self.first_name)
-        form.addRow("Wymiar etatu:", self.employment_fraction)
+        form.addRow("Imię (opcjonalnie):", self.first_name)
+
+        # Pokazywane tylko dla Dino - dla każdego profilu Ochrona (na tę
+        # chwilę jedyny inny w tej wersji działalności, niezależnie od
+        # dokładnego klucza profilu) klient zawsze zatrudnia na pełny etat,
+        # pole tylko myliłoby/nie miałoby zastosowania. Combo zostaje w
+        # pełni zbudowane i domyślnie na indeksie 0 (1.0 - pełny etat),
+        # _save() dalej czyta currentData() bez zmian - tym samym wzorcem
+        # co ukryte "Progi obsady" w ConfigDialog (patrz ENYO_ONLY_CHANGES.md).
+        if self.shop_config is None or self.shop_config.business_type == DEFAULT_BUSINESS_TYPE:
+            form.addRow("Wymiar etatu:", self.employment_fraction)
 
         if self.locations:
             # Bez opcji "Brak" - projekt ma zawsze co najmniej jedną
@@ -352,8 +361,8 @@ class EmployeeDialog(QDialog):
         ln = self.last_name.text().strip()
         fn = self.first_name.text().strip()
 
-        if not ln or not fn:
-            QMessageBox.critical(self, "Błąd", "Imię i nazwisko nie mogą być puste.")
+        if not ln:
+            QMessageBox.critical(self, "Błąd", "Nazwisko nie może być puste.")
             return
 
         legacy_roles = {}

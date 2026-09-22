@@ -1246,3 +1246,131 @@ pracowników, lokalizacja 24/7, `round_clock_start_hour="08:00"`) - status
 wcześniej środek doby zostawał pusty. Pełny zestaw testów zielony (patrz
 liczba w kolejnym wpisie), zero regresji na testach duty_rotation/night_shift/
 open/close/rest_11h.
+
+## Schowanie ręcznego edytora "Godziny zakończenia z poprzedniego miesiąca..." (2026-09-22)
+
+Zgłoszenie użytkownika: pozycja menu Edycja - "Godziny zakończenia z
+poprzedniego miesiąca..." (`PreviousMonthShiftDialog`) to był tylko
+testowy dostęp do pamięci poprzedniego miesiąca, nie miała trafić do
+klienta w tej formie - zwłaszcza że jej domyślna wartość ("22:00") była
+już raz źródłem realnego buga (patrz `PreviousMonthBlocksDay1DiagnosticsTests`
+w `tests/test_previous_month_memory.py`: jednolita, zgadnięta godzina dla
+wszystkich pracowników potrafiła zrobić cały grafik `INFEASIBLE` bez
+wyjaśnienia, zanim naprawiono to w `logic/generator/diagnostics.py`).
+
+**Zmiana:**
+- `ui/main_window.py::_build_menu` - usunięte wywołanie
+  `edit_menu.addAction("Godziny zakończenia z poprzedniego miesiąca...", ...)`
+  (zastąpione komentarzem wyjaśniającym decyzję). Metoda
+  `_open_previous_month_shift_dialog` i cały `ui/previous_month_shift_dialog.py`
+  zostają nietknięte - to jest UKRYCIE (kod nieosiągalny z UI), nie
+  usunięcie, więc łatwo odwracalne. Sam mechanizm pamięci (auto-przejęcie
+  przy zmianie miesiąca, wpływ na generator) zostaje w pełni aktywny -
+  jedyna zmiana to brak ręcznej furtki do wpisania danych od zera.
+- `ui/main_window.py::_previous_month_memory_note`/`_on_generation_finished` -
+  nowe: po udanej generacji, jeśli pamięć poprzedniego miesiąca jest
+  włączona, ale ŻADEN pracownik nie ma zapisanych danych (typowo:
+  pierwszy miesiąc projektu, albo skok przez miesiąc bezpośrednio
+  poprzedzający) - generator już wcześniej po cichu pomijał wtedy
+  sprawdzenie przerwy 11h względem poprzedniego miesiąca (`if carry is
+  None: continue` w `_add_previous_month_rest_constraint`, we wszystkich
+  trzech wariantach: zwykłym, rotacji służby, round-clock) - teraz
+  dodatkowo informuje o tym w oknie "Sukces"/"Wersja demo" zamiast
+  zostawiać to niezauważone. `ui/demo_manager.py::show_after_generate`
+  dostało analogiczny opcjonalny `extra_note`, żeby wersja demo też to
+  pokazywała.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `ui/main_window.py` | Usunięta rejestracja akcji menu (kod dialogu zostaje, tylko nieosiągalny); nowe `_previous_month_memory_note` | N/D (decyzja UX tej rundy, nie Enyo-specyficzna - dotyczy obu kanałów) |
+| `ui/demo_manager.py` | `show_after_generate(parent, extra_note=None)` | TAK |
+| `tests/test_previous_month_memory.py` | Test obecności akcji w menu zamieniony na test jej NIEobecności (przez źródło `_build_menu`, nie przez żywe `menuBar()` - PySide6 kasuje Python-owy wrapper podmenu z `addMenu(str)` bez trzymanej referencji); nowa klasa `PreviousMonthMemoryNoteTests` | TAK |
+| `tests/test_demo_manager.py` (nowy) | `show_after_generate` z/bez `extra_note` | TAK |
+
+**Weryfikacja:** pełny zestaw testów zielony (640 passed, 1 skipped),
+zero regresji.
+
+## Rozszerzenie danych klienta o kolejne placówki (2026-09-22)
+
+Kontynuacja sekcji "Dane testowe z realnych grafików klienta (2026-09-19)"
+wyżej - użytkownik doprecyzował konkretne godziny start/koniec zmian dla
+większości z 7 placówek, które wtedy nie dały się odczytać ze zdjęć, i
+podał komplet 10 placówek na nowo (z jedną dodatkową, "Sprzątanie",
+wcześniej wspominaną tylko jako osobna tabela przy Nadleśnictwie).
+`demo/install_client_sample_data.py` i `test_data/dane_klienta_ochrona.json`
+rozszerzone o 4 nowe placówki (2 już istniały: Ubojnia GOSZ, PGE Ustka -
+PGE dostało dodatkowego, wcześniej pominiętego pracownika "Sowiecki").
+
+### Placówki dodane, zweryfikowane realnym generatorem (4/6 nowych)
+
+3. **GZUK Łęczyce** (5 pracowników) - klient podał DWA dopuszczalne
+   warianty tej samej doby: "7/7 24h" LUB "15/7 16h" (16h wieczór/noc +
+   uzupełniające 8h za dnia). To dokładnie ten sam mechanizm co "24h
+   kontra 12h+12h" w Ubojni/PGE (`normalize_duty_rotation()` nie wymaga,
+   żeby podział był po połowie ani żeby `weekend_full` zaczynał się o tej
+   samej godzinie co `weekend_half_a`) - solver wybiera wariant sam,
+   codziennie.
+4. **Łeba, Apartamenty Nadmorska 33** (3 pracowników) - "jedna zmiana 8/8"
+   (wyłącznie 24h). Pola `weekend_half_a`/`b` mimo to wymagane przez
+   `normalize_duty_rotation()` (nie da się skonfigurować samej zmiany 24h
+   bez "wentyla bezpieczeństwa" podziału) - placeholder 08:00/20:00, bez
+   żadnej roli blokującej podział.
+5. **LakPol Słupsk** (3 pracowników) - "jedna zmiana 7/7 24h", ten sam
+   przypadek co Łeba Apartamenty.
+6. **P.P. Nadleśnictwo Cewice** (2 pracowników) - klient wprost potwierdził
+   BRAK danych o wzorcu zmian ("stwórz po prostu puste"). **Znaleziony po
+   drodze realny bug w tym podejściu:** zostawienie domyślnego
+   `LocationConfig.open_hours` (DEFAULT_OPEN_HOURS, prawie całodobowy
+   wzorzec sklepowy 05:30-23:00ish) NIE oznacza "brak wzorca" -
+   `LocationConfig.get_night_shift_hours()` automatycznie wykrywa z tych
+   godzin zmianę nocną (nachodzą na stałe okno 22:00-06:00) i generator
+   faktycznie zaczął tam coś przydzielać (zweryfikowane empirycznie: 2
+   pracowników dostało zmiany 22:00-06:00 na części dni miesiąca, mimo
+   zerowej konfiguracji). Naprawa: lokalizacja dostaje jawnie zamknięte
+   wszystkie dni tygodnia (`open_hours = {wd: (None, None) for wd in
+   range(7)}`) - dopiero to daje faktycznie zero przydziałów (zweryfikowane
+   ponownie: 0 obsadzonych dni-zmian w całym miesiącu).
+
+### Placówki NIE dodane - potwierdzone z użytkownikiem, że pomijamy (4/10)
+
+Użytkownik wybrał "Pomiń na razie" dla obu pytań (nie próbować prowizorki,
+nie wpisywać ręcznie zablokowanych zmian):
+
+| Placówka | Dlaczego nie pasuje |
+|---|---|
+| **MZGK Krzywoustego** | Różna długość zmiany w różne dni tygodnia (8h/7h w tygodniu, 6h sobota, 4h niedziela) - `logic/utils/time_utils.py::get_effective_daily_hours()` liczy JEDNĄ, stałą długość zmiany na pracownika (`standard_daily_hours * employment_fraction`), niezależną od dnia tygodnia. Nie istnieje mechanizm zmiennej długości zmiany per-dzień - wymagałoby nowej funkcji generatora. |
+| **Brico Marche Wejcherowo**, **Brico Marche Lębork**, **Sprzątanie** | Pojedyncza, ciągła zmiana na cały okres otwarcia (np. 8:00-20:00, 12h; 14:00-21:00, 7h). Profil "Ochrona" (`rules=[]`) nie wymusza w ogóle obsady zwykłych zmian OPEN/CLOSE dla żadnej lokalizacji (świadoma decyzja profilu - brak `min_staff_with_role`), a długość zmiany OPEN/CLOSE jest zakotwiczona na jednej, wspólnej dla CAŁEGO `ShopConfig` wartości `standard_daily_hours` - dopasowanie jej naraz do 12h i 7h w jednym pliku wymagałoby kruchych sztuczek (globalne ustawienie + dostrajanie ułamków etatu na granicy zaokrągleń 15-minutowych), które łatwo dają wynik NIEZGODNY z zadanymi godzinami zamiast go odtwarzać. |
+
+### Obserwacja warta uwagi klienta (potwierdza wcześniejszą z sekcji PGE wyżej)
+
+Uruchomienie `AutoScheduleGenerator.generate()` na pełnych 6 placówkach
+(25 pracowników, październik 2026, limit solvera 60s) zwraca **OPTIMAL /
+success=True**. Dla WSZYSTKICH czterech placówek z dopuszczonym wariantem
+24h (GZUK, Łeba Apartamenty, PGE Ustka, LakPol) solver w tym konkretnym
+rozwiązaniu wybrał podział (12h+12h albo 16h+8h, zależnie od placówki) na
+**KAŻDY** dzień miesiąca - ani razu nie zaproponował czystej zmiany 24h,
+mimo że dla trzech z tych czterech placówek (Łeba, PGE, LakPol) klient
+opisał wyłącznie zmianę 24h jako historycznie stosowaną. To bezpośredni,
+teraz jeszcze wyraźniej potwierdzony efekt miękkiej preferencji
+`logic/generator/duty_rotation_preference.py` (`PREFER_SPLIT_WEIGHT=5`) -
+pokrycie jest poprawne w obu wariantach, ale wynik nie odzwierciedla stylu
+pracy, jaki te placówki historycznie stosowały. Nie ma dziś mechanizmu
+"wymuś zawsze 24h" (jest tylko odwrotność, `nie_chce_24h`, blokująca 24h) -
+do rozważenia jako osobna zmiana w produkcyjnym kodzie, jeśli klient
+potwierdzi, że to realny problem (a nie tylko kwestia tych konkretnych
+danych testowych).
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `demo/install_client_sample_data.py` | 4 nowe funkcje budujące lokalizacje (`_gzuk_leczyce_location`, `_apartamenty_leba_location`, `_lakpol_slupsk_location`, `_nadlesnictwo_cewice_location`), 4 nowe listy pracowników, PGE dostało dodatkowego pracownika "Sowiecki" | NIE - dane jednego konkretnego klienta testowego |
+| `test_data/dane_klienta_ochrona.json` | 6 placówek (było 2), 25 pracowników (było 11) | NIE (jw.) |
+
+**Weryfikacja:** `python demo/install_client_sample_data.py` bez błędów,
+`load_project()` + `ScheduleController.generate_schedule(force=True)` na
+pełnym pliku zwraca OPTIMAL/success=True, ręczna inspekcja przydziałów
+dzień-po-dniu potwierdza pełną obsadę wszystkich 5 placówek z
+`duty_rotation` i zero przydziałów dla Nadleśnictwa. Pełny zestaw testów
+programu zielony (649 passed, 1 skipped) - żaden istniejący test nie
+odczytuje tego pliku bezpośrednio (testy duty_rotation używają własnych,
+syntetycznych replik tych samych wzorców godzinowych), więc rozszerzenie
+nie mogło nic zepsuć.

@@ -432,7 +432,9 @@ class FixModeNightShiftTests(unittest.TestCase):
 
 
 class SchedulePresenterNightShiftTests(unittest.TestCase):
-    def test_night_shift_cell_shows_plus_one_and_night_background(self):
+    def test_night_shift_cell_shows_hours_and_night_background(self):
+        """Bez znacznika "+1" - usunięty całkiem na życzenie użytkownika,
+        tło komórki (SHIFT_NIGHT) samo odróżnia zmianę przez północ."""
         shop = _shop_with_night()
         schedule = MonthSchedule(2026, 8)
         emp = _employee()
@@ -443,8 +445,8 @@ class SchedulePresenterNightShiftTests(unittest.TestCase):
         cell = presenter.get_cell_view(emp, 3)
 
         self.assertEqual(cell.text_start, "22:00")
-        self.assertIn("06:00", cell.text_end)
-        self.assertIn("+1", cell.text_end)
+        self.assertEqual(cell.text_end, "06:00")
+        self.assertNotIn("+1", cell.text_end)
         self.assertEqual(cell.bg, theme.SHIFT_NIGHT)
 
     def test_normal_shift_cell_is_unaffected(self):

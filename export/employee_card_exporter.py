@@ -91,11 +91,13 @@ def _day_night_hours(ds) -> tuple[str, str]:
 
 
 def _format_hour(time_str):
+    """Zawsze pełny zapis "H:MM" (np. "8:00", nie "8") - godzina bez
+    zera wiodącego, minuty zawsze dwucyfrowe, spójnie z kolumnami
+    "Godziny dzienne"/"Godziny nocne" (patrz _format_minutes)."""
     if not time_str:
         return ""
-    if time_str.endswith(":00"):
-        return str(int(time_str.split(":")[0]))
-    return time_str
+    h, m = time_str.split(":")
+    return f"{int(h)}:{m}"
 
 
 def _location_name(shop, employee) -> str:
@@ -113,23 +115,31 @@ def _location_name(shop, employee) -> str:
 
 def _day_rows(schedule, employee):
     """(dzień, wejście, wyjście, ilość_godzin, godziny_dzienne,
-    godziny_nocne) dla każdego dnia miesiąca - puste stringi dla dni bez
-    zmiany/urlopu/L4 (bez zer, bez znaków specjalnych, zgodnie ze
-    specyfikacją)."""
+    godziny_nocne) dla każdego dnia miesiąca. Urlop/L4 dostają jawny
+    znacznik w kolumnie "Wejście" ("Urlop"/"L4") zamiast być nieodróżnialne
+    od dnia bez żadnej zmiany (dawniej wszystkie trzy przypadki dawały
+    identyczny pusty wiersz) - dzień bez zmiany (ani urlopu, ani L4) dalej
+    zostaje pusty. Koniec zmiany przechodzącej przez północ pokazuje samą
+    godzinę, bez znacznika "+1" (usunięty na życzenie użytkownika - karta
+    ma jeden podpis na cały miesiąc, nie osobną kolumnę na dzień, więc
+    ujednoznacznienie dnia i tak nie ma tu zastosowania jak w siatce
+    grafiku)."""
     rows = []
     for day in range(1, schedule.days_in_month + 1):
         ds = schedule.get_day(employee, day)
-        if ds.is_empty() or ds.is_leave or getattr(ds, "is_sick", False):
+        if ds.is_leave:
+            rows.append((day, "Urlop", "", "", "", ""))
+            continue
+        if getattr(ds, "is_sick", False):
+            rows.append((day, "L4", "", "", "", ""))
+            continue
+        if ds.is_empty():
             rows.append((day, "", "", "", "", ""))
             continue
 
-        end_text = _format_hour(ds.end)
-        if ds.crosses_midnight():
-            end_text += "+1"
-
         day_hours, night_hours = _day_night_hours(ds)
         rows.append((
-            day, _format_hour(ds.start), end_text, ds.total_as_str() or "",
+            day, _format_hour(ds.start), _format_hour(ds.end), ds.total_as_str() or "",
             day_hours, night_hours,
         ))
 
@@ -236,11 +246,23 @@ class _EmployeeCardImageExporter:
 
         return y + block_h + 30
 
+    def _column_widths(self):
+        """Szerokości 6 kolumn tabeli (patrz _COLUMNS) - "Godziny dzienne"/
+        "Godziny nocne" dostają dokładnie tyle samo miejsca (cała
+        szerokość zostająca po pierwszych czterech kolumnach, podzielona
+        na pół); dawniej ostatnia kolumna brała całą resztę, więc
+        "nocne" wychodziło ponad 2x szersze niż "dzienne", mimo że mają
+        identyczną treść (format "H:MM")."""
+        table_w = (_PAGE_W - self.MARGIN) - self.MARGIN
+        fixed_w = [70, 150, 150, 150]
+        hours_w = table_w - sum(fixed_w)
+        night_w = hours_w // 2
+        day_w = hours_w - night_w
+        return fixed_w + [day_w, night_w]
+
     def _draw_table(self, y):
         table_x0 = self.MARGIN
-        table_x1 = _PAGE_W - self.MARGIN
-        col_w = [70, 150, 150, 150, 160]
-        col_w.append((table_x1 - table_x0) - sum(col_w))
+        col_w = self._column_widths()
         col_x = [table_x0]
         for w in col_w:
             col_x.append(col_x[-1] + w)
@@ -285,29 +307,39 @@ class _EmployeeCardImageExporter:
         self.draw.text((x - w // 2, y - h // 2), text, fill=self.BLACK, font=font)
 
 
+def render_employee_card_image(schedule, year, month, shop, employee):
+    """Renderuje kartę pracy jednego pracownika do obrazu (PIL Image),
+    bez zapisu do pliku - współdzielone przez `export_employee_card_to_image`/
+    `export_employee_cards_to_pdf` oraz przez podgląd przed eksportem
+    (`ui/export_preview_dialog.py`), żeby podgląd był dokładnie tym, co
+    trafi do pliku."""
+    return _EmployeeCardImageExporter(schedule, year, month, shop, employee).render()
+
+
 def export_employee_card_to_image(schedule, year, month, path, shop=None, employee=None):
-    exporter = _EmployeeCardImageExporter(schedule, year, month, shop, employee)
-    exporter.export(path)
+    image = render_employee_card_image(schedule, year, month, shop, employee)
+    image.save(path, "JPEG", quality=95)
     return True
 
 
 # ============================== PDF ===============================
 
 
-def export_employee_cards_to_pdf(schedule, year, month, path, shop=None, employees=None):
-    """Jeden dokument PDF, jedna strona na pracownika (kolejność jak w
-    `employees`) - ten sam render co JPG (`_EmployeeCardImageExporter.render()`),
-    tylko zapisany jako PDF zamiast JPEG (Pillow wspiera to natywnie,
-    wielostronicowo przez `save_all`/`append_images`)."""
-    employees = employees if employees is not None else schedule.employees
-
-    pages = [
-        _EmployeeCardImageExporter(schedule, year, month, shop, employee).render()
-        for employee in employees
-    ]
-
+def save_employee_card_pages_to_pdf(pages, path):
+    """Zapisuje gotowe obrazy kart (jedna strona = jeden pracownik, patrz
+    `render_employee_card_image`) jako jeden wielostronicowy PDF (Pillow
+    wspiera to natywnie przez `save_all`/`append_images`)."""
     first, rest = pages[0], pages[1:]
     first.save(path, "PDF", resolution=150.0, save_all=True, append_images=rest)
+
+
+def export_employee_cards_to_pdf(schedule, year, month, path, shop=None, employees=None):
+    """Jeden dokument PDF, jedna strona na pracownika (kolejność jak w
+    `employees`) - ten sam render co JPG (`render_employee_card_image`),
+    tylko zapisany jako PDF zamiast JPEG."""
+    employees = employees if employees is not None else schedule.employees
+    pages = [render_employee_card_image(schedule, year, month, shop, employee) for employee in employees]
+    save_employee_card_pages_to_pdf(pages, path)
     return True
 
 

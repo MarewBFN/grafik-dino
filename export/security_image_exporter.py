@@ -154,9 +154,9 @@ class SecurityScheduleImageExporter:
                 mid_y = y + 2 * self.CELL_H
                 self.draw.line([x + 10, mid_y, x + self.CELL_W - 10, mid_y], fill=self.GRID)
 
+                # Bez znacznika "+1" dla zmian nocnych - usunięty całkiem na
+                # życzenie użytkownika.
                 end_text = self._format_hour(ds.end)
-                if ds.crosses_midnight():
-                    end_text += "+1"
 
                 self.draw.text((x + self.CELL_W // 2, y + self.CELL_H // 2), self._format_hour(ds.start), fill=(0, 0, 0), font=self.font, anchor="mm")
                 self.draw.text((x + self.CELL_W // 2, y + self.CELL_H + self.CELL_H // 2), end_text, fill=(0, 0, 0), font=self.font, anchor="mm")

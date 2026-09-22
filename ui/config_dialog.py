@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
     QFrame,
 )
 from logic.utils.time_utils import month_scope_note
+from ui.duty_rotation_editor import DutyRotationEditor
+from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.profile_wizard_dialog import ProfileWizardDialog
 from ui.weekly_hours_editor import WeeklyHoursEditor
@@ -292,33 +294,108 @@ class ConfigDialog(QDialog):
         outer.setContentsMargins(20, 20, 20, 20)
         outer.setSpacing(12)
 
+        # Poniżej: self.is_24_7_check/duty_rotation_editor/round_clock_*
+        # istnieją tylko gdy self.location is not None - to okno traktuje
+        # tę zakładkę dokładnie jak wiersz tej samej lokalizacji w oknie
+        # Lokalizacje (ui/locations_dialog.py::_LocationRow, na życzenie
+        # użytkownika) - te same widgety, ta sama logika widoczności i
+        # zapisu, żeby nie trzeba było przełączać się między dwoma oknami
+        # dla tej samej lokalizacji. Bez odpowiednika "Usuń"/nazwy (te
+        # zmieniają tożsamość lokalizacji, nie jej godziny/rotację) i bez
+        # przycisku zwiń/rozwiń dla godzin (sensowny tylko przy długiej
+        # LIŚCIE lokalizacji w Lokalizacje, nie w tym jednolokalizacyjnym
+        # widoku).
+        self.is_24_7_check = None
         if self.location is not None:
             location_label = QLabel(f"Edytujesz godziny otwarcia w placówce {self.location.name}")
             location_label.setObjectName("sectionLabel")
             outer.addWidget(location_label)
 
+            self.is_24_7_check = QCheckBox("Działalność całodobowa (24/7)")
+            self.is_24_7_check.setChecked(self.location.is_24_7)
+            self.is_24_7_check.toggled.connect(self._on_hours_tab_24_7_toggled)
+            outer.addWidget(self.is_24_7_check)
+
         hours_source = self.location.open_hours if self.location is not None else self.shop_config.open_hours
         self.hours_editor = WeeklyHoursEditor(hours_source)
         outer.addWidget(self.hours_editor)
 
-        hint = QLabel(
+        # "Działalność całodobowa: ustaw np. 00:00-23:45" (dawna treść tej
+        # podpowiedzi) usunięte - to była instrukcja obejścia sprzed
+        # dodania prawdziwego checkboxa 24/7 wyżej, dziś nieaktualna.
+        self.hours_hint = QLabel(
             "Godziny pracy dla pojedynczego dnia możesz zmienić ręcznie, "
-            "klikając dwukrotnie na nagłówek tego dnia w grafiku (np. „Wt 22”).\n"
-            "Działalność całodobowa: ustaw np. 00:00–23:45 (godziny "
-            "przechodzące przez północ nie są jeszcze wspierane)."
+            "klikając dwukrotnie na nagłówek tego dnia w grafiku (np. „Wt 22”)."
         )
-        hint.setObjectName("mutedHint")
-        hint.setWordWrap(True)
-        outer.addWidget(hint)
+        self.hours_hint.setObjectName("mutedHint")
+        self.hours_hint.setWordWrap(True)
+        outer.addWidget(self.hours_hint)
 
-        # Rotacja służby 24/7 (LocationConfig.duty_rotation) edytuje się
-        # wyłącznie w oknie Lokalizacje (ui/locations_dialog.py), podpięta
-        # wprost pod tamtejszy checkbox "Działalność całodobowa (24/7)" -
-        # to okno nie ma takiego checkboxa (edytuje tylko godziny), więc
-        # świadomie nie duplikuje tego edytora osobnym przełącznikiem tutaj.
+        if self.location is not None:
+            # Rotacja służby 24/7 - ten sam DutyRotationEditor i ten sam
+            # wzorzec podpięcia pod checkbox 24/7 co w Lokalizacje.
+            self.duty_rotation_editor = DutyRotationEditor(self.location.duty_rotation)
+            outer.addWidget(self.duty_rotation_editor)
+
+            # "Godzina rozpoczęcia" rotacji całodobowej (LocationConfig.
+            # round_clock_start_hour) - identyczne widgety/teksty co
+            # ui/locations_dialog.py::_LocationRow.
+            self.round_clock_container = QWidget()
+            round_clock_row = QHBoxLayout(self.round_clock_container)
+            round_clock_row.setContentsMargins(0, 0, 0, 0)
+            self.round_clock_check = QCheckBox("Rotacja całodobowa - godzina rozpoczęcia:")
+            self.round_clock_check.setChecked(self.location.round_clock_start_hour is not None)
+            self.round_clock_check.toggled.connect(self._update_hours_tab_round_clock_visibility)
+            round_clock_row.addWidget(self.round_clock_check)
+            self.round_clock_start_input = TimeInputWidget()
+            self.round_clock_start_input.set_time_str(self.location.round_clock_start_hour or "08:00")
+            round_clock_row.addWidget(self.round_clock_start_input)
+            round_clock_row.addStretch()
+            outer.addWidget(self.round_clock_container)
+
+            self.round_clock_hint = QLabel(
+                "Włącz, żeby generator dzielił dobę na kolejne, następujące po "
+                "sobie zmiany zaczynające się o podanej godzinie (np. 08:00 → "
+                "08:00–16:00, 16:00–00:00, 00:00–08:00, i tak każdego dnia "
+                "miesiąca), aż wypełni całą dobę. Bez tego środek doby zostaje "
+                "bez obsady - zwykłe zmiany otwarcia/zamknięcia sięgają najwyżej "
+                "ok. 1,5 h od godziny otwarcia/zamknięcia, więc przy 24h otwarcia "
+                "zawsze zostaje kilkugodzinna luka. Lokalizacje z konkretnymi "
+                "godzinami otwarcia (nie 24/7) działają bez żadnej zmiany."
+            )
+            self.round_clock_hint.setObjectName("quickInfoHint")
+            self.round_clock_hint.setWordWrap(True)
+            outer.addWidget(self.round_clock_hint)
+
+            self._update_hours_tab_visibility()
+            self._update_hours_tab_round_clock_visibility()
 
         outer.addStretch()
         return page
+
+    def _on_hours_tab_24_7_toggled(self, checked):
+        """Ten sam wzorzec co _LocationRow._on_24_7_toggled w
+        ui/locations_dialog.py - wpisuje 00:00-23:45 wprost do edytora
+        godzin, więc _save() (który po prostu czyta hours_editor.get_hours())
+        nie potrzebuje żadnej osobnej logiki dla 24/7."""
+        if checked:
+            self.hours_editor.set_hours({wd: ("00:00", "23:45") for wd in range(7)})
+        self.hours_editor.setEnabled(not checked)
+        self._update_hours_tab_visibility()
+        if not checked:
+            self.round_clock_check.setChecked(False)
+        self._update_hours_tab_round_clock_visibility()
+
+    def _update_hours_tab_visibility(self):
+        is_24_7 = self.is_24_7_check.isChecked()
+        self.hours_editor.setVisible(not is_24_7)
+        self.duty_rotation_editor.setVisible(is_24_7)
+
+    def _update_hours_tab_round_clock_visibility(self):
+        is_24_7 = self.is_24_7_check.isChecked()
+        self.round_clock_container.setVisible(is_24_7)
+        self.round_clock_hint.setVisible(is_24_7)
+        self.round_clock_start_input.setVisible(self.round_clock_check.isChecked())
 
     def _build_sundays_tab(self):
         page = QWidget()
@@ -727,6 +804,32 @@ class ConfigDialog(QDialog):
                         merged = dict(loc.duty_rotation)
                         merged["only_12_24h"] = only_12_24h_value
                         loc.duty_rotation = normalize_duty_rotation(merged)
+
+            # Zakładka "Godziny otwarcia" traktowana tak samo jak wiersz tej
+            # lokalizacji w oknie Lokalizacje (na życzenie użytkownika) - ten
+            # sam odczyt co ui/locations_dialog.py::LocationsDialog._save().
+            # Celowo PO bloku only_12_24h wyżej: to jest ostateczny, pełny
+            # zapis stanu widgetów tej karty, ma pierwszeństwo przed
+            # starszym, "globalnym" przełącznikiem only_12_24h powyżej,
+            # gdyby oba dotyczyły tej samej lokalizacji.
+            if self.location is not None and self.is_24_7_check is not None:
+                self.location.set_24_7(self.is_24_7_check.isChecked())
+
+                duty_rotation = None
+                if self.is_24_7_check.isChecked():
+                    try:
+                        duty_rotation = self.duty_rotation_editor.get_duty_rotation()
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"Rotacja służby 24/7 dla lokalizacji „{self.location.name}”: {exc}"
+                        ) from exc
+                self.location.set_duty_rotation(duty_rotation)
+
+                if self.is_24_7_check.isChecked() and self.round_clock_check.isChecked():
+                    self.location.round_clock_start_hour = self.round_clock_start_input.get_time_str()
+                else:
+                    self.location.round_clock_start_hour = None
+
             self.shop_config.constraints["rest_11h_mode"] = self.rest_11h_mode_selector.currentData()
             self.shop_config.constraints["solver_time_limit_seconds"] = self.solver_time_limit.value()
             for policy_name, selector in self.policy_selectors.items():

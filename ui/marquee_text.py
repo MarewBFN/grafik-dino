@@ -79,9 +79,19 @@ class MarqueeButton(_MarqueeMixin, QPushButton):
         return 24  # zapas na padding stylu (patrz ui/theme.py locationNameButton)
 
     def sizeHint(self) -> QSize:
-        base = super().sizeHint()
+        # UWAGA: celowo NIE super().sizeHint().width() - to zależy od
+        # aktualnie WYŚWIETLANEGO tekstu, który _refresh_marquee() mógł już
+        # skrócić/zelidować w poprzednim przebiegu layoutu. Użycie go tutaj
+        # tworzy pętlę sprzężenia zwrotnego (węższy widget -> krótszy
+        # wyświetlany tekst -> jeszcze mniejszy sizeHint -> ...), która w
+        # layoucie bez stretcha zbiega do minimumSizeHint (~2 znaki) -
+        # zgłoszone jako bug. Liczymy więc od stałego _full_text.
+        base_height = super().sizeHint().height()
         metrics = QFontMetrics(self.font())
-        return QSize(min(base.width(), metrics.horizontalAdvance("Lokalizacja") + 40), base.height())
+        full_text = getattr(self, "_full_text", "")
+        natural_width = metrics.horizontalAdvance(full_text) + self._text_padding()
+        cap = metrics.horizontalAdvance("Lokalizacja") + 40
+        return QSize(min(natural_width, cap), base_height)
 
     def minimumSizeHint(self) -> QSize:
         return QSize(_MIN_SENSIBLE_WIDTH, super().minimumSizeHint().height())
@@ -98,9 +108,83 @@ class MarqueeLabel(_MarqueeMixin, QLabel):
         return 4
 
     def sizeHint(self) -> QSize:
-        base = super().sizeHint()
+        # Patrz komentarz w MarqueeButton.sizeHint() - ta sama poprawka.
+        base_height = super().sizeHint().height()
         metrics = QFontMetrics(self.font())
-        return QSize(min(base.width(), metrics.horizontalAdvance("Lokalizacja")), base.height())
+        full_text = getattr(self, "_full_text", "")
+        natural_width = metrics.horizontalAdvance(full_text) + self._text_padding()
+        cap = metrics.horizontalAdvance("Lokalizacja")
+        return QSize(min(natural_width, cap), base_height)
+
+
+def _wrap_text_to_width(text: str, metrics: QFontMetrics, max_width: int) -> str:
+    """Zachłanne zawijanie po spacjach do `max_width` - jedno za długie
+    słowo trafia na własną linię bez dalszego dzielenia po znakach (nazwy
+    placówek to zwykłe słowa, nie długie ciągi bez spacji)."""
+    words = text.split(" ")
+    lines = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if not current or metrics.horizontalAdvance(candidate) <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return "\n".join(lines)
+
+
+class WrappingLocationButton(QPushButton):
+    """Jak MarqueeButton, ale zamiast przewijać za długi tekst w poziomie
+    (marquee), zawija go do wielu linii i rośnie w pionie, żeby się
+    zmieścił - na życzenie użytkownika, konkretnie dla
+    ui/main_window.py::btn_location_name (nazwa placówki w lewym pasku).
+    Szerokość zawijania nadąża za faktyczną szerokością przycisku
+    (resizeEvent - reaguje np. na przeciąganie splittera). Minimalna
+    wysokość rośnie monotonicznie w ramach sesji (nigdy się nie zmniejsza),
+    żeby przełączenie na krótszą nazwę nie "skakało" resztą panelu -
+    patrz _rewrap()."""
+
+    _TEXT_PADDING = 24  # jak MarqueeButton._text_padding()
+    _VERTICAL_PADDING = 16  # zapas na padding stylu w pionie (4px * 2 + zapas)
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, parent)
+        self._full_text = text or ""
+        self._min_height_reached = 0
+
+    def setFullText(self, text: str) -> None:
+        self._full_text = text or ""
+        self.setToolTip(self._full_text)
+        self._rewrap()
+
+    def fullText(self) -> str:
+        return self._full_text
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._rewrap()
+
+    def _available_width(self) -> int:
+        return max(self.width() - self._TEXT_PADDING, 20)
+
+    def _rewrap(self) -> None:
+        if not self._full_text:
+            self.setText("")
+            return
+
+        metrics = QFontMetrics(self.font())
+        available = self._available_width()
+        wrapped = _wrap_text_to_width(self._full_text, metrics, available)
+        self.setText(wrapped)
+
+        needed_height = metrics.boundingRect(
+            0, 0, available, 10_000, Qt.TextWordWrap, wrapped,
+        ).height() + self._VERTICAL_PADDING
+        self._min_height_reached = max(self._min_height_reached, needed_height)
+        self.setMinimumHeight(self._min_height_reached)
 
     def minimumSizeHint(self) -> QSize:
         return QSize(_MIN_SENSIBLE_WIDTH, super().minimumSizeHint().height())

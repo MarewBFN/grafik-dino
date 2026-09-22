@@ -149,6 +149,82 @@ def test_editing_employee_with_meat_disabled_preserves_is_meat_flag():
     assert saved.is_meat is True  # hidden role: preserved, not wiped to False
 
 
+def test_employee_dialog_shows_wymiar_etatu_for_dino():
+    shop = ShopConfig(2026, 3)  # dino_retail
+    dialog = EmployeeDialog(None, shop_config=shop)
+
+    # form.addRow() reparentuje widget do rodzica layoutu (dialogu) - brak
+    # rodzica znaczy "nigdy nie dodany do żadnego layoutu".
+    assert dialog.employment_fraction.parent() is not None
+
+
+def test_employee_dialog_hides_wymiar_etatu_for_ochrona():
+    """Ta wersja działalności (Ochrona) zawsze zatrudnia na pełny etat -
+    pole tylko myliłoby/nie miałoby zastosowania (patrz
+    ui/employee_dialog.py::__init__). Combo zostaje w pełni zbudowane,
+    tylko nie trafia do layoutu - _save() dalej działa niezmienione."""
+    from model.business_profile import DEFAULT_OCHRONA_PROFILE_KEY
+
+    shop = ShopConfig(2026, 3)
+    shop.business_type = DEFAULT_OCHRONA_PROFILE_KEY
+    dialog = EmployeeDialog(None, shop_config=shop)
+
+    assert dialog.employment_fraction.parent() is None
+    assert dialog.employment_fraction.currentData() == 1.0  # domyślnie pełny etat
+
+
+def test_employee_dialog_save_still_works_with_wymiar_etatu_hidden():
+    from model.business_profile import DEFAULT_OCHRONA_PROFILE_KEY
+
+    shop = ShopConfig(2026, 3)
+    shop.business_type = DEFAULT_OCHRONA_PROFILE_KEY
+    dialog = EmployeeDialog(None, shop_config=shop)
+    dialog.last_name.setText("Kowalski")
+
+    dialog._save()
+
+    saved = dialog.employee_result
+    assert saved is not None
+    assert saved.employment_fraction == 1.0
+
+
+def test_save_succeeds_without_a_first_name():
+    """Imię jest opcjonalne - klient może nie znać/nie chcieć podawać
+    imion pracowników, samo nazwisko wystarcza (patrz
+    model/employee.py::Employee.validate())."""
+    shop = ShopConfig(2026, 3)
+    dialog = EmployeeDialog(None, shop_config=shop)
+    dialog.last_name.setText("Kowalski")
+    dialog.first_name.setText("")
+
+    dialog._save()
+
+    saved = dialog.employee_result
+    assert saved is not None
+    assert saved.last_name == "Kowalski"
+    assert saved.first_name == ""
+    assert saved.display_name() == "Kowalski"
+
+
+def test_save_still_requires_a_last_name(monkeypatch):
+    shop = ShopConfig(2026, 3)
+    dialog = EmployeeDialog(None, shop_config=shop)
+    dialog.last_name.setText("")
+    dialog.first_name.setText("Jan")
+
+    shown = []
+    monkeypatch.setattr(
+        "ui.employee_dialog.QMessageBox.critical",
+        lambda *args, **kwargs: shown.append(args),
+    )
+
+    dialog._save()
+
+    # _save() returns before setting employee_result when validation fails.
+    assert not hasattr(dialog, "employee_result")
+    assert shown, "expected a QMessageBox.critical error when last name is missing"
+
+
 def test_grid_view_hides_meat_summary_row_and_badge_when_disabled():
     shop = ShopConfig(2026, 3)
     shop.constraint_policies["meat"] = ConstraintPolicy.DISABLED

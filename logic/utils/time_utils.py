@@ -84,6 +84,29 @@ def previous_calendar_month(year: int, month: int) -> tuple[int, int]:
     return (year - 1, 12) if month == 1 else (year, month - 1)
 
 
+def fraction_hour(time_str: str) -> str:
+    """Sama godzina (bez zera wiodącego) dla trybu wyświetlania "Ułamki"
+    (menu Wygląd -> "Widok trybu szybkiego") - np. "08:00" -> "8". Niepełne
+    godziny (minuty != 00) są na razie tylko prosto zaokrąglane do
+    najbliższej pełnej godziny (np. "8:30" -> "9") - dokładniejszy zapis
+    ułamków godziny to świadomie odłożone rozszerzenie. Współdzielone przez
+    logic/schedule_presenter.py (widok rozszerzony) i ui/grid_view.py
+    (widok kompaktowy - patrz komentarz w _fill_day_cells), żeby oba
+    widoki zaokrąglały identycznie."""
+    h, m = time_str.split(":")
+    hour = int(h)
+    if int(m) >= 30:
+        hour = (hour + 1) % 24
+    return str(hour)
+
+
+def format_hours_as_fraction(start: str, end: str) -> str:
+    """Godzina początku nad godziną końca (jedna cyfra pod drugą, nie obok
+    siebie), żeby zmieściło się w wąskiej komórce siatki grafiku - np.
+    "08:00"/"20:00" -> "8\\n20"."""
+    return f"{fraction_hour(start)}\n{fraction_hour(end)}"
+
+
 def classify_shift_as_morning_or_afternoon(shift_start, shift_end, shop_open_dt, shop_close_dt):
     """Classify a shift based on the actual shop opening/closing window.
 
