@@ -647,6 +647,7 @@ class MainWindow(QMainWindow):
         help_menu.addAction("Samouczek", self._open_tutorial)
 
         file_menu.addAction("Nowy projekt...", self._open_new_project)
+        file_menu.addAction("Usuń konfigurację", self._reset_configuration)
         file_menu.addSeparator()
         file_menu.addAction("Zapisz", self._save_project)
         file_menu.addAction("Wczytaj", self._load_project)
@@ -768,6 +769,67 @@ class MainWindow(QMainWindow):
         self._update_nominal_hours_label()
         self._sync_everything()
         self.statusBar().showMessage("Utworzono nowy projekt.", 2500)
+
+    def _reset_configuration(self):
+        """"Usuń konfigurację" - przywraca WYŁĄCZNIE grafik/konfigurację
+        (schedule, shop_config, last_project.json) do stanu sprzed
+        pierwszego uruchomienia, tym samym mechanizmem co _open_new_project
+        (self.schedule=None przed _init_state(), żeby nie przenieść starych
+        pracowników) - tylko bez interaktywnego NewProjectDialog, od razu na
+        gołe domyślne wartości, i z jawnym dopisaniem last_project.json na
+        końcu (czego _open_new_project nie robi), żeby stan nie wrócił po
+        restarcie. Świadomie NIE dotyka first_run.flag/*_tutorial_seen.flag/
+        license.json/machine_id.json/demo.json/custom_profiles.json - to nie
+        jest "grafik", tylko odrębny stan pierwszego uruchomienia/licencji/
+        poradników, który użytkownik wprost poprosił zostawić w spokoju."""
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Usuń konfigurację")
+        msg_box.setText(
+            "To przywróci program do stanu sprzed pierwszego uruchomienia: "
+            "usunie bieżący grafik, listę pracowników, lokalizacje i całą "
+            "konfigurację generatora.\n\n"
+            "Klucz licencji, flaga pierwszego uruchomienia i zapamiętane "
+            "poradniki NIE zostaną ruszone.\n\n"
+            "Tej operacji nie da się cofnąć. Kontynuować?"
+        )
+        btn_yes = msg_box.addButton("Tak, usuń", QMessageBox.YesRole)
+        msg_box.addButton("Anuluj", QMessageBox.RejectRole)
+        msg_box.exec()
+        if msg_box.clickedButton() != btn_yes:
+            return
+
+        today = date.today()
+        self.year, self.month = today.year, today.month
+        self._set_date_controls(self.year, self.month)
+
+        self.schedule = None
+        self._init_state()
+
+        # Domyślny profil dla świeżego projektu na tym branchu (Dino
+        # celowo wykluczone z visible_profiles() - patrz ENYO_ONLY_CHANGES.md)
+        # - ten sam wybór co pierwsza pozycja w kreatorze pierwszego
+        # uruchomienia/NewProjectDialog, zamiast gołego ShopConfig() domyślnie
+        # wracającego do dino_retail.
+        from model.business_profile import get_custom_profile, visible_profiles
+        profiles = visible_profiles()
+        if profiles:
+            self.shop_config.business_type = profiles[0].key
+            custom = get_custom_profile(self.shop_config.business_type)
+            if custom is not None:
+                from logic.generator.custom_profile_wiring import default_policies
+                self.shop_config.constraint_policies.update(default_policies(custom))
+
+        self._update_nominal_hours_label()
+        self._sync_everything()
+
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
+
+        self.statusBar().showMessage(
+            "Usunięto konfigurację - program działa jak po pierwszym uruchomieniu.", 3000
+        )
 
     def _init_state(self):
         old_employees = []
