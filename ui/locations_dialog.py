@@ -17,8 +17,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from logic.utils.time_utils import month_scope_note
 from ui.duty_rotation_editor import DutyRotationEditor
 from ui.slug import slugify
+from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig
@@ -51,7 +53,7 @@ class _LocationRow(QFrame):
     def __init__(
         self, on_remove, name="", open_hours=None, is_24_7=False,
         max_consecutive_days=None, rule_defs=(), rule_overrides=None,
-        original_key=None, duty_rotation=None,
+        original_key=None, duty_rotation=None, round_clock_start_hour=None,
     ):
         super().__init__()
         self.setObjectName("configCard")
@@ -109,7 +111,41 @@ class _LocationRow(QFrame):
         self.duty_rotation_editor = DutyRotationEditor(duty_rotation)
         outer.addWidget(self.duty_rotation_editor)
 
+        # "Godzina rozpoczęcia" rotacji całodobowej - tylko dla 24/7 (patrz
+        # LocationConfig.round_clock_start_hour). Domyślnie wyłączone (żeby
+        # nie zmieniać zachowania istniejących lokalizacji 24/7 przy samym
+        # otwarciu tego okna) - zaznaczenie włącza generator dzielący dobę
+        # na kolejne zmiany zamiast dotychczasowego OPEN/CLOSE, które nie
+        # jest w stanie obsadzić środka doby przy 24h otwarcia.
+        self.round_clock_container = QWidget()
+        round_clock_row = QHBoxLayout(self.round_clock_container)
+        round_clock_row.setContentsMargins(0, 0, 0, 0)
+        self.round_clock_check = QCheckBox("Rotacja całodobowa - godzina rozpoczęcia:")
+        self.round_clock_check.setChecked(round_clock_start_hour is not None)
+        self.round_clock_check.toggled.connect(self._update_round_clock_visibility)
+        round_clock_row.addWidget(self.round_clock_check)
+        self.round_clock_start_input = TimeInputWidget()
+        self.round_clock_start_input.set_time_str(round_clock_start_hour or "08:00")
+        round_clock_row.addWidget(self.round_clock_start_input)
+        round_clock_row.addStretch()
+        outer.addWidget(self.round_clock_container)
+
+        self.round_clock_hint = QLabel(
+            "Włącz, żeby generator dzielił dobę na kolejne, następujące po "
+            "sobie zmiany zaczynające się o podanej godzinie (np. 08:00 → "
+            "08:00–16:00, 16:00–00:00, 00:00–08:00, i tak każdego dnia "
+            "miesiąca), aż wypełni całą dobę. Bez tego środek doby zostaje "
+            "bez obsady - zwykłe zmiany otwarcia/zamknięcia sięgają najwyżej "
+            "ok. 1,5 h od godziny otwarcia/zamknięcia, więc przy 24h otwarcia "
+            "zawsze zostaje kilkugodzinna luka. Lokalizacje z konkretnymi "
+            "godzinami otwarcia (nie 24/7) działają bez żadnej zmiany."
+        )
+        self.round_clock_hint.setObjectName("quickInfoHint")
+        self.round_clock_hint.setWordWrap(True)
+        outer.addWidget(self.round_clock_hint)
+
         self._update_hours_visibility()
+        self._update_round_clock_visibility()
 
         # "Progi obsady dla tej lokalizacji" schowane na prośbę klienta -
         # widgety zostają w pełni działające (constraints_overrides() niżej
@@ -151,6 +187,9 @@ class _LocationRow(QFrame):
             self.hours_editor.set_hours({wd: ("00:00", "23:45") for wd in range(7)})
         self.hours_editor.setEnabled(not checked)
         self._update_hours_visibility()
+        if not checked:
+            self.round_clock_check.setChecked(False)
+        self._update_round_clock_visibility()
 
     def _toggle_hours_expanded(self):
         self._hours_expanded = not self._hours_expanded
@@ -166,6 +205,20 @@ class _LocationRow(QFrame):
         self.hours_editor.setVisible(not is_24_7 and self._hours_expanded)
         self.toggle_hours_btn.setText("Zwiń" if self._hours_expanded else "Rozwiń")
         self.duty_rotation_editor.setVisible(is_24_7)
+
+    def _update_round_clock_visibility(self):
+        is_24_7 = self.is_24_7_check.isChecked()
+        # Cała sekcja (checkbox + podpowiedź) istnieje tylko dla 24/7 - dla
+        # zwykłej lokalizacji ten mechanizm nie ma zastosowania (patrz
+        # LocationConfig.round_clock_start_hour).
+        self.round_clock_container.setVisible(is_24_7)
+        self.round_clock_hint.setVisible(is_24_7)
+        self.round_clock_start_input.setVisible(self.round_clock_check.isChecked())
+
+    def round_clock_start_hour_value(self) -> str | None:
+        if not self.is_24_7_check.isChecked() or not self.round_clock_check.isChecked():
+            return None
+        return self.round_clock_start_input.get_time_str()
 
     def name(self) -> str:
         return self.name_edit.text().strip()
@@ -215,6 +268,11 @@ class LocationsDialog(QDialog):
         hint.setWordWrap(True)
         root.addWidget(hint)
 
+        scope_note = QLabel(month_scope_note(self.shop_config.year, self.shop_config.month))
+        scope_note.setObjectName("quickInfoHint")
+        scope_note.setWordWrap(True)
+        root.addWidget(scope_note)
+
         # Lista lokalizacji rośnie bez ograniczeń - bez scrolla treść tego
         # okna (i przyciski Zapisz/Anuluj) wypadałyby poza ekran przy kilku
         # lokalizacjach naraz. Wzorem sidebaru głównego okna
@@ -257,6 +315,7 @@ class LocationsDialog(QDialog):
                 rule_overrides=loc.constraints,
                 original_key=key,
                 duty_rotation=loc.duty_rotation,
+                round_clock_start_hour=loc.round_clock_start_hour,
             )
 
         self.add_btn = QPushButton("Dodaj lokalizację")
@@ -289,7 +348,7 @@ class LocationsDialog(QDialog):
     def _add_location_row(
         self, name="", open_hours=None, is_24_7=False,
         max_consecutive_days=None, rule_overrides=None, original_key=None,
-        duty_rotation=None,
+        duty_rotation=None, round_clock_start_hour=None,
     ):
         row = _LocationRow(
             self._remove_location_row, name, open_hours, is_24_7=is_24_7,
@@ -298,6 +357,7 @@ class LocationsDialog(QDialog):
             rule_overrides=rule_overrides,
             original_key=original_key,
             duty_rotation=duty_rotation,
+            round_clock_start_hour=round_clock_start_hour,
         )
         self._location_rows.append(row)
         self.locations_container.addWidget(row)
@@ -433,6 +493,7 @@ class LocationsDialog(QDialog):
                     constraints=row.constraints_overrides(),
                     is_24_7=row.is_24_7_check.isChecked(),
                     duty_rotation=duty_rotation,
+                    round_clock_start_hour=row.round_clock_start_hour_value(),
                 )
                 old = self.shop_config.locations.get(row.original_key)
                 if old is not None:

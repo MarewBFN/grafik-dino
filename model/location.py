@@ -190,6 +190,20 @@ class LocationConfig:
     # poniżej (osobny, dalej opcjonalny mechanizm rotacji służby).
     is_24_7: bool = False
 
+    # "Godzina rozpoczęcia" rotacji całodobowej (tylko dla is_24_7=True,
+    # niezależna od duty_rotation - patrz logic/generator/round_clock_constraint.py).
+    # None = wyłączone: generator używa dotychczasowego mechanizmu OPEN/CLOSE
+    # (zakotwiczonego na 00:00/23:45 dla lokalizacji 24/7), który - jak się
+    # okazało (2026-09-21, zgłoszenie klienta) - fizycznie nie jest w stanie
+    # obsadzić środka doby (maks. przesunięcie od otwarcia/zamknięcia to
+    # 90/75 minut, więc przy 24h otwarcia zawsze zostaje kilkugodzinna luka
+    # bez nikogo w pracy). Ustawione (np. "08:00") - generator dzieli dobę na
+    # kolejne, następujące po sobie zmiany zaczynające się o tej godzinie, o
+    # ShopConfig.standard_daily_hours długości każda (patrz
+    # round_clock_constraint.py::round_clock_tile_count), aż wypełni całą
+    # dobę - i tak każdego dnia miesiąca.
+    round_clock_start_hour: str | None = None
+
     # Opcjonalna konfiguracja rotacji służby 24/7 (np. ochrona) - patrz
     # normalize_duty_rotation() wyżej. None = lokalizacja jej nie używa
     # (domyślne - zero zmiany zachowania). Niezależna od `is_24_7`/godzin
@@ -272,6 +286,8 @@ class LocationConfig:
         self.is_24_7 = enabled
         if enabled:
             self.open_hours = {wd: ("00:00", "23:45") for wd in range(7)}
+        else:
+            self.round_clock_start_hour = None
 
     def get_duty_rotation(self) -> dict | None:
         """Konfiguracja rotacji służby 24/7 tej lokalizacji, albo None gdy
@@ -291,6 +307,7 @@ class LocationConfig:
             "day_overrides": self.day_overrides,
             "constraints": self.constraints,
             "is_24_7": self.is_24_7,
+            "round_clock_start_hour": self.round_clock_start_hour,
             "duty_rotation": self.duty_rotation,
         }
 
@@ -309,6 +326,7 @@ class LocationConfig:
             int(day): tuple(hours) for day, hours in data.get("day_overrides", {}).items()
         }
         loc.is_24_7 = bool(data.get("is_24_7", False))
+        loc.round_clock_start_hour = data.get("round_clock_start_hour")
         loc.constraints = dict(DEFAULT_LOCATION_CONSTRAINTS)
         loc.constraints.update(data.get("constraints", {}))
         duty_rotation = data.get("duty_rotation")

@@ -1,4 +1,5 @@
 import os
+from copy import deepcopy
 from datetime import date
 
 from PySide6.QtCore import Qt, QThread, Signal, QObject, QTimer, QUrl
@@ -19,7 +20,6 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -37,20 +37,26 @@ from export.employee_card_exporter import (
     sanitize_filename_part,
 )
 from logic.schedule_controller import ScheduleController
-from logic.utils.time_utils import is_next_calendar_month
+from logic.utils.time_utils import previous_calendar_month
 from ui.previous_month_shift_dialog import PreviousMonthShiftDialog
 from ui.marquee_text import MarqueeButton, MarqueeLabel
 from model.business_profile import DEFAULT_BUSINESS_TYPE
 from model.location import format_open_hours_summary
 from model.month_schedule import MonthSchedule, PREVIOUS_MONTH_MEMORY_ENABLED
+from model.monthly_project import MonthlyProject
 from model.shop_config import ShopConfig
-from persistence.project_io import assign_missing_location_keys, load_project, save_project
+from persistence.project_io import (
+    assign_missing_location_keys,
+    load_project_bundle,
+    save_project_bundle,
+)
 from ui.config_dialog import ConfigDialog
 from ui.locations_dialog import LocationsDialog
 from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import ScheduleGrid
+from ui.month_picker_dialog import MonthPickerDialog
 from ui.new_project_dialog import NewProjectDialog
 from ui.quick_mode_settings_dialog import QuickModeSettingsDialog
 from ui.time_input import TimeInputWidget
@@ -290,37 +296,9 @@ class MainWindow(QMainWindow):
         self.btn_change_date.setObjectName("linkButton")
         self.btn_change_date.setCursor(Qt.PointingHandCursor)
         self.btn_change_date.setFixedWidth(120)
-        self.btn_change_date.clicked.connect(self._enter_edit_date_mode)
+        self.btn_change_date.clicked.connect(self._open_month_picker)
 
         hero_layout.addWidget(self.btn_change_date)
-
-        # Widget dla trybu edycji daty
-        self.date_edit_widget = QWidget()
-        self.date_edit_widget.hide()
-        date_edit_layout = QVBoxLayout(self.date_edit_widget)
-        date_edit_layout.setContentsMargins(0, 0, 0, 0)
-
-        date_row = QHBoxLayout()
-        date_row.addWidget(QLabel("Miesiąc"))
-        self.month_spin = QSpinBox()
-        self.month_spin.setRange(1, 12)
-        self.month_spin.setValue(self.month)
-        date_row.addWidget(self.month_spin)
-
-        date_row.addWidget(QLabel("Rok"))
-        self.year_spin = QSpinBox()
-        self.year_spin.setRange(2024, 2035)
-        self.year_spin.setValue(self.year)
-        date_row.addWidget(self.year_spin)
-        
-        self.btn_save_date = QPushButton("Zapisz")
-        self.btn_save_date.setObjectName("primaryButton")
-        self.btn_save_date.clicked.connect(self._save_date_clicked)
-        self.btn_save_date.setMinimumHeight(30)
-        date_row.addWidget(self.btn_save_date)
-
-        date_edit_layout.addLayout(date_row)
-        hero_layout.addWidget(self.date_edit_widget)
 
         layout.addWidget(hero)
 
@@ -751,6 +729,12 @@ class MainWindow(QMainWindow):
         self.shop_config = ShopConfig(self.year, self.month)
         self.controller = ScheduleController(self.schedule, self.shop_config)
 
+        # Świeży/zerowany projekt = świeży kontener "pamięci wielu miesięcy"
+        # (patrz model/monthly_project.py) - żaden inny miesiąc jeszcze nie
+        # istnieje, tylko ten właśnie utworzony.
+        self.project = MonthlyProject()
+        self.project.put(self.year, self.month, self.schedule, self.shop_config)
+
     def _sync_everything(self):
         # Bezpiecznik: tabela grafiku filtruje pracowników po location_key
         # (patrz _sync_grid), więc ktoś bez poprawnego przypisania byłby
@@ -900,82 +884,82 @@ class MainWindow(QMainWindow):
         pass
 
     def _set_date_controls(self, year, month):
-        self._loading = True
-        self.year_spin.blockSignals(True)
-        self.month_spin.blockSignals(True)
-        self.year_spin.setValue(year)
-        self.month_spin.setValue(month)
         if hasattr(self, 'date_display_label'):
             self.date_display_label.setText(f"{month:02d}.{year}")
-        self.year_spin.blockSignals(False)
-        self.month_spin.blockSignals(False)
-        self._loading = False
 
-    def _enter_edit_date_mode(self):
-        self.date_display_label.hide()
-        self.btn_change_date.hide()
-        self.date_edit_widget.show()
+    def _open_month_picker(self):
+        """Wpięte pod przycisk "🗓 Zmień datę" - okno-kalendarz
+        (ui/month_picker_dialog.py) pokazujące wszystkie miesiące tego
+        projektu razem z ich stanem (patrz
+        model/monthly_project.py::describe_month_state), tak żeby przełączanie
+        było świadomym wyborem, nie zgadywaniem "czy tu coś już jest"."""
+        dialog = MonthPickerDialog(self.project, self.year, self.month, self)
+        if dialog.exec() == QDialog.Accepted and dialog.result_year is not None:
+            self._switch_to_month(dialog.result_year, dialog.result_month)
 
-    def _save_date_clicked(self):
-        new_year = self.year_spin.value()
-        new_month = self.month_spin.value()
-        
+    def _switch_to_month(self, new_year: int, new_month: int) -> None:
+        """Przełącza na (new_year, new_month) w ramach TEGO SAMEGO projektu -
+        jedyna droga zmiany miesiąca (_open_month_picker). Od pamięci wielu
+        miesięcy (model/monthly_project.py) nieodwracalnie NIC się już nie
+        kasuje: miesiąc odwiedzony wcześniej wraca dokładnie taki, jaki
+        został zostawiony; naprawdę nowy miesiąc startuje pusty (ale z tymi
+        samymi pracownikami/lokalizacjami/regułami generatora), z pamięcią
+        końca poprzedniego miesiąca doliczoną automatycznie, jeśli miesiąc
+        bezpośrednio go poprzedzający już istnieje w projekcie - niezależnie
+        od tego, który miesiąc był aktualnie otwarty przed przełączeniem."""
         if new_year == self.year and new_month == self.month:
-            self.date_edit_widget.hide()
-            self.date_display_label.show()
-            self.btn_change_date.show()
             return
 
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Zmiana miesiąca")
-        msg_box.setText("Zmiana miesiąca spowoduje usunięcie wszystkich zmian wprowadzonych na grafiku. Kontynuować?")
-        btn_yes = msg_box.addButton("Tak", QMessageBox.YesRole)
-        btn_cancel = msg_box.addButton("Anuluj", QMessageBox.RejectRole)
-        msg_box.exec()
+        self._loading = True
 
-        if msg_box.clickedButton() == btn_yes:
-            self._loading = True
-            old_year, old_month = self.year, self.month
-            old_schedule = self.schedule
-            self.year = new_year
-            self.month = new_month
-            self.date_display_label.setText(f"{self.month:02d}.{self.year}")
+        # Bieżący stan zawsze z powrotem do kontenera, zanim przełączymy -
+        # self.schedule/self.shop_config mogły być edytowane w miejscu od
+        # czasu ostatniego project.put() (te same referencje, więc to tylko
+        # zabezpieczenie, nie właściwa kopia).
+        self.project.put(self.year, self.month, self.schedule, self.shop_config)
 
-            # Celowo NIE _init_state() - to tworzyłoby zupełnie nowy, pusty
-            # ShopConfig i gubiło profil działalności, lokalizacje, presety
-            # trybu szybkiego i zasady generatora (dialog wyżej mówi wyraźnie
-            # o kasowaniu tylko GRAFIKU, nie ustawień). Zamiast tego: ten sam
-            # shop_config, zerowany tylko z tego co miesiąc-specyficzne (patrz
-            # ShopConfig.reset_for_new_month), i świeży MonthSchedule z tymi
-            # samymi pracownikami.
-            self.shop_config.reset_for_new_month(self.year, self.month)
-            self.schedule = MonthSchedule(self.year, self.month, employees=self.schedule.employees)
-            if PREVIOUS_MONTH_MEMORY_ENABLED and is_next_calendar_month(old_year, old_month, new_year, new_month):
-                self._carry_over_previous_month_end_shifts(old_schedule)
-            self.controller = ScheduleController(self.schedule, self.shop_config)
-
-            self._update_nominal_hours_label()
-            self._sync_everything()
-            self.statusBar().showMessage("Utworzono nowy grafik dla wybranego miesiąca.", 2500)
-            
-            self.date_edit_widget.hide()
-            self.date_display_label.show()
-            self.btn_change_date.show()
-            self._loading = False
+        existing = self.project.get(new_year, new_month)
+        if existing is not None:
+            self.schedule, self.shop_config = existing
         else:
-            self._set_date_controls(self.year, self.month)
-            self.date_edit_widget.hide()
-            self.date_display_label.show()
-            self.btn_change_date.show()
+            # Nowy miesiąc w tym projekcie - ten sam wzorzec co dawny
+            # _save_date_clicked: NIE zupełnie świeży ShopConfig (to gubiłoby
+            # profil działalności/lokalizacje/presety/reguły generatora),
+            # tylko kopia bieżącego, zerowana z tego co miesiąc-specyficzne
+            # (patrz ShopConfig.reset_for_new_month). Kopia (nie ten sam
+            # obiekt) - inaczej edycja "nowego" miesiąca cofałaby się też do
+            # miesięcy już zapisanych w kontenerze, które współdzieliłyby tę
+            # samą instancję.
+            new_shop_config = deepcopy(self.shop_config)
+            new_shop_config.reset_for_new_month(new_year, new_month)
+            self.shop_config = new_shop_config
+            self.schedule = MonthSchedule(new_year, new_month, employees=self.schedule.employees)
+
+            prev_year, prev_month = previous_calendar_month(new_year, new_month)
+            predecessor = self.project.get(prev_year, prev_month)
+            if PREVIOUS_MONTH_MEMORY_ENABLED and predecessor is not None:
+                predecessor_schedule, _ = predecessor
+                self._carry_over_previous_month_end_shifts(predecessor_schedule)
+
+            self.project.put(new_year, new_month, self.schedule, self.shop_config)
+
+        self.controller = ScheduleController(self.schedule, self.shop_config)
+        self.year, self.month = new_year, new_month
+        self._set_date_controls(self.year, self.month)
+
+        self._update_nominal_hours_label()
+        self._sync_everything()
+        self.statusBar().showMessage(f"Przełączono na {new_month:02d}.{new_year}.", 2500)
+        self._loading = False
 
     def _carry_over_previous_month_end_shifts(self, old_schedule: MonthSchedule) -> None:
         """"Pamięć poprzedniego miesiąca" (patrz PreviousMonthShiftEnd) -
-        dla każdego pracownika przejmuje z KOŃCZĄCEGO SIĘ grafiku (jeszcze w
-        pamięci, o krok przed zastąpieniem self.schedule w
-        _save_date_clicked) koniec jego ostatniej zmiany w ostatnim dniu
-        tamtego miesiąca, żeby generator/rest-constraint w nowym miesiącu
-        wiedziały, kiedy naprawdę mieli ostatni odpoczynek (patrz
-        logic/generator/rest_constraint.py,
+        dla każdego pracownika przejmuje z KOŃCZĄCEGO SIĘ grafiku (przekazany
+        jawnie - już niekoniecznie tożsamy z tym, co było aktualnie otwarte
+        przed przełączeniem, patrz _switch_to_month) koniec jego ostatniej
+        zmiany w ostatnim dniu tamtego miesiąca, żeby generator/rest-constraint
+        w nowym miesiącu wiedziały, kiedy naprawdę mieli ostatni odpoczynek
+        (patrz logic/generator/rest_constraint.py,
         logic/generator/duty_rotation_rest_constraint.py). Pomija dni puste
         (wolne/urlop/L4) - tam nie ma żadnego "końca" do przejęcia."""
         last_day = old_schedule.days_in_month
@@ -1294,7 +1278,7 @@ class MainWindow(QMainWindow):
         # Constraint policies are part of the local working project, so retain
         # the selected generator configuration for the next application start.
         try:
-            save_project("last_project.json", self.schedule, self.shop_config)
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano konfigurację.", 2500)
@@ -1310,7 +1294,7 @@ class MainWindow(QMainWindow):
         assign_missing_location_keys(self.schedule, self.shop_config)
         self._sync_everything()
         try:
-            save_project("last_project.json", self.schedule, self.shop_config)
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano lokalizacje.", 2500)
@@ -1323,7 +1307,7 @@ class MainWindow(QMainWindow):
         self.shop_config.quick_mode_presets = dialog.result_presets
         self._rebuild_quick_preset_buttons()
         try:
-            save_project("last_project.json", self.schedule, self.shop_config)
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano ustawienia trybu szybkiego.", 2500)
@@ -1346,8 +1330,10 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith((".myp", ".json")):
             path += ".json" if selected_filter.endswith("(*.json)") else ".myp"
 
-        save_project(path, self.schedule, self.shop_config)
-        save_project("last_project.json", self.schedule, self.shop_config)
+        # Cały projekt (patrz model/monthly_project.py) - każdy miesiąc
+        # odwiedzony w tej sesji, nie tylko aktualnie otwarty.
+        save_project_bundle(path, self.project, self.year, self.month)
+        save_project_bundle("last_project.json", self.project, self.year, self.month)
         self.statusBar().showMessage("Zapisano projekt.", 2500)
 
     def _load_project(self):
@@ -1357,15 +1343,14 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        self._apply_loaded_project(*load_project(path))
+        self._apply_loaded_project(*load_project_bundle(path))
         self.statusBar().showMessage("Wczytano projekt.", 2500)
 
-    def _apply_loaded_project(self, schedule, shop_config):
-        self.schedule = schedule
-        self.shop_config = shop_config
+    def _apply_loaded_project(self, project: MonthlyProject, active_year: int, active_month: int):
+        self.project = project
+        self.year, self.month = active_year, active_month
+        self.schedule, self.shop_config = self.project.get(self.year, self.month)
         self.controller = ScheduleController(self.schedule, self.shop_config)
-        self.year = self.schedule.year
-        self.month = self.schedule.month
         self._set_date_controls(self.year, self.month)
         self._update_nominal_hours_label()
         self._sync_everything()
@@ -1377,7 +1362,7 @@ class MainWindow(QMainWindow):
         if not path or not os.path.exists(path):
             return False
         try:
-            self._apply_loaded_project(*load_project(path))
+            self._apply_loaded_project(*load_project_bundle(path))
         except Exception:
             return False
         self.statusBar().showMessage("Wczytano projekt.", 2500)
@@ -1687,7 +1672,7 @@ class MainWindow(QMainWindow):
             return False
 
         try:
-            self._apply_loaded_project(*load_project("last_project.json"))
+            self._apply_loaded_project(*load_project_bundle("last_project.json"))
         except Exception:
             return False
         return True
@@ -2010,7 +1995,7 @@ class MainWindow(QMainWindow):
                 return
 
             try:
-                save_project("last_project.json", self.schedule, self.shop_config)
+                save_project_bundle("last_project.json", self.project, self.year, self.month)
             except:
                 pass
 
@@ -2077,7 +2062,7 @@ class MainWindow(QMainWindow):
 
         self._update_nominal_hours_label()
         self._sync_everything()
-        save_project("last_project.json", self.schedule, self.shop_config)
+        save_project_bundle("last_project.json", self.project, self.year, self.month)
         self.statusBar().showMessage("Utworzono placówkę.", 2500)
 
     def _clear_generated(self):

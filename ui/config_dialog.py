@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QFrame,
 )
+from logic.utils.time_utils import month_scope_note
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.profile_wizard_dialog import ProfileWizardDialog
 from ui.weekly_hours_editor import WeeklyHoursEditor
@@ -73,6 +74,11 @@ class ConfigDialog(QDialog):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
+
+        scope_note = QLabel(month_scope_note(self.shop_config.year, self.shop_config.month))
+        scope_note.setObjectName("quickInfoHint")
+        scope_note.setWordWrap(True)
+        root.addWidget(scope_note)
 
         # Sekcja "Nazwa i Profil placówki" schowana dla Enyo - klient ma
         # dokładnie jedną placówkę (kilka lokalizacji w jej ramach, patrz

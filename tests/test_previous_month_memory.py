@@ -1,7 +1,7 @@
 """'Pamięć poprzedniego miesiąca' (PreviousMonthShiftEnd, patrz
 model/month_schedule.py) - przejęcie końca ostatniej zmiany każdego
 pracownika przy zmianie miesiąca w tym samym projekcie
-(ui/main_window.py::_save_date_clicked), jego wpływ na 11h rest na
+(ui/main_window.py::_switch_to_month), jego wpływ na 11h rest na
 początku dnia 1 (zwykły tryb i rotacja 24/7), pojawianie/znikanie kolumny
 w ScheduleGrid i round-trip zapisu/wczytania projektu."""
 
@@ -28,6 +28,7 @@ from logic.utils.time_utils import is_next_calendar_month
 from model.employee import Employee
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule, PreviousMonthShiftEnd
+from model.monthly_project import MonthlyProject
 from model.shop_config import ShopConfig
 from persistence.project_io import load_project, save_project
 from ui.grid_view import ScheduleGrid
@@ -93,7 +94,7 @@ class CarryOverPreviousMonthEndShiftsTests(unittest.TestCase):
 
         self.assertIsNone(window.schedule.get_previous_month_end_shift(emp))
 
-    def test_save_date_clicked_carries_over_only_for_the_immediately_next_month(self):
+    def test_switch_to_month_carries_over_only_for_the_immediately_next_month(self):
         emp = Employee(last_name="Kowalski", first_name="Jan")
         old_schedule = MonthSchedule(2026, 1, employees=[emp])
         old_schedule.set_day_hours(emp, 31, "14:00", "22:00")
@@ -104,33 +105,25 @@ class CarryOverPreviousMonthEndShiftsTests(unittest.TestCase):
         window.year, window.month = 2026, 1
         window.schedule = old_schedule
         window.shop_config = shop
-        window.year_spin = MagicMock()
-        window.year_spin.value.return_value = 2026
-        window.month_spin = MagicMock()
-        window.month_spin.value.return_value = 2  # skok o jeden miesiąc
+        window.project = MonthlyProject()
+        window.project.put(2026, 1, old_schedule, shop)
         window.date_display_label = MagicMock()
-        window.date_edit_widget = MagicMock()
-        window.btn_change_date = MagicMock()
         window.statusBar = MagicMock(return_value=MagicMock())
         window._update_nominal_hours_label = MagicMock()
         window._sync_everything = MagicMock()
 
-        fake_msg_box = MagicMock()
-        btn_yes = MagicMock()
-        fake_msg_box.addButton.side_effect = [btn_yes, MagicMock()]
-        fake_msg_box.clickedButton.return_value = btn_yes
-
-        # Mechanizm jest domyślnie schowany (patrz PreviousMonthMemoryHiddenTests)
-        # - ta klasa testuje samo zachowanie przejęcia, niezależnie od tego,
-        # czy jest aktualnie wpięte w main_window.py.
-        with patch("ui.main_window.QMessageBox", return_value=fake_msg_box), \
-             patch("ui.main_window.PREVIOUS_MONTH_MEMORY_ENABLED", True):
-            window._save_date_clicked()
+        # Mechanizm jest teraz domyślnie odblokowany (patrz
+        # PreviousMonthMemoryEnabledByDefaultTests), ale wymuszamy True jawnie
+        # tutaj też - ta klasa testuje samo zachowanie przejęcia, niezależnie
+        # od aktualnej wartości flagi w main_window.py. Zmiana miesiąca nie
+        # jest już destrukcyjna (pamięć wielu miesięcy).
+        with patch("ui.main_window.PREVIOUS_MONTH_MEMORY_ENABLED", True):
+            window._switch_to_month(2026, 2)  # skok o jeden miesiąc
 
         carry = window.schedule.get_previous_month_end_shift(emp)
         self.assertEqual(carry, PreviousMonthShiftEnd("22:00", False))
 
-    def test_save_date_clicked_does_not_carry_over_when_skipping_a_month(self):
+    def test_switch_to_month_does_not_carry_over_when_skipping_a_month(self):
         emp = Employee(last_name="Kowalski", first_name="Jan")
         old_schedule = MonthSchedule(2026, 1, employees=[emp])
         old_schedule.set_day_hours(emp, 31, "14:00", "22:00")
@@ -141,24 +134,16 @@ class CarryOverPreviousMonthEndShiftsTests(unittest.TestCase):
         window.year, window.month = 2026, 1
         window.schedule = old_schedule
         window.shop_config = shop
-        window.year_spin = MagicMock()
-        window.year_spin.value.return_value = 2026
-        window.month_spin = MagicMock()
-        window.month_spin.value.return_value = 3  # skok o DWA miesiące
+        window.project = MonthlyProject()
+        window.project.put(2026, 1, old_schedule, shop)
         window.date_display_label = MagicMock()
-        window.date_edit_widget = MagicMock()
-        window.btn_change_date = MagicMock()
         window.statusBar = MagicMock(return_value=MagicMock())
         window._update_nominal_hours_label = MagicMock()
         window._sync_everything = MagicMock()
 
-        fake_msg_box = MagicMock()
-        btn_yes = MagicMock()
-        fake_msg_box.addButton.side_effect = [btn_yes, MagicMock()]
-        fake_msg_box.clickedButton.return_value = btn_yes
-
-        with patch("ui.main_window.QMessageBox", return_value=fake_msg_box):
-            window._save_date_clicked()
+        # Skok o DWA miesiące - luty (miesiąc bezpośrednio poprzedzający
+        # marzec) nigdy nie istniał w projekcie.
+        window._switch_to_month(2026, 3)
 
         self.assertIsNone(window.schedule.get_previous_month_end_shift(emp))
 
@@ -398,9 +383,10 @@ class GridPreviousMonthColumnTests(unittest.TestCase):
         schedule = MonthSchedule(2026, 2, employees=[emp1, emp2])
         schedule.set_previous_month_end_shift(emp1, "22:00", False)
 
-        # Mechanizm jest domyślnie schowany (patrz PreviousMonthMemoryHiddenTests)
-        # - ta klasa testuje samo zachowanie kolumny, niezależnie od tego,
-        # czy jest aktualnie wpięta w ui/grid_view.py.
+        # Mechanizm jest teraz domyślnie odblokowany (patrz
+        # PreviousMonthMemoryEnabledByDefaultTests), ale wymuszamy True jawnie
+        # tutaj też - ta klasa testuje samo zachowanie kolumny, niezależnie od
+        # aktualnej wartości flagi w ui/grid_view.py.
         with patch("ui.grid_view.PREVIOUS_MONTH_MEMORY_ENABLED", True):
             grid = self._grid(schedule, shop)
 
@@ -566,21 +552,19 @@ class PreviousMonthBlocksDay1DiagnosticsTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 9. Mechanizm schowany na życzenie użytkownika (2026-09-21) - patrz
-#    model/month_schedule.py::PREVIOUS_MONTH_MEMORY_ENABLED. Kod zostaje w
-#    pełni działający (wszystkie testy wyżej dalej przechodzą, wołając
-#    constrainty/dialog/grid bezpośrednio z schedule= jawnie podanym - flaga
-#    dotyczy tylko trzech punktów "wpięcia": menu, auto-przejęcie przy
-#    zmianie miesiąca, wpływ na generator przez base_specs.py) - te trzy
-#    punkty sprawdza ta klasa.
+# 9. Mechanizm odblokowany (2026-09-21, przy okazji pamięci wielu miesięcy) -
+#    patrz model/month_schedule.py::PREVIOUS_MONTH_MEMORY_ENABLED. Ta klasa
+#    sprawdza, że domyślnie (bez żadnego jawnego patchowania flagi) trzy
+#    punkty "wpięcia" - menu, auto-przejęcie przy zmianie miesiąca, wpływ na
+#    generator przez base_specs.py - faktycznie działają.
 # ---------------------------------------------------------------------------
 
-class PreviousMonthMemoryHiddenTests(unittest.TestCase):
-    def test_flag_is_currently_disabled(self):
+class PreviousMonthMemoryEnabledByDefaultTests(unittest.TestCase):
+    def test_flag_is_currently_enabled(self):
         from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
-        self.assertFalse(PREVIOUS_MONTH_MEMORY_ENABLED)
+        self.assertTrue(PREVIOUS_MONTH_MEMORY_ENABLED)
 
-    def test_build_rest_11h_does_not_pass_schedule_through_when_disabled(self):
+    def test_build_rest_11h_passes_schedule_through_by_default(self):
         import logic.generator.base_specs as base_specs
 
         ctx = MagicMock()
@@ -592,9 +576,9 @@ class PreviousMonthMemoryHiddenTests(unittest.TestCase):
         with patch.object(base_specs, "add_rest_11h_constraint", return_value=[]) as mock_rest:
             base_specs._build_rest_11h(ctx, soft=False)
 
-        self.assertIsNone(mock_rest.call_args.kwargs.get("schedule"))
+        self.assertIs(mock_rest.call_args.kwargs.get("schedule"), ctx.schedule)
 
-    def test_build_rest_11h_simplified_does_not_pass_schedule_through_when_disabled(self):
+    def test_build_rest_11h_simplified_passes_schedule_through_by_default(self):
         import logic.generator.base_specs as base_specs
 
         ctx = MagicMock()
@@ -606,9 +590,9 @@ class PreviousMonthMemoryHiddenTests(unittest.TestCase):
         with patch.object(base_specs, "add_rest_11h_constraint_simplified", return_value=[]) as mock_rest:
             base_specs._build_rest_11h(ctx, soft=False)
 
-        self.assertIsNone(mock_rest.call_args.kwargs.get("schedule"))
+        self.assertIs(mock_rest.call_args.kwargs.get("schedule"), ctx.schedule)
 
-    def test_build_rest_11h_duty_rotation_does_not_pass_schedule_through_when_disabled(self):
+    def test_build_rest_11h_duty_rotation_passes_schedule_through_by_default(self):
         import logic.generator.base_specs as base_specs
 
         ctx = MagicMock()
@@ -621,9 +605,9 @@ class PreviousMonthMemoryHiddenTests(unittest.TestCase):
              patch.object(base_specs, "add_duty_rotation_rest_constraint", return_value=[]) as mock_duty_rest:
             base_specs._build_rest_11h(ctx, soft=False)
 
-        self.assertIsNone(mock_duty_rest.call_args.kwargs.get("schedule"))
+        self.assertIs(mock_duty_rest.call_args.kwargs.get("schedule"), ctx.schedule)
 
-    def test_menu_action_not_added_when_disabled(self):
+    def test_menu_action_added_by_default(self):
         window = MainWindow.__new__(MainWindow)
         edit_menu = MagicMock()
         window._clear_schedule = MagicMock()
@@ -636,9 +620,9 @@ class PreviousMonthMemoryHiddenTests(unittest.TestCase):
             edit_menu.addAction("Godziny zakończenia z poprzedniego miesiąca...", window._open_previous_month_shift_dialog)
 
         calls = [c.args[0] for c in edit_menu.addAction.call_args_list]
-        self.assertNotIn("Godziny zakończenia z poprzedniego miesiąca...", calls)
+        self.assertIn("Godziny zakończenia z poprzedniego miesiąca...", calls)
 
-    def test_grid_column_never_shows_even_with_data_present(self):
+    def test_grid_column_shows_by_default_when_data_present(self):
         shop = ShopConfig(2026, 3)
         emp = Employee(last_name="Kowalski", first_name="Jan")
         schedule = MonthSchedule(2026, 3, employees=[emp])
@@ -648,33 +632,34 @@ class PreviousMonthMemoryHiddenTests(unittest.TestCase):
         grid.set_data(schedule, shop, MagicMock())
         grid.build()
 
-        self.assertIsNone(grid._previous_month_last_day_if_shown())
-        self.assertEqual(grid._prev_col_offset, 0)
+        self.assertEqual(grid._previous_month_last_day_if_shown(), 28)
+        self.assertEqual(grid._prev_col_offset, 1)
 
-    def test_auto_carry_over_is_skipped_on_month_change(self):
+    def test_auto_carry_over_happens_on_month_change_by_default(self):
         emp = Employee(last_name="Kowalski", first_name="Jan")
         old_schedule = MonthSchedule(2026, 1, employees=[emp])
         old_schedule.set_day_hours(emp, 31, "14:00", "22:00")
 
+        shop = ShopConfig(2026, 1)
+
         window = MainWindow.__new__(MainWindow)
         window.year, window.month = 2026, 1
         window.schedule = old_schedule
-        window.shop_config = ShopConfig(2026, 1)
-        window.year_spin = MagicMock(value=MagicMock(return_value=2026))
-        window.month_spin = MagicMock(value=MagicMock(return_value=2))
+        window.shop_config = shop
+        window.project = MonthlyProject()
+        window.project.put(2026, 1, old_schedule, shop)
         window.date_display_label = MagicMock()
-        window.date_edit_widget = MagicMock()
-        window.btn_change_date = MagicMock()
         window._update_nominal_hours_label = MagicMock()
         window._sync_everything = MagicMock()
         window.statusBar = MagicMock(return_value=MagicMock())
 
-        with patch("ui.main_window.QMessageBox") as mock_box:
-            mock_box.return_value.clickedButton.return_value = mock_box.return_value.addButton.return_value
-            window._save_date_clicked()
+        window._switch_to_month(2026, 2)
 
         new_emp = window.schedule.employees[0]
-        self.assertIsNone(window.schedule.get_previous_month_end_shift(new_emp))
+        self.assertEqual(
+            window.schedule.get_previous_month_end_shift(new_emp),
+            PreviousMonthShiftEnd("22:00", False),
+        )
 
 
 if __name__ == "__main__":

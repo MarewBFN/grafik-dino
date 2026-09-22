@@ -69,6 +69,14 @@ def add_manual_shift_constraints(
         if shop.get_location(emp).get_duty_rotation():
             continue
 
+        # Analogicznie: pracownicy rotacji całodobowej "ogólnej" (round-clock,
+        # patrz logic/generator/round_clock_constraint.py) mają swoją,
+        # równoległą wersję tego constraintu -
+        # round_clock_manual_constraint.py. Zero zmiany zachowania dla
+        # każdej lokalizacji bez ustawionej round_clock_start_hour.
+        if shop.get_location(emp).get_round_clock_start_hour():
+            continue
+
         for d in days:
 
             day_state = schedule.get_day(emp, d)

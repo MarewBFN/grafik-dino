@@ -36,6 +36,9 @@ from logic.generator.duty_rotation_constraint import (
 )
 from logic.generator.duty_rotation_rest_constraint import add_duty_rotation_rest_constraint
 from logic.generator.duty_rotation_manual_constraint import add_duty_rotation_manual_shift_constraint
+from logic.generator.round_clock_constraint import add_round_clock_gate_constraint
+from logic.generator.round_clock_rest_constraint import add_round_clock_rest_constraint
+from logic.generator.round_clock_manual_constraint import add_round_clock_manual_shift_constraint
 from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
 
 
@@ -104,6 +107,7 @@ def _build_always_on_specs():
             lambda ctx, soft: add_work_dependency_constraint(
                 ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shift_open, ctx.shift_close, ctx.all_shifts,
                 trace=ctx.trace, shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
+                round_clock_shifts=ctx.round_clock_shifts,
             ),
             always_on=True,
         ),
@@ -145,14 +149,37 @@ def _build_always_on_specs():
             ) if ctx.duty_shifts is not None else None,
             always_on=True,
         ),
+        ConstraintSpec(
+            # Strukturalny fakt (jak duty_rotation_gate wyżej) - kafelki
+            # rotacji całodobowej "ogólnej" (round_clock_constraint.py) i
+            # stary model OPEN/CLOSE/START/END/NIGHT są wzajemnie wyłączne
+            # per pracownik.
+            "round_clock_gate",
+            lambda ctx, soft: add_round_clock_gate_constraint(
+                ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.round_clock_shifts, ctx.all_shifts,
+                ctx.shop.standard_daily_hours, trace=ctx.trace,
+            ) if ctx.round_clock_shifts is not None else None,
+            always_on=True,
+        ),
+        ConstraintSpec(
+            # Ręczna blokada dnia dla pracowników rotacji całodobowej
+            # "ogólnej" - równoległa do "manual_shift"/"duty_rotation_manual_shift"
+            # wyżej, patrz logic/generator/round_clock_manual_constraint.py.
+            "round_clock_manual_shift",
+            lambda ctx, soft: add_round_clock_manual_shift_constraint(
+                ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.round_clock_shifts,
+                ctx.shop.standard_daily_hours, trace=ctx.trace,
+            ) if ctx.round_clock_shifts is not None else None,
+            always_on=True,
+        ),
     ]
 
 
 def _build_rest_11h(ctx, soft):
-    # "Pamięć poprzedniego miesiąca" schowana na razie (patrz
-    # model/month_schedule.py::PREVIOUS_MONTH_MEMORY_ENABLED) - schedule=None
-    # sprawia, że _add_previous_month_rest_constraint() w obu funkcjach
-    # niżej wychodzi natychmiast, bez żadnego wpływu na dzień 1.
+    # "Pamięć poprzedniego miesiąca" (model/month_schedule.py::
+    # PREVIOUS_MONTH_MEMORY_ENABLED) - gdy wyłączona, schedule=None sprawia,
+    # że _add_previous_month_rest_constraint() w obu funkcjach niżej wychodzi
+    # natychmiast, bez żadnego wpływu na dzień 1.
     prev_month_schedule = ctx.schedule if PREVIOUS_MONTH_MEMORY_ENABLED else None
 
     mode = ctx.shop.constraints.get("rest_11h_mode", "standard")
@@ -190,6 +217,15 @@ def _build_rest_11h(ctx, soft):
             schedule=prev_month_schedule, soft=soft, trace=ctx.trace,
         )
 
+    # Rotacja całodobowa "ogólna" (round_clock_constraint.py) - ten sam
+    # wzorzec: add_rest_11h_constraint nie buduje okien dla tych kafelków w
+    # ogóle, więc to dokłada się obok, nie modyfikuje istniejącej logiki.
+    if ctx.round_clock_shifts is not None:
+        violations = list(violations) + add_round_clock_rest_constraint(
+            ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.round_clock_shifts,
+            ctx.shop.standard_daily_hours, schedule=prev_month_schedule, soft=soft, trace=ctx.trace,
+        )
+
     return violations
 
 
@@ -205,6 +241,7 @@ def _build_availability(ctx, soft):
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts,
         ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
         soft=soft, trace=ctx.trace, shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
+        round_clock_shifts=ctx.round_clock_shifts,
     )
 
 

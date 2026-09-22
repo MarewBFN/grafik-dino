@@ -1040,3 +1040,209 @@ sekcji, `Output/EnyoSetup.exe` przebudowany. Nie testowane empirycznie
 razem z powyższym scaleniem checkboxa 24/7 (ta sama runda) - jeśli w
 GitHub Release z tagu `v1.0.0-enyo` już wgrano stary plik, trzeba go
 zastąpić nowym (trzeci raz).
+
+## Pamięć wielu miesięcy + odblokowanie pamięci poprzedniego miesiąca (2026-09-21)
+
+Dotychczas "projekt" (`.myp`) to był dokładnie JEDEN miesiąc - zmiana
+miesiąca (`ui/main_window.py::_save_date_clicked`) zawsze bezpowrotnie
+kasowała grafik i pytała o to ostrzegawczym popupem, zachowując tylko
+listę pracowników i `ShopConfig` (lokalizacje/profil/reguły generatora -
+te już wcześniej przeżywały zmianę miesiąca przez `ShopConfig.
+reset_for_new_month`, tylko sam `MonthSchedule` ginął, razem z
+`day_overrides`/`trade_sundays` konkretnego miesiąca, bo `reset_for_new_month`
+zerowało je w miejscu na współdzielonym obiekcie). Użytkownik poprosił o
+możliwość swobodnego poruszania się między miesiącami tego samego projektu
+(np. żeby sprawdzić coś we wcześniejszym miesiącu) bez utraty żadnych
+danych - i o wpięcie do tego mechanizmu pamięci poprzedniego miesiąca
+opisanej wyżej (przywrócone z `PREVIOUS_MONTH_MEMORY_ENABLED = False` do
+`True` w tej samej rundzie - diagnostyka INFEASIBLE, na którą to chowanie
+czekało, była już gotowa).
+
+**Model:** nowy `model/monthly_project.py::MonthlyProject` - kontener
+`Dict[(year, month), (MonthSchedule, ShopConfig)]`, jeden wpis na KAŻDY
+miesiąc kiedykolwiek odwiedzony w tej sesji, nie tylko aktualnie otwarty.
+Każdy miesiąc ma WŁASNY, niezależny `ShopConfig` (kopiowany przez
+`deepcopy` - ten sam, już istniejący wzorzec co undo/redo w
+`logic/schedule_controller.py`) zamiast jednego współdzielonego i zerowanego
+w miejscu - dzięki temu powrót do starego miesiąca pokazuje dokładnie te
+niedziele handlowe/nadpisania dni/święta, jakie tam faktycznie ustawiono.
+
+**`ui/main_window.py::_switch_to_month`** (zastępuje `_save_date_clicked`
+jako jedyną drogę zmiany miesiąca, wołane teraz z nowego okna wyboru -
+patrz niżej): miesiąc już obecny w `self.project` wraca dokładnie taki,
+jaki został zostawiony; naprawdę nowy miesiąc startuje pusty (te same
+pracownicy/lokalizacje/reguły generatora co dziś), z pamięcią końca
+poprzedniego miesiąca doliczoną automatycznie, JEŚLI miesiąc bezpośrednio
+kalendarzowo go poprzedzający już istnieje w projekcie - sprawdzane przez
+`logic/utils/time_utils.py::previous_calendar_month`, NIEZALEŻNIE od tego,
+który miesiąc był aktualnie otwarty przed przełączeniem (swobodna
+nawigacja to umożliwia: użytkownik mógł być na marcu i stamtąd wprost
+utworzyć czerwiec - źródłem pamięci ma być maj, jeśli maj istnieje w
+projekcie, nie marzec). To zastępuje dawne użycie
+`is_next_calendar_month(stary_miesiąc, nowy_miesiąc)` w tym samym miejscu,
+które porównywało do czegokolwiek aktualnie otwartego - `is_next_calendar_month`
+zostaje (własne testy, koncept wciąż poprawny), tylko przestaje być tym,
+co bramkuje to konkretne wywołanie.
+
+**Nowe okno wyboru miesiąca** (`ui/month_picker_dialog.py::MonthPickerDialog`,
+wpięte pod ISTNIEJĄCY przycisk "🗓 Zmień datę" zamiast dawnego inline
+spinboxa) - kalendarz roczny: siatka 4x3 kafelków (jeden na miesiąc),
+strzałki `‹ rok ›` do przełączania roku, przycisk "Dziś". Każdy kafelek
+pokazuje krótki, LICZONY NA ŻYWO (nie osobno logowany - zero ryzyka
+rozjazdu po cofnięciu/edycji) opis stanu z `model/monthly_project.py::
+describe_month_state` - np. "10 lokacji, 8 pracowników, grafik gotowy" /
+"Pusty grafik" - plus kolorowy pasek po lewej (szary/żółty/zielony -
+`month_state_class`). Klik zaznacza, dwuklik od razu przełącza. Przycisk
+"Zmień datę" pokazywał wcześniej inline spinboxy (`year_spin`/`month_spin`/
+`btn_save_date`) - usunięte razem z `_enter_edit_date_mode`/dawnym
+`_save_date_clicked`, bo stały się martwym UI (nieosiągalnym po podpięciu
+przycisku pod nowe okno).
+
+**Zapis/wczytanie** (`persistence/project_io.py`) - nowe
+`save_project_bundle`/`load_project_bundle` zapisują/wczytują CAŁY
+`MonthlyProject` (wszystkie miesiące, plus który jest aktywny) zamiast
+tylko jednego miesiąca; rozumieją też stary, jednomiesięczny format (pliki
+sprzed tej zmiany, i te wciąż zapisywane starym `save_project()` przez
+`demo/*.py`/`logic/generator/trace.py`, które celowo zostały bez zmian -
+tam chodzi o pojedynczy migawkowy plik, nie o cały projekt) - taki plik
+wczytuje się jako jedyny miesiąc świeżego `MonthlyProject`. Wszystkie
+miejsca w `ui/main_window.py` wołające dawne `save_project`/`load_project`
+(zapis `.myp`, autozapis `last_project.json`, wczytanie przy starcie,
+otwarcie z linii poleceń) przełączone na wersje `_bundle`.
+
+Już nie usuwa się NIC nieodwracalnie przy zmianie miesiąca - dawny
+ostrzegawczy popup "Zmiana miesiąca spowoduje usunięcie wszystkich zmian"
+zniknął całkowicie, bo przestał być prawdą.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/monthly_project.py` (nowy) | `MonthlyProject` (kontener) + `describe_month_state`/`month_state_class` (opis/kolor kafelka) | TAK - generyczne, nie Enyo-specyficzne |
+| `persistence/project_io.py` | `save_project_bundle`/`load_project_bundle`, wstecznie kompatybilne ze starym, jednomiesięcznym formatem | TAK |
+| `ui/main_window.py` | `_switch_to_month` (zastępuje `_save_date_clicked`), `_open_month_picker`, `self.project`; usunięte martwe UI inline edycji daty | TAK |
+| `ui/month_picker_dialog.py` (nowy) | `MonthPickerDialog` - kalendarz roczny z kafelkami stanu | TAK |
+| `logic/utils/time_utils.py` | `previous_calendar_month()` - miesiąc bezpośrednio poprzedzający | TAK |
+| `model/month_schedule.py` | `PREVIOUS_MONTH_MEMORY_ENABLED` z powrotem `True` (patrz sekcja "Pamięć poprzedniego miesiąca" wyżej) | TAK |
+| `tests/test_monthly_project.py` (nowy, 25 testów) | Kontener, opis stanu, round-trip zapisu (nowy i stary format), `_switch_to_month` (w tym predecessor niezależny od aktualnie otwartego miesiąca), `MonthPickerDialog` | TAK |
+| `tests/test_previous_month_memory.py` | Klasa `PreviousMonthMemoryHiddenTests` -> `PreviousMonthMemoryEnabledByDefaultTests` (odwrócone asercje - mechanizm jest teraz domyślnie WŁĄCZONY); 3 testy przepięte z `_save_date_clicked`+spinboxy na `_switch_to_month` bezpośrednio | TAK |
+
+**Weryfikacja:** pełny zestaw testów zielony, zero regresji; ręczne
+sprawdzenie na żywym `MainWindow()` (nie mocki) - przełączanie
+tam-i-z-powrotem między miesiącami zachowuje dane, pamięć poprzedniego
+miesiąca liczy się poprawnie niezależnie od kolejności odwiedzin, round-trip
+zapisu/wczytania (`.myp` nowego formatu + wsteczna kompatybilność ze
+starym) zachowuje wszystkie miesiące.
+
+### Doprecyzowanie zasięgu edycji: tylko ten miesiąc + nowe kolejne (2026-09-21)
+
+Użytkownik zapytał, czy edycja konfiguracji/dodanie lokalizacji/pracownika
+"wycieka" do innych miesięcy, i poprosił o sprawdzenie konkretnego
+scenariusza: dodajemy nową lokalizację, mając ją otwartą wczytujemy
+poprzedni miesiąc - czy program się nie wywali/nie pokaże niczego.
+
+**Sprawdzone na żywym `MainWindow()`:** ten scenariusz już działał
+poprawnie dzięki `_update_location_switcher()` (istniejący mechanizm
+samonaprawy - `self.selected_location_key not in locations` -> fallback na
+`next(iter(locations))`, czyli pierwszą lokalizację TEGO miesiąca) -
+zero zmian kodu potrzebnych tutaj.
+
+**Druga, subtelniejsza rzecz sprawdzona tym samym eksperymentem:** edycja
+configu (np. `min_open_staff`) na miesiącu N NIE propaguje się do już
+istniejących, PÓŹNIEJSZYCH miesięcy (N+1, N+2...) - tylko do nowo
+tworzonych od tego momentu. Użytkownik: to jest pożądane zachowanie
+(bezpieczne - nic nie zmienia się po cichu w miesiącu, który mógł już
+zostać wygenerowany/sprawdzony), więc bez zmian w logice - tylko dopisana
+jawna notka w GUI, żeby klient wiedział, czego się spodziewać, zamiast
+się tego domyślać.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/utils/time_utils.py` | `MONTH_NAMES_PL`, `format_month_label()`, `month_scope_note()` - wspólny tekst dla trzech okien niżej | TAK |
+| `ui/month_picker_dialog.py` | Nazwy miesięcy przeniesione na współdzielone `MONTH_NAMES_PL` (usunięta duplikacja) | TAK |
+| `ui/config_dialog.py`, `ui/locations_dialog.py`, `ui/employee_dialog.py` | Nowa notka (`quickInfoHint`) na górze okna: "Zmiany w tym oknie dotyczą tylko miesiąca X i miesięcy utworzonych od teraz..." | TAK |
+| `tests/test_monthly_project.py` (+11 testów) | `MonthScopeIsolationTests` (samonaprawa lokalizacji, izolacja configu/pracowników wstecz i do już istniejących późniejszych miesięcy, dziedziczenie przez nowo tworzone), `MonthScopeNoteTests` (obecność i treść notki w trzech oknach) | TAK |
+
+**Weryfikacja:** pełny zestaw testów zielony (587 passed, 1 skipped),
+zero regresji.
+
+## Rotacja całodobowa "ogólna" - godzina rozpoczęcia dla lokalizacji 24/7 (2026-09-21)
+
+Zgłoszenie klienta: dla lokalizacji z zaznaczonym "Działalność całodobowa
+(24/7)" (`LocationConfig.is_24_7`) generator nie potrafił obsadzić środka
+doby. Zweryfikowane empirycznie PRZED napisaniem kodu (uruchomienie
+prawdziwego `AutoScheduleGenerator` na lokalizacji 24/7): mechanizm
+OPEN/CLOSE (`logic/auto_generator.py::START_SHIFT_MAP`/`END_SHIFT_MAP`)
+zakotwicza zmiany tylko na godzinie otwarcia/zamknięcia, z przesunięciami
+do maks. 90/75 minut - to wystarcza na typowy dzień sklepu (~17h), ale przy
+24h otwarcia zawsze zostaje ok. 5-6-godzinna dziura bez nikogo w pracy
+(solver zgłaszał "rozwiązanie", ale środek doby zostawał pusty).
+
+**Rozwiązanie (ustalone z użytkownikiem - dwa pytania przed kodowaniem):**
+nowe pole `LocationConfig.round_clock_start_hour` (tylko dla `is_24_7=True`)
+- generator dzieli dobę na N "kafelków" (zmian) o długości
+`ShopConfig.standard_daily_hours` każda, zaczynających się od podanej
+godziny i rozstawionych równo co `24h/N`, aż wypełnią całą dobę - N liczone
+automatycznie jako `ceil(24h / standard_daily_hours)` (domyślnie 8h → 3
+kafelki), z granicami [2, 6]. Obsada każdego kafelka: DOKŁADNIE ta sama
+reguła co dzisiejsze otwarcie/zamknięcie (`min_open_staff` + wymóg co
+najmniej 1 osoby z rolą "otwiera" i 1 z rolą "mięso") - świadomie
+WYŁĄCZNIE dla profilu Dino (te role nie mają sensu dla innych profili, np.
+Ochrona ma już własny, dedykowany `duty_rotation`).
+
+**Architektura (ten sam wzorzec co `duty_rotation_constraint.py` - Etap B
+"plan profil ochrona"):** nowa rodzina 6 stałych ID zmian
+(`SHIFT_ROUND_1..6`, zawsze w `ALL_SHIFTS`, jak `SHIFT_DUTY_*`) - gate
+(`add_round_clock_gate_constraint`) blokuje je twardo dla każdego
+pracownika bez skonfigurowanej lokalizacji round-clock (i blokuje kafelki
+`>= N` dla wszystkich), rest (`add_round_clock_rest_constraint`, standardowe
+11h - w odróżnieniu od `duty_rotation`'s "doba za dobę" po zmianie 24h,
+żaden kafelek round-clock nie jest tak długi jak doba, więc wystarczy
+sprawdzić dzień d wobec d+1), manual (`add_round_clock_manual_shift_constraint`,
+dopasowanie po samej godzinie startu). Zero zmiany zachowania dla każdego
+istniejącego projektu (żadna lokalizacja nie ma `round_clock_start_hour`
+domyślnie).
+
+**Naprawiony bug znaleziony PODCZAS budowy tej funkcji (nie osobne
+zgłoszenie):** profil Dino wymaga obsady OPEN/CLOSE bezwarunkowo
+(MANDATORY domyślnie) - gdy WSZYSCY pracownicy projektu są na lokalizacji
+round-clock (więc mają `x[e,d,SHIFT_OPEN/CLOSE]` zablokowane przez bramę
+round-clock), `min_open_staff`/`min_close_staff` było strukturalnie
+niespełnialne, robiąc CAŁY miesiąc `INFEASIBLE` (odtworzone empirycznie -
+12 pracowników z rolami otwiera+mięso, generator i tak zgłaszał brak
+rozwiązania). Naprawa: `add_fixed_staff_shift_constraints`
+(`constraints_staff.py`) dostało opcjonalny `employee_indices` (ten sam
+wzorzec co `add_max_consecutive_constraint`) + early-return `[]`, gdy lista
+jest pusta (zamiast wymuszać niespełnialne `total_staff == min_staff` na
+zerze pracowników); `dino_retail_profile.py::_build_open`/`_build_close`
+filtrują teraz pracowników rotacji całodobowej (i, dla spójności, służby
+24/7) z tego wymogu - projekt mieszany (część lokalizacji zwykła, część
+round-clock) nadal poprawnie wymaga obsady open/close od "zwykłych"
+pracowników.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/location.py` | `LocationConfig.round_clock_start_hour`, `set_24_7(False)` czyści je | TAK |
+| `model/shop_config.py` | `_LocationView.get_round_clock_start_hour()`, `ShopConfig.get_round_clock_start_hour()` (zawsze `None` - fallback dla pracownika bez lokalizacji), domyślna polityka `round_clock_coverage: MANDATORY` | TAK |
+| `logic/generator/round_clock_constraint.py` (nowy) | `round_clock_tile_count`/`round_clock_tile_start_hour`, `add_round_clock_gate_constraint`, `add_round_clock_coverage_constraint` | TAK |
+| `logic/generator/round_clock_rest_constraint.py` (nowy) | `add_round_clock_rest_constraint` (11h + pamięć poprzedniego miesiąca) | TAK |
+| `logic/generator/round_clock_manual_constraint.py` (nowy) | `add_round_clock_manual_shift_constraint` | TAK |
+| `logic/generator/constraints_staff.py` | `add_fixed_staff_shift_constraints` - nowy opcjonalny `employee_indices` | TAK |
+| `logic/generator/dino_retail_profile.py` | `_build_round_clock_coverage` (nowy spec), `_open_close_eligible_indices()` (naprawa opisana wyżej) | TAK |
+| `logic/generator/constraints_logic.py`, `availability_constraint.py`, `manual_constraint.py` | Wykluczenie kafelków round-clock z `work_dependency`/`availability`/starego `manual_shift`, ten sam wzorzec co dla `duty_shifts` | TAK |
+| `logic/generator/base_specs.py` | Rejestracja gate/manual (always-on) + rest (w `_build_rest_11h`) | TAK |
+| `logic/generator/solution_mapper.py`, `logic/auto_generator.py`, `logic/generator/constraint_registry.py` | Nowe ID zmian, zapis przydziału do `DaySchedule`, `ConstraintContext.round_clock_shifts` | TAK |
+| `ui/locations_dialog.py` | Pole "Rotacja całodobowa - godzina rozpoczęcia" (tylko dla 24/7) + opis działania w GUI | TAK |
+| `tests/test_round_clock.py` (nowy, 29 testów) | Matematyka kafelków, brama, obsada (end-to-end przez prawdziwy generator - potwierdzona pełna obsada doby bez luki), odpoczynek 11h, ręczna blokada, regresja na buga open/close, GUI | TAK |
+
+**Świadome ograniczenia zakresu (v1):** budżet "mięsa tymczasowego"
+(`is_meat_light`) nie liczy się do obsady kafelków round-clock (budowany
+tylko dla OPEN/CLOSE/START/END); `logic/generator/fix.py` (tryb
+częściowej regeneracji "Napraw") nie wie o kafelkach round-clock -
+zaakceptowane uproszczenia, nieblokujące podstawowej funkcjonalności.
+
+**Weryfikacja:** empirycznie na żywym `AutoScheduleGenerator` (12
+pracowników, lokalizacja 24/7, `round_clock_start_hour="08:00"`) - status
+`OPTIMAL`, sprawdzone dzień po dniu: pełna obsada doby (00:00-08:30,
+08:00-16:30, 16:00-00:30 - zachodzące kafelki, zero luki) tam, gdzie
+wcześniej środek doby zostawał pusty. Pełny zestaw testów zielony (patrz
+liczba w kolejnym wpisie), zero regresji na testach duty_rotation/night_shift/
+open/close/rest_11h.

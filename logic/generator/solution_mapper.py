@@ -18,6 +18,7 @@ def save_solution(
     trace=None,
     shift_night=None,
     duty_shifts=None,
+    round_clock_shifts=None,
 ):
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         print("❌ BRAK ROZWIĄZANIA")
@@ -121,6 +122,36 @@ def save_solution(
                         break
                 if assigned_duty:
                     continue
+
+            # Rotacja całodobowa "ogólna" (round_clock_constraint.py) - jak
+            # duty_rotation wyżej, własne, stałe (per kafelek) godziny
+            # niezależne od open_hours dnia, sprawdzane przed
+            # get_open_hours_for_day poniżej.
+            if round_clock_shifts is not None:
+                start_hour = shop.get_location(emp).get_round_clock_start_hour()
+                if start_hour:
+                    from logic.generator.round_clock_constraint import (
+                        round_clock_tile_count,
+                        round_clock_tile_start_hour,
+                    )
+
+                    n_tiles = round_clock_tile_count(shop.standard_daily_hours)
+                    assigned_tile = False
+                    for tile_index in range(n_tiles):
+                        if solver.Value(x[e, d, round_clock_shifts[tile_index]]) != 1:
+                            continue
+                        tile_start = round_clock_tile_start_hour(
+                            start_hour, tile_index, shop.standard_daily_hours
+                        )
+                        eff_hours = get_effective_daily_hours(emp, shop)
+                        tile_end = calc_end(tile_start, eff_hours)
+                        schedule.set_day_hours(emp, d, tile_start, tile_end)
+                        if trace is not None:
+                            trace.log_assignment(e, d, round_clock_shifts[tile_index], "solver_assignment")
+                        assigned_tile = True
+                        break
+                    if assigned_tile:
+                        continue
 
             hours = shop.get_location(emp).get_open_hours_for_day(d)
             if not hours:

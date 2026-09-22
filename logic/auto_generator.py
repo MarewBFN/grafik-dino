@@ -85,6 +85,22 @@ class AutoScheduleGenerator:
             "weekend_half_b": self.SHIFT_DUTY_WEEKEND_HALF_B,
         }
 
+        # Rotacja całodobowa "ogólna" dla lokalizacji 24/7 z ustawioną
+        # godziną rozpoczęcia (LocationConfig.round_clock_start_hour) - patrz
+        # logic/generator/round_clock_constraint.py. W odróżnieniu od
+        # SHIFT_DUTY_* (pięć nazwanych zmian specyficznych dla Ochrony), to
+        # MAX_ROUND_CLOCK_TILES jednakowych "kafelków" - ile z nich faktycznie
+        # jest w użyciu dla danego projektu zależy od shop.standard_daily_hours
+        # (patrz round_clock_tile_count) i jest egzekwowane przez
+        # add_round_clock_gate_constraint (kafelki >= N zawsze zablokowane).
+        # Istnieją w tej samej, wspólnej przestrzeni zmiennych x[e,d,s] dla
+        # KAŻDEGO profilu, ale ta brama blokuje je twardo dla każdego
+        # pracownika, którego lokalizacja nie ma round_clock_start_hour - dla
+        # dzisiejszych projektów (żadna lokalizacja go nie ma) to zero zmiany
+        # zachowania, tylko nieużywane zmienne w modelu.
+        from logic.generator.round_clock_constraint import MAX_ROUND_CLOCK_TILES
+        self.ROUND_CLOCK_SHIFTS = list(range(20, 20 + MAX_ROUND_CLOCK_TILES))
+
         # wszystkie zmiany (tu można dodawać kolejne typy zmian)
         self.ALL_SHIFTS = (
             self.SHIFT_OPEN,
@@ -110,6 +126,8 @@ class AutoScheduleGenerator:
             self.SHIFT_DUTY_WEEKEND_FULL,
             self.SHIFT_DUTY_WEEKEND_HALF_A,
             self.SHIFT_DUTY_WEEKEND_HALF_B,
+
+            *self.ROUND_CLOCK_SHIFTS,
         )
 
     # ==================================================
@@ -199,6 +217,7 @@ class AutoScheduleGenerator:
             trace=trace,
             shift_night=self.SHIFT_NIGHT,
             duty_shifts=self.DUTY_SHIFTS,
+            round_clock_shifts=self.ROUND_CLOCK_SHIFTS,
         )
 
         from model.business_profile import get_custom_profile
@@ -264,6 +283,7 @@ class AutoScheduleGenerator:
             trace=trace,
             shift_night=self.SHIFT_NIGHT,
             duty_shifts=self.DUTY_SHIFTS,
+            round_clock_shifts=self.ROUND_CLOCK_SHIFTS,
         )
 
         # SPRZĄTANIE: Przywracamy oryginalne daily_hours, żeby UI i zapisy nie świrowały
