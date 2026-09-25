@@ -26,11 +26,9 @@ doby):
    powtarzające się "8/8" - czyli DOKŁADNIE zmiana 24h co dzień
    (only_12_24h, weekend_full). Świadomie ŻADEN pracownik nie ma tu flagi
    "nie_chce_24h" - real dane nigdy nie pokazują podziału 12h+12h w tej
-   placówce, w przeciwieństwie do Ubojni. To dobry test na to, czy nowa
-   preferencja generatora (12h+12h zamiast 24h,
-   logic/generator/duty_rotation_preference.py) zacznie w praktyce
-   proponować podział, którego ta konkretna placówka historycznie nigdy
-   nie stosowała.
+   placówce, w przeciwieństwie do Ubojni. Włączone "Preferuj zmiany 24h"
+   (duty_rotation["prefer_24h"], 2026-09-25) - bez niego generator dzielił
+   KAŻDĄ dobę na 12h+12h (logic/generator/duty_rotation_preference.py).
 3. GZUK Łęczyce: 5 pracowników, klient podał DWA alternatywne warianty tej
    samej doby - "7/7 24h" (jedna osoba, cała doba) LUB "15/7 16h" (16h
    wieczór/noc + uzupełniające 8h za dnia, dwie osoby). To dokładnie ten
@@ -46,11 +44,8 @@ doby):
    weekend_half_a/b są mimo to wymagane przez normalize_duty_rotation()
    (nie da się skonfigurować samej zmiany 24h bez "wentylu bezpieczeństwa"
    podziału) - ustawione na granicach 08:00/20:00, tak jak w Ubojni/PGE,
-   ale bez żadnej roli blokującej podział, więc solver technicznie MOŻE (i,
-   sądząc po zachowaniu przy PGE, prawdopodobnie czasem będzie) zaproponować
-   12h+12h zamiast czystej zmiany 24h - do obserwacji przy generowaniu,
-   nie ma dziś mechanizmu "wymuś zawsze 24h" (jest tylko odwrotność,
-   "nie_chce_24h").
+   ale bez żadnej roli blokującej podział - "Preferuj zmiany 24h" włączone,
+   więc podział tylko gdy 24h jest niemożliwe.
 5. LakPol Słupsk: 3 pracowników, "jedna zmiana 7/7 24h" - dokładnie ten sam
    przypadek co Łeba Apartamenty (czysta zmiana 24h, ten sam brak
    mechanizmu wymuszenia, ta sama możliwa miękka propozycja podziału).
@@ -137,9 +132,22 @@ def build_profile() -> CustomBusinessProfile:
     )
 
 
+def _rotation_location(key: str, name: str, rotation: dict) -> LocationConfig:
+    """Tak jak w UI (Lokalizacje): "Działalność całodobowa (24/7)" +
+    rotacja służby. Bez is_24_7 LocationConfig.from_dict() pomija
+    duty_rotation przy wczytaniu (patrz jego komentarz) - plik zapisany bez
+    tego otwierał się jako placówka bez rotacji. Zaznaczenie 24/7 w UI
+    odznacza też "Zamknięte w polskie święta ustawowe" - obiekt chroniony
+    także w święta."""
+    loc = LocationConfig(key=key, name=name)
+    loc.set_24_7(True)
+    loc.closed_on_public_holidays = False
+    loc.set_duty_rotation(rotation)
+    return loc
+
+
 def _ubojnia_gosz_location() -> LocationConfig:
-    loc = LocationConfig(key="ubojnia_gosz_waga_biuro", name="Ubojnia Drobiu GOSZ - waga/biuro")
-    loc.set_duty_rotation({
+    return _rotation_location("ubojnia_gosz_waga_biuro", "Ubojnia Drobiu GOSZ - waga/biuro", {
         "only_12_24h": True,
         # Obserwowany wzorzec: 8:00-20:00 dzień + 20:00-8:00 noc, każdego
         # dnia tygodnia. weekend_full wymagane przez normalize_duty_rotation
@@ -150,13 +158,12 @@ def _ubojnia_gosz_location() -> LocationConfig:
         "weekend_half_a": {"start": "08:00", "end": "20:00"},
         "weekend_half_b": {"start": "20:00", "end": "08:00"},
     })
-    return loc
 
 
 def _pge_ustka_location() -> LocationConfig:
-    loc = LocationConfig(key="pge_ustka_westerplatte", name="PGE Ustka, ul. Westerplatte 4")
-    loc.set_duty_rotation({
+    return _rotation_location("pge_ustka_westerplatte", "PGE Ustka, ul. Westerplatte 4", {
         "only_12_24h": True,
+        "prefer_24h": True,  # "Preferuj zmiany 24h" - historycznie wyłącznie 24h
         # Obserwowany/potwierdzony wzorzec: "8/8" powtarzające się - zmiana
         # 24h co dzień.
         "weekend_full": {"start": "08:00"},
@@ -167,12 +174,10 @@ def _pge_ustka_location() -> LocationConfig:
         "weekend_half_a": {"start": "08:00", "end": "20:00"},
         "weekend_half_b": {"start": "20:00", "end": "08:00"},
     })
-    return loc
 
 
 def _gzuk_leczyce_location() -> LocationConfig:
-    loc = LocationConfig(key="gzuk_leczyce", name="GZUK Łęczyce")
-    loc.set_duty_rotation({
+    return _rotation_location("gzuk_leczyce", "GZUK Łęczyce", {
         "only_12_24h": True,
         # Klient: "7/7 24h lub 15/7 16h" - dwa dopuszczone warianty tej
         # samej doby, solver wybiera sam który zastosować każdego dnia
@@ -181,13 +186,12 @@ def _gzuk_leczyce_location() -> LocationConfig:
         "weekend_half_a": {"start": "15:00", "end": "07:00"},  # 16h wieczór/noc
         "weekend_half_b": {"start": "07:00", "end": "15:00"},  # 8h uzupełniające za dnia
     })
-    return loc
 
 
 def _apartamenty_leba_location() -> LocationConfig:
-    loc = LocationConfig(key="apartamenty_leba", name="Łeba, Apartamenty Nadmorska 33")
-    loc.set_duty_rotation({
+    return _rotation_location("apartamenty_leba", "Łeba, Apartamenty Nadmorska 33", {
         "only_12_24h": True,
+        "prefer_24h": True,  # "Preferuj zmiany 24h" - klient: "jedna zmiana 8/8"
         # Klient: "jedna zmiana 8/8" - wyłącznie zmiana 24h, patrz docstring
         # modułu punkt 4 (half_a/b to wymagany placeholder, nie potwierdzony
         # wzorzec).
@@ -195,20 +199,18 @@ def _apartamenty_leba_location() -> LocationConfig:
         "weekend_half_a": {"start": "08:00", "end": "20:00"},
         "weekend_half_b": {"start": "20:00", "end": "08:00"},
     })
-    return loc
 
 
 def _lakpol_slupsk_location() -> LocationConfig:
-    loc = LocationConfig(key="lakpol_slupsk", name="LakPol Słupsk")
-    loc.set_duty_rotation({
+    return _rotation_location("lakpol_slupsk", "LakPol Słupsk", {
         "only_12_24h": True,
+        "prefer_24h": True,  # "Preferuj zmiany 24h" - klient: "jedna zmiana 7/7 24h"
         # Klient: "jedna zmiana 7/7 24h" - ten sam przypadek co Łeba
         # Apartamenty, patrz docstring modułu punkt 5.
         "weekend_full": {"start": "07:00"},
         "weekend_half_a": {"start": "07:00", "end": "19:00"},
         "weekend_half_b": {"start": "19:00", "end": "07:00"},
     })
-    return loc
 
 
 def _nadlesnictwo_cewice_location() -> LocationConfig:

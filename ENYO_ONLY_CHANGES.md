@@ -1661,3 +1661,20 @@ z "Nie chce zmian 24h".
 |---|---|---|
 | `logic/generator/diagnostics.py` | `_add_duty_rotation_supply_messages`, filtr profilu/pracowników dla open/close/mięso | TAK |
 | `tests/test_generator_diagnostics.py` | `DutyRotationInfeasibilitySummaryTests` | TAK |
+
+### Dane testowe klienta: 24/7 + "Preferuj zmiany 24h"
+
+`test_data/dane_klienta_ochrona.json` miał rotację bez zaznaczonego 24/7 -
+`LocationConfig.from_dict()` pomija wtedy rotację, więc plik otwierał się
+jako placówki bez rotacji i grafik się nie generował (komunikaty Dino).
+`demo/install_client_sample_data.py` buduje teraz placówki tak jak UI
+(`_rotation_location`: 24/7, święta otwarte, rotacja), PGE/Łeba/LakPol z
+"Preferuj zmiany 24h". Plik wygenerowany ponownie. Weryfikacja
+(październik 2026, plik wczytany przez `load_project`): pełne pokrycie
+wszystkich 5 placówek, PGE/Łeba/LakPol 31/31 dób jako zmiana 24h,
+odpoczynek po 24h zgodny z (N-1)x24h.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `demo/install_client_sample_data.py` | `_rotation_location()`, `prefer_24h` dla 3 placówek | NIE - dane jednego klienta testowego |
+| `test_data/dane_klienta_ochrona.json` | Wygenerowany ponownie | NIE (jw.) |
