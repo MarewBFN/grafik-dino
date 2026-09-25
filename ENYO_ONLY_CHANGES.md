@@ -1759,3 +1759,63 @@ następnym miesiącu jest pomijany (komunikat w logu).
 | `logic/duty_coverage_presenter.py`, `ui/grid_view.py` | "Obłożenie" po osi czasu, nowy dymek | TAK |
 | `ui/day_edit_dialog.py`, `ui/main_window.py`, `logic/schedule_controller.py` | Dwuklik dla rotacji | TAK |
 | `tests/test_duty_rotation_manual_coverage.py` (nowy), `tests/test_duty_coverage_presenter.py` | Testy planu, generowania, edycji, obłożenia | TAK |
+
+### Audyt przed wydaniem (2026-09-25): poprawki po przeglądzie ścieżek rotacji i dni zamkniętych
+
+Każdy punkt ma test odtwarzający błąd (czerwony przed poprawką).
+
+- **Odpoczynek po 24h przeskakiwał dzień bez zmian.** Doba zaplanowana w
+  całości wokół ręcznych wpisów nie ma żadnego okna, a pętla "dalej nie ma
+  sensu sprawdzać" kończyła się na pustym dniu - przy N>=3 po 24h (wymagane
+  (N-1)x24h) generator mógł dać tej samej osobie zmianę już po 24h.
+  `duty_rotation_rest_constraint.py`: pusty dzień nie kończy sprawdzania.
+- **Typ zmiany (1/2) albo zablokowana zmiana nocna w dzień zamknięty =
+  cały miesiąc bez rozwiązania.** Od kiedy `add_non_trade_day_constraints`
+  zamyka dni bez godzin otwarcia lokalizacji, typ zmiany ustawiony np. na
+  11.11 (święto zamykane automatycznie) wymuszał x==1 wbrew zerowaniu dnia
+  (projekt Dino: INFEASIBLE, przed zmianą OPTIMAL z niewidoczną zmianą).
+  Teraz: typ zmiany w dniu zamkniętym jest ignorowany; jawnie zablokowana
+  zmiana z godzinami wygrywa z zamknięciem (ten sam priorytet co w
+  `duty_rotation_public_holiday_constraint.py`) - zmiana nocna i kafelek
+  rotacji całodobowej są wymuszane, a zmiana, której nie da się dopasować
+  bez godzin otwarcia, jest zerowana (`manual_constraint.py`,
+  `constraints_basic.py`, `base_specs.py`).
+- **Reguła "min. N z rolą" w dzień zamknięty placówki wszystkich osób z
+  rolą.** Dzień zostaje w `trade_days`, gdy czynna jest inna placówka -
+  wymóg był wtedy niespełnialny (INFEASIBLE, przed zmianą OPTIMAL z
+  niewidoczną zmianą). `generic_rules.py` pomija taki dzień dla grupy.
+- **Zmiana w komórce dnia "Nieczynne" była niewidoczna.** Kawałek doby
+  dnia poprzedniego po północy (plan zmian resztkowych) trafia do komórki
+  dnia zamkniętego, a siatka maskowała takie komórki na szaro i pusto,
+  choć zmiana liczyła się do godzin i eksportu.
+  `SchedulePresenter.get_cell_view()`/`ui/grid_view.py`: komórka ze
+  zmianą pokazuje godziny na tle "nieczynne".
+- **"Dni pod rząd" gubiły ręczne wpisy w dobach zaplanowanych.** Ręczny
+  wpis pasujący do rotacji w dobie zaplanowanej jest stałym przedziałem
+  planu (x == 0) - wcześniej liczył się jako x == 1. `max_consecutive`
+  dostaje teraz dni stałych przedziałów planu
+  (`constraints_staff.py`, `base_specs.py`).
+- **Początek doby późniejszy niż podział (np. 20:00 i domyślne 08:00).**
+  Obie połówki zaczynają się w tym samym dniu kalendarzowym (doba połówek
+  od 08:00), a zmiana 24h od 20:00 - dzień z 24h obok dnia z połówkami
+  dawał 12h luki i 12h podwójnej obsady przy wyniku "OPTIMAL". Edytor
+  rotacji odrzuca taki zapis z komunikatem (`ui/duty_rotation_editor.py`).
+  Projekty zapisane wcześniej z takim ustawieniem generator nadal liczy po
+  staremu - "Obłożenie" pokaże wtedy dni z luką.
+- **Komunikaty o braku rozwiązania.** "Dostępna tylko 1 osoba... doby nie
+  da się obsadzić" pojawiała się też w dobie częściowo pokrytej ręcznym
+  wpisem z dnia poprzedniego (fałszywa - teraz pomija doby zaplanowane).
+  Nowy komunikat dla ręcznie zablokowanej zmiany 24h osobie z "Nie chce
+  zmian 24h" przy tej zasadzie jako Wymaganej (wcześniej tylko ogólne
+  "Wymagane zasady są ze sobą sprzeczne") - `diagnostics.py`.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/duty_rotation_rest_constraint.py` | Pusty dzień nie kończy sprawdzania odpoczynku | TAK |
+| `logic/generator/constraints_basic.py`, `manual_constraint.py`, `base_specs.py` | Ręczna blokada vs dzień zamknięty | TAK |
+| `logic/generator/generic_rules.py` | Reguła roli pomija dzień zamknięty całej grupy | TAK |
+| `logic/schedule_presenter.py`, `ui/grid_view.py` | Zmiana w dniu zamkniętym widoczna | TAK |
+| `logic/generator/constraints_staff.py`, `base_specs.py` | Stałe przedziały planu w "Dni pod rząd" | TAK |
+| `ui/duty_rotation_editor.py` | Walidacja początek doby < podział | TAK |
+| `logic/generator/diagnostics.py` | Bez podpowiedzi "1 osoba" w dobach zaplanowanych, komunikat 24h vs "Nie chce 24h" | TAK |
+| `tests/…` (rotacja, dni zamknięte, round-clock, lokalizacje, prezentacja, diagnostyka, edytor) | Testy odtwarzające | TAK |

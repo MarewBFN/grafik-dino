@@ -119,6 +119,20 @@ class DutyRotationEditorValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             editor.get_duty_rotation()
 
+    def test_day_start_later_than_split_raises(self):
+        """Początek doby 20:00 (podział domyślnie 08:00) dawał dokładnie
+        "dawny błąd" z test_24h_shift_always_starts_at_the_start_of_the_day:
+        obie połówki zaczynają się w tym samym dniu kalendarzowym (doba
+        połówek od 08:00), a zmiana 24h od 20:00 - dzień z 24h obok dnia z
+        połówkami to 12h luki i 12h podwójnej obsady."""
+        editor = DutyRotationEditor(None)
+        editor.start_input.input.setText("2000")
+        self.assertEqual(editor.split_input.get_time_str(), "08:00")
+        self.assertIn("wcześniejsza", editor.summary_label.text())
+
+        with self.assertRaises(ValueError):
+            editor.get_duty_rotation()
+
 
 if __name__ == "__main__":
     unittest.main()

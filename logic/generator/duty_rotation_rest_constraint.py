@@ -201,7 +201,10 @@ def add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shif
                     d_future = days_sorted[j]
                     day_offset = (j - i) * DAY_MINUTES
 
-                    reached_beyond_required = True
+                    # Dzień bez żadnej zmiany (doba zaplanowana w całości
+                    # wokół ręcznych wpisów, duty_rotation_manual_coverage.py)
+                    # nic nie mówi o dniach po nim - nie kończy sprawdzania.
+                    reached_beyond_required = bool(windows_by_day[d_future])
                     for s2, _full2, start2, _end2 in windows_by_day[d_future]:
                         if day_offset + start2 - end1 >= required:
                             continue

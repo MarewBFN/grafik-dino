@@ -6,12 +6,14 @@ a closed day as (None, None), the convention get_open_hours_for_day() in
 model/shop_config.py and model/location.py already understood, but which
 neither UI could previously produce."""
 
+import io
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from pathlib import Path
 import sys
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -363,6 +365,35 @@ class GeneratorRespectsClosedLocationDayTests(unittest.TestCase):
             for emp in employees:
                 self.assertTrue(schedule.get_day(emp, day).is_empty(), f"dzień {day}")
         self.assertTrue(any(not schedule.get_day(emp, 7).is_empty() for emp in employees))
+
+    def test_shift_class_and_night_locks_on_a_closed_day_do_not_make_the_month_infeasible(self):
+        """Typ zmiany (1/2) albo zablokowana zmiana nocna ustawione, zanim
+        dzień stał się zamknięty (święto przy closed_on_public_holidays,
+        "Nieczynne") - wymuszały x==1 wbrew zerowaniu dnia przez
+        non_trade_day, więc cały miesiąc był bez rozwiązania (wcześniej
+        solver przydzielał tam niewidoczną zmianę). Typ zmiany jest w dniu
+        zamkniętym ignorowany, jawnie zablokowana zmiana nocna - zostaje."""
+        shop = self._shop()
+        shop.constraints["min_open_staff"] = 1
+        shop.constraints["min_close_staff"] = 1
+        shop.constraint_policies["monthly_hours"] = ConstraintPolicy.DISABLED
+        shop.constraint_policies["balance"] = ConstraintPolicy.DISABLED
+        employees = self._employees()
+        schedule = MonthSchedule(2026, 4, employees=employees)
+        schedule.get_day(employees[0], self.EASTER_MONDAY).set_shift_class("1")
+        schedule.get_day(employees[1], self.CLOSED_WEDNESDAY).set_shift_class("2")
+        night_start, night_end = shop.locations["g"].get_night_shift_hours()
+        schedule.get_day(employees[2], self.CLOSED_WEDNESDAY).set_hours(night_start, night_end)
+        schedule.get_day(employees[2], self.CLOSED_WEDNESDAY).is_locked = True
+
+        with redirect_stdout(io.StringIO()):
+            result = AutoScheduleGenerator(schedule, shop).generate(
+                solver_time_limit_seconds=20, solver_workers=2,
+            )
+
+        self.assertTrue(result["success"], result.get("infeasibility_reasons"))
+        self.assertTrue(schedule.get_day(employees[0], self.EASTER_MONDAY).is_empty())
+        self.assertTrue(schedule.get_day(employees[1], self.CLOSED_WEDNESDAY).is_empty())
 
 
 if __name__ == "__main__":

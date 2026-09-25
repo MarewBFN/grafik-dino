@@ -344,11 +344,35 @@ def _add_duty_rotation_supply_messages(schedule, shop, add) -> None:
         group_employees_with_duty_rotation,
     )
 
+    from logic.generator.duty_rotation_manual_coverage import build_duty_coverage_plan, match_duty_key
+
     employees = schedule.employees
+    # Doby zaplanowane wokół ręcznych wpisów (także z dnia poprzedniego,
+    # sięgających w tę dobę) nie wymagają standardowego podziału - podpowiedź
+    # "tylko 1 osoba" nie jest tam dowodliwa.
+    plan = build_duty_coverage_plan(schedule, shop, employees)
     for location_key, (rotation, indices) in group_employees_with_duty_rotation(employees, shop).items():
         location = shop.locations.get(location_key)
         name = location.name if location is not None else location_key
         for day in range(1, schedule.days_in_month + 1):
+            # Ręcznie zablokowana zmiana 24h (dokładnie zmiana 24h rotacji)
+            # osobie z "Nie chce zmian 24h", gdy ta zasada jest Wymagana -
+            # blokada wymusza tę zmianę, a zasada ją zakazuje.
+            if shop.constraint_policies.get("duty_rotation_no24h") == ConstraintPolicy.MANDATORY:
+                for e in indices:
+                    state = schedule.get_day(employees[e], day)
+                    if (
+                        employees[e].custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False)
+                        and state.is_locked
+                        and not state.is_leave
+                        and match_duty_key(state, rotation, shop.weekday(day)) == "weekend_full"
+                        and not (plan is not None and plan.is_fixed(employees[e], day))
+                    ):
+                        add(
+                            f"{name}, dzień {day}: {employees[e].display_name()} ma ręcznie "
+                            "wpisaną zmianę 24h, a zaznaczone „Nie chce zmian 24h” "
+                            "(zasada Wymagana)."
+                        )
             if location is not None and location.is_duty_day_closed(shop.year, shop.month, day):
                 continue
             available = [
@@ -360,7 +384,7 @@ def _add_duty_rotation_supply_messages(schedule, shop, add) -> None:
                     f"{name}, dzień {day}: nikt z pracowników placówki nie jest "
                     "dostępny (urlop/L4/wolne) - doby nie da się obsadzić."
                 )
-            elif len(available) == 1:
+            elif len(available) == 1 and not (plan is not None and plan.is_planned(location_key, day)):
                 only = available[0]
                 weekday_split = shop.weekday(day) < 5 and not rotation.get("only_12_24h")
                 if weekday_split:

@@ -13,6 +13,7 @@ verified dino_retail behavior.
 
 from datetime import datetime, timedelta
 
+from logic.generator.constraints_basic import is_location_open_for_employee
 from logic.utils.time_utils import (
     daily_windows_overlap,
     get_effective_daily_hours,
@@ -68,6 +69,16 @@ def build_min_staff_with_role(ctx, soft, role_key, rule_key, min_count=1, scope=
 
     for threshold, indices in groups.items():
         for d in ctx.trade_days:
+            # Dzień zostaje w trade_days, gdy czynna jest KTÓRAKOLWIEK
+            # lokalizacja - ale gdy placówki wszystkich osób z tej grupy są
+            # tego dnia zamknięte, add_non_trade_day_constraints blokuje im
+            # każdą zmianę i wymóg byłby niespełnialny (cały miesiąc bez
+            # rozwiązania). Pusta grupa (nikt nie ma roli) nadal sygnalizuje
+            # brak, tak jak wcześniej.
+            if indices and not any(
+                is_location_open_for_employee(ctx.shop, ctx.employees[e], d) for e in indices
+            ):
+                continue
             shifts = shifts_by_day(d)
             terms = [ctx.x[e, d, s] for e in indices for s in shifts]
             count = sum(terms) if terms else ctx.model.NewConstant(0)

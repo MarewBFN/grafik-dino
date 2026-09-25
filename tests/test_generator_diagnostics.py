@@ -213,3 +213,33 @@ class DutyRotationInfeasibilitySummaryTests(unittest.TestCase):
         messages = build_infeasibility_summary(schedule, shop)
 
         self.assertFalse(any("otwarci" in m or "zamknięci" in m for m in messages), messages)
+
+    def test_no_single_person_hint_when_a_manual_entry_reaches_into_the_day(self):
+        """10.10: E1 i E2 na urlopie, dostępna tylko E0 ("Nie chce 24h") - ale
+        ręczna 24h E1 z 9.10 od 19:00 pokrywa dobę 10.10 do 19:00, a resztę
+        (19:00-07:00) E0 może wziąć jako zmianę resztkową planu
+        (duty_rotation_manual_coverage.py). Podpowiedź "doby nie da się
+        obsadzić" byłaby tu fałszywa."""
+        shop, schedule, employees = self._shop_and_schedule()
+        employees[0].custom_roles["nie_chce_24h"] = True
+        schedule.get_day(employees[1], 9).set_full_day_shift("19:00")
+        schedule.get_day(employees[1], 9).is_locked = True
+        for emp in employees[1:]:
+            schedule.get_day(emp, 10).set_leave()
+
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertFalse(any("dzień 10" in m for m in messages), messages)
+
+    def test_locked_24h_shift_for_employee_who_refuses_24h_names_person_and_day(self):
+        """Ręcznie zablokowana zmiana 24h (od początku doby) osobie z "Nie
+        chce zmian 24h" przy tej zasadzie jako Wymaganej - sprzeczność
+        dowodliwa z danych, a komunikat był ogólny."""
+        shop, schedule, employees = self._shop_and_schedule(n=3)
+        employees[0].custom_roles["nie_chce_24h"] = True
+        schedule.get_day(employees[0], 29).set_full_day_shift("07:00")
+        schedule.get_day(employees[0], 29).is_locked = True
+
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertTrue(any("dzień 29" in m and "E0 G" in m and "24h" in m for m in messages), messages)

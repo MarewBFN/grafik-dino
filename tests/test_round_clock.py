@@ -422,6 +422,33 @@ class RoundClockManualConstraintTests(unittest.TestCase):
         status = cp_model.CpSolver().Solve(model)
         self.assertEqual(status, cp_model.INFEASIBLE)
 
+    def test_locked_tile_on_a_closed_day_does_not_contradict_the_closure(self):
+        """11.11 (święto, closed_on_public_holidays) - add_non_trade_day_constraints
+        zerował dzień, a zablokowany wcześniej kafelek wymuszał x==1
+        (sprzeczność = cały miesiąc bez rozwiązania). Ręczna blokada wygrywa
+        z zamknięciem dnia."""
+        from logic.generator.constraints_basic import add_non_trade_day_constraints
+
+        loc = _make_24_7_location()
+        shop = ShopConfig(2026, 11)
+        shop.locations = {"glowna": loc}
+        emp = Employee(last_name="A", first_name="A", location_key="glowna", employment_fraction=1.0)
+        schedule = MonthSchedule(2026, 11, employees=[emp])
+        schedule.set_day_hours(emp, 11, "16:00", "00:00")
+        schedule.get_day(emp, 11).is_locked = True
+        self.assertIsNone(loc.get_open_hours_for_day(2026, 11, 11))
+
+        model = cp_model.CpModel()
+        x = {(0, 11, s): model.NewBoolVar(f"x_{s}") for s in self.ROUND_CLOCK_SHIFTS}
+        add_non_trade_day_constraints(model, x, [emp], [11], shop, self.ROUND_CLOCK_SHIFTS, schedule=schedule)
+        add_round_clock_manual_shift_constraint(
+            model, x, [emp], [11], schedule, shop, self.ROUND_CLOCK_SHIFTS, 8.0,
+        )
+
+        solver = cp_model.CpSolver()
+        self.assertIn(solver.Solve(model), (cp_model.OPTIMAL, cp_model.FEASIBLE))
+        self.assertEqual(solver.Value(x[0, 11, self.ROUND_CLOCK_SHIFTS[1]]), 1)
+
 
 # ---------------------------------------------------------------------------
 # 8. Model / serializacja

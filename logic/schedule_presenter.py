@@ -21,7 +21,6 @@ class SchedulePresenter:
     def get_cell_view(self, emp, day) -> CellView:
         ds = self.schedule.get_day(emp, day)
         s, e, t = ds.as_rows()
-        fractions = getattr(self.shop_config, "hours_display_mode", "standard") == "fractions"
 
         if ds.is_leave:
             return CellView(
@@ -36,10 +35,25 @@ class SchedulePresenter:
         # oznaczony "Nieczynne" (patrz WeeklyHoursEditor/DayOverrideDialog) -
         # get_open_hours_for_day() sprawdza oba, per lokalizacja pracownika.
         if not self.shop_config.get_location(emp).get_open_hours_for_day(day):
-            return CellView(bg=theme.BG_DISABLED)
+            if not s or not e:
+                return CellView(bg=theme.BG_DISABLED)
+            # Zmiana mimo to istnieje - np. kawałek doby rotacji służby z
+            # dnia poprzedniego zaczynający się po północy
+            # (logic/generator/duty_rotation_manual_coverage.py) albo ręczny
+            # wpis sprzed zamknięcia dnia. Liczy się do godzin i eksportu,
+            # więc nie może zniknąć z siatki - tło zostaje "nieczynne".
+            view = self._shift_view(emp, day, s, e, t, ds)
+            view.bg = theme.BG_DISABLED
+            view.tooltip = f"Placówka nieczynna tego dnia\n{view.tooltip}"
+            return view
 
         if not s or not e:
             return CellView(bg=theme.BG_MAIN)
+
+        return self._shift_view(emp, day, s, e, t, ds)
+
+    def _shift_view(self, emp, day, s, e, t, ds) -> CellView:
+        fractions = getattr(self.shop_config, "hours_display_mode", "standard") == "fractions"
 
         if ds.crosses_midnight():
             # Zmiana nocna (Etap C/D planu zmian nocnych) - koniec leży w
