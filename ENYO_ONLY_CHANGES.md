@@ -1540,3 +1540,49 @@ programu zielony (649 passed, 1 skipped) - żaden istniejący test nie
 odczytuje tego pliku bezpośrednio (testy duty_rotation używają własnych,
 syntetycznych replik tych samych wzorców godzinowych), więc rozszerzenie
 nie mogło nic zepsuć.
+
+## Ukrycie "Rotacji całodobowej" + twarde zamknięcie dni bez godzin otwarcia (2026-09-25)
+
+Przegląd przełączników okna Lokalizacje (na prośbę użytkownika) wykazał,
+sprawdzone na prawdziwym `AutoScheduleGenerator`:
+
+1. **"Rotacja całodobowa - godzina rozpoczęcia" + 24/7 = brak rozwiązania.**
+   Zaznaczone 24/7 zawsze zapisuje `duty_rotation` (edytor rotacji służby
+   nie ma stanu "wyłączony"), a bramy `duty_rotation_gate` i
+   `round_clock_gate` blokują sobie nawzajem wszystkie zmiany - pracownik
+   lokalizacji nie może dostać żadnej. Obsadę kafelków round-clock wymusza
+   do tego wyłącznie profil Dino. Specyfikację klienta (1 osoba na
+   zmianie, zmiany bez zazębiania, 16h+8h / 24h albo 12h+12h) spełnia
+   wyłącznie rotacja służby - decyzja użytkownika: pole round-clock
+   **UKRYTE** dla Enyo (flaga `ROUND_CLOCK_UI_ENABLED = False` w
+   `ui/locations_dialog.py`, importowana przez `ui/config_dialog.py`),
+   a `round_clock_start_hour` zapisane obok `duty_rotation` jest ignorowane
+   przy wczytaniu (`LocationConfig.from_dict`).
+2. **Dzień bez godzin otwarcia lokalizacji nie był zamknięty dla solvera.**
+   "Nieczynne" w godzinach otwarcia, "Zamknięte w polskie święta ustawowe"
+   i ręczne zamknięcie dnia działały tylko przy zapisie wyniku - solver
+   przydzielał w taki dzień zmiany (np. 5-6 w Poniedziałek Wielkanocny),
+   `save_solution` je pomijało, a te niewidoczne zmiany liczyły się do
+   godzin, odpoczynku i dni pod rząd (w dniu "Nieczynne" potrafiła też
+   zostać zmiana nocna 22:00-06:00). Naprawa w generycznym kodzie
+   (prawdziwy bug, dotyczy też Dino - zasada 2 wyżej):
+   `add_non_trade_day_constraints` blokuje wszystkie zmiany pracownika w
+   dniu, gdy jego lokalizacja nie ma godzin otwarcia (pracownicy rotacji
+   służby pominięci - nie korzystają z godzin otwarcia, święta mają własną
+   regułę), a `trade_days` w `AutoScheduleGenerator.generate()` pomija dni,
+   w których lokalizacja KAŻDEGO pracownika jest zamknięta (inaczej wymogi
+   obsady open/close/mięso/role byłyby w nich niespełnialne).
+
+Świadomie NIE ruszone (decyzja użytkownika): reguła dni niehandlowych
+nadal korzysta z kalendarza projektu, nie lokalizacji - dla Dino nie
+istnieją zmiany rotacji 24/7, więc problem nie występuje.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `ui/locations_dialog.py`, `ui/config_dialog.py` | `ROUND_CLOCK_UI_ENABLED = False` - pole "Rotacja całodobowa" UKRYTE, nic nie zapisuje | NIE (w main `True`, dla sklepów 24/7 Dino) |
+| `model/location.py` | `from_dict`: `round_clock_start_hour = None`, gdy lokalizacja ma `duty_rotation` | TAK |
+| `logic/generator/constraints_basic.py` | `add_non_trade_day_constraints` + nowa `is_location_open_for_employee()` - blokada dni bez godzin otwarcia lokalizacji | TAK |
+| `logic/auto_generator.py` | `trade_days` bez dni zamkniętych dla wszystkich pracowników | TAK |
+| `tests/test_round_clock.py` | Testy GUI z `patch(ROUND_CLOCK_UI_ENABLED=True)` + nowe: pole ukryte domyślnie, zapis czyści wartość, `from_dict` | TAK (poza testem ukrycia) |
+| `tests/test_night_shift_stress.py` | Scenariusz obsady nocnej: `closed_on_public_holidays = False` (sierpień 2026 ma 15.08 - wcześniej zmiana nocna po cichu omijała zamknięcie w święto, teraz dzień jest słusznie pusty) | TAK |
+| `tests/test_closed_day_toggle.py` | `GeneratorRespectsClosedLocationDayTests` - blokada "Nieczynne"/święta, rotacja służby nieblokowana, generacja end-to-end | TAK |

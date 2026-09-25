@@ -12,6 +12,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import unittest
+from unittest.mock import patch
 
 from ortools.sat.python import cp_model
 from PySide6.QtWidgets import QApplication
@@ -444,6 +445,27 @@ class LocationConfigRoundClockFieldTests(unittest.TestCase):
         emp = Employee(last_name="A", first_name="A", location_key="glowna")
         self.assertEqual(shop.get_location(emp).get_round_clock_start_hour(), "08:00")
 
+    def test_from_dict_ignores_round_clock_next_to_duty_rotation(self):
+        """Rotacja służby + rotacja całodobowa naraz blokują sobie nawzajem
+        wszystkie zmiany - przy wczytaniu wygrywa rotacja służby."""
+        loc = _make_24_7_location(start_hour="09:30")
+        loc.set_duty_rotation({
+            "weekday_long": {"start": "06:00", "end": "22:00"},
+            "weekday_short": {"start": "22:00", "end": "06:00"},
+            "weekend_full": {"start": "06:00"},
+            "weekend_half_a": {"start": "06:00", "end": "18:00"},
+            "weekend_half_b": {"start": "18:00", "end": "06:00"},
+        })
+
+        loaded = LocationConfig.from_dict(loc.to_dict())
+
+        self.assertIsNotNone(loaded.duty_rotation)
+        self.assertIsNone(loaded.round_clock_start_hour)
+
+    def test_from_dict_keeps_round_clock_without_duty_rotation(self):
+        loaded = LocationConfig.from_dict(_make_24_7_location(start_hour="09:30").to_dict())
+        self.assertEqual(loaded.round_clock_start_hour, "09:30")
+
     def test_employee_without_location_never_gets_round_clock(self):
         shop = ShopConfig(2026, 3)
         emp = Employee(last_name="A", first_name="A", location_key="does-not-exist")
@@ -462,6 +484,7 @@ class LocationsDialogRoundClockUiTests(unittest.TestCase):
         self.assertFalse(row.is_24_7_check.isChecked())
         self.assertIsNone(row.round_clock_start_hour_value())
 
+    @patch("ui.locations_dialog.ROUND_CLOCK_UI_ENABLED", True)
     def test_field_shown_and_value_round_trips(self):
         shop = ShopConfig(2026, 3)
         shop.locations = {"glowna": _make_24_7_location(start_hour="09:30")}
@@ -471,6 +494,33 @@ class LocationsDialogRoundClockUiTests(unittest.TestCase):
         self.assertTrue(row.round_clock_check.isChecked())
         self.assertEqual(row.round_clock_start_hour_value(), "09:30")
 
+    def test_field_hidden_for_enyo_even_when_24_7(self):
+        """Domyślnie (ROUND_CLOCK_UI_ENABLED=False) pole jest ukryte i nic
+        nie zapisuje - także dla lokalizacji 24/7 z wcześniej zapisaną
+        godziną rozpoczęcia."""
+        shop = ShopConfig(2026, 3)
+        shop.locations = {"glowna": _make_24_7_location(start_hour="09:30")}
+        dialog = LocationsDialog(None, shop)
+        row = dialog._location_rows[0]
+
+        self.assertTrue(row.is_24_7_check.isChecked())
+        self.assertTrue(row.round_clock_container.isHidden())
+        self.assertTrue(row.round_clock_hint.isHidden())
+        self.assertFalse(row.round_clock_check.isChecked())
+        self.assertIsNone(row.round_clock_start_hour_value())
+
+    def test_saving_24_7_location_drops_round_clock_start_hour(self):
+        shop = ShopConfig(2026, 3)
+        shop.locations = {"glowna": _make_24_7_location(start_hour="09:30")}
+        dialog = LocationsDialog(None, shop)
+        dialog._save()
+
+        loc = shop.locations["glowna"]
+        self.assertTrue(loc.is_24_7)
+        self.assertIsNotNone(loc.duty_rotation)
+        self.assertIsNone(loc.round_clock_start_hour)
+
+    @patch("ui.locations_dialog.ROUND_CLOCK_UI_ENABLED", True)
     def test_unchecking_24_7_clears_the_value(self):
         shop = ShopConfig(2026, 3)
         shop.locations = {"glowna": _make_24_7_location()}

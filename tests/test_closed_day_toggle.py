@@ -29,6 +29,13 @@ from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.shop_config import ShopConfig
 from ui.main_window import MainWindow
 
+from ortools.sat.python import cp_model
+
+from logic.auto_generator import AutoScheduleGenerator
+from logic.generator.constraints_basic import add_non_trade_day_constraints
+from model.constraint_policy import ConstraintPolicy
+from model.employee import Employee
+
 
 class WeeklyHoursEditorClosedDayTests(unittest.TestCase):
     def test_checking_closed_returns_none_hours_for_that_day(self):
@@ -281,6 +288,81 @@ class HeaderMenuPersistsDayOverrideOnAcceptTests(unittest.TestCase):
                 window._open_header_menu(3, None)
 
         mock_save.assert_not_called()
+
+
+class GeneratorRespectsClosedLocationDayTests(unittest.TestCase):
+    """Dzień bez godzin otwarcia lokalizacji ("Nieczynne", święto przy
+    closed_on_public_holidays) jest dla generatora twardo zamknięty. Wcześniej
+    solver przydzielał w taki dzień zmiany, a save_solution je po cichu
+    pomijało - niewidoczne zmiany liczyły się do godzin/odpoczynku."""
+
+    # kwiecień 2026: 1 i 8 = środa, 6 = Poniedziałek Wielkanocny
+    CLOSED_WEDNESDAY = 1
+    EASTER_MONDAY = 6
+
+    def _shop(self, closed_on_public_holidays=True):
+        shop = ShopConfig(2026, 4)
+        loc = LocationConfig(key="g", name="G")
+        loc.open_hours[2] = (None, None)
+        loc.closed_on_public_holidays = closed_on_public_holidays
+        shop.locations = {"g": loc}
+        return shop
+
+    def _employees(self, n=6):
+        return [
+            Employee(
+                last_name=f"P{i}", first_name="J", location_key="g",
+                employment_fraction=1.0, is_opener=True, is_meat=True,
+            )
+            for i in range(n)
+        ]
+
+    def _can_assign(self, shop, day, shift=0):
+        emp = self._employees(1)
+        model = cp_model.CpModel()
+        x = {(0, d, s): model.NewBoolVar(f"x{d}_{s}") for d in range(1, 31) for s in (0, 1)}
+        add_non_trade_day_constraints(model, x, emp, list(range(1, 31)), shop, [0, 1])
+        model.Add(x[0, day, shift] == 1)
+        return cp_model.CpSolver().Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    def test_closed_weekday_blocks_every_shift(self):
+        self.assertFalse(self._can_assign(self._shop(), self.CLOSED_WEDNESDAY))
+        self.assertTrue(self._can_assign(self._shop(), self.CLOSED_WEDNESDAY + 1))
+
+    def test_public_holiday_blocks_only_when_location_closes_on_holidays(self):
+        self.assertFalse(self._can_assign(self._shop(), self.EASTER_MONDAY))
+        self.assertTrue(self._can_assign(self._shop(closed_on_public_holidays=False), self.EASTER_MONDAY))
+
+    def test_duty_rotation_employee_is_not_blocked_by_open_hours(self):
+        shop = self._shop(closed_on_public_holidays=False)
+        shop.locations["g"].set_24_7(True)
+        shop.locations["g"].open_hours[2] = (None, None)
+        shop.locations["g"].set_duty_rotation({
+            "only_12_24h": True,
+            "weekend_full": {"start": "06:00"},
+            "weekend_half_a": {"start": "06:00", "end": "18:00"},
+            "weekend_half_b": {"start": "18:00", "end": "06:00"},
+        })
+        self.assertTrue(self._can_assign(shop, self.CLOSED_WEDNESDAY))
+
+    def test_generation_succeeds_and_leaves_closed_days_empty(self):
+        shop = self._shop()
+        shop.constraints["min_open_staff"] = 1
+        shop.constraints["min_close_staff"] = 1
+        shop.constraint_policies["monthly_hours"] = ConstraintPolicy.DISABLED
+        shop.constraint_policies["balance"] = ConstraintPolicy.DISABLED
+        employees = self._employees()
+        schedule = MonthSchedule(2026, 4, employees=employees)
+
+        result = AutoScheduleGenerator(schedule, shop).generate(
+            solver_time_limit_seconds=20, solver_workers=2,
+        )
+
+        self.assertTrue(result["success"], result.get("infeasibility_reasons"))
+        for day in (self.CLOSED_WEDNESDAY, self.EASTER_MONDAY, 8):
+            for emp in employees:
+                self.assertTrue(schedule.get_day(emp, day).is_empty(), f"dzień {day}")
+        self.assertTrue(any(not schedule.get_day(emp, 7).is_empty() for emp in employees))
 
 
 if __name__ == "__main__":

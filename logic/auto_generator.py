@@ -6,6 +6,7 @@ from model.shop_config import ShopConfig
 from logic.generator.solver import build_objective, solve_model
 from logic.generator.solution_mapper import save_solution
 from logic.generator.constraint_registry import ConstraintContext, apply_registry
+from logic.generator.constraints_basic import is_location_open_for_employee
 from logic.generator.trace import ConstraintTraceLogger
 
 # Only the "dino_retail" business profile exists today; AutoScheduleGenerator
@@ -174,7 +175,16 @@ class AutoScheduleGenerator:
         min_open = self.shop.constraints.get("min_open_staff", 3)
         min_close = self.shop.constraints.get("min_close_staff", 3)
         max_consecutive = self.shop.constraints.get("max_consecutive_days", 4)
-        trade_days = [d for d in days if self.shop.is_trade_day(d)]
+        # Dzień, w którym lokalizacja KAŻDEGO pracownika jest zamknięta
+        # ("Nieczynne", święto, ręczne zamknięcie dnia), nie jest dniem
+        # obsady - add_non_trade_day_constraints blokuje w nim wszystkie
+        # zmiany, więc wymogi obsady (open/close/mięso/role) byłyby w nim
+        # niespełnialne. Projekt bez pracowników - bez zmian.
+        trade_days = [
+            d for d in days
+            if self.shop.is_trade_day(d)
+            and (not employees or any(is_location_open_for_employee(self.shop, emp, d) for emp in employees))
+        ]
 
         print("Liczba pracowników:", len(employees))
         print("Dni w miesiącu:", len(days))

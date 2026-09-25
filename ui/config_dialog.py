@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 from logic.utils.time_utils import month_scope_note
 from ui.duty_rotation_editor import DutyRotationEditor
+from ui.locations_dialog import ROUND_CLOCK_UI_ENABLED
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.profile_wizard_dialog import ProfileWizardDialog
@@ -358,7 +359,9 @@ class ConfigDialog(QDialog):
             round_clock_row = QHBoxLayout(self.round_clock_container)
             round_clock_row.setContentsMargins(0, 0, 0, 0)
             self.round_clock_check = QCheckBox("Rotacja całodobowa - godzina rozpoczęcia:")
-            self.round_clock_check.setChecked(self.location.round_clock_start_hour is not None)
+            self.round_clock_check.setChecked(
+                ROUND_CLOCK_UI_ENABLED and self.location.round_clock_start_hour is not None
+            )
             self.round_clock_check.toggled.connect(self._update_hours_tab_round_clock_visibility)
             round_clock_row.addWidget(self.round_clock_check)
             self.round_clock_start_input = TimeInputWidget()
@@ -406,9 +409,10 @@ class ConfigDialog(QDialog):
         self.duty_rotation_editor.setVisible(is_24_7)
 
     def _update_hours_tab_round_clock_visibility(self):
-        is_24_7 = self.is_24_7_check.isChecked()
-        self.round_clock_container.setVisible(is_24_7)
-        self.round_clock_hint.setVisible(is_24_7)
+        # Ukryte dla Enyo - patrz ui/locations_dialog.py::ROUND_CLOCK_UI_ENABLED.
+        visible = ROUND_CLOCK_UI_ENABLED and self.is_24_7_check.isChecked()
+        self.round_clock_container.setVisible(visible)
+        self.round_clock_hint.setVisible(visible)
         self.round_clock_start_input.setVisible(self.round_clock_check.isChecked())
 
     def _build_sundays_tab(self):
@@ -839,7 +843,7 @@ class ConfigDialog(QDialog):
                         ) from exc
                 self.location.set_duty_rotation(duty_rotation)
 
-                if self.is_24_7_check.isChecked() and self.round_clock_check.isChecked():
+                if ROUND_CLOCK_UI_ENABLED and self.is_24_7_check.isChecked() and self.round_clock_check.isChecked():
                     self.location.round_clock_start_hour = self.round_clock_start_input.get_time_str()
                 else:
                     self.location.round_clock_start_hour = None

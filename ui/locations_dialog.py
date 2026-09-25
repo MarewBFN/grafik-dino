@@ -27,6 +27,16 @@ from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig
 
 LOCATIONS_TUTORIAL_FLAG = "locations_tutorial_seen.flag"
 
+# "Rotacja całodobowa - godzina rozpoczęcia" (LocationConfig.round_clock_start_hour)
+# UKRYTA dla Enyo (patrz ENYO_ONLY_CHANGES.md) - specyfikację klienta (1 osoba
+# na zmianie, zmiany bez zazębiania, 16h+8h / 24h albo 12h+12h) spełnia
+# wyłącznie "Rotacja służby 24/7", podpięta pod ten sam checkbox 24/7. Obsadę
+# kafelków round-clock wymusza tylko profil Dino, a razem z rotacją służby
+# obie bramy blokowały sobie nawzajem wszystkie zmiany (generator bez
+# rozwiązania). Kod zostaje - True przywraca pole (też w
+# ui/config_dialog.py, który importuje tę stałą).
+ROUND_CLOCK_UI_ENABLED = False
+
 
 def _parse_time(value: str) -> QTime:
     if not value:
@@ -141,7 +151,7 @@ class _LocationRow(QFrame):
         round_clock_row = QHBoxLayout(self.round_clock_container)
         round_clock_row.setContentsMargins(0, 0, 0, 0)
         self.round_clock_check = QCheckBox("Rotacja całodobowa - godzina rozpoczęcia:")
-        self.round_clock_check.setChecked(round_clock_start_hour is not None)
+        self.round_clock_check.setChecked(ROUND_CLOCK_UI_ENABLED and round_clock_start_hour is not None)
         self.round_clock_check.toggled.connect(self._update_round_clock_visibility)
         round_clock_row.addWidget(self.round_clock_check)
         self.round_clock_start_input = TimeInputWidget()
@@ -227,16 +237,21 @@ class _LocationRow(QFrame):
         self.duty_rotation_editor.setVisible(is_24_7)
 
     def _update_round_clock_visibility(self):
-        is_24_7 = self.is_24_7_check.isChecked()
         # Cała sekcja (checkbox + podpowiedź) istnieje tylko dla 24/7 - dla
         # zwykłej lokalizacji ten mechanizm nie ma zastosowania (patrz
-        # LocationConfig.round_clock_start_hour).
-        self.round_clock_container.setVisible(is_24_7)
-        self.round_clock_hint.setVisible(is_24_7)
+        # LocationConfig.round_clock_start_hour) - i tylko gdy nie jest
+        # ukryta (ROUND_CLOCK_UI_ENABLED).
+        visible = ROUND_CLOCK_UI_ENABLED and self.is_24_7_check.isChecked()
+        self.round_clock_container.setVisible(visible)
+        self.round_clock_hint.setVisible(visible)
         self.round_clock_start_input.setVisible(self.round_clock_check.isChecked())
 
     def round_clock_start_hour_value(self) -> str | None:
-        if not self.is_24_7_check.isChecked() or not self.round_clock_check.isChecked():
+        if (
+            not ROUND_CLOCK_UI_ENABLED
+            or not self.is_24_7_check.isChecked()
+            or not self.round_clock_check.isChecked()
+        ):
             return None
         return self.round_clock_start_input.get_time_str()
 

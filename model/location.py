@@ -378,6 +378,15 @@ class LocationConfig:
         # konkretne godziny), zawsze pokrywa się z tym, co robi generator -
         # zgłoszenie użytkownika (2026-09-25), test_data/dane_klienta_ochrona.json.
         loc.duty_rotation = dict(duty_rotation) if duty_rotation and loc.is_24_7 else None
+        # Rotacja służby i rotacja całodobowa (round_clock_start_hour) mają
+        # wzajemnie wykluczające się bramy w generatorze - razem blokują
+        # pracownikom tej lokalizacji KAŻDĄ zmianę (generator bez
+        # rozwiązania). Rotacja służby to mechanizm ze specyfikacji klienta
+        # Enyo, a pole rotacji całodobowej jest ukryte w UI (patrz
+        # ui/locations_dialog.py::ROUND_CLOCK_UI_ENABLED) - wartość zapisana
+        # wcześniej obok rotacji służby jest więc ignorowana przy wczytaniu.
+        if loc.duty_rotation:
+            loc.round_clock_start_hour = None
         return loc
 
 
