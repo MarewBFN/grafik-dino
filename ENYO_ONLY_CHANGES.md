@@ -1678,3 +1678,27 @@ odpoczynek po 24h zgodny z (N-1)x24h.
 |---|---|---|
 | `demo/install_client_sample_data.py` | `_rotation_location()`, `prefer_24h` dla 3 placówek | NIE - dane jednego klienta testowego |
 | `test_data/dane_klienta_ochrona.json` | Wygenerowany ponownie | NIE (jw.) |
+
+### Zasada "Wyrównanie godzin umowa/bez"
+
+Nowa zasada w Konfiguracji -> ustawienia zaawansowane (obok pozostałych,
+Preferowane/Wymagane/Wyłączone), tylko dla profili custom (ochrona).
+Domyślnie **Wyłączone** (decyzja użytkownika). Wyrównuje godziny osobno w
+grupach (placówka, "Umowa" tak/nie); priorytet "Umowa" działa dalej.
+"Preferowane" i "Wymagane" to oba wyłącznie term celu (Wymagane = 10x
+większa waga) - nigdy nie blokuje pokrycia. Kara dopiero za rozrzut
+większy niż najdłuższa dostępna w grupie zmiana (np. 12h przy samych
+12h, 24h gdy ktoś bierze 24h), urlop/L4 zaliczany jako udział w obsadzie,
+niepełny etat proporcjonalnie. Brak wpisu w starszym projekcie = wyłączone
+także w oknie Konfiguracji (`POLICY_MISSING_DEFAULTS`).
+
+Dane klienta (październik, zasada Preferowane): Ubojnia 96-108h (było
+60-144h), GZUK 136-152h, PGE 144-168h - zmiany 24h w PGE/Łebie/LakPol
+bez zmian (31/31).
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/priority_hours_constraint.py` | `add_hours_equalization_penalty`, `hours_equalization_weight` | TAK |
+| `logic/generator/custom_profile_wiring.py` | Etykieta zasady, domyślnie DISABLED, term celu | TAK |
+| `ui/config_dialog.py` | `POLICY_MISSING_DEFAULTS` | TAK |
+| `tests/test_priority_hours_and_duty_preference.py`, `tests/test_location_hours_editing_ui.py` | `TestHoursEqualization`, test domyślnej wartości w oknie | TAK |

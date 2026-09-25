@@ -209,3 +209,24 @@ def test_config_dialog_turning_on_24_7_unchecks_closed_on_public_holidays():
     dialog.is_24_7_check.setChecked(True)
 
     assert dialog.closed_on_public_holidays_check.isChecked() is False
+
+
+def test_hours_equalization_rule_is_shown_for_custom_profile_and_disabled_when_missing():
+    """Nowa zasada "Wyrównanie godzin umowa/bez" - starszy projekt bez
+    zapisanego wpisu nie może jej po cichu włączyć samym zapisem okna."""
+    from model.business_profile import register_custom_profile
+    from model.constraint_policy import ConstraintPolicy
+    from model.custom_profile import CustomBusinessProfile
+
+    profile = CustomBusinessProfile(key="test_equalization_ui", display_name="T", roles=[], rules=[])
+    register_custom_profile(profile)
+    shop = ShopConfig(2026, 8)
+    shop.business_type = profile.key
+    shop.constraint_policies.pop("hours_equalization", None)
+
+    dialog = ConfigDialog(None, shop)
+    selector = dialog.policy_selectors["hours_equalization"]
+    assert selector.currentData() == ConstraintPolicy.DISABLED
+
+    dialog._save()
+    assert shop.constraint_policies.get("hours_equalization", ConstraintPolicy.DISABLED) == ConstraintPolicy.DISABLED

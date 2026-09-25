@@ -17,7 +17,13 @@ from logic.generator.objective import (
     add_work_balance_penalty,
     add_workload_balance_penalty,
 )
-from logic.generator.priority_hours_constraint import add_priority_hours_shortfall_penalty
+from logic.generator.priority_hours_constraint import (
+    HOURS_EQUALIZATION_LABEL,
+    HOURS_EQUALIZATION_POLICY,
+    add_hours_equalization_penalty,
+    add_priority_hours_shortfall_penalty,
+    hours_equalization_weight,
+)
 from model.custom_profile import RULE_TYPE_MIN_STAFF_WITH_ROLE, CustomBusinessProfile
 
 
@@ -63,6 +69,9 @@ def default_policies(custom: CustomBusinessProfile) -> dict:
         "availability": ConstraintPolicy.PREFERRED,
         "max_consecutive": ConstraintPolicy.PREFERRED,
         "monthly_hours": ConstraintPolicy.PREFERRED,
+        # "Wyrównanie godzin umowa/bez" - domyślnie wyłączone (decyzja
+        # użytkownika 2026-09-25), patrz priority_hours_constraint.py.
+        HOURS_EQUALIZATION_POLICY: ConstraintPolicy.DISABLED,
     }
     for rule in custom.rules:
         try:
@@ -74,6 +83,7 @@ def default_policies(custom: CustomBusinessProfile) -> dict:
 
 def build_policy_labels(custom: CustomBusinessProfile) -> tuple:
     labels = list(base_specs.GENERIC_POLICY_LABELS)
+    labels.append((HOURS_EQUALIZATION_POLICY, HOURS_EQUALIZATION_LABEL))
     for rule in custom.rules:
         labels.append((custom.rule_policy_key(rule), custom.rule_label(rule)))
     return tuple(labels)
@@ -99,6 +109,14 @@ def build_objective_terms(ctx, *_args, **_kwargs) -> list:
     terms.extend(add_priority_hours_shortfall_penalty(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
         shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
+    ))
+
+    # "Wyrównanie godzin umowa/bez" - zawsze miękkie (także "Wymagane",
+    # tylko z większą wagą), brak wpisu w projekcie = wyłączone.
+    terms.extend(add_hours_equalization_penalty(
+        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
+        shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
+        weight=hours_equalization_weight(ctx.shop.constraint_policies.get(HOURS_EQUALIZATION_POLICY)),
     ))
 
     # Preferencja 12h+12h zamiast 24h w weekend dla lokalizacji z rotacją

@@ -42,6 +42,13 @@ POLICY_OPTIONS = (
     ("Wyłączone", ConstraintPolicy.DISABLED),
 )
 
+# Zasady, których starsze projekty nie mają jeszcze zapisanych - brak wpisu
+# ma znaczyć to samo co w generatorze (inaczej samo otwarcie i zapisanie
+# Konfiguracji po cichu włączyłoby zasadę).
+POLICY_MISSING_DEFAULTS = {
+    "hours_equalization": ConstraintPolicy.DISABLED,
+}
+
 REST_11H_MODE_OPTIONS = (
     ("Standardowy (dokładny)", "standard"),
     ("Uproszczony (2 zmiany — szybszy)", "simplified"),
@@ -659,7 +666,7 @@ class ConfigDialog(QDialog):
             for text, value in POLICY_OPTIONS:
                 selector.addItem(text, value)
             current_policy = self.shop_config.constraint_policies.get(
-                policy_name, ConstraintPolicy.PREFERRED
+                policy_name, POLICY_MISSING_DEFAULTS.get(policy_name, ConstraintPolicy.PREFERRED)
             )
             if policy_name == "balance" and current_policy == ConstraintPolicy.MANDATORY:
                 # MANDATORY zrobiłby grafik niewykonalnym za każdym razem, gdy
