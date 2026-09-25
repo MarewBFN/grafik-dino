@@ -1442,6 +1442,14 @@ class MainWindow(QMainWindow):
 
         self._update_nominal_hours_label()
         self._sync_grid()
+        # Nadpisanie godzin/święta to ustawienie (day_overrides/public_holidays),
+        # nie dana grafiku - reszta okien ustawień (Konfiguracja, Lokalizacje,
+        # tryb szybki) zapisuje się od razu po zamknięciu, więc to też powinno,
+        # zamiast czekać na osobne "Zapisz" albo monit przy zamknięciu programu.
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
         self.statusBar().showMessage("Zaktualizowano godziny dnia.", 2500)
 
     def _open_config(self):
@@ -2029,9 +2037,14 @@ class MainWindow(QMainWindow):
         self.quick_preset_buttons = {}
 
         presets = self.shop_config.quick_mode_presets if self.shop_config else []
-        self.quick_presets_label.setVisible(bool(presets))
+        # "visible" (patrz model/shop_config.py::normalize_quick_mode_presets)
+        # pozwala trzymać przygotowane przedziały bez pokazywania ich jako
+        # przycisk - odfiltrowane tu, więc nieaktywne nie zajmują miejsca
+        # w gridzie ani nie liczą się do decyzji, czy pokazać cały panel.
+        visible_presets = [p for p in presets if p.get("visible", True)]
+        self.quick_presets_label.setVisible(bool(visible_presets))
 
-        for index, preset in enumerate(presets):
+        for index, preset in enumerate(visible_presets):
             name = preset["name"]
             btn = QPushButton(name)
             btn.setCheckable(True)

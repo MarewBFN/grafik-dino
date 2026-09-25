@@ -45,8 +45,8 @@ def test_saving_produces_normalized_presets():
     dialog._save()
 
     assert dialog.result_presets == [
-        {"name": "Zmiana 16h", "start": "06:00", "end": "22:00", "full_day": False},
-        {"name": "Doba 24h", "start": "06:00", "end": None, "full_day": True},
+        {"name": "Zmiana 16h", "start": "06:00", "end": "22:00", "full_day": False, "visible": True},
+        {"name": "Doba 24h", "start": "06:00", "end": None, "full_day": True, "visible": True},
     ]
 
 
@@ -58,8 +58,46 @@ def test_rows_with_empty_name_are_skipped_on_save():
     dialog._save()
 
     assert dialog.result_presets == [
-        {"name": "Zmiana", "start": "06:00", "end": "22:00", "full_day": False},
+        {"name": "Zmiana", "start": "06:00", "end": "22:00", "full_day": False, "visible": True},
     ]
+
+
+def test_name_input_is_capped_at_ten_characters():
+    dialog = QuickModeSettingsDialog(None, [])
+    dialog._add_row()
+    row = dialog._rows[0]
+
+    row.name_edit.setText("Bardzo dlugi przedzial")
+
+    assert len(row.name()) == 10
+
+
+def test_show_checkbox_defaults_to_checked_for_new_rows():
+    dialog = QuickModeSettingsDialog(None, [])
+    dialog._add_row("Zmiana", "06:00", "22:00")
+
+    assert dialog._rows[0].is_visible() is True
+
+
+def test_unchecking_show_saves_preset_as_not_visible():
+    dialog = QuickModeSettingsDialog(None, [])
+    dialog._add_row("Zmiana", "06:00", "22:00")
+    dialog._rows[0].show_check.setChecked(False)
+
+    dialog._save()
+
+    assert dialog.result_presets == [
+        {"name": "Zmiana", "start": "06:00", "end": "22:00", "full_day": False, "visible": False},
+    ]
+
+
+def test_existing_hidden_preset_loads_with_show_unchecked():
+    presets = [
+        {"name": "Zmiana", "start": "06:00", "end": "22:00", "full_day": False, "visible": False},
+    ]
+    dialog = QuickModeSettingsDialog(None, presets)
+
+    assert dialog._rows[0].is_visible() is False
 
 
 def test_duplicate_names_show_an_error_and_do_not_accept(monkeypatch):

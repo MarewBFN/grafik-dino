@@ -22,17 +22,24 @@ from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 QUICK_MODE_TUTORIAL_FLAG = "quick_mode_tutorial_seen.flag"
 
 
+_NAME_MAX_LENGTH = 10
+
+
 class _PresetRow(QFrame):
     """Jeden edytowalny przedział: nazwa + start/koniec (albo "cała doba"),
     wzorem _LocationRow w ui/config_dialog.py."""
 
-    def __init__(self, on_remove, name="", start="08:00", end="16:00", full_day=False):
+    def __init__(self, on_remove, name="", start="08:00", end="16:00", full_day=False, visible=True):
         super().__init__()
         self.setObjectName("configCard")
         layout = QHBoxLayout(self)
 
         self.name_edit = QLineEdit(name)
         self.name_edit.setPlaceholderText("np. Zmiana 16h")
+        # Nazwa trafia na przycisk w trybie szybkim (ui/main_window.py::
+        # _rebuild_quick_preset_buttons) - zbyt długa rozjeżdża lewy panel,
+        # stąd twardy limit wpisywania wprost w polu.
+        self.name_edit.setMaxLength(_NAME_MAX_LENGTH)
         layout.addWidget(self.name_edit, 1)
 
         layout.addWidget(QLabel("Start:"))
@@ -51,6 +58,14 @@ class _PresetRow(QFrame):
         self.end_input.setEnabled(not full_day)
         layout.addWidget(self.full_day_check)
 
+        self.show_check = QCheckBox("Pokaż")
+        self.show_check.setToolTip(
+            "Czy ten przedział ma pojawiać się jako przycisk w trybie szybkim. "
+            "Odznacz, żeby zachować przedział na później bez pokazywania go w UI."
+        )
+        self.show_check.setChecked(visible)
+        layout.addWidget(self.show_check)
+
         remove_btn = QPushButton("Usuń")
         remove_btn.setObjectName("dangerButton")
         remove_btn.clicked.connect(lambda: on_remove(self))
@@ -68,6 +83,9 @@ class _PresetRow(QFrame):
     def is_full_day(self) -> bool:
         return self.full_day_check.isChecked()
 
+    def is_visible(self) -> bool:
+        return self.show_check.isChecked()
+
 
 class QuickModeSettingsDialog(QDialog):
     """Konfiguracja nazwanych, ręcznie zdefiniowanych przedziałów czasowych
@@ -80,7 +98,10 @@ class QuickModeSettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Ustawienia trybu szybkiego")
         self.setModal(True)
-        self.resize(560, 420)
+        # Szersze niż domyślne Qt, bo wiersz mieści nazwę + start/koniec +
+        # "Cała doba" + "Pokaż" + "Usuń" - przy domyślnej szerokości pole
+        # nazwy robiło się nieczytelnie wąskie.
+        self.resize(820, 460)
         self.result_presets = None
         self._rows: list[_PresetRow] = []
         self._build_ui(presets or [])
@@ -91,9 +112,11 @@ class QuickModeSettingsDialog(QDialog):
 
         hint = QLabel(
             "Zdefiniuj własne, nazwane przedziały czasowe (np. \"Zmiana 16h\", "
-            "\"Nocka 22–06\", \"Doba 24h\") - każdy pojawi się jako osobny "
-            "przycisk w trybie szybkim zamiast ręcznego wpisywania godzin. "
-            "Koniec wcześniejszy niż start oznacza przejście przez północ."
+            f"\"Nocka\", \"Doba 24h\", max. {_NAME_MAX_LENGTH} znaków) - każdy "
+            "zaznaczony jako \"Pokaż\" pojawi się jako osobny przycisk w trybie "
+            "szybkim zamiast ręcznego wpisywania godzin. Odznacz \"Pokaż\", żeby "
+            "zachować przedział bez pokazywania go w trybie szybkim. Koniec "
+            "wcześniejszy niż start oznacza przejście przez północ."
         )
         hint.setObjectName("mutedHint")
         hint.setWordWrap(True)
@@ -116,6 +139,7 @@ class QuickModeSettingsDialog(QDialog):
                 preset.get("start", "08:00"),
                 preset.get("end") or preset.get("start", "08:00"),
                 bool(preset.get("full_day")),
+                bool(preset.get("visible", True)),
             )
 
         self._rows_layout.addStretch()
@@ -139,8 +163,8 @@ class QuickModeSettingsDialog(QDialog):
         help_btn.clicked.connect(self._open_tutorial)
         root.addWidget(buttons)
 
-    def _add_row(self, name="", start="08:00", end="16:00", full_day=False):
-        row = _PresetRow(self._remove_row, name, start, end, full_day)
+    def _add_row(self, name="", start="08:00", end="16:00", full_day=False, visible=True):
+        row = _PresetRow(self._remove_row, name, start, end, full_day, visible)
         self._rows.append(row)
         # -1: trzymamy addStretch() na samym końcu listy przedziałów.
         self._rows_layout.insertWidget(self._rows_layout.count() - 1, row)
@@ -167,9 +191,11 @@ class QuickModeSettingsDialog(QDialog):
         if self._rows:
             steps.append(TutorialStep(
                 "Nazwa i godziny",
-                "Nadaj przedziałowi nazwę (np. „Zmiana 16h”) i ustaw godziny "
-                "start/koniec. Zaznacz „Cała doba (24h)”, jeśli przedział ma "
-                "trwać całą dobę.",
+                f"Nadaj przedziałowi nazwę (max. {_NAME_MAX_LENGTH} znaków, np. "
+                "„Zmiana 16h”) i ustaw godziny start/koniec. Zaznacz „Cała doba "
+                "(24h)”, jeśli przedział ma trwać całą dobę. „Pokaż” decyduje, czy "
+                "przedział ma być widoczny jako przycisk w trybie szybkim - "
+                "odznacz, żeby zachować go na później bez pokazywania w UI.",
                 target=self._rows[0],
             ))
         steps.append(TutorialStep(
@@ -215,6 +241,7 @@ class QuickModeSettingsDialog(QDialog):
                 "start": row.start_time(),
                 "end": None if full_day else row.end_time(),
                 "full_day": full_day,
+                "visible": row.is_visible(),
             })
 
         try:

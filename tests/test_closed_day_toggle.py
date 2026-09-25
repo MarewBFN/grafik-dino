@@ -160,6 +160,9 @@ class HeaderMenuDoesNotMaskAClosedDayTests(unittest.TestCase):
         window._update_nominal_hours_label = MagicMock()
         window._sync_grid = MagicMock()
         window.statusBar = MagicMock(return_value=MagicMock())
+        window.project = MagicMock()
+        window.year = schedule.year
+        window.month = schedule.month
         return window
 
     def test_closed_weekday_passes_none_hours_not_the_weekly_pattern(self):
@@ -216,6 +219,68 @@ class HeaderMenuDoesNotMaskAClosedDayTests(unittest.TestCase):
         args, kwargs = mock_dialog.call_args
         self.assertEqual(args[2], (None, None))
         self.assertEqual(kwargs.get("fallback_hours"), ("09:00", "17:00"))
+
+
+class HeaderMenuPersistsDayOverrideOnAcceptTests(unittest.TestCase):
+    """Nadpisanie godzin/święta dnia (day_overrides/public_holidays) to
+    ustawienie projektu, tak samo jak Konfiguracja/Lokalizacje/tryb szybki -
+    te trzy zapisują się od razu po zaakceptowaniu dialogu (patrz
+    ui/main_window.py::_open_config/_open_locations_dialog/
+    _open_quick_mode_settings), więc to też powinno, zamiast polegać
+    wyłącznie na monicie przy zamknięciu programu."""
+
+    def _make_window(self, shop, schedule, location_key):
+        window = MainWindow.__new__(MainWindow)
+        window.shop_config = shop
+        window.schedule = schedule
+        window.selected_location_key = location_key
+        window.controller = MagicMock()
+        window._update_nominal_hours_label = MagicMock()
+        window._sync_grid = MagicMock()
+        window.statusBar = MagicMock(return_value=MagicMock())
+        window.project = MagicMock()
+        window.year = schedule.year
+        window.month = schedule.month
+        return window
+
+    def test_accepted_dialog_saves_the_project(self):
+        shop = ShopConfig(2026, 8)
+        loc = LocationConfig(key="site1", name="Site 1")
+        loc.open_hours[0] = ("08:00", "20:00")
+        shop.locations["site1"] = loc
+        schedule = MonthSchedule(2026, 8)
+        window = self._make_window(shop, schedule, "site1")
+
+        fake_dialog = MagicMock()
+        fake_dialog.exec.return_value = QDialog.Accepted
+        fake_dialog.result_mode = "save"
+        fake_dialog.result_start = "09:00"
+        fake_dialog.result_end = "17:00"
+        fake_dialog.result_holiday = False
+
+        with patch("ui.main_window.DayOverrideDialog", return_value=fake_dialog):
+            with patch("ui.main_window.save_project_bundle") as mock_save:
+                window._open_header_menu(3, None)
+
+        mock_save.assert_called_once_with("last_project.json", window.project, 2026, 8)
+        self.assertEqual(loc.day_overrides[3], ("09:00", "17:00"))
+
+    def test_rejected_dialog_does_not_save(self):
+        shop = ShopConfig(2026, 8)
+        loc = LocationConfig(key="site1", name="Site 1")
+        loc.open_hours[0] = ("08:00", "20:00")
+        shop.locations["site1"] = loc
+        schedule = MonthSchedule(2026, 8)
+        window = self._make_window(shop, schedule, "site1")
+
+        fake_dialog = MagicMock()
+        fake_dialog.exec.return_value = QDialog.Rejected
+
+        with patch("ui.main_window.DayOverrideDialog", return_value=fake_dialog):
+            with patch("ui.main_window.save_project_bundle") as mock_save:
+                window._open_header_menu(3, None)
+
+        mock_save.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ class NormalizeQuickModePresetsTests(unittest.TestCase):
         self.assertEqual(normalize_quick_mode_presets([]), [])
 
     def test_normal_preset_round_trips(self):
-        raw = [{"name": "Zmiana 16h", "start": "06:00", "end": "22:00", "full_day": False}]
+        raw = [{"name": "Zmiana 16h", "start": "06:00", "end": "22:00", "full_day": False, "visible": True}]
         result = normalize_quick_mode_presets(raw)
         self.assertEqual(result, raw)
 
@@ -33,7 +33,19 @@ class NormalizeQuickModePresetsTests(unittest.TestCase):
     def test_full_day_preset_drops_end(self):
         raw = [{"name": "Doba 24h", "start": "06:00", "end": "06:00", "full_day": True}]
         result = normalize_quick_mode_presets(raw)
-        self.assertEqual(result, [{"name": "Doba 24h", "start": "06:00", "end": None, "full_day": True}])
+        self.assertEqual(
+            result, [{"name": "Doba 24h", "start": "06:00", "end": None, "full_day": True, "visible": True}]
+        )
+
+    def test_visible_defaults_to_true_when_missing(self):
+        raw = [{"name": "Zmiana", "start": "06:00", "end": "14:00"}]
+        result = normalize_quick_mode_presets(raw)
+        self.assertTrue(result[0]["visible"])
+
+    def test_visible_false_is_preserved(self):
+        raw = [{"name": "Zmiana", "start": "06:00", "end": "14:00", "visible": False}]
+        result = normalize_quick_mode_presets(raw)
+        self.assertFalse(result[0]["visible"])
 
     def test_empty_name_is_rejected(self):
         with self.assertRaises(ValueError):

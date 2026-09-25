@@ -643,6 +643,9 @@ class HeaderDayOverrideLocationRoutingTests(unittest.TestCase):
         window._update_nominal_hours_label = MagicMock()
         window._sync_grid = MagicMock()
         window.statusBar = MagicMock(return_value=MagicMock())
+        window.project = MagicMock()
+        window.year = schedule.year
+        window.month = schedule.month
         return window
 
     def _fake_dialog(self, result_start="09:00", result_end="17:00", holiday=False):
@@ -662,7 +665,8 @@ class HeaderDayOverrideLocationRoutingTests(unittest.TestCase):
         window = self._make_window(shop, schedule, "site1")
 
         with patch("ui.main_window.DayOverrideDialog", return_value=self._fake_dialog()):
-            window._open_header_menu(3, None)
+            with patch("ui.main_window.save_project_bundle"):
+                window._open_header_menu(3, None)
 
         self.assertEqual(loc.day_overrides.get(3), ("09:00", "17:00"))
         self.assertNotIn(3, shop.day_overrides)
@@ -680,7 +684,8 @@ class HeaderDayOverrideLocationRoutingTests(unittest.TestCase):
         reset_dialog.result_mode = "reset"
 
         with patch("ui.main_window.DayOverrideDialog", return_value=reset_dialog):
-            window._open_header_menu(3, None)
+            with patch("ui.main_window.save_project_bundle"):
+                window._open_header_menu(3, None)
 
         self.assertNotIn(3, loc.day_overrides)
 

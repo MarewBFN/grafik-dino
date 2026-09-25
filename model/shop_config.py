@@ -78,7 +78,13 @@ def normalize_quick_mode_presets(raw: list[dict] | None) -> list[dict]:
     zdublowanej albo niepoprawnym zakresie godzin - to samo miejsce, z
     którego korzysta zarówno UI (ui/quick_mode_settings_dialog.py), jak i
     deserializacja projektu, żeby raz zapisany plik nie mógł zawierać
-    nieprawidłowych presetów."""
+    nieprawidłowych presetów.
+
+    "visible" (domyślnie True dla presetów bez tego pola - stare projekty
+    sprzed tej flagi) mówi ui/main_window.py::_rebuild_quick_preset_buttons,
+    czy dany przedział ma dostać przycisk w trybie szybkim - pozwala trzymać
+    przygotowane, ale niepotrzebne akurat teraz przedziały bez zaśmiecania
+    panelu, bez usuwania i odtwarzania ich za każdym razem."""
     if not raw:
         return []
 
@@ -96,9 +102,11 @@ def normalize_quick_mode_presets(raw: list[dict] | None) -> list[dict]:
         if not start:
             raise ValueError(f'Brak godziny startu dla "{name}".')
 
+        visible = bool(entry.get("visible", True))
+
         full_day = bool(entry.get("full_day"))
         if full_day:
-            presets.append({"name": name, "start": start, "end": None, "full_day": True})
+            presets.append({"name": name, "start": start, "end": None, "full_day": True, "visible": visible})
             continue
 
         end = entry.get("end")
@@ -109,7 +117,7 @@ def normalize_quick_mode_presets(raw: list[dict] | None) -> list[dict]:
                 f'Koniec nie może być równy początkowi dla "{name}" - '
                 'zaznacz "Cała doba (24h)", jeśli o to chodzi.'
             )
-        presets.append({"name": name, "start": start, "end": end, "full_day": False})
+        presets.append({"name": name, "start": start, "end": end, "full_day": False, "visible": visible})
 
     return presets
 
