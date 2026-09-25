@@ -1646,3 +1646,18 @@ pomijanie pokrycia w `duty_rotation_constraint.py` i wiersz "Obłożenie"
 | `model/location.py` | `is_duty_day_closed()` | TAK |
 | `logic/generator/duty_rotation_public_holiday_constraint.py`, `logic/generator/duty_rotation_constraint.py`, `logic/duty_coverage_presenter.py` | `is_closed_for_public_holiday` -> `is_duty_day_closed` | TAK |
 | `tests/test_duty_rotation_public_holiday_constraint.py` | `TestManualClosedDayOverride` | TAK |
+
+### Komunikat o braku rozwiązania dla rotacji służby
+
+Urlop całej obsady LakPol 20.10 dawał "Dzień 1: brak pracownika otwarcia
+możliwego do pracy na otwarciu" - reguła Dino, bez wskazania placówki ani
+dnia. `build_infeasibility_summary` sprawdza teraz otwarcie/zamknięcie/
+mięso tylko dla profilu Dino i tylko dla pracowników bez rotacji, a dla
+rotacji służby dodaje: "{placówka}, dzień N: nikt z pracowników placówki
+nie jest dostępny (urlop/L4/wolne)" oraz przypadek jedynej dostępnej osoby
+z "Nie chce zmian 24h".
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/diagnostics.py` | `_add_duty_rotation_supply_messages`, filtr profilu/pracowników dla open/close/mięso | TAK |
+| `tests/test_generator_diagnostics.py` | `DutyRotationInfeasibilitySummaryTests` | TAK |
