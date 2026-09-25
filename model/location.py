@@ -172,6 +172,12 @@ def normalize_duty_rotation(raw: dict | None) -> dict | None:
     }
     normalized["weekend_full"] = {"start": weekend_full_start}
     normalized["only_12_24h"] = only_12_24h
+    # "Preferuj zmiany 24h" (ui/duty_rotation_editor.py) - odwraca miękką
+    # preferencję generatora (logic/generator/duty_rotation_preference.py).
+    # Zapisywane tylko gdy włączone, żeby projekty bez tej opcji miały
+    # dokładnie ten sam słownik co wcześniej.
+    if raw.get("prefer_24h"):
+        normalized["prefer_24h"] = True
     return normalized
 
 

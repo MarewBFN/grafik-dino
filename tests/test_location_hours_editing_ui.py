@@ -176,3 +176,36 @@ def test_config_dialog_hours_tab_loads_and_saves_closed_on_public_holidays():
     dialog._save()
 
     assert shop.locations["site1"].closed_on_public_holidays is True
+
+
+def test_turning_on_24_7_unchecks_closed_on_public_holidays():
+    """Placówka 24/7 z rotacją służby jest domyślnie chroniona także w
+    święta (decyzja użytkownika 2026-09-25)."""
+    row = _row()
+    assert row.closed_on_public_holidays_check.isChecked() is True
+
+    row.is_24_7_check.setChecked(True)
+
+    assert row.closed_on_public_holidays_check.isChecked() is False
+
+
+def test_existing_24_7_location_keeps_its_saved_holiday_setting():
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1", closed_on_public_holidays=True)
+    loc.set_24_7(True)
+    shop.locations = {"site1": loc}
+
+    dialog = LocationsDialog(None, shop)
+
+    assert dialog._location_rows[0].closed_on_public_holidays_check.isChecked() is True
+
+
+def test_config_dialog_turning_on_24_7_unchecks_closed_on_public_holidays():
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1")
+    shop.locations["site1"] = loc
+
+    dialog = ConfigDialog(None, shop, location_key="site1")
+    dialog.is_24_7_check.setChecked(True)
+
+    assert dialog.closed_on_public_holidays_check.isChecked() is False

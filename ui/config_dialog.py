@@ -397,6 +397,9 @@ class ConfigDialog(QDialog):
         nie potrzebuje żadnej osobnej logiki dla 24/7."""
         if checked:
             self.hours_editor.set_hours({wd: ("00:00", "23:45") for wd in range(7)})
+            # Patrz _LocationRow._on_24_7_toggled - 24/7 domyślnie chronione
+            # także w święta.
+            self.closed_on_public_holidays_check.setChecked(False)
         self.hours_editor.setEnabled(not checked)
         self._update_hours_tab_visibility()
         if not checked:

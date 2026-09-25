@@ -103,6 +103,30 @@ class TestPreferWeekendSplitOverFull:
         assert status == cp_model.OPTIMAL
         assert solver.Value(x[0, SATURDAY, WEEKEND_FULL]) == 1
 
+    def test_prefer_24h_flips_the_preference_to_full_day(self):
+        """"Preferuj zmiany 24h" w edytorze rotacji placówki - przy dwóch
+        chętnych osobach solver wybiera jedną zmianę 24h zamiast podziału."""
+        shop = ShopConfig(2026, 8)
+        loc = LocationConfig(key="site1", name="Site 1")
+        loc.set_duty_rotation(dict(ROTATION, prefer_24h=True))
+        shop.locations["site1"] = loc
+        employees = [Employee(last_name="Guard", first_name=n, location_key="site1") for n in "AB"]
+
+        model = cp_model.CpModel()
+        x = {(e, d, s): model.NewBoolVar(f"x_{e}_{d}_{s}") for e in range(2) for d in [SATURDAY] for s in ALL_SHIFTS}
+
+        add_duty_rotation_gate_constraint(model, x, employees, [SATURDAY], shop, DUTY_SHIFTS, ALL_SHIFTS)
+        add_duty_rotation_coverage_constraint(model, x, employees, [SATURDAY], shop, DUTY_SHIFTS, soft=False)
+        penalty = add_prefer_weekend_split_over_full_penalty(model, x, employees, [SATURDAY], shop, DUTY_SHIFTS)
+        model.Minimize(sum(penalty))
+
+        solver = cp_model.CpSolver()
+        assert solver.Solve(model) == cp_model.OPTIMAL
+        assert solver.Value(x[0, SATURDAY, WEEKEND_FULL]) + solver.Value(x[1, SATURDAY, WEEKEND_FULL]) == 1
+        assert all(
+            solver.Value(x[e, SATURDAY, s]) == 0 for e in range(2) for s in (WEEKEND_HALF_A, WEEKEND_HALF_B)
+        )
+
 
 def _priority_shop_and_schedule(n_regular_employees):
     profile = CustomBusinessProfile(

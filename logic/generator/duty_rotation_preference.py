@@ -10,6 +10,11 @@ Wyłącznie term celu (nie nowy ConstraintSpec/polityka) - weekend_full
 zostaje w pełni dostępne i wybierane, gdy podział nie jest możliwy (np. za
 mało osób dostępnych/chętnych na 12h tego dnia) - kara tylko *zniechęca*,
 nigdy nie blokuje, więc nie może zrobić modelu niewykonalnym.
+
+"Preferuj zmiany 24h" (duty_rotation["prefer_24h"], checkbox w edytorze
+rotacji placówki) odwraca kierunek: kara za każdą połówkę zamiast za 24h -
+dla placówek, które historycznie pracują wyłącznie na zmianach 24h (np.
+PGE Ustka, Łeba, LakPol w danych klienta).
 """
 
 from logic.generator.duty_rotation_constraint import group_employees_with_duty_rotation
@@ -36,6 +41,13 @@ def add_prefer_weekend_split_over_full_penalty(model, x, employees, days, shop, 
             # no-opem, ale pomijamy jawnie zamiast polegać na tym.
             if wd < 5 and not rotation.get("only_12_24h"):
                 continue
-            penalties.extend(x[e, d, weekend_full] for e in indices)
+            if rotation.get("prefer_24h"):
+                penalties.extend(
+                    x[e, d, duty_shifts[key]]
+                    for e in indices
+                    for key in ("weekend_half_a", "weekend_half_b")
+                )
+            else:
+                penalties.extend(x[e, d, weekend_full] for e in indices)
 
     return [PREFER_SPLIT_WEIGHT * p for p in penalties]

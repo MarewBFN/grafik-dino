@@ -1586,3 +1586,45 @@ istnieją zmiany rotacji 24/7, więc problem nie występuje.
 | `tests/test_round_clock.py` | Testy GUI z `patch(ROUND_CLOCK_UI_ENABLED=True)` + nowe: pole ukryte domyślnie, zapis czyści wartość, `from_dict` | TAK (poza testem ukrycia) |
 | `tests/test_night_shift_stress.py` | Scenariusz obsady nocnej: `closed_on_public_holidays = False` (sierpień 2026 ma 15.08 - wcześniej zmiana nocna po cichu omijała zamknięcie w święto, teraz dzień jest słusznie pusty) | TAK |
 | `tests/test_closed_day_toggle.py` | `GeneratorRespectsClosedLocationDayTests` - blokada "Nieczynne"/święta, rotacja służby nieblokowana, generacja end-to-end | TAK |
+
+## Test generatora na danych klienta i decyzje użytkownika (2026-09-25)
+
+Przebieg na 6 placówkach klienta (październik/listopad 2026, projekt
+zbudowany jak w UI: 24/7 + rotacja, zapis/odczyt, generowanie jak przycisk
+"Generuj") wykazał kilka niespójności UI <-> generator. Decyzje
+użytkownika i wdrożenie - kolejne wpisy poniżej.
+
+### Uproszczony edytor rotacji + "Preferuj zmiany 24h" + święta dla 24/7
+
+- **Edytor rotacji** (`ui/duty_rotation_editor.py`) przebudowany na
+  życzenie użytkownika ("rotacja zaczynająca się o konkretnej godzinie"
+  jest bardziej intuicyjna dla klienta): godzina rozpoczęcia doby S,
+  godzina podziału P (domyślnie S+12h) i "Preferuj zmiany 24h". Zapis
+  zawsze `only_12_24h=True`: każdego dnia 24h od S albo S->P + P->S.
+  Usuwa dwa błędy starego edytora: (1) różne godziny początku doby w
+  tygodniu i weekendzie dawały lukę w poniedziałek rano i podwójną obsadę
+  w sobotę (także przy DOMYŚLNYCH wartościach 09-17 / 08-20), (2) zmiana
+  24h startowała od pierwszej wpisanej godziny weekendu, a nie od początku
+  doby (podział wpisany "20:00-08:00" = 12h luki + 12h podwójnie przy
+  każdej zmianie 24h). Samej "Rotacji całodobowej" (round-clock) nie
+  przywrócono - kilka osób na zmianę, zakładki 30 min, role Dino, w
+  profilu ochrony nic nie obsadza; od niej wzięty jest tylko sposób
+  konfiguracji (jedna godzina rozpoczęcia).
+- **"Preferuj zmiany 24h"** (`duty_rotation["prefer_24h"]`, zapisywane
+  tylko gdy włączone) - `duty_rotation_preference.py` karze wtedy połówki
+  zamiast zmiany 24h. W październiku generator nie dał ani jednej zmiany
+  24h (0/62 dób) w PGE/Łebie/LakPol, które historycznie pracują tylko na
+  24h.
+- **Święta:** zaznaczenie 24/7 odznacza "Zamknięte w polskie święta
+  ustawowe" (Lokalizacje i Konfiguracja) - obiekt z rotacją jest
+  domyślnie chroniony także w święta. Zapisane projekty zachowują swoje
+  ustawienie. Okno zamknięcia w święto zostaje "doba rotacji" (np. 11.11
+  08:00 -> 12.11 08:00) - decyzja użytkownika.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `ui/duty_rotation_editor.py` | Nowy układ (start/podział/preferuj 24h), `rotation_start_and_split()` do odczytu starszych słowników | TAK |
+| `model/location.py` | `normalize_duty_rotation` zachowuje `prefer_24h` | TAK |
+| `logic/generator/duty_rotation_preference.py` | Kierunek preferencji zależny od `prefer_24h` | TAK |
+| `ui/locations_dialog.py`, `ui/config_dialog.py` | 24/7 odznacza zamknięcie w święta; tekst samouczka | TAK |
+| `tests/test_duty_rotation_editor.py` (przepisany), `tests/test_priority_hours_and_duty_preference.py`, `tests/test_location_hours_editing_ui.py` | Testy nowego edytora, odwróconej preferencji, domyślnych świąt dla 24/7 | TAK |

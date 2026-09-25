@@ -215,6 +215,10 @@ class _LocationRow(QFrame):
     def _on_24_7_toggled(self, checked):
         if checked:
             self.hours_editor.set_hours({wd: ("00:00", "23:45") for wd in range(7)})
+            # Placówka 24/7 z rotacją służby jest domyślnie chroniona także w
+            # święta (decyzja użytkownika 2026-09-25) - użytkownik może to
+            # potem świadomie zaznaczyć z powrotem.
+            self.closed_on_public_holidays_check.setChecked(False)
         self.hours_editor.setEnabled(not checked)
         self._update_hours_visibility()
         if not checked:
@@ -440,9 +444,9 @@ class LocationsDialog(QDialog):
                 "Zaznacz, jeśli ta placówka ma ciągłą obsadę (np. ochrona) - "
                 "godziny otwarcia znikają (nie mają tu znaczenia), a zamiast "
                 "nich pojawia się konfiguracja rotacji służby: generator "
-                "przydzieli wyłącznie zmiany pokrywające całą dobę. Wpisz "
-                "godziny podziału doby - reszta (druga zmiana, start 24h w "
-                "weekend) dolicza się sama.",
+                "przydzieli wyłącznie zmiany pokrywające całą dobę. Podaj "
+                "godzinę rozpoczęcia doby i godzinę podziału - każdego dnia "
+                "będzie jedna zmiana 24h albo dwie zmiany.",
                 target=first_row.is_24_7_check,
             ))
             if not first_row.is_24_7_check.isChecked():
