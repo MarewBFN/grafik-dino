@@ -1128,6 +1128,50 @@ nowych testów, zero regresji). Zweryfikowane bezpośrednio: import
 pełne wygenerowanie stycznia 2026 (OPTIMAL, dni 1/6 puste, reszta w pełni
 obsadzona).
 
+**Instalacja pakietu w środowisku uruchomieniowym:** `holidays` trzeba
+zainstalować OSOBNO w każdym Pythonie, który uruchamia ten kod (repo nie
+ma `requirements.txt`) - zgłoszony przez użytkownika crash przy starcie
+`python main.py` z `.venv` (pakiet zainstalowany wcześniej tylko w
+systemowym Pythonie, nie w `.venv` projektu) - naprawione instalacją do
+`.venv/Scripts/python.exe`. Do rozważenia: dodanie `requirements.txt`,
+żeby to się nie powtórzyło na kolejnej maszynie/świeżym `.venv`
+(zaproponowane użytkownikowi, jeszcze bez decyzji).
+
+### Poprawka: brakująca rekompensata za święto w sobotę (art. 130 §2¹, 2026-09-25)
+
+**Zgłoszenie użytkownika:** przesłał gotowe, wyliczone ręcznie zestawienie
+nominalnego wymiaru czasu pracy dla pełnego etatu, wrzesień 2026 - wrzesień
+2028 (24 miesiące), z prośbą o porównanie z tym, co liczy program.
+Porównanie 1:1 (skrypt weryfikacyjny) ujawniło dokładnie 4 rozbieżności,
+zawsze o dokładnie 8h, zawsze w miesiącu, w którym użytkownik jawnie
+zaznaczył "+ wolne za [święto] (sobota)": grudzień 2026 (26.12), maj 2027
+(1.05), grudzień 2027 (25.12), styczeń 2028 (1.01).
+
+**Przyczyna:** `get_full_time_nominal_hours()` (wdrożona chwilę wcześniej w
+tej samej rozmowie) implementowała tylko art. 130 §1 (obniżenie za święto w
+dzień powszedni) - brakowało art. 130 §2¹ (dodatkowe obniżenie normy o
+dniówkę za KAŻDE święto ustawowe wypadające w sobotę, mimo że sobota i tak
+nie jest liczona jako dzień roboczy).
+
+**Naprawa:** `model/shop_config.py::get_full_time_nominal_hours()` liczy
+teraz dodatkowo `saturday_holidays` (dni w sobotę będące auto-wykrytym
+świętem) i odejmuje je od `workdays` przed mnożeniem przez
+`standard_daily_hours`. Celowo dotyczy WYŁĄCZNIE auto-wykrytych świąt
+(`polish_public_holiday_days`), nie ręcznie zaznaczonych `public_holidays`
+- ręczny dzień wolny w sobotę nie musi być świętem w rozumieniu ustawy o
+dniach wolnych od pracy (może być dowolnym firmowym dniem wolnym), więc nie
+powinien automatycznie uruchamiać tej konkretnej, ustawowej rekompensaty.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/shop_config.py::get_full_time_nominal_hours` | Dodane liczenie/odejmowanie `saturday_holidays` (tylko auto-wykryte święta) | TAK |
+| `tests/test_location.py` (+2 testy) | Grudzień 2026 (rekompensata stosowana), ręcznie zaznaczona sobota (rekompensata NIE stosowana) | TAK |
+
+**Weryfikacja:** zestawienie użytkownika sprawdzone programowo w całości -
+**24/24 miesięcy zgodnych co do godziny** po tej poprawce (przed nią: 20/24,
+4 rozbieżności dokładnie po 8h w miesiącach z sobotnim świętem). Pełny
+zestaw testów zielony (748 passed, 1 skipped).
+
 ## Pamięć wielu miesięcy + odblokowanie pamięci poprzedniego miesiąca (2026-09-21)
 
 Dotychczas "projekt" (`.myp`) to był dokładnie JEDEN miesiąc - zmiana

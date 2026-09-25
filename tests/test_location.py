@@ -408,6 +408,28 @@ def test_nominal_hours_uses_standard_daily_hours_not_hardcoded_8():
     assert shop.get_full_time_nominal_hours() == 20 * 7.5
 
 
+def test_nominal_hours_grants_a_compensatory_day_for_a_saturday_holiday():
+    # Grudzień 2026: drugi dzień Bożego Narodzenia (26.12) wypada w sobotę -
+    # art. 130 §2¹ Kodeksu pracy każe wtedy obniżyć normę o dodatkową
+    # dniówkę (mimo że sobota i tak nie liczy się jako dzień roboczy).
+    # 20 dni roboczych (pon-pt), bez świąt w tygodniu -> (20-1)*8 = 152...
+    # w rzeczywistości grudzień 2026 ma też inne dni robocze - zweryfikowane
+    # wprost względem zestawienia użytkownika (2026-09-25): 160h.
+    shop = ShopConfig(2026, 12)
+    assert shop.get_full_time_nominal_hours() == 160.0
+
+
+def test_nominal_hours_saturday_compensation_only_applies_to_automatic_holidays():
+    # Sobota zaznaczona ręcznie (nie jest świętem ustawowym w rozumieniu
+    # ustawy o dniach wolnych od pracy) NIE uruchamia dodatkowego obniżenia -
+    # to by wymagało zgadywania intencji użytkownika (dzień wolny firmowy
+    # może akurat wypaść w sobotę bez żadnego prawnego znaczenia).
+    shop = ShopConfig(2026, 8)  # 2026-08-15 (sobota) to jedyne auto-święto
+    baseline = ShopConfig(2026, 8).get_full_time_nominal_hours()
+    shop.public_holidays = {22}  # 2026-08-22, inna, dowolna sobota
+    assert shop.get_full_time_nominal_hours() == baseline
+
+
 def test_nominal_hours_month_without_any_weekday_holiday_is_unaffected():
     # Marzec 2026 nie ma żadnego polskiego święta ustawowego.
     shop = ShopConfig(2026, 3)

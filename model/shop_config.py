@@ -519,37 +519,50 @@ class ShopConfig:
     def get_full_time_nominal_hours(self) -> float:
         """
         Nominalny wymiar czasu pracy (pełny etat) dla danego miesiąca,
-        zgodnie z Kodeksem pracy (art. 130 §1): liczba dni roboczych
-        (pon-pt) w miesiącu, pomniejszona o święta ustawowo wolne od pracy
-        przypadające w dzień powszedni - każde takie święto obniża normę o
-        jedną dniówkę, niezależnie od tego, czy akurat ten projekt normalnie
-        w ten dzień pracuje (np. ochrona 24/7).
+        zgodnie z Kodeksem pracy (art. 130 §1 i §2¹): liczba dni roboczych
+        (pon-pt) w miesiącu, pomniejszona o:
+
+        - święta ustawowo wolne od pracy przypadające w dzień powszedni
+          (pon-pt) - każde obniża normę o jedną dniówkę, niezależnie od
+          tego, czy akurat ten projekt normalnie w ten dzień pracuje (np.
+          ochrona 24/7);
+        - święto ustawowe przypadające w SOBOTĘ - art. 130 §2¹ każe wtedy
+          oddać dodatkowy dzień wolny (obniża normę o dniówkę tak samo jak
+          święto w tygodniu, mimo że sobota i tak nie była liczona jako dzień
+          roboczy) - dotyczy WYŁĄCZNIE świąt ustawowych (auto-wykrytych),
+          nie ręcznie zaznaczonych dni (te nie muszą być świętem w sensie
+          ustawy o dniach wolnych od pracy, np. dzień wolny firmowy).
 
         Święta liczone automatycznie z biblioteki `holidays` (kalendarz
         polski - patrz logic/utils/holidays_pl.py), żeby nie trzeba było
         pamiętać o ręcznym zaznaczaniu ich co roku w każdym projekcie -
-        zgłoszenie użytkownika (2026-09-25): program dotąd "prosto"
-        liczył wyłącznie ręcznie zaznaczone self.public_holidays (unia z
+        zgłoszenie użytkownika (2026-09-25): program dotąd "prosto" liczył
+        wyłącznie ręcznie zaznaczone self.public_holidays (unia z
         automatycznymi, na wypadek dnia wolnego spoza kalendarza krajowego,
-        np. lokalnego/firmowego).
+        np. lokalnego/firmowego), bez obniżenia za sobotnie święta
+        - zweryfikowane liczbowo (2026-09-25) na zestawieniu użytkownika
+        wrzesień 2026 - wrzesień 2028 (24 miesiące): identyczne wartości po
+        tej poprawce.
         """
         import calendar
 
         from logic.utils.holidays_pl import polish_public_holiday_days
 
         workdays = 0
+        saturday_holidays = 0
 
         days_in_month = calendar.monthrange(self.year, self.month)[1]
         auto_holidays = polish_public_holiday_days(self.year, self.month)
 
         for d in range(1, days_in_month + 1):
             wd = calendar.weekday(self.year, self.month, d)
+            is_holiday = d in auto_holidays or d in self.public_holidays
 
-            # pon–pt
-            if wd < 5:
-                # jeśli to święto (automatyczne albo ręcznie zaznaczone) → nie liczymy
-                if d in auto_holidays or d in self.public_holidays:
+            if wd < 5:  # pon-pt
+                if is_holiday:
                     continue
                 workdays += 1
+            elif wd == 5 and d in auto_holidays:  # sobota, święto ustawowe
+                saturday_holidays += 1
 
-        return workdays * self.standard_daily_hours
+        return (workdays - saturday_holidays) * self.standard_daily_hours
