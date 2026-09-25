@@ -803,21 +803,7 @@ class MainWindow(QMainWindow):
         self._set_date_controls(self.year, self.month)
 
         self.schedule = None
-        self._init_state()
-
-        # Domyślny profil dla świeżego projektu na tym branchu (Dino
-        # celowo wykluczone z visible_profiles() - patrz ENYO_ONLY_CHANGES.md)
-        # - ten sam wybór co pierwsza pozycja w kreatorze pierwszego
-        # uruchomienia/NewProjectDialog, zamiast gołego ShopConfig() domyślnie
-        # wracającego do dino_retail.
-        from model.business_profile import get_custom_profile, visible_profiles
-        profiles = visible_profiles()
-        if profiles:
-            self.shop_config.business_type = profiles[0].key
-            custom = get_custom_profile(self.shop_config.business_type)
-            if custom is not None:
-                from logic.generator.custom_profile_wiring import default_policies
-                self.shop_config.constraint_policies.update(default_policies(custom))
+        self._init_state()  # już ustawia domyślny widoczny profil - patrz _apply_default_visible_business_type
 
         self._update_nominal_hours_label()
         self._sync_everything()
@@ -846,6 +832,31 @@ class MainWindow(QMainWindow):
         # istnieje, tylko ten właśnie utworzony.
         self.project = MonthlyProject()
         self.project.put(self.year, self.month, self.schedule, self.shop_config)
+
+        self._apply_default_visible_business_type()
+
+    def _apply_default_visible_business_type(self):
+        """Goły ShopConfig() domyślnie wraca do dino_retail (patrz
+        model/business_profile.py::DEFAULT_BUSINESS_TYPE) - na tym branchu
+        (Dino celowo wykluczone z visible_profiles(), patrz
+        ENYO_ONLY_CHANGES.md) to nigdy nie jest poprawny wybór dla
+        świeżo utworzonego projektu. Bez tego wiersze podsumowania
+        Otwarcie/Zamknięcie/Mięso (dino_retail) pokazywały się przy każdym
+        pierwszym uruchomieniu na chwilę (albo na stałe, gdyby ktoś zamknął
+        kreator bez dokończenia go) - zanim kreator pierwszego uruchomienia
+        (albo NewProjectDialog) zdążył nadpisać business_type poprawną
+        wartością. Wywoływana z _init_state() - każdy z jego trzech
+        wywołań, który faktycznie chce inny profil (kreator, "Nowy
+        projekt..."), i tak nadpisuje business_type zaraz potem."""
+        from model.business_profile import get_custom_profile, visible_profiles
+        profiles = visible_profiles()
+        if not profiles:
+            return
+        self.shop_config.business_type = profiles[0].key
+        custom = get_custom_profile(self.shop_config.business_type)
+        if custom is not None:
+            from logic.generator.custom_profile_wiring import default_policies
+            self.shop_config.constraint_policies.update(default_policies(custom))
 
     def _sync_everything(self):
         # Bezpiecznik: tabela grafiku filtruje pracowników po location_key
