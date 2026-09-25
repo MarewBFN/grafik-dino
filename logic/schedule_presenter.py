@@ -69,21 +69,12 @@ class SchedulePresenter:
 
         if hours:
             open_t, close_t = hours
-            if s == open_t and emp.daily_hours == 8:
-                text_start = "OTW"
-                text_end = ""
-            elif e == close_t and emp.daily_hours == 8:
-                text_start = "ZAM"
-                text_end = ""
             if s == open_t:
                 bg = theme.SHIFT_MORNING
             elif e == close_t:
                 bg = theme.SHIFT_CLOSE
 
-        # "OTW"/"ZAM" wyżej to już zwarte etykiety, nie surowe godziny - nie
-        # ma ich co dodatkowo skracać do ułamka (patrz warunek niżej: tylko
-        # gdy text_start/text_end wciąż są surowymi s/e).
-        if fractions and text_start == s and text_end == e:
+        if fractions:
             text_start = format_hours_as_fraction(s, e)
             text_end = ""
 

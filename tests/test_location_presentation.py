@@ -33,15 +33,17 @@ def _build_two_location_schedule():
     return shop, schedule, emp_a, emp_b
 
 
-def test_schedule_presenter_resolves_open_close_labels_per_employee_location():
+def test_schedule_presenter_resolves_open_close_colors_per_employee_location():
     shop, schedule, emp_a, emp_b = _build_two_location_schedule()
     presenter = SchedulePresenter(schedule, shop)
 
     view_a = presenter.get_cell_view(emp_a, 2)
-    assert view_a.text_start == "OTW", view_a
+    assert view_a.bg == theme.SHIFT_MORNING, view_a
+    assert view_a.text_start == "06:00", view_a
 
     view_b = presenter.get_cell_view(emp_b, 2)
-    assert view_b.text_start == "ZAM", view_b
+    assert view_b.bg == theme.SHIFT_CLOSE, view_b
+    assert view_b.text_start == "18:00", view_b
 
 
 def test_schedule_presenter_does_not_mix_up_locations():
@@ -50,12 +52,12 @@ def test_schedule_presenter_does_not_mix_up_locations():
 
     # emp_a's shift (06:00-14:00) matches loc_a's open time, not loc_b's -
     # if the presenter used the wrong (global/loc_b) hours this would show
-    # neither OTW nor ZAM.
+    # loc_b's close color instead of loc_a's open color.
     view_a = presenter.get_cell_view(emp_a, 2)
-    assert view_a.text_start != "ZAM"
+    assert view_a.bg != theme.SHIFT_CLOSE
 
     view_b = presenter.get_cell_view(emp_b, 2)
-    assert view_b.text_start != "OTW"
+    assert view_b.bg != theme.SHIFT_MORNING
 
 
 def test_closed_weekday_greys_out_the_cell_for_that_locations_employees():
@@ -154,4 +156,5 @@ def test_schedule_presenter_without_locations_behaves_as_before():
 
     presenter = SchedulePresenter(schedule, shop)
     view = presenter.get_cell_view(emp, 2)
-    assert view.text_start == "OTW"
+    assert view.bg == theme.SHIFT_MORNING
+    assert view.text_start == shop.get_open_hours_for_day(2)[0]

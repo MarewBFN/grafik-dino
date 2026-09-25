@@ -162,7 +162,10 @@ class FractionsModeTests(unittest.TestCase):
 
         self.assertEqual(cv.text_total, "12:00")
 
-    def test_open_close_abbreviations_are_not_converted_to_fractions(self):
+    def test_shift_starting_at_open_time_is_still_converted_to_a_fraction(self):
+        # Nie ma już osobnej etykiety "OTW" (usunięta na życzenie
+        # użytkownika - zostaje tylko kolor tła komórki), więc taka zmiana
+        # podlega dokładnie tej samej konwersji co każda inna.
         emp = Employee(last_name="Kowalski", first_name="Jan", daily_hours=8)
         schedule = MonthSchedule(2026, 3, employees=[emp])
         shop = ShopConfig(2026, 3)
@@ -174,7 +177,7 @@ class FractionsModeTests(unittest.TestCase):
 
         cv = SchedulePresenter(schedule, shop).get_cell_view(emp, 3)
 
-        self.assertEqual(cv.text_start, "OTW")
+        self.assertEqual(cv.text_start, format_hours_as_fraction(open_t, "13:00"))
         self.assertEqual(cv.text_end, "")
 
     def test_leave_day_is_not_affected(self):
