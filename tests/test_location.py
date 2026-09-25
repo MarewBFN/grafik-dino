@@ -262,6 +262,73 @@ def test_old_project_without_locations_field_migrates_to_one_default_location():
     assert restored._migrated_default_location is True
 
 
+# --- from_dict() musi odrzucić duty_rotation osierocone bez is_24_7
+# (zgłoszenie użytkownika 2026-09-25: test_data/dane_klienta_ochrona.json ma
+# lokalizacje z is_24_7=False i skonfigurowanymi konkretnymi godzinami
+# pracy, ale z osieroconym duty_rotation z dawnych danych testowych (sprzed
+# scalenia checkboxa "Rotacja służby 24/7" z "Działalność całodobowa
+# (24/7)") - generator mimo to przydzielał zmiany 24h/12h+12h, bo
+# get_duty_rotation() samo w sobie jest celowo niezależne od is_24_7 (patrz
+# jej docstring - generator/testy legalnie konstruują lokalizacje z
+# duty_rotation bez is_24_7). Obie ścieżki zapisu (LocationsDialog,
+# ConfigDialog) zawsze trzymają te dwa pola w parze, więc jedyne miejsce,
+# gdzie mogą się faktycznie rozjechać, to wczytanie pliku - tam (nie w
+# get_duty_rotation()) ma to być naprawione. ---
+
+
+def test_from_dict_drops_orphaned_duty_rotation_when_24_7_is_off():
+    rotation = {
+        "weekend_half_a": {"start": "08:00", "end": "20:00"},
+        "weekend_half_b": {"start": "20:00", "end": "08:00"},
+        "weekend_full": {"start": "08:00"},
+        "only_12_24h": True,
+    }
+    loc = LocationConfig(key="a", name="A", open_hours={i: ("08:00", "20:00") for i in range(7)})
+    loc.duty_rotation = dict(rotation)  # np. z demo/install_*.py albo starego projektu
+    assert loc.is_24_7 is False
+
+    restored = LocationConfig.from_dict(loc.to_dict())
+
+    assert restored.is_24_7 is False
+    assert restored.get_duty_rotation() is None
+    assert restored.open_hours == {i: ("08:00", "20:00") for i in range(7)}
+
+
+def test_from_dict_keeps_duty_rotation_when_24_7_is_on():
+    rotation = {
+        "weekend_half_a": {"start": "08:00", "end": "20:00"},
+        "weekend_half_b": {"start": "20:00", "end": "08:00"},
+        "weekend_full": {"start": "08:00"},
+        "only_12_24h": True,
+    }
+    loc = LocationConfig(key="a", name="A")
+    loc.is_24_7 = True
+    loc.duty_rotation = dict(rotation)
+
+    restored = LocationConfig.from_dict(loc.to_dict())
+
+    assert restored.get_duty_rotation() == rotation
+
+
+def test_get_duty_rotation_is_independent_of_is_24_7_for_in_memory_objects():
+    """Generator/testy tworzą lokalizacje z duty_rotation bezpośrednio (bez
+    is_24_7) - to jest jedyny mechanizm, o którym duty_rotation w ogóle wie,
+    godziny otwarcia/is_24_7 są dla niego bez znaczenia. Spójność z is_24_7
+    jest egzekwowana wyłącznie przy wczytywaniu z dysku (patrz testy
+    from_dict wyżej), nie tutaj."""
+    rotation = {
+        "weekend_half_a": {"start": "08:00", "end": "20:00"},
+        "weekend_half_b": {"start": "20:00", "end": "08:00"},
+        "weekend_full": {"start": "08:00"},
+        "only_12_24h": True,
+    }
+    loc = LocationConfig(key="a", name="A")
+    loc.set_duty_rotation(rotation)
+    assert loc.is_24_7 is False
+
+    assert loc.get_duty_rotation() == rotation
+
+
 def test_employee_location_key_defaults_empty_and_round_trips():
     emp = Employee(last_name="Kowalski", first_name="Jan")
     assert emp.location_key == ""

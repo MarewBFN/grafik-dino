@@ -120,6 +120,11 @@ def test_location_config_duty_rotation_set_get_and_round_trip():
     loc.set_duty_rotation(VALID_ROTATION)
     assert loc.get_duty_rotation() == VALID_ROTATION
 
+    # from_dict() odrzuca duty_rotation osierocone bez is_24_7 (patrz
+    # tests/test_location.py::test_from_dict_drops_orphaned_duty_rotation_when_24_7_is_off) -
+    # obie ścieżki zapisu w UI zawsze trzymają te dwa pola w parze, więc
+    # round-trip tego pola ma sens tylko razem z is_24_7=True.
+    loc.is_24_7 = True
     restored = LocationConfig.from_dict(loc.to_dict())
     assert restored.get_duty_rotation() == VALID_ROTATION
 

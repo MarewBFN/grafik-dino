@@ -291,7 +291,13 @@ class LocationConfig:
 
     def get_duty_rotation(self) -> dict | None:
         """Konfiguracja rotacji służby 24/7 tej lokalizacji, albo None gdy
-        jej nie ma - patrz normalize_duty_rotation()."""
+        jej nie ma - patrz normalize_duty_rotation(). Celowo NIEZALEŻNE od
+        `is_24_7` (patrz komentarz przy tym polu) - `duty_rotation` samo w
+        sobie w pełni definiuje obsadę (godziny otwarcia nie mają tu
+        znaczenia), a generator/testy legalnie konstruują lokalizacje z
+        duty_rotation bez dotykania is_24_7 w ogóle. Spójność z is_24_7 jest
+        egzekwowana WYŁĄCZNIE przy wczytywaniu zapisanego projektu - patrz
+        from_dict() niżej - nie tutaj."""
         return self.duty_rotation
 
     def set_duty_rotation(self, raw: dict | None) -> None:
@@ -330,7 +336,18 @@ class LocationConfig:
         loc.constraints = dict(DEFAULT_LOCATION_CONSTRAINTS)
         loc.constraints.update(data.get("constraints", {}))
         duty_rotation = data.get("duty_rotation")
-        loc.duty_rotation = dict(duty_rotation) if duty_rotation else None
+        # Obie ścieżki zapisu (ui/locations_dialog.py, ui/config_dialog.py)
+        # zawsze trzymają duty_rotation i is_24_7 w parze - jedyny sposób,
+        # w jaki mogą się rozjechać w pliku, to dane sprzed scalenia
+        # checkboxa "Rotacja służby 24/7" z "Działalność całodobowa (24/7)"
+        # (demo/install_*.py, stare zapisane projekty). Zignorowanie
+        # osieroconego duty_rotation tutaj (przy wczytaniu, nie w
+        # get_duty_rotation() - ten mechanizm jest CELOWO niezależny od
+        # is_24_7 dla generatora/testów, patrz jego docstring) gwarantuje,
+        # że to, co widać w Konfiguracji/Lokalizacjach (is_24_7 odznaczone,
+        # konkretne godziny), zawsze pokrywa się z tym, co robi generator -
+        # zgłoszenie użytkownika (2026-09-25), test_data/dane_klienta_ochrona.json.
+        loc.duty_rotation = dict(duty_rotation) if duty_rotation and loc.is_24_7 else None
         return loc
 
 
