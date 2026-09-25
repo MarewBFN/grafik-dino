@@ -243,6 +243,21 @@ class LocationConfig:
         from logic.utils.holidays_pl import polish_public_holiday_days
         return day in polish_public_holiday_days(year, month)
 
+    def is_duty_day_closed(self, year: int, month: int, day: int) -> bool:
+        """True gdy doba rotacji służby zaczynająca się tego dnia ma zostać
+        bez obsady: zamknięte święto (is_closed_for_public_holiday) ALBO dzień
+        ręcznie oznaczony "Nieczynne tego dnia" (dwuklik na nagłówku w
+        grafiku - day_overrides[day] bez godzin). Rotacja nie korzysta z
+        godzin otwarcia, więc samo get_open_hours_for_day() jej nie dotyczy -
+        wcześniej dzień "Nieczynne" był w siatce szary i pusty, a generator
+        i tak go obsadzał (niewidoczne zmiany liczone do godzin i eksportu).
+        Ręczne nadpisanie Z godzinami otwiera dzień, także w święto."""
+        override = self.day_overrides.get(day)
+        if override is not None:
+            start, end = override
+            return not (start and end)
+        return self.is_closed_for_public_holiday(year, month, day)
+
     # Same logic as ShopConfig.weekday/is_trade_day/get_open_hours_for_day
     # (model/shop_config.py) - a location has no year/month of its own, so
     # these take them as arguments instead of reading self.year/self.month.

@@ -37,7 +37,7 @@ def is_day_fully_covered(schedule, shop, employees, day: int) -> bool:
 
     for location_key, (rotation, indices) in groups.items():
         location = shop.locations.get(location_key)
-        if location is not None and location.is_closed_for_public_holiday(shop.year, shop.month, day):
+        if location is not None and location.is_duty_day_closed(shop.year, shop.month, day):
             # Zamknięta w to konkretne święto (LocationConfig.
             # closed_on_public_holidays) - generator nikogo tu nie wymaga
             # (patrz add_duty_rotation_coverage_constraint), więc brak

@@ -1,6 +1,8 @@
 """Zamyka lokalizacje z duty_rotation w polskie święta ustawowo wolne od
 pracy, gdy LocationConfig.closed_on_public_holidays jest włączone
-(domyślnie tak) - patrz LocationConfig.is_closed_for_public_holiday().
+(domyślnie tak) - patrz LocationConfig.is_closed_for_public_holiday() - oraz
+w dni ręcznie oznaczone "Nieczynne tego dnia" (nagłówek dnia w grafiku,
+day_overrides bez godzin) - patrz LocationConfig.is_duty_day_closed().
 
 Lokalizacje z duty_rotation w ogóle nie korzystają z open_hours/kalendarza
 handlowego (patrz duty_rotation_constraint.py) - `add_non_trade_day_constraints`
@@ -37,7 +39,7 @@ def add_duty_rotation_public_holiday_constraint(
             continue
 
         for d in days:
-            if not location.is_closed_for_public_holiday(shop.year, shop.month, d):
+            if not location.is_duty_day_closed(shop.year, shop.month, d):
                 continue
 
             # Ręczne, jawne zablokowanie/przypisanie zmiany tego dnia

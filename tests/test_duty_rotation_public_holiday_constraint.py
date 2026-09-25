@@ -149,6 +149,51 @@ class TestDutyRotationPublicHolidayConstraint:
             assert solver.Value(x[0, HOLIDAY_DAY, s]) == 0
 
 
+class TestManualClosedDayOverride:
+    """"Nieczynne tego dnia" (nagłówek dnia w grafiku -> day_overrides bez
+    godzin) zamyka dobę rotacji tak samo jak zamknięte święto - wcześniej
+    siatka pokazywała dzień jako szary/pusty, a generator go obsadzał."""
+
+    def test_is_duty_day_closed_for_manual_override(self):
+        loc = LocationConfig(key="site1", name="Site 1", closed_on_public_holidays=False)
+        loc.set_duty_rotation(ROTATION)
+        loc.day_overrides[REGULAR_DAY] = (None, None)
+        assert loc.is_duty_day_closed(YEAR, MONTH, REGULAR_DAY) is True
+        assert loc.is_duty_day_closed(YEAR, MONTH, REGULAR_DAY + 1) is False
+
+    def test_override_with_hours_reopens_a_closed_holiday(self):
+        loc = LocationConfig(key="site1", name="Site 1")
+        loc.set_duty_rotation(ROTATION)
+        assert loc.is_duty_day_closed(YEAR, MONTH, HOLIDAY_DAY) is True
+        loc.day_overrides[HOLIDAY_DAY] = ("00:00", "23:45")
+        assert loc.is_duty_day_closed(YEAR, MONTH, HOLIDAY_DAY) is False
+
+    def test_generator_leaves_manually_closed_day_empty(self):
+        profile = CustomBusinessProfile(key="test_manual_closed_day", display_name="T", roles=[], rules=[])
+        register_custom_profile(profile)
+        shop = ShopConfig(YEAR, MONTH)
+        shop.business_type = profile.key
+        loc = LocationConfig(key="site1", name="Site 1", closed_on_public_holidays=False)
+        loc.set_duty_rotation(ROTATION)
+        loc.day_overrides[14] = (None, None)
+        shop.locations["site1"] = loc
+        shop.constraint_policies.update(default_policies(profile))
+        shop.constraint_policies["balance"] = ConstraintPolicy.DISABLED
+        shop.constraint_policies["monthly_hours"] = ConstraintPolicy.DISABLED
+        schedule = MonthSchedule(YEAR, MONTH)
+        employees = [Employee(last_name=f"E{i}", first_name="G", location_key="site1") for i in range(3)]
+        for emp in employees:
+            schedule.add_employee(emp)
+
+        with redirect_stdout(io.StringIO()):
+            result = AutoScheduleGenerator(schedule, shop).generate(solver_time_limit_seconds=30)
+
+        assert result["success"], result
+        assert all(schedule.get_day(emp, 14).is_empty() for emp in employees)
+        assert any(not schedule.get_day(emp, 13).is_empty() for emp in employees)
+        assert any(not schedule.get_day(emp, 15).is_empty() for emp in employees)
+
+
 class TestCoverageSkipsClosedHolidays:
     def test_coverage_constraint_does_not_require_staff_on_a_closed_holiday(self):
         shop = _shop_with_rotation()

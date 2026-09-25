@@ -1628,3 +1628,21 @@ użytkownika i wdrożenie - kolejne wpisy poniżej.
 | `logic/generator/duty_rotation_preference.py` | Kierunek preferencji zależny od `prefer_24h` | TAK |
 | `ui/locations_dialog.py`, `ui/config_dialog.py` | 24/7 odznacza zamknięcie w święta; tekst samouczka | TAK |
 | `tests/test_duty_rotation_editor.py` (przepisany), `tests/test_priority_hours_and_duty_preference.py`, `tests/test_location_hours_editing_ui.py` | Testy nowego edytora, odwróconej preferencji, domyślnych świąt dla 24/7 | TAK |
+
+### "Nieczynne tego dnia" zamyka dobę rotacji jak święto
+
+Dzień oznaczony w nagłówku grafiku jako "Nieczynne tego dnia" (day_overrides
+bez godzin) w placówce z rotacją: siatka rysowała go szary i pusty, a
+generator i tak go obsadzał - zmiany były niewidoczne, ale liczyły się do
+sum godzin i eksportu (Excel, karta pracy). Decyzja użytkownika: zamyka dobę
+jak zamknięte święto. Nowe `LocationConfig.is_duty_day_closed()` (ręczne
+zamknięcie ALBO święto; nadpisanie Z godzinami otwiera dzień także w
+święto) - używane przez `duty_rotation_public_holiday_constraint.py`,
+pomijanie pokrycia w `duty_rotation_constraint.py` i wiersz "Obłożenie"
+(`logic/duty_coverage_presenter.py`).
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/location.py` | `is_duty_day_closed()` | TAK |
+| `logic/generator/duty_rotation_public_holiday_constraint.py`, `logic/generator/duty_rotation_constraint.py`, `logic/duty_coverage_presenter.py` | `is_closed_for_public_holiday` -> `is_duty_day_closed` | TAK |
+| `tests/test_duty_rotation_public_holiday_constraint.py` | `TestManualClosedDayOverride` | TAK |

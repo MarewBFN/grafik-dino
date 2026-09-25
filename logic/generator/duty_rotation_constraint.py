@@ -180,11 +180,12 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
 
         for d in days:
             # Lokalizacja zamknięta w polskie święto ustawowe (per lokalizacja
-            # - patrz LocationConfig.closed_on_public_holidays) - pomija
+            # - patrz LocationConfig.closed_on_public_holidays) albo ręcznie
+            # "Nieczynne tego dnia" (LocationConfig.is_duty_day_closed) - pomija
             # wymóg pokrycia tego dnia zamiast wymuszać count==1 sprzecznie z
             # add_duty_rotation_public_holiday_constraint (zeruje x[e,d,s] dla
             # tych samych dni, patrz base_specs.py).
-            if location is not None and location.is_closed_for_public_holiday(shop.year, shop.month, d):
+            if location is not None and location.is_duty_day_closed(shop.year, shop.month, d):
                 continue
 
             wd = shop.weekday(d)
