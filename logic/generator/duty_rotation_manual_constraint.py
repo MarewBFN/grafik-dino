@@ -26,36 +26,7 @@ AutoScheduleGenerator) przed napisaniem tej poprawki - patrz
 ENYO_ONLY_CHANGES.md.
 """
 
-FULL_DAY_KEY = "weekend_full"
-_EXACT_MATCH_KEYS = ("weekday_long", "weekday_short", "weekend_half_a", "weekend_half_b")
-
-
-def _match_duty_shift(day_state, rotation, duty_shifts):
-    """Który z pięciu typów zmian duty_rotation tej lokalizacji odpowiada
-    zablokowanym godzinom tego dnia (None gdy żaden) - dokładne dopasowanie
-    start/end (albo is_full_day+start dla zmiany 24h "weekend_full"),
-    odpowiednik resolve_manual_shift() w manual_constraint.py dla starego
-    modelu zmian."""
-    start = getattr(day_state, "start", None)
-    if not start:
-        return None
-
-    if getattr(day_state, "is_full_day", False):
-        window = rotation.get(FULL_DAY_KEY)
-        if window and window.get("start") == start:
-            return duty_shifts.get(FULL_DAY_KEY)
-        return None
-
-    end = getattr(day_state, "end", None)
-    if not end:
-        return None
-
-    for key in _EXACT_MATCH_KEYS:
-        window = rotation.get(key)
-        if window and window.get("start") == start and window.get("end") == end:
-            return duty_shifts.get(key)
-
-    return None
+from logic.generator.duty_rotation_manual_coverage import get_plan, match_duty_key
 
 
 def add_duty_rotation_manual_shift_constraint(
@@ -113,7 +84,18 @@ def add_duty_rotation_manual_shift_constraint(
                     model.Add(x[e, d, s] == 0)
                 continue
 
-            shift = _match_duty_shift(day_state, rotation, duty_shifts)
+            # Doba zaplanowana wokół ręcznych wpisów (duty_rotation_manual_
+            # coverage.py) - ręczny wpis jest tam stałym przedziałem planu
+            # (liczy się do pokrycia, godzin i odpoczynku), więc temu
+            # pracownikowi nie przydziela się tego dnia żadnej zmiany.
+            plan = get_plan(duty_shifts)
+            if plan is not None and plan.is_fixed(emp, d):
+                for s in duty_shift_ids:
+                    model.Add(x[e, d, s] == 0)
+                continue
+
+            key = match_duty_key(day_state, rotation, shop.weekday(d))
+            shift = duty_shifts.get(key) if key is not None else None
 
             if shift is None:
                 # Zablokowane godziny nie odpowiadają żadnej z pięciu zmian

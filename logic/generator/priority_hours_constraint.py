@@ -19,6 +19,7 @@ pełnego etatu razy wymiar etatu, pomniejszony o L4/urlop, przycięty do 0
 miejsca, które trzeba trzymać w synchronizacji, gdyby któreś się zmieniło.
 """
 
+from logic.generator.duty_rotation_manual_coverage import planned_minutes_expr
 from logic.generator.hours_constraint import _duration_overrides_for_employee, _shift_minutes_by_type
 from logic.utils.time_utils import get_effective_daily_hours
 
@@ -86,6 +87,7 @@ def add_priority_hours_shortfall_penalty(
         model.Add(
             total_minutes ==
             sum(x[e, d, s] * minutes_by_shift[s] for d in days for s in all_shifts)
+            + planned_minutes_expr(x, e, emp, days, duty_shifts)
         )
 
         under = model.NewIntVar(0, 50000, f"priority_hours_under_e{e}")
@@ -210,6 +212,7 @@ def add_hours_equalization_penalty(
             model.Add(
                 norm == scale * (
                     sum(x[e, d, s] * minutes_by_shift[s] for d in days for s in all_shifts)
+                    + planned_minutes_expr(x, e, emp, days, duty_shifts)
                     + unavailable * share_per_day
                 )
             )

@@ -1139,7 +1139,10 @@ class ScheduleGrid(QTableWidget):
                     item.setTextAlignment(Qt.AlignCenter)
                     item.setBackground(QBrush(QColor(theme.OK_GREEN if covered else theme.ERR_RED)))
                     if not covered:
-                        item.setToolTip("Brak pełnego pokrycia doby (24h) tego dnia.")
+                        item.setToolTip(
+                            "Doba nie jest obsadzona dokładnie jedną osobą "
+                            "(luka albo dwie osoby naraz)."
+                        )
                     self.setItem(row, day + self._prev_col_offset, item)
                     continue
 

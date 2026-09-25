@@ -78,13 +78,22 @@ class AutoScheduleGenerator:
         self.SHIFT_DUTY_WEEKEND_FULL = 17
         self.SHIFT_DUTY_WEEKEND_HALF_A = 18
         self.SHIFT_DUTY_WEEKEND_HALF_B = 19
-        self.DUTY_SHIFTS = {
+        # Zmiany "resztkowe" rotacji (custom_0..N) - kawałki doby
+        # dopasowane wokół ręcznych wpisów niepasujących do rotacji (patrz
+        # logic/generator/duty_rotation_manual_coverage.py). Blokowane
+        # bramą rotacji wszędzie poza dobami, dla których plan je wyznaczył.
+        from logic.generator.duty_rotation_manual_coverage import CUSTOM_KEYS, DutyShiftMap
+        from logic.generator.round_clock_constraint import MAX_ROUND_CLOCK_TILES
+        first_custom_id = 20 + MAX_ROUND_CLOCK_TILES
+        self.DUTY_SHIFTS = DutyShiftMap({
             "weekday_long": self.SHIFT_DUTY_WEEKDAY_LONG,
             "weekday_short": self.SHIFT_DUTY_WEEKDAY_SHORT,
             "weekend_full": self.SHIFT_DUTY_WEEKEND_FULL,
             "weekend_half_a": self.SHIFT_DUTY_WEEKEND_HALF_A,
             "weekend_half_b": self.SHIFT_DUTY_WEEKEND_HALF_B,
-        }
+            **{key: first_custom_id + i for i, key in enumerate(CUSTOM_KEYS)},
+        })
+        self.DUTY_CUSTOM_SHIFTS = [self.DUTY_SHIFTS[key] for key in CUSTOM_KEYS]
 
         # Rotacja całodobowa "ogólna" dla lokalizacji 24/7 z ustawioną
         # godziną rozpoczęcia (LocationConfig.round_clock_start_hour) - patrz
@@ -129,6 +138,8 @@ class AutoScheduleGenerator:
             self.SHIFT_DUTY_WEEKEND_HALF_B,
 
             *self.ROUND_CLOCK_SHIFTS,
+
+            *self.DUTY_CUSTOM_SHIFTS,
         )
 
     # ==================================================
@@ -163,6 +174,11 @@ class AutoScheduleGenerator:
         # wpisywać tych godzin ręcznie ani pilnować, że ich dane przetrwały.
         from logic.manager_schedule import apply_all_manager_schedules
         apply_all_manager_schedules(self.schedule, self.shop)
+
+        # Ręczne wpisy pracowników rotacji liczone jako pokrycie doby -
+        # plan liczony z zablokowanych dni, więc dopiero po ich ustaleniu.
+        from logic.generator.duty_rotation_manual_coverage import build_duty_coverage_plan
+        self.DUTY_SHIFTS.plan = build_duty_coverage_plan(self.schedule, self.shop, self.schedule.employees)
 
         for emp in self.schedule.employees:
             object.__setattr__(emp, '_orig_daily_hours', emp.daily_hours)

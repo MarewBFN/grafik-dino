@@ -1702,3 +1702,60 @@ bez zmian (31/31).
 | `logic/generator/custom_profile_wiring.py` | Etykieta zasady, domyślnie DISABLED, term celu | TAK |
 | `ui/config_dialog.py` | `POLICY_MISSING_DEFAULTS` | TAK |
 | `tests/test_priority_hours_and_duty_preference.py`, `tests/test_location_hours_editing_ui.py` | `TestHoursEqualization`, test domyślnej wartości w oknie | TAK |
+
+### Ręczne wpisy liczone jako pokrycie doby, dwuklik dla rotacji, "Obłożenie" po osi czasu
+
+**Problem (test na danych klienta):** ręczny wpis pracownika rotacji o
+godzinach innych niż zmiany placówki (preset 07:00-19:00 w PGE, gdzie
+zmiany to 08-20 / 20-08) był dla generatora niewidoczny - dokładał drugą
+osobę na 08-20 (dwie osoby 07-19), a odpoczynek wokół wpisu nie był
+sprawdzany. Dwuklik odrzucał nocną połówkę 20:00-08:00 i zmianę 24h, a
+przyjmował 22:00-06:00 (auto-wykryte okno nocne), którego rotacja nie zna -
+znowu dwie osoby naraz. Wiersz "Obłożenie" pokazywał OK we wszystkich tych
+przypadkach (sprawdzał tylko istnienie zmian o godzinach rotacji).
+
+**Decyzja użytkownika:** "Licz jako pokrycie" + "Przytnij i scal krótkie".
+
+- `logic/generator/duty_rotation_manual_coverage.py` (nowy): plan liczony
+  raz na generowanie. Doba, w którą wchodzi ręczny wpis niepasujący do
+  rotacji, jest "planowana": standardowy podział przycinany o wszystkie
+  ręczne wpisy tej doby, kawałki < 4h scalane ze stykającą się zmianą -
+  także przez granicę doby (np. 06:00-08:00 + 08:00-20:00 następnego dnia
+  = 06:00-20:00; sąsiednia doba dołączana wtedy do planu). Każdy kawałek =
+  zmiana resztkowa (custom_0..7, nowe ID 26-33) z dokładnie jedną osobą,
+  przypisana do komórki dnia, w którym się ZACZYNA. Ręczne wpisy = stałe
+  przedziały (godziny + odpoczynek). Przykład użytkownika daje dokładnie:
+  noc 9.10 20:00-07:00, 10.10 19:00-08:00.
+- Plan przekazywany jako atrybut `DutyShiftMap.plan` (dict z ID zmian
+  rotacji) - brama, pokrycie, ręczna blokada, odpoczynek, święta, suma
+  godzin (5 miejsc: monthly_hours, balance, Umowa, wyrównanie, fix) i
+  zapis wyniku widzą go bez zmiany sygnatur. Zwykły dict (testy) = stare
+  zachowanie.
+- `duty_rotation_rest_constraint.py` przepisany na okna czasowe dnia
+  (standardowe + resztkowe) i stałe przedziały ręczne (także poprzedni
+  miesiąc). Ręczna blokada dopasowuje teraz tylko zmiany ważne danego dnia.
+- Dwuklik (`ui/day_edit_dialog.py`, `ui/main_window.py::_edit_day`,
+  `ScheduleController.set_day_hours`): dla pracownika rotacji dowolne
+  godziny przez północ, "Cała doba (24h)", szybkie przyciski zmian
+  placówki; bez podpowiedzi okna nocnego 22-06.
+- `logic/duty_coverage_presenter.py`: "Obłożenie" = w każdej chwili doby
+  rotacji (od jej początku do początku następnej) dokładnie 1 osoba -
+  wykrywa luki i dwie osoby naraz, także na styku tygodnia i weekendu w
+  starszym schemacie.
+
+Weryfikacja na danych klienta: E2 (07-19) i E3 (20-08, 22-06, 24h ręcznie)
+- pełne pokrycie bez zakładek, odpoczynek >= 11h, "Obłożenie" OK każdego
+dnia; bez ręcznych wpisów wynik jak wcześniej. Scenariusz ze sprzecznymi
+ręcznymi wpisami (20-08 i następnego dnia 08-20 tej samej osobie) kończy
+się komunikatem "zablokowana przerwa wynosi tylko 0.00 h". Znane
+ograniczenie: kawałek ostatniej doby miesiąca zaczynający się już w
+następnym miesiącu jest pomijany (komunikat w logu).
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/duty_rotation_manual_coverage.py` (nowy) | Plan zmian resztkowych, `DutyShiftMap`, `match_duty_key`, `planned_minutes_expr` | TAK |
+| `logic/auto_generator.py` | ID zmian resztkowych, `DutyShiftMap`, plan po wyczyszczeniu dni | TAK |
+| `logic/generator/duty_rotation_constraint.py`, `duty_rotation_manual_constraint.py`, `duty_rotation_rest_constraint.py`, `duty_rotation_public_holiday_constraint.py`, `solution_mapper.py`, `hours_constraint.py`, `priority_hours_constraint.py`, `fix.py` | Obsługa planu | TAK |
+| `logic/duty_coverage_presenter.py`, `ui/grid_view.py` | "Obłożenie" po osi czasu, nowy dymek | TAK |
+| `ui/day_edit_dialog.py`, `ui/main_window.py`, `logic/schedule_controller.py` | Dwuklik dla rotacji | TAK |
+| `tests/test_duty_rotation_manual_coverage.py` (nowy), `tests/test_duty_coverage_presenter.py` | Testy planu, generowania, edycji, obłożenia | TAK |

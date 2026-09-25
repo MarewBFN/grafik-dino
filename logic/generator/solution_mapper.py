@@ -1,3 +1,4 @@
+from logic.generator.duty_rotation_manual_coverage import CUSTOM_KEYS, DAY_MINUTES, format_minutes, get_plan
 from ortools.sat.python import cp_model
 from datetime import datetime, timedelta
 from model.day_schedule import calc_start, calc_end
@@ -108,10 +109,19 @@ def save_solution(
                 rotation = shop.get_location(emp).get_duty_rotation()
                 assigned_duty = False
                 if rotation:
+                    plan = get_plan(duty_shifts)
                     for key, shift_id in duty_shifts.items():
                         if solver.Value(x[e, d, shift_id]) != 1:
                             continue
-                        if key == "weekend_full":
+                        if key in CUSTOM_KEYS:
+                            # Zmiana resztkowa doby zaplanowanej wokół
+                            # ręcznych wpisów (duty_rotation_manual_coverage.py).
+                            piece_start, piece_end = plan.day_pieces(emp.location_key or "", d)[CUSTOM_KEYS.index(key)]
+                            if piece_end - piece_start >= DAY_MINUTES:
+                                schedule.set_day_full_day_shift(emp, d, format_minutes(piece_start))
+                            else:
+                                schedule.set_day_hours(emp, d, format_minutes(piece_start), format_minutes(piece_end))
+                        elif key == "weekend_full":
                             schedule.set_day_full_day_shift(emp, d, rotation[key]["start"])
                         else:
                             window = rotation[key]

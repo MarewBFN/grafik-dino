@@ -18,6 +18,9 @@ osobno pomija wymóg pokrycia dla tych samych dni, żeby nie zbudować modelu
 sprzecznego z samym sobą (twarde `count == 1` obok twardego `count == 0`)."""
 
 
+from logic.generator.duty_rotation_manual_coverage import custom_shift_ids
+
+
 def add_duty_rotation_public_holiday_constraint(
     model, x, employees, days, schedule, shop, duty_shifts, trace=None,
 ):
@@ -27,7 +30,10 @@ def add_duty_rotation_public_holiday_constraint(
             "closes duty-rotation locations on PL public holidays per the location's own setting",
         )
 
-    duty_shift_ids = set(duty_shifts.values())
+    # Bez zmian resztkowych (duty_rotation_manual_coverage.py) - kawałek po
+    # północy w zamknięty dzień należy do doby dnia poprzedniego, a brama
+    # rotacji i tak blokuje każdą zmianę resztkową, której plan nie wyznaczył.
+    duty_shift_ids = set(duty_shifts.values()) - set(custom_shift_ids(duty_shifts))
 
     for e, emp in enumerate(employees):
         rotation = shop.get_location(emp).get_duty_rotation()
