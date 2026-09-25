@@ -1172,6 +1172,41 @@ powinien automatycznie uruchamiać tej konkretnej, ustawowej rekompensaty.
 4 rozbieżności dokładnie po 8h w miesiącach z sobotnim świętem). Pełny
 zestaw testów zielony (748 passed, 1 skipped).
 
+## Poprawki UI: edycja pojedynczego dnia (DayOverrideDialog), 2026-09-25
+
+Na życzenie użytkownika, trzy powiązane poprawki dla okna "Godziny dla
+dnia X" (dwuklik na nagłówku dnia w gridzie, `ui/day_override_dialog.py`):
+
+**Naprawiony bug:** `ui/main_window.py::_open_header_menu` przy braku
+godzin z `get_open_hours_for_day()` (dzień faktycznie zamknięty - święto
+[patrz sekcja wyżej], "Nieczynne" w tygodniowym wzorcu, niedziela
+niehandlowa) **cicho podstawiał zwykłe godziny tego dnia tygodnia**
+(`location.open_hours.get(weekday)`) zamiast pokazać prawdziwy stan -
+użytkownik widział dialog z normalnymi godzinami, jakby dzień był otwarty,
+zamiast automatycznie zaznaczonego "Nieczynne tego dnia". Naprawa:
+`hours` (prawdziwy stan, może być `None`) i `fallback_hours` (zwykły
+wzorzec tygodniowy - WYŁĄCZNIE podpowiedź pól czasu po odznaczeniu
+"Nieczynne") to teraz dwie osobne wartości; `DayOverrideDialog` dostaje
+nowy parametr `fallback_hours`.
+
+**Nowe funkcje (na życzenie):**
+- Edytor godzin (`hours_form_widget`, opakowany w `QWidget`) chowa się
+  całkowicie (`setVisible`, nie tylko `setEnabled`) po zaznaczeniu
+  "Nieczynne tego dnia", zamiast zostawać wyszarzony.
+- Checkbox "Nieczynne tego dnia" przeniesiony NAD edytor godzin (był pod
+  spodem) - lepsza czytelność.
+- Po odznaczeniu "Nieczynne" na dniu, który był faktycznie zamknięty
+  (godziny puste), pola czasu wypełniają się `fallback_hours` zamiast
+  zostawać na "00:00-00:00".
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `ui/main_window.py::_open_header_menu` | Usunięty fallback maskujący zamknięty dzień; nowy, osobny `fallback_hours` przekazywany do dialogu | TAK |
+| `ui/day_override_dialog.py` | Nowy param `fallback_hours`, checkbox nad formularzem, `hours_form_widget` (chowany całkowicie), podpowiedź godzin po odznaczeniu | TAK |
+| `tests/test_closed_day_toggle.py` (+8 testów) | Kolejność w layoucie, chowanie/pokazywanie formularza, podpowiedź `fallback_hours`, `_open_header_menu` przekazuje prawdziwy stan (nie zwykły wzorzec) dla zamkniętego/otwartego dnia | TAK |
+
+**Weryfikacja:** pełny zestaw testów zielony (754 passed, 1 skipped).
+
 ## Pamięć wielu miesięcy + odblokowanie pamięci poprzedniego miesiąca (2026-09-21)
 
 Dotychczas "projekt" (`.myp`) to był dokładnie JEDEN miesiąc - zmiana

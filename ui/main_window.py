@@ -1405,16 +1405,21 @@ class MainWindow(QMainWindow):
         if location is not None:
             uses_trade_calendar = get_profile(self.shop_config.business_type).uses_trade_calendar
             hours = location.get_open_hours_for_day(self.schedule.year, self.schedule.month, day, uses_trade_calendar)
-            if not hours:
-                weekday = location.weekday(self.schedule.year, self.schedule.month, day)
-                hours = location.open_hours.get(weekday)
+            weekday = location.weekday(self.schedule.year, self.schedule.month, day)
+            fallback_hours = location.open_hours.get(weekday)
         else:
             hours = self.shop_config.get_open_hours_for_day(day)
-            if not hours:
-                weekday = self.shop_config.weekday(day)
-                hours = self.shop_config.get_open_hours_for_weekday(weekday)
+            weekday = self.shop_config.weekday(day)
+            fallback_hours = self.shop_config.get_open_hours_for_weekday(weekday)
 
-        dialog = DayOverrideDialog(self, day, hours, self.shop_config)
+        # `hours` (None gdy dzień jest faktycznie zamknięty - święto,
+        # "Nieczynne" w tygodniu, niedziela niehandlowa) NIE MOŻE tu
+        # dostawać fallbacku na zwykłe godziny tygodniowe - dialog musi
+        # zobaczyć prawdziwy stan (i sam automatycznie zaznaczyć "Nieczynne
+        # tego dnia"), inaczej użytkownik widzi zwykłe godziny, jakby dzień
+        # był otwarty. `fallback_hours` to osobna wartość - tylko do
+        # podpowiedzi pól czasu, gdyby użytkownik odznaczył "Nieczynne".
+        dialog = DayOverrideDialog(self, day, hours or (None, None), self.shop_config, fallback_hours=fallback_hours)
         result = dialog.exec()
 
         if result != QDialog.Accepted:
