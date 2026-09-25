@@ -29,7 +29,7 @@ from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.monthly_hours_status import monthly_hours_status
 from logic.schedule_presenter import SchedulePresenter
 from logic.utils.time_utils import classify_shift_as_morning_or_afternoon, format_hours_as_fraction
-from model.business_profile import get_profile
+from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
 from model.constraint_policy import ConstraintPolicy
 from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
 from utils import resource_path
@@ -614,7 +614,20 @@ class ScheduleGrid(QTableWidget):
             # Rotacja 24/7 (np. ochrona) zastępuje Otwarcie/Zamknięcie -
             # koncepcje bez znaczenia dla tego mechanizmu - jednym wierszem
             # "Obłożenie" (patrz logic/duty_coverage_presenter.py).
-            if project_uses_duty_rotation(self.shop_config, self._visible_employees):
+            # project_uses_duty_rotation() pokrywa dino_retail-owe projekty,
+            # które i tak skonfigurowały duty_rotation na jakiejś lokalizacji
+            # (mechanizm jest generyczny, nieprzywiązany do business_type -
+            # patrz "Generator pod klucz dla Enyo" w ENYO_ONLY_CHANGES.md).
+            # Dodatkowo, dla KAŻDEGO profilu poza dino_retail wiersz jest
+            # ZAWSZE widoczny, nawet zanim jakakolwiek lokalizacja ma
+            # rotację ustawioną - klient tego typu (np. Enyo/ochrona) ma to
+            # jako swój JEDYNY wiersz podsumowania, więc nie może on znikać
+            # przy nowej, jeszcze nieskonfigurowanej lokalizacji (❌ w takim
+            # wypadku poprawnie sygnalizuje "brak pokrycia").
+            if (
+                business_type != DEFAULT_BUSINESS_TYPE
+                or project_uses_duty_rotation(self.shop_config, self._visible_employees)
+            ):
                 rows = tuple(row for row in rows if row[1] not in ("open", "close"))
                 rows = (("Obłożenie", "coverage"),) + rows
 

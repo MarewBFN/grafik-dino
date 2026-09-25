@@ -53,6 +53,22 @@ def test_duty_rotation_project_shows_oblozenie_instead_of_open_close():
     assert "close" not in keys
 
 
+def test_oblozenie_row_always_shown_for_non_dino_profile_even_without_rotation():
+    # Fresh location (or a location whose 24/7 rotation isn't configured
+    # yet) must not make the row disappear for this kind of client - see
+    # ENYO_ONLY_CHANGES.md ("Obłożenie" zawsze widoczne dla klienta).
+    shop = ShopConfig(2026, 8)
+    shop.business_type = "custom_ochrona"
+
+    grid = ScheduleGrid()
+    grid.schedule = MonthSchedule(2026, 8)
+    grid.shop_config = shop
+
+    rows = grid._summary_rows()
+    keys = [key for _, key in rows]
+    assert "coverage" in keys
+
+
 def test_dino_project_keeps_open_close_rows():
     shop = ShopConfig(2026, 8)  # dino_retail, no locations at all
     grid = ScheduleGrid()
