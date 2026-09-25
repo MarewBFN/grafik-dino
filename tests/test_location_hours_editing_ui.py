@@ -130,3 +130,49 @@ def test_turning_off_24_7_restores_the_previous_expand_state():
     assert row._hours_expanded is True
     assert not row.toggle_hours_btn.isHidden()
     assert not row.hours_editor.isHidden()
+
+
+# --- "Zamknięte w polskie święta ustawowe" (LocationConfig.
+# closed_on_public_holidays) - patrz model/location.py, zgłoszenie
+# użytkownika 2026-09-25 ---
+
+
+def test_new_location_row_defaults_to_closed_on_public_holidays():
+    row = _row()
+    assert row.closed_on_public_holidays_check.isChecked() is True
+
+
+def test_locations_dialog_saves_closed_on_public_holidays_per_row():
+    shop = ShopConfig(2026, 8)
+    dialog = LocationsDialog(None, shop)
+    row = dialog._location_rows[0]
+    row.closed_on_public_holidays_check.setChecked(False)
+
+    dialog._save()
+
+    saved = next(iter(shop.locations.values()))
+    assert saved.closed_on_public_holidays is False
+
+
+def test_locations_dialog_loads_existing_locations_closed_on_public_holidays():
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1", closed_on_public_holidays=False)
+    shop.locations = {"site1": loc}
+
+    dialog = LocationsDialog(None, shop)
+
+    assert dialog._location_rows[0].closed_on_public_holidays_check.isChecked() is False
+
+
+def test_config_dialog_hours_tab_loads_and_saves_closed_on_public_holidays():
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1", closed_on_public_holidays=False)
+    shop.locations["site1"] = loc
+
+    dialog = ConfigDialog(None, shop, location_key="site1")
+    assert dialog.closed_on_public_holidays_check.isChecked() is False
+
+    dialog.closed_on_public_holidays_check.setChecked(True)
+    dialog._save()
+
+    assert shop.locations["site1"].closed_on_public_holidays is True

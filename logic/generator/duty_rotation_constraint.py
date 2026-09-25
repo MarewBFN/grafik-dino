@@ -176,8 +176,17 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
     for location_key, (rotation, indices) in groups.items():
         max_count = max(len(indices), 1)
         only_12_24h = rotation.get("only_12_24h", False)
+        location = shop.locations.get(location_key)
 
         for d in days:
+            # Lokalizacja zamknięta w polskie święto ustawowe (per lokalizacja
+            # - patrz LocationConfig.closed_on_public_holidays) - pomija
+            # wymóg pokrycia tego dnia zamiast wymuszać count==1 sprzecznie z
+            # add_duty_rotation_public_holiday_constraint (zeruje x[e,d,s] dla
+            # tych samych dni, patrz base_specs.py).
+            if location is not None and location.is_closed_for_public_holiday(shop.year, shop.month, d):
+                continue
+
             wd = shop.weekday(d)
 
             if wd < 5 and not only_12_24h:

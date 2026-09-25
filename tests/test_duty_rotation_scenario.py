@@ -73,6 +73,12 @@ def _build_month(year: int, month: int, n_employees: int, no24h_count: int, rota
     shop.business_type = profile.key
     loc = LocationConfig(key="site1", name="Site 1")
     loc.set_duty_rotation(rotation)
+    # Ten test sprawdza WYŁĄCZNIE pokrycie/rotację, nie automatyczne
+    # zamknięcie w święta (patrz LocationConfig.closed_on_public_holidays,
+    # domyślnie True) - wyłączone, żeby realne polskie święto wypadające w
+    # danym miesiącu/roku testu nie fałszowało oczekiwanego "pokrycie
+    # KAŻDEGO dnia".
+    loc.closed_on_public_holidays = False
     shop.locations["site1"] = loc
     shop.constraint_policies.update(default_policies(profile))
     shop.constraint_policies["balance"] = ConstraintPolicy.DISABLED

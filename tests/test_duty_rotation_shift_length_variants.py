@@ -98,6 +98,9 @@ def _shop_with_rotation(rotation):
     shop = ShopConfig(2026, 8)
     loc = LocationConfig(key="site1", name="Site 1")
     loc.set_duty_rotation(rotation)
+    # Nie testujemy tu automatycznego zamknięcia w święta (domyślnie True) -
+    # patrz ten sam komentarz w _shop_schedule_with_profile() niżej.
+    loc.closed_on_public_holidays = False
     shop.locations["site1"] = loc
     return shop
 
@@ -361,6 +364,9 @@ def _shop_schedule_with_profile(rotation, n_employees, no24h_indices=(), key="te
     shop.business_type = profile.key
     loc = LocationConfig(key="site1", name="Site 1")
     loc.set_duty_rotation(rotation)
+    # Nie testujemy tu automatycznego zamknięcia w święta (domyślnie True) -
+    # patrz komentarz w _shop_with_rotation() wyżej.
+    loc.closed_on_public_holidays = False
     shop.locations = {"site1": loc}
     shop.constraint_policies.update(default_policies(profile))
     # Etap D (jak w realnym demo Enyo): pełne pokrycie > nominalny czas pracy.

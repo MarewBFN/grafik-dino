@@ -329,6 +329,93 @@ def test_get_duty_rotation_is_independent_of_is_24_7_for_in_memory_objects():
     assert loc.get_duty_rotation() == rotation
 
 
+# --- closed_on_public_holidays: automatyczne zamknięcie w polskie święta
+# ustawowe (biblioteka `holidays`, patrz logic/utils/holidays_pl.py) -
+# zgłoszenie użytkownika (2026-09-25): program dotąd liczył nominalny czas
+# pracy/otwarcie lokalizacji tylko przez ręcznie zaznaczane public_holidays ---
+
+
+def test_is_closed_for_public_holiday_true_by_default_on_a_real_holiday():
+    loc = LocationConfig(key="a", name="A")
+    assert loc.closed_on_public_holidays is True
+    # 2026-01-01 to Nowy Rok - trwałe, ustawowe święto.
+    assert loc.is_closed_for_public_holiday(2026, 1, 1) is True
+
+
+def test_is_closed_for_public_holiday_false_when_toggle_off():
+    loc = LocationConfig(key="a", name="A", closed_on_public_holidays=False)
+    assert loc.is_closed_for_public_holiday(2026, 1, 1) is False
+
+
+def test_is_closed_for_public_holiday_false_on_a_regular_day():
+    loc = LocationConfig(key="a", name="A")
+    assert loc.is_closed_for_public_holiday(2026, 1, 2) is False
+
+
+def test_day_override_wins_over_automatic_public_holiday_closure():
+    loc = LocationConfig(key="a", name="A")
+    loc.day_overrides[1] = ("08:00", "16:00")  # 2026-01-01, jawne nadpisanie
+    assert loc.is_closed_for_public_holiday(2026, 1, 1) is False
+    assert loc.get_open_hours_for_day(2026, 1, 1) == ("08:00", "16:00")
+
+
+def test_get_open_hours_for_day_returns_none_on_a_public_holiday():
+    loc = LocationConfig(key="a", name="A", open_hours={3: ("08:00", "20:00")})  # Czwartek
+    # 2026-01-01 to czwartek.
+    assert loc.get_open_hours_for_day(2026, 1, 1) is None
+
+
+def test_get_open_hours_for_day_unaffected_when_toggle_off():
+    loc = LocationConfig(
+        key="a", name="A", open_hours={3: ("08:00", "20:00")}, closed_on_public_holidays=False,
+    )
+    assert loc.get_open_hours_for_day(2026, 1, 1) == ("08:00", "20:00")
+
+
+def test_closed_on_public_holidays_round_trips_and_defaults_true_for_old_files():
+    loc = LocationConfig(key="a", name="A", closed_on_public_holidays=False)
+    restored = LocationConfig.from_dict(loc.to_dict())
+    assert restored.closed_on_public_holidays is False
+
+    data = LocationConfig(key="a", name="A").to_dict()
+    del data["closed_on_public_holidays"]  # symuluje projekt zapisany przed tym polem
+    restored_old = LocationConfig.from_dict(data)
+    assert restored_old.closed_on_public_holidays is True
+
+
+# --- ShopConfig.get_full_time_nominal_hours(): liczone automatycznie z
+# biblioteki `holidays` zamiast tylko ręcznie zaznaczanych public_holidays ---
+
+
+def test_nominal_hours_subtracts_automatically_detected_weekday_holidays():
+    # Styczeń 2026: 22 dni robocze (pon-pt), z czego 2 to święta (1 i 6
+    # stycznia) - (22-2)*8 = 160.
+    shop = ShopConfig(2026, 1)
+    assert shop.get_full_time_nominal_hours() == 160.0
+
+
+def test_nominal_hours_manual_public_holidays_still_subtract_too():
+    # Unia automatycznych i ręcznie zaznaczonych - dzień spoza kalendarza
+    # krajowego (np. lokalny/firmowy) nadal się odejmuje.
+    shop = ShopConfig(2026, 1)
+    shop.public_holidays = {2}  # 2026-01-02, piątek, nie jest świętem PL
+    assert shop.get_full_time_nominal_hours() == 152.0
+
+
+def test_nominal_hours_uses_standard_daily_hours_not_hardcoded_8():
+    shop = ShopConfig(2026, 1)
+    shop.standard_daily_hours = 7.5
+    assert shop.get_full_time_nominal_hours() == 20 * 7.5
+
+
+def test_nominal_hours_month_without_any_weekday_holiday_is_unaffected():
+    # Marzec 2026 nie ma żadnego polskiego święta ustawowego.
+    shop = ShopConfig(2026, 3)
+    import calendar
+    workdays = sum(1 for d in range(1, 32) if calendar.weekday(2026, 3, d) < 5)
+    assert shop.get_full_time_nominal_hours() == workdays * 8
+
+
 def test_employee_location_key_defaults_empty_and_round_trips():
     emp = Employee(last_name="Kowalski", first_name="Jan")
     assert emp.location_key == ""

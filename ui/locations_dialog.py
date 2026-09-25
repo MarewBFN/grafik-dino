@@ -54,6 +54,7 @@ class _LocationRow(QFrame):
         self, on_remove, name="", open_hours=None, is_24_7=False,
         max_consecutive_days=None, rule_defs=(), rule_overrides=None,
         original_key=None, duty_rotation=None, round_clock_start_hour=None,
+        closed_on_public_holidays=True,
     ):
         super().__init__()
         self.setObjectName("configCard")
@@ -98,6 +99,25 @@ class _LocationRow(QFrame):
         self.toggle_hours_btn.clicked.connect(self._toggle_hours_expanded)
         is_24_7_row.addWidget(self.toggle_hours_btn)
         outer.addLayout(is_24_7_row)
+
+        # Automatyczne zamknięcie w polskie święta ustawowe (biblioteka
+        # `holidays`, patrz logic/utils/holidays_pl.py) - niezależne od 24/7,
+        # bo dotyczy zarówno zwykłych godzin otwarcia, jak i rotacji służby
+        # (LocationConfig.duty_rotation w ogóle nie zna pojęcia "godziny
+        # otwarcia" - patrz LocationConfig.is_closed_for_public_holiday()).
+        # Domyślnie włączone - część placówek nie wymaga ochrony w święta,
+        # część (np. obiekty krytyczne) zostaje mimo to 24/7.
+        self.closed_on_public_holidays_check = QCheckBox("Zamknięte w polskie święta ustawowe")
+        self.closed_on_public_holidays_check.setChecked(bool(closed_on_public_holidays))
+        self.closed_on_public_holidays_check.setToolTip(
+            "Gdy zaznaczone, ta lokalizacja jest automatycznie traktowana "
+            "jako nieczynna (grafik i generator) w polskie święta ustawowo "
+            "wolne od pracy - obowiązuje też dla rotacji 24/7. Odznacz dla "
+            "obiektów chronionych bez przerwy, również w święta. Ręczne "
+            "nadpisanie konkretnego dnia (dwuklik na nagłówku w grafiku) "
+            "zawsze wygrywa."
+        )
+        outer.addWidget(self.closed_on_public_holidays_check)
 
         self.hours_editor = WeeklyHoursEditor(open_hours)
         self.hours_editor.setEnabled(not is_24_7)
@@ -316,6 +336,7 @@ class LocationsDialog(QDialog):
                 original_key=key,
                 duty_rotation=loc.duty_rotation,
                 round_clock_start_hour=loc.round_clock_start_hour,
+                closed_on_public_holidays=loc.closed_on_public_holidays,
             )
 
         self.add_btn = QPushButton("Dodaj lokalizację")
@@ -349,6 +370,7 @@ class LocationsDialog(QDialog):
         self, name="", open_hours=None, is_24_7=False,
         max_consecutive_days=None, rule_overrides=None, original_key=None,
         duty_rotation=None, round_clock_start_hour=None,
+        closed_on_public_holidays=True,
     ):
         row = _LocationRow(
             self._remove_location_row, name, open_hours, is_24_7=is_24_7,
@@ -358,6 +380,7 @@ class LocationsDialog(QDialog):
             original_key=original_key,
             duty_rotation=duty_rotation,
             round_clock_start_hour=round_clock_start_hour,
+            closed_on_public_holidays=closed_on_public_holidays,
         )
         self._location_rows.append(row)
         self.locations_container.addWidget(row)
@@ -494,6 +517,7 @@ class LocationsDialog(QDialog):
                     is_24_7=row.is_24_7_check.isChecked(),
                     duty_rotation=duty_rotation,
                     round_clock_start_hour=row.round_clock_start_hour_value(),
+                    closed_on_public_holidays=row.closed_on_public_holidays_check.isChecked(),
                 )
                 old = self.shop_config.locations.get(row.original_key)
                 if old is not None:

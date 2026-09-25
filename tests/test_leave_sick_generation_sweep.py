@@ -92,6 +92,12 @@ def _duty_rotation_shop_and_schedule(n_employees=4, all_no24h=True):
     shop.business_type = profile.key
     loc = LocationConfig(key="site1", name="Site 1")
     loc.set_duty_rotation(UBOJNIA_STYLE_ROTATION)
+    # Nie testujemy tu automatycznego zamknięcia w święta
+    # (LocationConfig.closed_on_public_holidays, domyślnie True) - to
+    # zamierzenie sprawdza pokrycie KAŻDEGO dnia miesiąca niezależnie od
+    # ilości L4/urlopu, więc realne polskie święto wypadające w
+    # YEAR/MONTH fałszowałoby oczekiwany wynik.
+    loc.closed_on_public_holidays = False
     shop.locations = {"site1": loc}
     shop.constraint_policies.update(default_policies(profile))
     # PREFERRED (nie DISABLED jak w realnym demo Enyo) - celowo, patrz docstring wyżej.

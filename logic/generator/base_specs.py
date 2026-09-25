@@ -36,6 +36,7 @@ from logic.generator.duty_rotation_constraint import (
 )
 from logic.generator.duty_rotation_rest_constraint import add_duty_rotation_rest_constraint
 from logic.generator.duty_rotation_manual_constraint import add_duty_rotation_manual_shift_constraint
+from logic.generator.duty_rotation_public_holiday_constraint import add_duty_rotation_public_holiday_constraint
 from logic.generator.round_clock_constraint import add_round_clock_gate_constraint
 from logic.generator.round_clock_rest_constraint import add_round_clock_rest_constraint
 from logic.generator.round_clock_manual_constraint import add_round_clock_manual_shift_constraint
@@ -145,6 +146,16 @@ def _build_always_on_specs():
             # patrz logic/generator/duty_rotation_manual_constraint.py.
             "duty_rotation_manual_shift",
             lambda ctx, soft: add_duty_rotation_manual_shift_constraint(
+                ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.duty_shifts, trace=ctx.trace
+            ) if ctx.duty_shifts is not None else None,
+            always_on=True,
+        ),
+        ConstraintSpec(
+            # Zamyka lokalizacje z duty_rotation w polskie święta ustawowe,
+            # per lokalizacja (LocationConfig.closed_on_public_holidays) -
+            # patrz logic/generator/duty_rotation_public_holiday_constraint.py.
+            "duty_rotation_public_holiday",
+            lambda ctx, soft: add_duty_rotation_public_holiday_constraint(
                 ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.duty_shifts, trace=ctx.trace
             ) if ctx.duty_shifts is not None else None,
             always_on=True,

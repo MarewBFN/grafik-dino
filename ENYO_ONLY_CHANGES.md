@@ -1041,6 +1041,93 @@ razem z powyższym scaleniem checkboxa 24/7 (ta sama runda) - jeśli w
 GitHub Release z tagu `v1.0.0-enyo` już wgrano stary plik, trzeba go
 zastąpić nowym (trzeci raz).
 
+## Święta ustawowe: `pip holidays`, nominalny czas pracy, automatyczne zamknięcie (2026-09-25)
+
+Na życzenie użytkownika: program przestał polegać wyłącznie na ręcznym
+zaznaczaniu świąt (`ShopConfig.public_holidays`/`LocationConfig.
+public_holidays` - dwuklik na nagłówku dnia) i "prostym" przeliczaniu
+nominalnego czasu pracy. Nowa zależność: pakiet PyPI `holidays`
+(`pip install holidays`) - **brak `requirements.txt` w repo, zależność
+tylko w środowisku, w którym uruchamiane/budowane jest repo**.
+
+### Nowy moduł
+
+| Plik | Co robi | Przywrócić do main? |
+|---|---|---|
+| `logic/utils/holidays_pl.py` (nowy) | `polish_public_holiday_days(year, month)` - cienka nakładka na `holidays.country_holidays("PL", years=year)`, cache'owana per rok (`lru_cache`) | TAK - generyczne, nie Enyo-specyficzne |
+
+### Naprawiony: nominalny czas pracy liczony "na prosto"
+
+`ShopConfig.get_full_time_nominal_hours()` (używane przez `monthly_hours`/
+`balance`/priorytet "Umowa"/diagnostykę - patrz wcześniejsza sekcja
+"Generator pod klucz dla Enyo") liczyła nominał jako (dni robocze pon-pt w
+miesiącu) × **stałe 8h**, pomniejszone WYŁĄCZNIE o ręcznie zaznaczone
+`public_holidays` - użytkownik musiałby co roku pamiętać o ręcznym
+zaznaczeniu każdego święta w każdym projekcie. Teraz: unia automatycznie
+wykrytych świąt (`holidays_pl.py`) i ręcznie zaznaczonych (ręczne zostają
+jako możliwość dodania dnia spoza kalendarza krajowego - lokalnego/
+firmowego), pomnożone przez `self.standard_daily_hours` (użytkownikowe pole
+"Standardowy wymiar zmiany", wcześniej ignorowane na rzecz sztywnego 8).
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/shop_config.py::get_full_time_nominal_hours` | Unia auto+ręcznych świąt, `* self.standard_daily_hours` zamiast `* 8` | TAK |
+| `tests/test_location.py` (+8 testów) | Automatyczne wykrycie (styczeń 2026 = 160h), unia z ręcznymi, `standard_daily_hours` respektowane, miesiąc bez świąt bez zmian | TAK |
+| `tests/test_monthly_hours_status.py` | 2 testy poprawione pod zwracany teraz `float` (`nominal_hours // 8` → `int(nominal_hours // 8)`) | TAK |
+
+**Weryfikacja:** żaden z miesięcy używanych w istniejących testach (2026,
+wszystkie z wyjątkiem stycznia/kwietnia/maja/czerwca) nie ma świąt
+przypadających w dzień roboczy, więc zero regresji bez zmian w testach -
+potwierdzone jawnie sprawdzeniem kalendarza 2026 przed wdrożeniem.
+
+### Nowa funkcja: automatyczne zamknięcie lokalizacji w święta (grid + generator), per lokalizacja
+
+Rozszerzenie tej samej rozmowy: użytkownik poprosił, żeby auto-wykryte
+święta od razu traktowały dzień jako nieczynny (nie tylko w nominalnym
+czasie pracy), z przełącznikiem PER LOKALIZACJA (część placówek nie
+wymaga ochrony w święta, część zostaje 24/7 mimo to) - **domyślnie
+włączone**.
+
+**Nowe pole:** `LocationConfig.closed_on_public_holidays: bool = True` +
+`is_closed_for_public_holiday(year, month, day)` (uwzględnia jawne
+`day_overrides` - zawsze wygrywają nad automatycznym zamknięciem).
+
+| Warstwa | Zmiana |
+|---|---|
+| Grid (zwykłe godziny otwarcia) | `LocationConfig.get_open_hours_for_day()` sprawdza `is_closed_for_public_holiday()` (po `day_overrides`, przed zwykłym fallbackiem tygodniowym) - grid szarzeje dokładnie tak samo jak "Nieczynne"/niedziela niehandlowa, bez żadnej zmiany w `ui/grid_view.py`/`logic/schedule_presenter.py` (już czytają `get_open_hours_for_day()`) |
+| Generator: rotacja 24/7 (duty_rotation) | Lokalizacje z `duty_rotation` w ogóle NIE korzystają z `open_hours` (ustalone wcześniej, patrz sekcja "Napraw rozjazd..." wyżej) - nowy `logic/generator/duty_rotation_public_holiday_constraint.py::add_duty_rotation_public_holiday_constraint` zeruje wszystkie 5 typów zmian danego dnia (ręczne, jawne przypisanie zmiany wygrywa - ten sam priorytet co `day_overrides`); `add_duty_rotation_coverage_constraint` (`duty_rotation_constraint.py`) osobno pomija wymóg pokrycia tych samych dni, żeby oba constrainty nie były sprzeczne (twarde `count==0` obok twardego `count==1`) |
+| Wiersz "Obłożenie" (podsumowanie w grid) | `logic/duty_coverage_presenter.py::is_day_fully_covered()` pomija zamkniętą lokalizację tego dnia zamiast liczyć brak obsady jako błąd (❌) |
+| UI | Nowy checkbox "Zamknięte w polskie święta ustawowe" w `ui/locations_dialog.py::_LocationRow` (zawsze widoczny, niezależny od 24/7) i analogicznie w `ui/config_dialog.py` (zakładka "Godziny otwarcia", ten sam wzorzec co reszta tej zakładki) |
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/location.py` | `closed_on_public_holidays` (pole + `to_dict`/`from_dict`, domyślnie `True` też dla starych plików bez tego klucza), `is_closed_for_public_holiday()`, wpięte w `get_open_hours_for_day()` | TAK |
+| `model/shop_config.py` | `_LocationView.is_closed_for_public_holiday(day)` (deleguje, bound rok/miesiąc) + fallback `ShopConfig.is_closed_for_public_holiday()` (zawsze `False`, ten sam wzorzec co `get_round_clock_start_hour`) | TAK |
+| `logic/generator/duty_rotation_public_holiday_constraint.py` (nowy) | Zeruje 5 typów zmian duty w zamknięty dzień, respektuje ręczne przypisanie | TAK |
+| `logic/generator/duty_rotation_constraint.py::add_duty_rotation_coverage_constraint` | Pomija wymóg pokrycia dla zamkniętych dni | TAK |
+| `logic/generator/base_specs.py` | Nowy `ConstraintSpec("duty_rotation_public_holiday", ...)`, ALWAYS_ON, ten sam wzorzec co `duty_rotation_manual_shift` | TAK |
+| `logic/duty_coverage_presenter.py::is_day_fully_covered` | Pomija zamkniętą lokalizację tego dnia | TAK |
+| `ui/locations_dialog.py`, `ui/config_dialog.py` | Nowy checkbox + zapis/odczyt | TAK |
+| `tests/test_duty_rotation_public_holiday_constraint.py` (nowy, 9 testów) | Izolowane (zero-out, toggle off, ręczne przypisanie wygrywa, "OFF" nadal zeruje, coverage pomija/nie pomija) + end-to-end pełny miesiąc (`AutoScheduleGenerator`, styczeń 2026: dni 1 i 6 puste, reszta w pełni obsadzona) | TAK |
+| `tests/test_duty_coverage_presenter.py` (+3 testy) | Zamknięty dzień liczy się jako pokryty, zwykły dzień nadal wymaga pełnej obsady, toggle off nadal wymaga | TAK |
+| `tests/test_location.py` (+7 testów) | `is_closed_for_public_holiday`, `day_overrides` wygrywa, `get_open_hours_for_day`, round-trip domyślne `True` dla starych plików | TAK |
+| `tests/test_location_hours_editing_ui.py` (+4 testy) | Domyślnie zaznaczone dla nowej lokalizacji, zapis/odczyt w obu oknach | TAK |
+| `tests/test_duty_rotation_scenario.py`, `tests/test_duty_rotation_shift_length_variants.py` (×2), `tests/test_leave_sick_generation_sweep.py` | Współdzielone fixture'y lokalizacji testowych dostały jawne `closed_on_public_holidays = False` - te testy sprawdzają pokrycie KAŻDEGO dnia niezależnie od kalendarza, więc realne polskie święto w danym miesiącu/roku fałszowałoby oczekiwany wynik | TAK (kosmetyka testowa) |
+
+**Pakowanie EXE:** `holidays` dodane do `datas`/`hiddenimports` w obu
+plikach `.spec` (`collect_data_files('holidays')` - pakiet niesie pliki
+lokalizacji `.mo` na nazwy świąt w różnych językach; nasz kod czyta
+wyłącznie same DATY, nigdy nazw, więc funkcjonalnie niepotrzebne, ale
+dodane defensywnie, żeby przyszła zmiana nie wywaliła się dopiero w
+gotowym exe). **Nieprzetestowane realnym buildem** w tej turze - do
+zweryfikowania przy następnym `scripts/build_release.ps1`.
+
+**Weryfikacja:** pełny zestaw testów zielony (746 passed, 1 skipped, 26
+nowych testów, zero regresji). Zweryfikowane bezpośrednio: import
+`holidays`, obliczenie `polish_public_holiday_days(2026, 1) == {1, 6}`,
+pełne wygenerowanie stycznia 2026 (OPTIMAL, dni 1/6 puste, reszta w pełni
+obsadzona).
+
 ## Pamięć wielu miesięcy + odblokowanie pamięci poprzedniego miesiąca (2026-09-21)
 
 Dotychczas "projekt" (`.myp`) to był dokładnie JEDEN miesiąc - zmiana

@@ -35,7 +35,16 @@ def is_day_fully_covered(schedule, shop, employees, day: int) -> bool:
 
     wd = shop.weekday(day)
 
-    for rotation, indices in groups.values():
+    for location_key, (rotation, indices) in groups.items():
+        location = shop.locations.get(location_key)
+        if location is not None and location.is_closed_for_public_holiday(shop.year, shop.month, day):
+            # Zamknięta w to konkretne święto (LocationConfig.
+            # closed_on_public_holidays) - generator nikogo tu nie wymaga
+            # (patrz add_duty_rotation_coverage_constraint), więc brak
+            # obsady tego dnia nie jest błędem - pomijamy tę lokalizację
+            # zamiast liczyć ją jako niepokrytą.
+            continue
+
         assigned = [schedule.get_day(employees[e], day) for e in indices]
         assigned = [ds for ds in assigned if not ds.is_empty()]
 

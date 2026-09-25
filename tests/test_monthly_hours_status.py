@@ -35,7 +35,7 @@ def test_no_shifts_worked_is_not_over():
 def test_exactly_at_target_is_not_over():
     schedule, shop, emp = _make_schedule()
     nominal_hours = shop.get_full_time_nominal_hours()
-    full_days = nominal_hours // 8
+    full_days = int(nominal_hours // 8)
 
     for day in range(1, full_days + 1):
         schedule.get_day(emp, day).set_hours("08:00", "16:00")
@@ -66,7 +66,7 @@ def test_working_more_than_nominal_is_over():
 def test_leave_days_lower_the_target_so_the_same_hours_can_tip_over():
     schedule, shop, emp = _make_schedule()
     nominal_hours = shop.get_full_time_nominal_hours()
-    full_days = nominal_hours // 8
+    full_days = int(nominal_hours // 8)
 
     # Two days of urlop lower the target by 2 * 8h, but the employee still
     # works the same number of days as in test_exactly_at_target_is_not_over.

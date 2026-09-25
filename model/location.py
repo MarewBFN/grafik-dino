@@ -212,6 +212,31 @@ class LocationConfig:
     # Etap A).
     duty_rotation: dict | None = field(default=None)
 
+    # Czy automatycznie zamykać tę lokalizację w polskie święta ustawowo
+    # wolne od pracy (patrz logic/utils/holidays_pl.py - biblioteka
+    # `holidays`, nie ręczne `public_holidays` wyżej). Domyślnie WŁĄCZONE -
+    # większość placówek nie jest chroniona w święta; część (np. obiekty
+    # krytyczne) zostaje mimo to 24/7, stąd przełącznik per lokalizacja, nie
+    # globalny. Niezależne od `uses_trade_calendar` profilu (patrz
+    # is_trade_day) - to osobny mechanizm, żeby działał też dla profili bez
+    # kalendarza handlowego (np. Enyo/ochrona). Jawnie nadpisany dzień
+    # (`day_overrides`) zawsze wygrywa - patrz is_closed_for_public_holiday().
+    closed_on_public_holidays: bool = True
+
+    def is_closed_for_public_holiday(self, year: int, month: int, day: int) -> bool:
+        """True gdy `closed_on_public_holidays` obejmuje ten dzień (polskie
+        święto ustawowe, patrz logic/utils/holidays_pl.py) - używane zarówno
+        przez get_open_hours_for_day() (godziny otwarcia/grid) niżej, jak i
+        bezpośrednio przez generator dla lokalizacji z duty_rotation (te w
+        ogóle nie korzystają z open_hours - patrz
+        logic/generator/duty_rotation_public_holiday_constraint.py)."""
+        if not self.closed_on_public_holidays:
+            return False
+        if day in self.day_overrides:
+            return False
+        from logic.utils.holidays_pl import polish_public_holiday_days
+        return day in polish_public_holiday_days(year, month)
+
     # Same logic as ShopConfig.weekday/is_trade_day/get_open_hours_for_day
     # (model/shop_config.py) - a location has no year/month of its own, so
     # these take them as arguments instead of reading self.year/self.month.
@@ -246,6 +271,9 @@ class LocationConfig:
             start, end = self.day_overrides[day]
             if start and end:
                 return start, end
+            return None
+
+        if self.is_closed_for_public_holiday(year, month, day):
             return None
 
         wd = self.weekday(year, month, day)
@@ -315,6 +343,7 @@ class LocationConfig:
             "is_24_7": self.is_24_7,
             "round_clock_start_hour": self.round_clock_start_hour,
             "duty_rotation": self.duty_rotation,
+            "closed_on_public_holidays": self.closed_on_public_holidays,
         }
 
     @classmethod
@@ -332,6 +361,7 @@ class LocationConfig:
             int(day): tuple(hours) for day, hours in data.get("day_overrides", {}).items()
         }
         loc.is_24_7 = bool(data.get("is_24_7", False))
+        loc.closed_on_public_holidays = bool(data.get("closed_on_public_holidays", True))
         loc.round_clock_start_hour = data.get("round_clock_start_hour")
         loc.constraints = dict(DEFAULT_LOCATION_CONSTRAINTS)
         loc.constraints.update(data.get("constraints", {}))

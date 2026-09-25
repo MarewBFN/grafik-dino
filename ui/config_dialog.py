@@ -316,6 +316,20 @@ class ConfigDialog(QDialog):
             self.is_24_7_check.toggled.connect(self._on_hours_tab_24_7_toggled)
             outer.addWidget(self.is_24_7_check)
 
+            # Ten sam widget/tooltip co ui/locations_dialog.py::_LocationRow -
+            # patrz LocationConfig.is_closed_for_public_holiday().
+            self.closed_on_public_holidays_check = QCheckBox("Zamknięte w polskie święta ustawowe")
+            self.closed_on_public_holidays_check.setChecked(self.location.closed_on_public_holidays)
+            self.closed_on_public_holidays_check.setToolTip(
+                "Gdy zaznaczone, ta lokalizacja jest automatycznie traktowana "
+                "jako nieczynna (grafik i generator) w polskie święta ustawowo "
+                "wolne od pracy - obowiązuje też dla rotacji 24/7. Odznacz dla "
+                "obiektów chronionych bez przerwy, również w święta. Ręczne "
+                "nadpisanie konkretnego dnia (dwuklik na nagłówku w grafiku) "
+                "zawsze wygrywa."
+            )
+            outer.addWidget(self.closed_on_public_holidays_check)
+
         hours_source = self.location.open_hours if self.location is not None else self.shop_config.open_hours
         self.hours_editor = WeeklyHoursEditor(hours_source)
         outer.addWidget(self.hours_editor)
@@ -829,6 +843,8 @@ class ConfigDialog(QDialog):
                     self.location.round_clock_start_hour = self.round_clock_start_input.get_time_str()
                 else:
                     self.location.round_clock_start_hour = None
+
+                self.location.closed_on_public_holidays = self.closed_on_public_holidays_check.isChecked()
 
             self.shop_config.constraints["rest_11h_mode"] = self.rest_11h_mode_selector.currentData()
             self.shop_config.constraints["solver_time_limit_seconds"] = self.solver_time_limit.value()

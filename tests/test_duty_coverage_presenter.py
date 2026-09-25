@@ -140,6 +140,57 @@ def test_only_12_24h_weekday_covered_by_both_halves():
     assert is_day_fully_covered(schedule, shop, [half_a_emp, half_b_emp], MONDAY) is True
 
 
+# --- LocationConfig.closed_on_public_holidays: dzień zamknięty w
+# automatycznie wykryte polskie święto liczy się jako "pokryty" (nikt nie
+# jest tam wymagany), nie jako błąd - patrz
+# logic/generator/duty_rotation_public_holiday_constraint.py ---
+
+
+def test_closed_public_holiday_counts_as_covered_even_with_nobody_assigned():
+    # Styczeń 2026, dzień 1 = Nowy Rok (czwartek, dzień roboczy).
+    shop = ShopConfig(2026, 1)
+    loc = LocationConfig(key="site1", name="Site 1")
+    loc.set_duty_rotation(ROTATION)
+    shop.locations["site1"] = loc
+    long_emp = Employee(last_name="Long", first_name="A", location_key="site1")
+    short_emp = Employee(last_name="Short", first_name="B", location_key="site1")
+    schedule = MonthSchedule(2026, 1)
+    schedule.add_employee(long_emp)
+    schedule.add_employee(short_emp)
+    # Nikt nie ma przypisanej zmiany tego dnia.
+
+    assert is_day_fully_covered(schedule, shop, [long_emp, short_emp], 1) is True
+
+
+def test_regular_day_in_the_same_month_still_requires_full_coverage():
+    # Styczeń 2026, dzień 2 (piątek) - zwykły dzień roboczy, bez święta.
+    shop = ShopConfig(2026, 1)
+    loc = LocationConfig(key="site1", name="Site 1")
+    loc.set_duty_rotation(ROTATION)
+    shop.locations["site1"] = loc
+    long_emp = Employee(last_name="Long", first_name="A", location_key="site1")
+    short_emp = Employee(last_name="Short", first_name="B", location_key="site1")
+    schedule = MonthSchedule(2026, 1)
+    schedule.add_employee(long_emp)
+    schedule.add_employee(short_emp)
+
+    assert is_day_fully_covered(schedule, shop, [long_emp, short_emp], 2) is False
+
+
+def test_toggle_off_still_requires_coverage_on_a_public_holiday():
+    shop = ShopConfig(2026, 1)
+    loc = LocationConfig(key="site1", name="Site 1", closed_on_public_holidays=False)
+    loc.set_duty_rotation(ROTATION)
+    shop.locations["site1"] = loc
+    long_emp = Employee(last_name="Long", first_name="A", location_key="site1")
+    short_emp = Employee(last_name="Short", first_name="B", location_key="site1")
+    schedule = MonthSchedule(2026, 1)
+    schedule.add_employee(long_emp)
+    schedule.add_employee(short_emp)
+
+    assert is_day_fully_covered(schedule, shop, [long_emp, short_emp], 1) is False
+
+
 def test_only_12_24h_weekday_not_covered_by_a_16h_shift():
     """Gdyby ktoś ręcznie ustawił 06:00-22:00 (stary wzorzec weekday_long)
     na lokalizacji z only_12_24h, to i tak nie liczy się jako pokrycie -

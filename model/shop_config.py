@@ -59,6 +59,9 @@ class _LocationView:
     def get_round_clock_start_hour(self) -> str | None:
         return self._location.round_clock_start_hour if self._location.is_24_7 else None
 
+    def is_closed_for_public_holiday(self, day: int) -> bool:
+        return self._location.is_closed_for_public_holiday(self._year, self._month, day)
+
     @property
     def constraints(self) -> dict:
         # LocationConfig always carries all of DEFAULT_LOCATION_CONSTRAINTS
@@ -375,6 +378,12 @@ class ShopConfig:
         # niżej), dla którego ten mechanizm i tak nigdy nie ma zastosowania.
         return None
 
+    def is_closed_for_public_holiday(self, day: int) -> bool:
+        # Ten sam wzorzec co get_round_clock_start_hour() wyżej - wyłącznie
+        # pole LocationConfig, ten fallback dotyczy tylko pracownika bez
+        # rozwiązywalnej lokalizacji.
+        return False
+
     # ==========================================================
     # PRESETY TRYBU SZYBKIEGO
     # ==========================================================
@@ -507,27 +516,40 @@ class ShopConfig:
 
         return cfg
 
-    def get_full_time_nominal_hours(self) -> int:
+    def get_full_time_nominal_hours(self) -> float:
         """
-        Zwraca nominalny wymiar czasu pracy (pełny etat)
-        dla danego miesiąca zgodnie z kodeksem pracy.
-        """
+        Nominalny wymiar czasu pracy (pełny etat) dla danego miesiąca,
+        zgodnie z Kodeksem pracy (art. 130 §1): liczba dni roboczych
+        (pon-pt) w miesiącu, pomniejszona o święta ustawowo wolne od pracy
+        przypadające w dzień powszedni - każde takie święto obniża normę o
+        jedną dniówkę, niezależnie od tego, czy akurat ten projekt normalnie
+        w ten dzień pracuje (np. ochrona 24/7).
 
+        Święta liczone automatycznie z biblioteki `holidays` (kalendarz
+        polski - patrz logic/utils/holidays_pl.py), żeby nie trzeba było
+        pamiętać o ręcznym zaznaczaniu ich co roku w każdym projekcie -
+        zgłoszenie użytkownika (2026-09-25): program dotąd "prosto"
+        liczył wyłącznie ręcznie zaznaczone self.public_holidays (unia z
+        automatycznymi, na wypadek dnia wolnego spoza kalendarza krajowego,
+        np. lokalnego/firmowego).
+        """
         import calendar
-        from datetime import date
+
+        from logic.utils.holidays_pl import polish_public_holiday_days
 
         workdays = 0
 
         days_in_month = calendar.monthrange(self.year, self.month)[1]
+        auto_holidays = polish_public_holiday_days(self.year, self.month)
 
         for d in range(1, days_in_month + 1):
             wd = calendar.weekday(self.year, self.month, d)
 
             # pon–pt
             if wd < 5:
-                # jeśli to święto ustawowe → nie liczymy
-                if d in self.public_holidays:
+                # jeśli to święto (automatyczne albo ręcznie zaznaczone) → nie liczymy
+                if d in auto_holidays or d in self.public_holidays:
                     continue
                 workdays += 1
 
-        return workdays * 8
+        return workdays * self.standard_daily_hours
