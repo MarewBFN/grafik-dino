@@ -11,11 +11,14 @@ from openpyxl import load_workbook
 
 from export.employee_card_exporter import (
     _day_night_hours,
+    _day_night_totals,
     _day_rows,
     _EmployeeCardImageExporter,
     _format_hour,
-    _location_name,
     _night_minutes,
+    _nominal_hours_str,
+    _overtime_str,
+    _strip_zero_minutes,
     export_employee_card_to_image,
     export_employee_cards_to_excel,
 )
@@ -25,12 +28,17 @@ from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig, DEFAULT_LOCATION_KEY
 
 
+def _row_for_day(schedule, employee, day):
+    prefix = f"{day} "
+    return next(r for r in _day_rows(schedule, employee) if r[0].startswith(prefix))
+
+
 class DayRowsMarkerTests(unittest.TestCase):
     """_day_rows() - urlop/L4 dostają jawny znacznik w kolumnie "Wejście"
     zamiast być nieodróżnialne od dnia bez żadnej zmiany (dawniej
     wszystkie trzy przypadki dawały identyczny pusty wiersz). Koniec
     zmiany przez północ NIE dostaje już znacznika "+1" (usunięty na
-    życzenie użytkownika)."""
+    życzenie użytkownika). Dzień 3 sierpnia 2026 to poniedziałek."""
 
     def _schedule_with_one_employee(self):
         schedule = MonthSchedule(2026, 8)
@@ -38,38 +46,61 @@ class DayRowsMarkerTests(unittest.TestCase):
         schedule.add_employee(emp)
         return schedule, emp
 
+    def test_day_number_has_weekday_abbreviation_attached(self):
+        schedule, emp = self._schedule_with_one_employee()
+
+        row = _row_for_day(schedule, emp, 3)
+
+        self.assertEqual(row[0], "3 Pn")
+
     def test_leave_day_shows_urlop_in_wejscie_column(self):
         schedule, emp = self._schedule_with_one_employee()
         schedule.get_day(emp, 3).set_leave()
 
-        row = next(r for r in _day_rows(schedule, emp) if r[0] == 3)
+        row = _row_for_day(schedule, emp, 3)
 
-        self.assertEqual(row, (3, "Urlop", "", "", "", ""))
+        self.assertEqual(row, ("3 Pn", "Urlop", "", "", "", ""))
 
     def test_sick_day_shows_l4_in_wejscie_column(self):
         schedule, emp = self._schedule_with_one_employee()
         schedule.get_day(emp, 3).set_sick()
 
-        row = next(r for r in _day_rows(schedule, emp) if r[0] == 3)
+        row = _row_for_day(schedule, emp, 3)
 
-        self.assertEqual(row, (3, "L4", "", "", "", ""))
+        self.assertEqual(row, ("3 Pn", "L4", "", "", "", ""))
 
     def test_day_without_any_shift_stays_blank(self):
         schedule, emp = self._schedule_with_one_employee()
 
-        row = next(r for r in _day_rows(schedule, emp) if r[0] == 3)
+        row = _row_for_day(schedule, emp, 3)
 
-        self.assertEqual(row, (3, "", "", "", "", ""))
+        self.assertEqual(row, ("3 Pn", "", "", "", "", ""))
 
     def test_shift_crossing_midnight_has_no_plus_one_marker(self):
         schedule, emp = self._schedule_with_one_employee()
         schedule.get_day(emp, 3).set_hours("22:00", "06:00")
 
-        row = next(r for r in _day_rows(schedule, emp) if r[0] == 3)
+        row = _row_for_day(schedule, emp, 3)
 
         self.assertEqual(row[1], "22:00")
         self.assertEqual(row[2], "6:00")
         self.assertNotIn("+1", row[2])
+
+    def test_full_hour_shift_drops_the_zero_minute_suffix(self):
+        schedule, emp = self._schedule_with_one_employee()
+        schedule.get_day(emp, 3).set_hours("08:00", "16:00")
+
+        row = _row_for_day(schedule, emp, 3)
+
+        self.assertEqual(row[3], "8")
+
+    def test_shift_with_non_zero_minutes_keeps_hmm_format(self):
+        schedule, emp = self._schedule_with_one_employee()
+        schedule.get_day(emp, 3).set_hours("08:00", "16:30")
+
+        row = _row_for_day(schedule, emp, 3)
+
+        self.assertEqual(row[3], "8:30")
 
 
 class NightMinutesTests(unittest.TestCase):
@@ -125,21 +156,77 @@ class FormatHourTests(unittest.TestCase):
         self.assertEqual(_format_hour(""), "")
 
 
-class LocationNameTests(unittest.TestCase):
-    def test_default_single_location_project(self):
-        shop = ShopConfig(2026, 8)
-        emp = Employee(last_name="Testowy", first_name="Jan", location_key=DEFAULT_LOCATION_KEY)
-        self.assertEqual(_location_name(shop, emp), "Placówka główna")
+class StripZeroMinutesTests(unittest.TestCase):
+    def test_whole_hours_drop_the_zero_minute_suffix(self):
+        self.assertEqual(_strip_zero_minutes("8:00"), "8")
+        self.assertEqual(_strip_zero_minutes("24:00"), "24")
 
-    def test_unassigned_location_falls_back_to_shop_name(self):
-        shop = ShopConfig(2026, 8)
-        shop.name = "Firma X"
-        emp = Employee(last_name="Testowy", first_name="Jan", location_key="brak")
-        self.assertEqual(_location_name(shop, emp), "Firma X")
+    def test_non_zero_minutes_are_kept(self):
+        self.assertEqual(_strip_zero_minutes("8:30"), "8:30")
 
+    def test_empty_string_stays_empty(self):
+        self.assertEqual(_strip_zero_minutes(""), "")
+
+
+class NominalHoursTests(unittest.TestCase):
     def test_none_shop_returns_empty_string(self):
         emp = Employee(last_name="Testowy", first_name="Jan")
-        self.assertEqual(_location_name(None, emp), "")
+        self.assertEqual(_nominal_hours_str(None, emp), "")
+
+    def test_matches_full_time_nominal_hours_for_full_etat(self):
+        shop = ShopConfig(2026, 8)
+        emp = Employee(last_name="Testowy", first_name="Jan")
+
+        nominal_hours = shop.get_full_time_nominal_hours()
+        hours, minutes = divmod(round(nominal_hours * 60), 60)
+        self.assertEqual(_nominal_hours_str(shop, emp), f"{hours}:{minutes:02d}")
+
+    def test_scales_with_employment_fraction(self):
+        shop = ShopConfig(2026, 8)
+        emp = Employee(last_name="Testowy", first_name="Jan", employment_fraction=0.5)
+
+        nominal_hours = shop.get_full_time_nominal_hours() * 0.5
+        hours, minutes = divmod(round(nominal_hours * 60), 60)
+        self.assertEqual(_nominal_hours_str(shop, emp), f"{hours}:{minutes:02d}")
+
+
+class OvertimeStrTests(unittest.TestCase):
+    def test_none_shop_returns_empty_string(self):
+        schedule, emp = MonthSchedule(2026, 8), Employee(last_name="Testowy", first_name="Jan")
+        schedule.add_employee(emp)
+        self.assertEqual(_overtime_str(schedule, None, emp), "")
+
+    def test_no_overtime_when_under_nominal(self):
+        shop = ShopConfig(2026, 8)
+        schedule = MonthSchedule(2026, 8)
+        emp = Employee(last_name="Testowy", first_name="Jan")
+        schedule.add_employee(emp)
+        schedule.get_day(emp, 3).set_hours("08:00", "16:00")
+
+        self.assertEqual(_overtime_str(schedule, shop, emp), "0:00")
+
+
+class DayNightTotalsTests(unittest.TestCase):
+    def test_sums_day_and_night_minutes_across_the_month(self):
+        schedule = MonthSchedule(2026, 8)
+        emp = Employee(last_name="Testowy", first_name="Jan")
+        schedule.add_employee(emp)
+        schedule.get_day(emp, 1).set_hours("08:00", "16:00")
+        schedule.get_day(emp, 2).set_hours("20:00", "23:00")
+
+        day_total, night_total = _day_night_totals(schedule, emp)
+
+        self.assertEqual(day_total, "10:00")
+        self.assertEqual(night_total, "1:00")
+
+    def test_leave_and_sick_days_are_ignored(self):
+        schedule = MonthSchedule(2026, 8)
+        emp = Employee(last_name="Testowy", first_name="Jan")
+        schedule.add_employee(emp)
+        schedule.get_day(emp, 1).set_leave()
+        schedule.get_day(emp, 2).set_sick()
+
+        self.assertEqual(_day_night_totals(schedule, emp), ("0:00", "0:00"))
 
 
 def _sample_schedule():
@@ -166,10 +253,22 @@ class ExcelCardExportTests(unittest.TestCase):
 
             self.assertEqual(ws.cell(row=1, column=1).value, "Lista obecności miesięczna pracownika")
             self.assertEqual(ws.cell(row=3, column=2).value, 2026)
-            self.assertEqual(ws.cell(row=4, column=2).value, "08")
-            self.assertIsNone(ws.cell(row=5, column=2).value)
+            self.assertEqual(ws.cell(row=4, column=2).value, "Sierpień")
+            self.assertEqual(ws.cell(row=5, column=2).value, _nominal_hours_str(shop, emp))
             self.assertEqual(ws.cell(row=3, column=4).value, emp.display_name())
-            self.assertEqual(ws.cell(row=4, column=4).value, "Placówka główna")
+            # "Stanowisko" zostaje puste - nie zaczytujemy już nazwy placówki.
+            self.assertIsNone(ws.cell(row=4, column=4).value)
+
+    def test_norma_is_empty_without_a_shop(self):
+        schedule, emp = _sample_schedule()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = f"{tmp}/karta.xlsx"
+            export_employee_cards_to_excel(schedule, 2026, 8, path, employees=[emp])
+
+            wb = load_workbook(path)
+            ws = wb.active
+            self.assertIsNone(ws.cell(row=5, column=2).value)
 
     def test_leave_day_shows_urlop_marker_and_leaves_the_rest_blank(self):
         schedule, emp = _sample_schedule()
@@ -180,16 +279,16 @@ class ExcelCardExportTests(unittest.TestCase):
 
             wb = load_workbook(path)
             ws = wb.active
-            # Wiersz nagłówka tabeli to 7, dzień 1 to wiersz 8, dzień 2 (urlop) to wiersz 9.
+            # Wiersz nagłówka tabeli to 7, dzień 1 to wiersz 8, dzień 2 (urlop, niedziela) to wiersz 9.
             leave_row = 9
-            self.assertEqual(ws.cell(row=leave_row, column=1).value, 2)
+            self.assertEqual(ws.cell(row=leave_row, column=1).value, "2 N")
             # Kolumna 2 to "Wejście" - tam ląduje znacznik "Urlop" zamiast
             # nieodróżnialnego pustego wiersza (patrz _day_rows()).
             self.assertEqual(ws.cell(row=leave_row, column=2).value, "Urlop")
             for col in range(3, 7):
                 self.assertIsNone(ws.cell(row=leave_row, column=col).value)
 
-    def test_footer_sum_matches_total_hours(self):
+    def test_full_hour_shift_drops_the_zero_minute_suffix_in_excel(self):
         schedule, emp = _sample_schedule()
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -198,11 +297,35 @@ class ExcelCardExportTests(unittest.TestCase):
 
             wb = load_workbook(path)
             ws = wb.active
+            # Dzień 1 (zmiana 08:00-16:00, 8h równe) to wiersz 8, kolumna 4 "Ilość godzin".
+            self.assertEqual(ws.cell(row=8, column=4).value, "8")
+
+    def test_footer_sums_hours_overtime_and_signature_below_table(self):
+        schedule, emp = _sample_schedule()
+        shop = ShopConfig(2026, 8)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = f"{tmp}/karta.xlsx"
+            export_employee_cards_to_excel(schedule, 2026, 8, path, shop=shop, employees=[emp])
+
+            wb = load_workbook(path)
+            ws = wb.active
             days_in_month = 31
             header_row = 7
-            footer_row = header_row + days_in_month + 1
-            self.assertEqual(ws.cell(row=footer_row, column=1).value, "Razem ilość godzin:")
-            self.assertEqual(ws.cell(row=footer_row, column=4).value, schedule.total_hours_for_employee(emp))
+            total_row = header_row + days_in_month + 1
+            overtime_row = total_row + 1
+            signature_label_row = overtime_row + 2
+
+            self.assertEqual(ws.cell(row=total_row, column=1).value, "Razem ilość godzin:")
+            self.assertEqual(ws.cell(row=total_row, column=4).value, schedule.total_hours_for_employee(emp))
+            day_total, night_total = _day_night_totals(schedule, emp)
+            self.assertEqual(ws.cell(row=total_row, column=5).value, day_total)
+            self.assertEqual(ws.cell(row=total_row, column=6).value, night_total)
+
+            self.assertEqual(ws.cell(row=overtime_row, column=1).value, "Nadgodziny:")
+            self.assertEqual(ws.cell(row=overtime_row, column=4).value, _overtime_str(schedule, shop, emp))
+
+            self.assertEqual(ws.cell(row=signature_label_row, column=1).value, "Podpis pracownika:")
 
     def test_multiple_employees_get_one_sheet_each(self):
         schedule = MonthSchedule(2026, 8)
