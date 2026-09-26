@@ -431,11 +431,12 @@ class DayHeaderView(QHeaderView):
         if logicalIndex == self.info_column:
             # Zwykłe QTableWidgetItem.setBackground() nie działa w nagłówku
             # (patrz docstring klasy) - to jedyny sposób, żeby ta kolumna
-            # miała WYRAŹNIE inne tło niż zwykłe dni, sygnalizując, że to
-            # dane czysto informacyjne z poprzedniego miesiąca.
+            # miała WYRAŹNIE inne (tu: "ghost" - wyszarzone) tło niż zwykłe
+            # dni, sygnalizując, że to dane czysto informacyjne z
+            # poprzedniego miesiąca. Przyciemniony tekst dopełnia efekt.
             painter.save()
             painter.fillRect(rect, QColor(theme.BG_PREVIOUS_MONTH_HEADER))
-            painter.setPen(QColor(theme.TEXT_MAIN))
+            painter.setPen(QColor(theme.TEXT_MUTED))
             text = self.model().headerData(logicalIndex, self.orientation(), Qt.DisplayRole)
             painter.drawText(rect, Qt.AlignCenter, str(text) if text is not None else "")
             painter.restore()
@@ -857,12 +858,21 @@ class ScheduleGrid(QTableWidget):
 
         item = QTableWidgetItem()
         item.setTextAlignment(Qt.AlignCenter)
-        item.setBackground(QBrush(QColor(theme.BG_PREVIOUS_MONTH_CELL)))
         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
         carry = self.schedule.get_previous_month_end_shift(emp)
         if carry is not None:
-            item.setText(f"{carry.end} →" if carry.crosses_midnight else carry.end)
+            # Bez strzałki/znacznika przejścia w kolejny miesiąc - tak samo
+            # jak zwykłe komórki siatki nie dopisują "(+1)" do tekstu zmiany
+            # nocnej (patrz SchedulePresenter._shift_view), tylko odróżniają
+            # ją kolorem tła. Tu ten sam kolor (SHIFT_NIGHT), tylko "ghost"
+            # (wyszarzony razem z resztą tej kolumny - patrz niżej).
+            item.setText(carry.end)
+            item.setBackground(QBrush(QColor(
+                theme.BG_PREVIOUS_MONTH_CELL_NIGHT if carry.crosses_midnight
+                else theme.BG_PREVIOUS_MONTH_CELL
+            )))
+            item.setForeground(QBrush(QColor(theme.TEXT_MUTED)))
             crossing_note = (
                 " Zmiana wchodziła już w dzień 1 tego miesiąca."
                 if carry.crosses_midnight else ""
@@ -871,6 +881,8 @@ class ScheduleGrid(QTableWidget):
                 f"Koniec ostatniej zmiany w poprzednim miesiącu: {carry.end}.{crossing_note}\n"
                 "Dane informacyjne - nieedytowalne tutaj."
             )
+        else:
+            item.setBackground(QBrush(QColor(theme.BG_PREVIOUS_MONTH_CELL)))
 
         self.setItem(row, 1, item)
 
@@ -1127,9 +1139,12 @@ class ScheduleGrid(QTableWidget):
 
             if self._prev_col_offset:
                 # Kolumna "pamięć poprzedniego miesiąca" nie ma znaczenia
-                # dla wierszy podsumowania - te dotyczą TEGO miesiąca.
+                # dla wierszy podsumowania - te dotyczą TEGO miesiąca. Ten
+                # sam "ghost" odcień co reszta kolumny (patrz
+                # _fill_previous_month_cell), żeby cała kolumna była
+                # jednolicie wyszarzona, nie tylko wiersze pracowników.
                 info_filler = QTableWidgetItem("")
-                info_filler.setBackground(QBrush(QColor(theme.BG_PANEL)))
+                info_filler.setBackground(QBrush(QColor(theme.BG_PREVIOUS_MONTH_CELL)))
                 self.setItem(row, 1, info_filler)
 
             for day in range(1, days + 1):

@@ -139,7 +139,7 @@ class MainWindow(QMainWindow):
 
         # Branch demonstracyjne (client-demo/enyo-ochrona) celowo nie
         # pokazuje marki "Dino" w tytule okna - patrz CLIENT_DEMO_README.md.
-        self.setWindowTitle("Grafik pracy")
+        self.setWindowTitle(f"Grafik pracy {APP_VERSION}")
         self.user_id = get_user_id()
         today = date.today()
         self.year = today.year
@@ -172,6 +172,14 @@ class MainWindow(QMainWindow):
         if not self._opened_existing_project:
             self._opened_existing_project = self._try_load_last_project()
         self.loading_overlay = LoadingOverlay(self)
+
+        # ID użytkownika (potrzebne do wygenerowania klucza licencji) na
+        # stałe w prawym dolnym rogu paska stanu, zamiast na dole panelu
+        # bocznego - zawsze widoczne, niezależnie od tego, co akurat pokazuje
+        # panel boczny.
+        self.user_id_label = QLabel(f"ID użytkownika: {self.user_id}")
+        self.user_id_label.setObjectName("mutedHint")
+        self.statusBar().addPermanentWidget(self.user_id_label)
 
         self.statusBar().showMessage("Gotowe")
         QTimer.singleShot(0, self._check_first_run)
@@ -447,10 +455,6 @@ class MainWindow(QMainWindow):
             self.btn_buy.setObjectName("successButton")
             self.btn_buy.clicked.connect(self._open_buy_page)
             layout.addWidget(self.btn_buy)
-
-        self.user_id_label = QLabel(f"ID użytkownika: {self.user_id}")
-        self.user_id_label.setObjectName("mutedHint")
-        layout.addWidget(self.user_id_label)
 
         self.version_label = QLabel(f"Wersja: {APP_VERSION}")
         self.version_label.setObjectName("mutedHint")
@@ -1008,8 +1012,11 @@ class MainWindow(QMainWindow):
         self.grid_legend.set_compact_section(visible_count > 10)
 
     def _update_window_title(self):
+        # Wersja programu zawsze bezpośrednio po nazwie ("Grafik pracy
+        # {APP_VERSION}"), przed nazwą projektu i miesiącem/rokiem.
         name = self.shop_config.name if self.shop_config else ""
-        prefix = f"Grafik pracy — {name}" if name else "Grafik pracy"
+        base = f"Grafik pracy {APP_VERSION}"
+        prefix = f"{base} — {name}" if name else base
         self.setWindowTitle(f"{prefix} — {self.month:02d}.{self.year}")
 
     def _update_nominal_hours_label(self):

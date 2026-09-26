@@ -3,11 +3,16 @@ BG_HEADER = "#e7edf6"
 BG_WEEKEND = "#eef2f7"
 BG_DISABLED = "#dde4ee"
 # Kolumna "pamięć poprzedniego miesiąca" w ScheduleGrid (patrz
-# ScheduleGrid.build()) - wyraźnie inny odcień niż BG_HEADER/BG_MAIN, żeby
-# było widać na pierwszy rzut oka, że to dane informacyjne z poprzedniego
-# miesiąca, nie edytowalny dzień tego grafiku.
-BG_PREVIOUS_MONTH_HEADER = "#ede3c8"
-BG_PREVIOUS_MONTH_CELL = "#f5efe0"
+# ScheduleGrid.build()) - "ghost" (lekko wyszarzony) odcień całej kolumny
+# zamiast płaskiego żółtego wyróżnienia (zgłoszenie użytkownika
+# 2026-09-26), żeby dane informacyjne z poprzedniego miesiąca były wyraźnie
+# odróżnialne, ale bez krzykliwego koloru odwracającego od niego uwagę.
+# Każdy odcień to bazowy kolor odpowiedniej komórki (nagłówek/zwykła
+# zmiana/zmiana nocna) zmieszany po połowie z szarością - stąd trzy blisko
+# siebie leżące, ale wciąż rozróżnialne odcienie.
+BG_PREVIOUS_MONTH_HEADER = "#bdc3cd"
+BG_PREVIOUS_MONTH_CELL = "#c3c7cf"
+BG_PREVIOUS_MONTH_CELL_NIGHT = "#aeb6d0"
 OK_GREEN = "#d6f4dd"
 WARN_YELLOW = "#fff0b3"
 ERR_RED = "#ffd0cf"
