@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
 
 from model.day_schedule import calc_end, calc_start
 from model.employee import Employee
+from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from logic.settlement_balancer import (
@@ -66,10 +67,46 @@ class ClassifyEditableSideTests(unittest.TestCase):
 
         self.assertIsNone(classify_editable_side(ds, shop, WORK_DAYS[0]))
 
+    def test_uses_the_employees_own_location_hours_not_the_project_default(self):
+        """Locations are the source of truth for the generator (and this
+        balancer) - a shift matching the employee's OWN location's open/close
+        time must classify correctly even when that differs from the
+        project-wide default (ShopConfig.open_hours)."""
+        shop = ShopConfig(2026, 8)  # project default: 05:30-22:45/23:00
+        loc = LocationConfig(key="site1", name="Site 1")
+        for wd in range(7):
+            loc.open_hours[wd] = ("08:00", "20:00")
+        shop.locations["site1"] = loc
+        schedule = MonthSchedule(2026, 8)
+        emp = Employee("Testowy", "Pracownik", daily_hours=8, location_key="site1")
+        schedule.add_employee(emp)
+
+        ds = schedule.get_day(emp, WORK_DAYS[0])
+        ds.set_hours("08:00", "16:30")  # opens with this location's own open time
+
+        self.assertEqual(classify_editable_side(ds, shop, WORK_DAYS[0], emp=emp), "end")
+
     def test_leave_day_is_not_editable(self):
         schedule, shop, emp = _make_schedule()
         ds = schedule.get_day(emp, WORK_DAYS[0])
         ds.set_leave()
+
+        self.assertIsNone(classify_editable_side(ds, shop, WORK_DAYS[0]))
+
+    def test_night_shift_is_not_edge_editable(self):
+        """A night shift (plan zmiany nocne, Etap B/C) is a rigid,
+        pre-configured block - trimming/extending its edge here would break
+        the exact match manual_constraint.py relies on to re-recognize it
+        as SHIFT_NIGHT on the next regenerate (Etap D)."""
+        shop = ShopConfig(2026, 8)
+        loc = LocationConfig(key="site1", name="Site 1")
+        shop.locations["site1"] = loc
+        schedule = MonthSchedule(2026, 8)
+        emp = Employee("Testowy", "Pracownik", location_key="site1")
+        schedule.add_employee(emp)
+
+        ds = schedule.get_day(emp, WORK_DAYS[0])
+        ds.set_hours("22:00", "06:00")
 
         self.assertIsNone(classify_editable_side(ds, shop, WORK_DAYS[0]))
 
@@ -133,6 +170,30 @@ class BalanceEmployeeHoursTests(unittest.TestCase):
         for day in result["days_freed"]:
             self.assertTrue(schedule.get_day(emp, day).is_empty())
         self.assertTrue(schedule.get_day(emp, result["days_freed"][0]).is_locked)
+
+    def test_night_shift_day_can_still_be_freed_on_large_overage(self):
+        """classify_editable_side excludes night shifts from edge-trimming,
+        but the coarser "free the whole day" path (which doesn't care about
+        the editable side) must still work for them - it's already correct
+        because DaySchedule.total_minutes() accounts for crossing midnight
+        (Etap A)."""
+        shop = ShopConfig(2026, 8)
+        loc = LocationConfig(key="site1", name="Site 1")
+        shop.locations["site1"] = loc
+        schedule = MonthSchedule(2026, 8)
+        emp = Employee("Testowy", "Pracownik", location_key="site1")
+        schedule.add_employee(emp)
+
+        for day in WORK_DAYS:
+            schedule.get_day(emp, day).set_hours("22:00", "06:00")
+        current = sum(schedule.get_day(emp, d).total_minutes(emp, shop) for d in range(1, 32))
+        self.assertEqual(current, len(WORK_DAYS) * 8 * 60)
+
+        result = balance_employee_hours(schedule, shop, emp, current - 600)
+
+        self.assertGreaterEqual(len(result["days_freed"]), 1)
+        for day in result["days_freed"]:
+            self.assertTrue(schedule.get_day(emp, day).is_empty())
 
     def test_large_overage_never_overshoots_past_target_with_irregular_day(self):
         schedule, shop, emp = _make_schedule()

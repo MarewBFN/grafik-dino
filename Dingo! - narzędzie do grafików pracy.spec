@@ -1,6 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_data_files
 
+# Biblioteka `holidays` (logic/utils/holidays_pl.py) - patrz ten sam
+# komentarz w "Enyo - Grafik Pracy.spec".
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -8,8 +11,8 @@ a = Analysis(
     ('C:\\Users\\kewi1\\AppData\\Local\\Programs\\Python\\Python313\\python313.dll', '.'),
     ('C:\\Users\\kewi1\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\ortools\\.libs\\*.dll', 'ortools\\.libs')
     ],
-    datas=[('assets', 'assets')],
-    hiddenimports=['ortools', 'ortools.sat', 'ortools.sat.python', 'ortools.sat.python.cp_model'],
+    datas=[('assets', 'assets')] + collect_data_files('holidays'),
+    hiddenimports=['ortools', 'ortools.sat', 'ortools.sat.python', 'ortools.sat.python.cp_model', 'holidays'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

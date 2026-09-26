@@ -1,4 +1,7 @@
-from PySide6.QtCore import Qt
+import dataclasses
+import os
+
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -8,21 +11,46 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QComboBox,
     QFrame,
     QSpacerItem,
-    QSizePolicy
+    QSizePolicy,
+    QWidget,
 )
 
 from model.employee import Employee
+from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
+from model.constraint_policy import ConstraintPolicy
+from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
+from logic.utils.time_utils import month_scope_note
+from ui.tutorial_overlay import TutorialOverlay, TutorialStep
+
+EMPLOYEE_TUTORIAL_FLAG = "employee_tutorial_seen.flag"
+
+# RoleDef.key values that map directly onto an Employee dataclass field
+# (the six legacy Dino flags). Any other key lives in Employee.custom_roles
+# instead, so new business profiles don't need new Employee fields.
+_EMPLOYEE_FIELDS = {f.name for f in dataclasses.fields(Employee)}
 
 
 class EmployeeDialog(QDialog):
-    def __init__(self, parent=None, employee=None):
+    def __init__(self, parent=None, employee=None, shop_config=None, default_location_key=None):
         super().__init__(parent)
         self.employee = employee
+        self.shop_config = shop_config
+        self.profile = get_profile(shop_config.business_type if shop_config else None)
+        self.locations = shop_config.locations if shop_config else {}
+        # Lokalizacja, na którą ma się domyślnie ustawić kombo poniżej dla
+        # NOWEGO pracownika (patrz _fill_from_employee) - zwykle aktualnie
+        # przeglądana placówka (main_window.selected_location_key), żeby
+        # dodany właśnie pracownik od razu pojawił się w widocznej tabeli
+        # zamiast "zniknąć" w nieprzefiltrowanej lokalizacji.
+        self.default_location_key = default_location_key
+        self.role_checkboxes: dict[str, QCheckBox] = {}
+        self.location_combo: QComboBox | None = None
         self.setWindowTitle("Edytuj pracownika" if employee else "Dodaj pracownika")
         self.setModal(True)
         self.setMinimumWidth(460)
@@ -30,6 +58,25 @@ class EmployeeDialog(QDialog):
         # Wygląd pochodzi ze wspólnego arkusza stylów aplikacji (ui/theme.py).
         self._build_ui()
         self._fill_from_employee()
+        QTimer.singleShot(0, self._maybe_show_tutorial)
+
+    def _role_is_hidden(self, role) -> bool:
+        """True when this role's linked_policy (e.g. Dino's meat roles ->
+        "meat") is DISABLED for the active project, so the checkbox for it
+        shouldn't be shown at all."""
+        if not role.linked_policy or not self.shop_config:
+            return False
+        return self.shop_config.constraint_policies.get(role.linked_policy) == ConstraintPolicy.DISABLED
+
+    def _project_uses_duty_rotation(self) -> bool:
+        """Ten sam warunek co "Rotacja 24/7" w ui/config_dialog.py -
+        projekt/którakolwiek lokalizacja ma faktycznie skonfigurowaną
+        LocationConfig.duty_rotation (patrz normalize_duty_rotation)."""
+        if not self.shop_config:
+            return False
+        if self.shop_config.get_duty_rotation():
+            return True
+        return any(loc.get_duty_rotation() for loc in self.shop_config.locations.values())
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -38,6 +85,27 @@ class EmployeeDialog(QDialog):
         title = QLabel("Dane pracownika")
         title.setObjectName("sectionLabel")
         root.addWidget(title)
+
+        if self.shop_config is not None:
+            scope_note = QLabel(month_scope_note(self.shop_config.year, self.shop_config.month))
+            scope_note.setObjectName("quickInfoHint")
+            scope_note.setWordWrap(True)
+            root.addWidget(scope_note)
+
+        # Karta ról rośnie z liczbą ról custom profilu (kreator pozwala
+        # dodać dowolnie wiele) - bez scrolla treść (i przyciski Zapisz/
+        # Anuluj) wypadały poza okno. Wzorem sidebaru głównego okna
+        # (ui/main_window.py::_build_left_panel).
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        root.addWidget(scroll, 1)
+
+        content = QWidget()
+        scroll.setWidget(content)
+        content_layout = QVBoxLayout(content)
+        content_layout.setSpacing(15)
 
         # --- Formularz ---
         form = QFormLayout()
@@ -62,46 +130,95 @@ class EmployeeDialog(QDialog):
         self.employment_fraction.addItem("1/4", 0.25)
 
         form.addRow("Nazwisko:", self.last_name)
-        form.addRow("Imię:", self.first_name)
-        form.addRow("Wymiar etatu:", self.employment_fraction)
+        form.addRow("Imię (opcjonalnie):", self.first_name)
 
-        root.addLayout(form)
+        # Pokazywane tylko dla Dino - dla każdego profilu Ochrona (na tę
+        # chwilę jedyny inny w tej wersji działalności, niezależnie od
+        # dokładnego klucza profilu) klient zawsze zatrudnia na pełny etat,
+        # pole tylko myliłoby/nie miałoby zastosowania. Combo zostaje w
+        # pełni zbudowane i domyślnie na indeksie 0 (1.0 - pełny etat),
+        # _save() dalej czyta currentData() bez zmian - tym samym wzorcem
+        # co ukryte "Progi obsady" w ConfigDialog (patrz ENYO_ONLY_CHANGES.md).
+        if self.shop_config is None or self.shop_config.business_type == DEFAULT_BUSINESS_TYPE:
+            form.addRow("Wymiar etatu:", self.employment_fraction)
+
+        if self.locations:
+            # Bez opcji "Brak" - projekt ma zawsze co najmniej jedną
+            # lokalizację (patrz model/shop_config.py), a tabela grafiku
+            # filtruje się teraz po lokalizacji (ui/grid_view.py), więc
+            # pracownik bez żadnej przypisanej byłby trwale niewidoczny w
+            # każdym widoku - patrz _fill_from_employee() niżej dla wyboru
+            # domyślnej wartości.
+            self.location_combo = QComboBox()
+            for loc in self.locations.values():
+                self.location_combo.addItem(loc.name, loc.key)
+            form.addRow("Lokalizacja:", self.location_combo)
+
+        content_layout.addLayout(form)
 
         # --- Role i ograniczenia: jedna karta zamiast osobnej ramki na checkbox ---
-        flags_card = QFrame()
-        flags_card.setObjectName("configCard")
-        flags_layout = QVBoxLayout(flags_card)
+        self.flags_card = QFrame()
+        self.flags_card.setObjectName("configCard")
+        flags_layout = QVBoxLayout(self.flags_card)
         flags_layout.setSpacing(10)
 
-        self.is_opener = QCheckBox("Pracownik otwarcia")
-        flags_layout.addWidget(self.is_opener)
+        for role in self.profile.roles:
+            if self._role_is_hidden(role):
+                continue
+            if role.key == NIE_CHCE_24H_ROLE_KEY:
+                # Ten klucz ma dedykowany checkbox niżej (self.no_24h_check),
+                # gated na _project_uses_duty_rotation() - poza rotacją 24/7
+                # nic go nie czyta (patrz logic/generator/duty_rotation_constraint.py),
+                # więc pokazywanie go tu drugi raz byłoby martwym duplikatem:
+                # oba pisały do tego samego Employee.custom_roles["nie_chce_24h"],
+                # a _save() niżej i tak zawsze nadpisywał tę wartość stanem
+                # self.no_24h_check, gdy oba były widoczne naraz.
+                continue
+            checkbox = QCheckBox(role.label)
+            if role.description:
+                checkbox.setToolTip(role.description)
+            flags_layout.addWidget(checkbox)
+            self.role_checkboxes[role.key] = checkbox
 
-        self.is_meat = QCheckBox("Obsługa stoiska mięsnego")
-        flags_layout.addWidget(self.is_meat)
+        # Zachowania specyficzne dla konkretnych ról (wykluczanie się mięsa/
+        # mięsa-lekkiego, wymuszanie wymiaru etatu kierowniczki) są pinowane
+        # po kluczu roli, nie generyczną regułą - inne profile ich nie mają.
+        meat_cb = self.role_checkboxes.get("is_meat")
+        meat_light_cb = self.role_checkboxes.get("is_meat_light")
+        if meat_cb and meat_light_cb:
+            meat_cb.toggled.connect(self._on_meat_toggled)
+            meat_light_cb.toggled.connect(self._on_meat_light_toggled)
 
-        self.is_meat_light = QCheckBox("mooooże stanąć na chwilę na mięsie")
-        flags_layout.addWidget(self.is_meat_light)
+        manager_cb = self.role_checkboxes.get("is_manager")
+        if manager_cb:
+            manager_cb.toggled.connect(self._on_manager_toggled)
 
-        self.is_meat.toggled.connect(self._on_meat_toggled)
-        self.is_meat_light.toggled.connect(self._on_meat_light_toggled)
+        # Flaga dla rotacji służby 24/7 (patrz LocationConfig.duty_rotation,
+        # logic/generator/duty_rotation_constraint.py) - osobna od systemu
+        # ról profilu, bo dotyczy generatora niezależnie od tego, jakie role
+        # ma dany profil. Widoczna tylko gdy projekt faktycznie używa tego
+        # mechanizmu (na poziomie projektu albo którejkolwiek lokalizacji) -
+        # dla profili bez rotacji nic by nie robiła.
+        self.no_24h_check = None
+        if self._project_uses_duty_rotation():
+            self.no_24h_check = QCheckBox("Nie chce pracować zmian 24h")
+            self.no_24h_check.setToolTip(
+                "Przy rotacji służby 24/7: ta osoba nigdy nie dostanie zmiany "
+                "24h w weekend (dostanie dwie 12h zamiast tego)."
+            )
+            flags_layout.addWidget(self.no_24h_check)
 
-        self.is_manager = QCheckBox(
-            "Kierowniczka (sztywny grafik: pon. wolne, wt-pt 7:00-15:00, sob 6:00-14:00)"
-        )
-        flags_layout.addWidget(self.is_manager)
-        self.is_manager.toggled.connect(self._on_manager_toggled)
-
-        self.no_night = QCheckBox("Nie pracuje w godzinach nocnych (przed 6:00 i po 22:00)")
-        flags_layout.addWidget(self.no_night)
-
-        self.no_afternoon = QCheckBox("Nie pracuje na popołudniu (tylko zmiany poranne)")
-        flags_layout.addWidget(self.no_afternoon)
-
-        root.addWidget(flags_card)
-        root.addStretch()
+        content_layout.addWidget(self.flags_card)
+        content_layout.addStretch()
 
         # --- Dolny pasek przycisków ---
         button_row = QHBoxLayout()
+
+        help_btn = QPushButton("Pomoc")
+        help_btn.setObjectName("secondaryButton")
+        help_btn.setMinimumHeight(34)
+        help_btn.clicked.connect(self._open_tutorial)
+        button_row.addWidget(help_btn)
 
         # Przycisk Usuń (w lewym rogu)
         if self.employee:
@@ -110,7 +227,7 @@ class EmployeeDialog(QDialog):
             self.delete_btn.setMinimumHeight(34)
             self.delete_btn.clicked.connect(self._delete_employee)
             button_row.addWidget(self.delete_btn)
-        
+
         # Spacer przesuwa resztę na prawo
         button_row.addItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
@@ -121,24 +238,26 @@ class EmployeeDialog(QDialog):
         cancel_btn.setMinimumWidth(80)
         cancel_btn.clicked.connect(self.reject)
 
-        save_btn = QPushButton("Zapisz")
-        save_btn.setObjectName("primaryButton")
-        save_btn.setMinimumHeight(34)
-        save_btn.setMinimumWidth(100)
-        save_btn.clicked.connect(self._save)
+        self.save_btn = QPushButton("Zapisz")
+        self.save_btn.setObjectName("primaryButton")
+        self.save_btn.setMinimumHeight(34)
+        self.save_btn.setMinimumWidth(100)
+        self.save_btn.clicked.connect(self._save)
 
         button_row.addWidget(cancel_btn)
-        button_row.addWidget(save_btn)
+        button_row.addWidget(self.save_btn)
 
         root.addLayout(button_row)
 
     def _on_meat_toggled(self, checked):
-        if checked and self.is_meat_light.isChecked():
-            self.is_meat_light.setChecked(False)
+        meat_light_cb = self.role_checkboxes["is_meat_light"]
+        if checked and meat_light_cb.isChecked():
+            meat_light_cb.setChecked(False)
 
     def _on_meat_light_toggled(self, checked):
-        if checked and self.is_meat.isChecked():
-            self.is_meat.setChecked(False)
+        meat_cb = self.role_checkboxes["is_meat"]
+        if checked and meat_cb.isChecked():
+            meat_cb.setChecked(False)
 
     def _on_manager_toggled(self, checked):
         # Jej zmiany są zawsze dokładnie 8h - "1/1 max 8:00" jest jedynym
@@ -150,40 +269,142 @@ class EmployeeDialog(QDialog):
 
     def _fill_from_employee(self):
         if not self.employee:
+            # Nowy pracownik: kombo lokalizacji i tak zawsze ma co najmniej
+            # jedną pozycję (patrz _build_ui) - ustawiamy ją od razu na
+            # aktualnie przeglądaną placówkę, żeby domyślnie trafił tam,
+            # gdzie użytkownik go dodaje, zamiast na pierwszą z listy.
+            if self.location_combo is not None:
+                idx = self.location_combo.findData(self.default_location_key or "")
+                self.location_combo.setCurrentIndex(idx if idx >= 0 else 0)
             return
         self.last_name.setText(self.employee.last_name)
         self.first_name.setText(self.employee.first_name)
-        self.is_opener.setChecked(self.employee.is_opener)
-        self.is_meat.setChecked(self.employee.is_meat)
-        self.is_meat_light.setChecked(getattr(self.employee, "is_meat_light", False))
-        self.is_manager.setChecked(getattr(self.employee, "is_manager", False))
-        self.no_night.setChecked(getattr(self.employee, "no_night", False))
-        self.no_afternoon.setChecked(getattr(self.employee, "no_afternoon", False))
+        for key, checkbox in self.role_checkboxes.items():
+            if key in _EMPLOYEE_FIELDS:
+                checkbox.setChecked(getattr(self.employee, key, False))
+            else:
+                checkbox.setChecked(self.employee.custom_roles.get(key, False))
         self.monthly_target_hours.setValue(self.employee.monthly_target_hours)
         idx = self.employment_fraction.findData(self.employee.employment_fraction)
         if idx >= 0:
             self.employment_fraction.setCurrentIndex(idx)
+        if self.no_24h_check is not None:
+            self.no_24h_check.setChecked(self.employee.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False))
+        if self.location_combo is not None:
+            idx = self.location_combo.findData(self.employee.location_key)
+            self.location_combo.setCurrentIndex(idx if idx >= 0 else 0)
+
+    def _build_tutorial_steps(self):
+        steps = [
+            TutorialStep(
+                "Dane pracownika",
+                "Tutaj ustawiasz podstawowe dane pracownika: imię, nazwisko, "
+                "wymiar etatu oraz role wykorzystywane przez generator.",
+            ),
+            TutorialStep(
+                "Wymiar etatu",
+                "Wybierz wymiar etatu pracownika - od tego zależy jego docelowa "
+                "liczba godzin w miesiącu.",
+                target=self.employment_fraction,
+            ),
+        ]
+        if self.location_combo is not None:
+            steps.append(TutorialStep(
+                "Lokalizacja",
+                "Wybierz placówkę, do której przypisany jest ten pracownik.",
+                target=self.location_combo,
+            ))
+        steps.append(TutorialStep(
+            "Role",
+            "Zaznacz role tego pracownika - generator używa ich przy układaniu "
+            "grafiku (np. kto ma priorytet w przydzielaniu godzin).",
+            target=self.flags_card,
+        ))
+        if self.no_24h_check is not None:
+            steps.append(TutorialStep(
+                "Nie chce pracować zmian 24h",
+                "Zaznacz, jeśli ta osoba nie powinna dostawać pojedynczej zmiany "
+                "24h przy rotacji służby - dostanie wtedy dwie zmiany po 12h.",
+                target=self.no_24h_check,
+            ))
+        steps.append(TutorialStep(
+            "Zapisz",
+            "Zapisz dane pracownika.",
+            target=self.save_btn,
+        ))
+        return steps
+
+    def _start_tutorial(self, on_finished=None):
+        existing = getattr(self, "_tutorial_overlay", None)
+        if existing is not None:
+            existing.deleteLater()
+        self._tutorial_overlay = TutorialOverlay(self, self._build_tutorial_steps(), on_finished=on_finished)
+        self._tutorial_overlay.start()
+
+    def _open_tutorial(self):
+        self._start_tutorial()
+
+    def _maybe_show_tutorial(self):
+        if os.path.exists(EMPLOYEE_TUTORIAL_FLAG):
+            return
+
+        def mark_seen():
+            try:
+                with open(EMPLOYEE_TUTORIAL_FLAG, "w") as f:
+                    f.write("seen")
+            except OSError:
+                pass
+
+        self._start_tutorial(on_finished=mark_seen)
 
     def _save(self):
         ln = self.last_name.text().strip()
         fn = self.first_name.text().strip()
 
-        if not ln or not fn:
-            QMessageBox.critical(self, "Błąd", "Imię i nazwisko nie mogą być puste.")
+        if not ln:
+            QMessageBox.critical(self, "Błąd", "Nazwisko nie może być puste.")
             return
+
+        legacy_roles = {}
+        custom_roles = {}
+        for role in self.profile.roles:
+            key = role.key
+            if key in self.role_checkboxes:
+                value = self.role_checkboxes[key].isChecked()
+            else:
+                # Hidden because its linked_policy is DISABLED - preserve
+                # whatever the employee already had instead of silently
+                # wiping it to False (e.g. turning the "meat" policy off
+                # must not un-flag every meat-counter employee).
+                if key in _EMPLOYEE_FIELDS:
+                    value = getattr(self.employee, key, False) if self.employee else False
+                else:
+                    value = self.employee.custom_roles.get(key, False) if self.employee else False
+
+            if key in _EMPLOYEE_FIELDS:
+                legacy_roles[key] = value
+            else:
+                custom_roles[key] = value
+
+        if self.no_24h_check is not None:
+            custom_roles[NIE_CHCE_24H_ROLE_KEY] = self.no_24h_check.isChecked()
+        elif self.employee is not None:
+            # Checkbox niewidoczny (projekt nie używa rotacji 24/7) - nie
+            # wolno cicho zgubić wartości, gdyby jednak była już ustawiona
+            # (np. lokalizacja z rotacją została w międzyczasie usunięta).
+            custom_roles[NIE_CHCE_24H_ROLE_KEY] = self.employee.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False)
+
+        location_key = self.location_combo.currentData() if self.location_combo is not None else ""
 
         try:
             emp = Employee(
                 last_name=ln,
                 first_name=fn,
-                is_opener=self.is_opener.isChecked(),
-                is_meat=self.is_meat.isChecked(),
-                is_meat_light=self.is_meat_light.isChecked(),
-                is_manager=self.is_manager.isChecked(),
-                no_night=self.no_night.isChecked(),
-                no_afternoon=self.no_afternoon.isChecked(),
                 monthly_target_hours=self.monthly_target_hours.value(),
                 employment_fraction=self.employment_fraction.currentData(),
+                custom_roles=custom_roles,
+                location_key=location_key,
+                **legacy_roles,
             )
             emp.validate()
         except Exception as exc:

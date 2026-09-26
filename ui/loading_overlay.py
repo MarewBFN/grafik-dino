@@ -57,11 +57,10 @@ class LoadingOverlay(QWidget):
             "Analizowanie dostępności pracowników...",
             "Układanie zmian porannych...",
             "Układanie zmian popołudniowych...",
-            "Dopasowywanie otwarcia sklepu...",
-            "Dopasowywanie zamknięcia sklepu...",
+            "Dopasowywanie otwarcia...",
+            "Dopasowywanie zamknięcia...",
             "Sprawdzanie ograniczeń (odpoczynek, dni pod rząd)...",
             "Balansowanie godzin pracy...",
-            "Układanie mięsiarzy...",
             "Optymalizowanie pokrycia zmian...",
             "Wyrównywanie obciążenia między pracownikami...",
         ]

@@ -69,18 +69,23 @@ def add_morning_afternoon_balance_penalty(
     fmt = "%H:%M"
 
     for d in days:
-        hours = shop.get_open_hours_for_day(d)
-        if not hours:
-            continue
-
-        open_time_str, close_time_str = hours
-        shop_open_dt = datetime.strptime(open_time_str, fmt)
-        shop_close_dt = datetime.strptime(close_time_str, fmt)
-
         morning_shifts = 0
         afternoon_shifts = 0
 
         for e, emp in enumerate(employees):
+            # Godziny WŁASNEJ lokalizacji pracownika, nie projektu - dwóch
+            # pracowników na tej samej zmianie (np. SHIFT_OPEN) w różnych
+            # lokalizacjach naprawdę zaczyna o różnych godzinach zegarowych
+            # (patrz model/shop_config.py::get_location), więc to musi być
+            # liczone per pracownik, nie raz na cały dzień.
+            hours = shop.get_location(emp).get_open_hours_for_day(d)
+            if not hours:
+                continue
+
+            open_time_str, close_time_str = hours
+            shop_open_dt = datetime.strptime(open_time_str, fmt)
+            shop_close_dt = datetime.strptime(close_time_str, fmt)
+
             eff_hours = get_effective_daily_hours(emp, shop)
             shift_delta = timedelta(hours=eff_hours)
 

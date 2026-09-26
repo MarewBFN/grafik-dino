@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import List
+from model.business_profile import DEFAULT_BUSINESS_TYPE
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from model.constraint_policy import ConstraintPolicy
@@ -36,13 +37,18 @@ class Rule:
 
 class MaxConsecutiveDaysRule(Rule):
 
-    def __init__(self, limit: int):
-        self.limit = limit
+    def __init__(self, default_limit: int):
+        self.default_limit = default_limit
 
     def apply(self, schedule, shop):
         results = []
 
         for emp in schedule.employees:
+            # Resolve per the employee's location the same way the real
+            # generator does (logic/generator/base_specs.py::_build_max_consecutive)
+            # - without a location assigned this is just self.default_limit,
+            # identical to before per-location overrides existed.
+            limit = shop.get_location(emp).constraints.get("max_consecutive_days", self.default_limit)
             streak = 0
 
             for day in range(1, schedule.days_in_month + 1):
@@ -54,13 +60,13 @@ class MaxConsecutiveDaysRule(Rule):
                 else:
                     streak = 0
 
-                if streak > self.limit:
+                if streak > limit:
                     results.append(
                         ConstraintViolation(
                             type="max_consecutive_days",
                             employee=emp,
                             day=day,
-                            message=f"Więcej niż {self.limit} dni pracy pod rząd"
+                            message=f"Więcej niż {limit} dni pracy pod rząd"
                         )
                     )
 
@@ -117,6 +123,12 @@ class Rest11hRule(Rule):
                     continue
 
                 end_today = datetime.strptime(today.end, fmt)
+                if today.crosses_midnight():
+                    # Zmiana nocna (plan zmian nocnych) kończy się w
+                    # kolejnej dobie kalendarzowej z definicji - bez tego
+                    # ta reguła liczyłaby odpoczynek o 24h za dużo i nigdy
+                    # nie wykryłaby realnego naruszenia po zmianie nocnej.
+                    end_today += timedelta(days=1)
                 start_next = datetime.strptime(next_day.start, fmt)
                 start_next += timedelta(days=1)
 
@@ -197,22 +209,31 @@ class ConstraintEngine:
                 MaxConsecutiveDaysRule(cfg["max_consecutive_days"])
             )
 
-        if "min_open_staff" in cfg:
-            rules.append(
-                MinStaffRule(cfg["min_open_staff"], "open")
-            )
-
-        if "min_close_staff" in cfg:
-            rules.append(
-                MinStaffRule(cfg["min_close_staff"], "close")
-            )
-
         if cfg.get("enforce_11h_rest", False):
             rules.append(Rest11hRule())
 
-        meat_policy = shop.constraint_policies.get("meat_coverage", ConstraintPolicy.MANDATORY)
-        if meat_policy != ConstraintPolicy.DISABLED or cfg.get("enforce_meat_coverage", False):
-            rules.append(MeatCoverageRule())
+        # min_open_staff/min_close_staff/meat coverage are dino_retail-only
+        # concepts (see logic/generator/dino_retail_profile.py) - shop.constraints
+        # always carries min_open_staff/min_close_staff defaults regardless of
+        # business_type, so without this guard every custom profile's grid
+        # would get validated against Dino's own staffing numbers instead of
+        # its actual rules (which live in model.custom_profile.RuleInstance,
+        # not shop.constraints, and already get their own coloring via
+        # logic/generator/generic_rules.py at generation time).
+        if shop.business_type == DEFAULT_BUSINESS_TYPE:
+            if "min_open_staff" in cfg:
+                rules.append(
+                    MinStaffRule(cfg["min_open_staff"], "open")
+                )
+
+            if "min_close_staff" in cfg:
+                rules.append(
+                    MinStaffRule(cfg["min_close_staff"], "close")
+                )
+
+            meat_policy = shop.constraint_policies.get("meat_coverage", ConstraintPolicy.MANDATORY)
+            if meat_policy != ConstraintPolicy.DISABLED or cfg.get("enforce_meat_coverage", False):
+                rules.append(MeatCoverageRule())
 
         violations: List[ConstraintViolation] = []
 
@@ -382,6 +403,9 @@ def rest_11h_violation(schedule: MonthSchedule, emp, day: int):
     fmt = "%H:%M"
 
     end_today = datetime.strptime(today.end, fmt)
+    if today.crosses_midnight():
+        # Zmiana nocna kończy się w kolejnej dobie kalendarzowej z definicji.
+        end_today += timedelta(days=1)
     start_next = datetime.strptime(next_day.start, fmt)
 
     # 🔥 uwzględnij przejście do kolejnego dnia

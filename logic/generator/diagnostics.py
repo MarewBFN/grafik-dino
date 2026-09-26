@@ -125,7 +125,12 @@ def audit_schedule(schedule, shop) -> dict[str, Any]:
             tomorrow = schedule.get_day(employee, day + 1)
             if not (today.end and tomorrow.start):
                 continue
-            rest = _minutes_between(day, today.end, day + 1, tomorrow.start, schedule.year, schedule.month)
+            # Zmiana nocna kończy się w kolejnej dobie kalendarzowej z
+            # definicji - bez tego przesunięcia _minutes_between liczyłby
+            # odpoczynek o 24h za dużo i nigdy nie wykryłby realnego
+            # naruszenia po zmianie nocnej.
+            end_day = day + 1 if today.crosses_midnight() else day
+            rest = _minutes_between(end_day, today.end, day + 1, tomorrow.start, schedule.year, schedule.month)
             if rest < 11 * 60:
                 rest_violations.append({
                     "employee": employee.display_name(),
@@ -169,6 +174,21 @@ def preflight_supply(schedule, shop) -> list[dict[str, Any]]:
     return report
 
 
+def _previous_month_rest_gap_hours(schedule, employee, target_time: str, fmt: str = "%H:%M") -> float | None:
+    """Godziny odpoczynku między końcem zmiany z poprzedniego miesiąca (patrz
+    model/month_schedule.py::PreviousMonthShiftEnd) a `target_time` w dniu 1
+    tego miesiąca - None, gdy dla tego pracownika nie ma takiej pamięci.
+    Ta sama arytmetyka co logic/generator/rest_constraint.py::_anchor."""
+    carry = schedule.get_previous_month_end_shift(employee)
+    if carry is None:
+        return None
+    end = datetime.strptime(carry.end, fmt)
+    target = datetime.strptime(target_time, fmt)
+    end_dt = datetime(2000, 1, 1, end.hour, end.minute) + timedelta(days=0 if carry.crosses_midnight else -1)
+    target_dt = datetime(2000, 1, 1, target.hour, target.minute)
+    return (target_dt - end_dt).total_seconds() / 3600
+
+
 def build_infeasibility_summary(schedule, shop) -> list[str]:
     """Return client-readable causes that can be proven from the input data."""
     messages: list[str] = []
@@ -180,7 +200,25 @@ def build_infeasibility_summary(schedule, shop) -> list[str]:
         if message not in messages and len(messages) < 6:
             messages.append(message)
 
+    _add_duty_rotation_supply_messages(schedule, shop, add)
+
+    # Obsada otwarcia/zamknięcia/mięsa to reguły wyłącznie profilu Dino
+    # (dino_retail_profile.py) i wyłącznie pracowników bez rotacji służby /
+    # rotacji całodobowej. Wcześniej te komunikaty ("brak pracownika
+    # otwarcia...") pojawiały się też dla projektu ochrony, którego
+    # prawdziwą przyczyną był np. urlop całej obsady jednej placówki.
+    from model.business_profile import DEFAULT_BUSINESS_TYPE
+
+    open_close_employees = [
+        employee for employee in schedule.employees
+        if not shop.get_location(employee).get_duty_rotation()
+        and not shop.get_location(employee).get_round_clock_start_hour()
+    ]
+    check_open_close = shop.business_type == DEFAULT_BUSINESS_TYPE and bool(open_close_employees)
+
     for day in range(1, schedule.days_in_month + 1):
+        if not check_open_close:
+            break
         if not shop.is_trade_day(day):
             continue
         hours = shop.get_open_hours_for_day(day)
@@ -197,7 +235,8 @@ def build_infeasibility_summary(schedule, shop) -> list[str]:
 
             fixed = []
             possible = []
-            for employee in schedule.employees:
+            blocked_by_previous_month = []
+            for employee in open_close_employees:
                 state = schedule.get_day(employee, day)
                 if state.is_leave or getattr(state, "is_sick", False) or getattr(state, "is_day_off", False):
                     continue
@@ -205,13 +244,34 @@ def build_infeasibility_summary(schedule, shop) -> list[str]:
                 if state.is_locked:
                     if matches:
                         fixed.append(employee)
-                else:
-                    possible.append(employee)
+                    continue
+
+                # Dzień 1 jest jedynym, gdzie "pamięć poprzedniego miesiąca"
+                # (patrz PreviousMonthShiftEnd) może wykluczyć kogoś, kto
+                # inaczej wyglądałby na "możliwego" - bez tego ta funkcja
+                # nie tłumaczyła w ogóle, że to ona jest przyczyną
+                # niewykonalności (patrz logic/generator/rest_constraint.py::
+                # _add_previous_month_rest_constraint, ta sama arytmetyka).
+                if day == 1:
+                    gap = _previous_month_rest_gap_hours(schedule, employee, target_time)
+                    if gap is not None and gap < 11:
+                        blocked_by_previous_month.append(employee)
+                        continue
+
+                possible.append(employee)
 
             if len(fixed) > required:
                 add(
                     f"Dzień {day}: zablokowano {len(fixed)} osoby na {label}, "
                     f"a wymagane są dokładnie {required}."
+                )
+            elif len(fixed) + len(possible) < required and blocked_by_previous_month:
+                add(
+                    f"Dzień {day}: pamięć poprzedniego miesiąca blokuje "
+                    f"{len(blocked_by_previous_month)} os. z wymaganych do pracy na {label} "
+                    "(przerwa do końca ich ostatniej zmiany poprzedniego miesiąca jest "
+                    "krótsza niż 11h) - sprawdź Edycja -> \"Godziny zakończenia z "
+                    "poprzedniego miesiąca...\"."
                 )
             elif len(fixed) + len(possible) < required:
                 add(
@@ -225,7 +285,7 @@ def build_infeasibility_summary(schedule, shop) -> list[str]:
 
         if policies.get("meat_coverage") == ConstraintPolicy.MANDATORY:
             available_meat = [
-                employee for employee in schedule.employees
+                employee for employee in open_close_employees
                 if (employee.is_meat or employee.is_meat_light)
                 and not schedule.get_day(employee, day).is_leave
                 and not getattr(schedule.get_day(employee, day), "is_sick", False)
@@ -262,6 +322,82 @@ def build_infeasibility_summary(schedule, shop) -> list[str]:
             "dostępność pracowników oraz wymagania dla danego dnia."
         )
     return messages
+
+
+def _is_unavailable(state) -> bool:
+    return (
+        state.is_leave
+        or getattr(state, "is_sick", False)
+        or getattr(state, "is_day_off", False)
+        or (state.is_locked and not state.start)
+    )
+
+
+def _add_duty_rotation_supply_messages(schedule, shop, add) -> None:
+    """Rotacja służby 24/7: doba placówki wymaga dokładnie jednej osoby
+    naraz. Dowodliwe z samych danych przyczyny braku rozwiązania - nikt z
+    placówki nie jest tego dnia dostępny (urlop/L4/wolne), albo jedyna
+    dostępna osoba nie może wziąć zmiany 24h, a dwóch osób do podziału
+    doby nie ma."""
+    from logic.generator.duty_rotation_constraint import (
+        NIE_CHCE_24H_ROLE_KEY,
+        group_employees_with_duty_rotation,
+    )
+
+    from logic.generator.duty_rotation_manual_coverage import build_duty_coverage_plan, match_duty_key
+
+    employees = schedule.employees
+    # Doby zaplanowane wokół ręcznych wpisów (także z dnia poprzedniego,
+    # sięgających w tę dobę) nie wymagają standardowego podziału - podpowiedź
+    # "tylko 1 osoba" nie jest tam dowodliwa.
+    plan = build_duty_coverage_plan(schedule, shop, employees)
+    for location_key, (rotation, indices) in group_employees_with_duty_rotation(employees, shop).items():
+        location = shop.locations.get(location_key)
+        name = location.name if location is not None else location_key
+        for day in range(1, schedule.days_in_month + 1):
+            # Ręcznie zablokowana zmiana 24h (dokładnie zmiana 24h rotacji)
+            # osobie z "Nie chce zmian 24h", gdy ta zasada jest Wymagana -
+            # blokada wymusza tę zmianę, a zasada ją zakazuje.
+            if shop.constraint_policies.get("duty_rotation_no24h") == ConstraintPolicy.MANDATORY:
+                for e in indices:
+                    state = schedule.get_day(employees[e], day)
+                    if (
+                        employees[e].custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False)
+                        and state.is_locked
+                        and not state.is_leave
+                        and match_duty_key(state, rotation, shop.weekday(day)) == "weekend_full"
+                        and not (plan is not None and plan.is_fixed(employees[e], day))
+                    ):
+                        add(
+                            f"{name}, dzień {day}: {employees[e].display_name()} ma ręcznie "
+                            "wpisaną zmianę 24h, a zaznaczone „Nie chce zmian 24h” "
+                            "(zasada Wymagana)."
+                        )
+            if location is not None and location.is_duty_day_closed(shop.year, shop.month, day):
+                continue
+            available = [
+                employees[e] for e in indices
+                if not _is_unavailable(schedule.get_day(employees[e], day))
+            ]
+            if not available:
+                add(
+                    f"{name}, dzień {day}: nikt z pracowników placówki nie jest "
+                    "dostępny (urlop/L4/wolne) - doby nie da się obsadzić."
+                )
+            elif len(available) == 1 and not (plan is not None and plan.is_planned(location_key, day)):
+                only = available[0]
+                weekday_split = shop.weekday(day) < 5 and not rotation.get("only_12_24h")
+                if weekday_split:
+                    add(
+                        f"{name}, dzień {day}: dostępna jest tylko 1 osoba "
+                        f"({only.display_name()}), a doba wymaga dwóch zmian."
+                    )
+                elif only.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False):
+                    add(
+                        f"{name}, dzień {day}: dostępna jest tylko 1 osoba "
+                        f"({only.display_name()}), a ma zaznaczone „Nie chce "
+                        "zmian 24h” - doby nie da się obsadzić."
+                    )
 
 
 class GeneratorDiagnostics:

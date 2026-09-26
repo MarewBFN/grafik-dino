@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from logic.auto_generator import AutoScheduleGenerator
+from logic.generator.diagnostics import build_infeasibility_summary
 from logic.generator.night_constraint import add_no_night_constraint
 from logic.generator.trace import build_random_project
 from model.constraint_policy import ConstraintPolicy
@@ -154,3 +155,91 @@ class GeneratorDiagnosticsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DutyRotationInfeasibilitySummaryTests(unittest.TestCase):
+    """Projekt ochrony (rotacja służby 24/7) - komunikat o braku rozwiązania
+    ma wskazać placówkę i dzień, a nie regułę otwarcia/zamknięcia Dino."""
+
+    def _shop_and_schedule(self, n=3, no24h=False):
+        from model.location import LocationConfig
+
+        shop = ShopConfig(2026, 10)
+        shop.business_type = "custom_test_diag_duty"
+        loc = LocationConfig(key="site1", name="LakPol Słupsk")
+        loc.set_24_7(True)
+        loc.set_duty_rotation({
+            "only_12_24h": True,
+            "weekend_full": {"start": "07:00"},
+            "weekend_half_a": {"start": "07:00", "end": "19:00"},
+            "weekend_half_b": {"start": "19:00", "end": "07:00"},
+        })
+        shop.locations = {"site1": loc}
+        employees = [
+            Employee(
+                last_name=f"E{i}", first_name="G", location_key="site1",
+                custom_roles={"nie_chce_24h": True} if no24h else {},
+            )
+            for i in range(n)
+        ]
+        return shop, MonthSchedule(2026, 10, employees=employees), employees
+
+    def test_whole_location_on_leave_names_location_and_day(self):
+        shop, schedule, employees = self._shop_and_schedule()
+        for emp in employees:
+            schedule.get_day(emp, 20).set_leave()
+
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertEqual(
+            messages,
+            ["LakPol Słupsk, dzień 20: nikt z pracowników placówki nie jest dostępny "
+             "(urlop/L4/wolne) - doby nie da się obsadzić."],
+        )
+
+    def test_single_available_person_who_refuses_24h(self):
+        shop, schedule, employees = self._shop_and_schedule(n=2, no24h=True)
+        schedule.get_day(employees[0], 5).set_leave()
+
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertTrue(any("dzień 5" in m and "Nie chce" in m for m in messages), messages)
+
+    def test_no_dino_open_close_messages_for_duty_rotation_project(self):
+        shop, schedule, employees = self._shop_and_schedule()
+        for emp in employees:
+            schedule.get_day(emp, 20).set_leave()
+
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertFalse(any("otwarci" in m or "zamknięci" in m for m in messages), messages)
+
+    def test_no_single_person_hint_when_a_manual_entry_reaches_into_the_day(self):
+        """10.10: E1 i E2 na urlopie, dostępna tylko E0 ("Nie chce 24h") - ale
+        ręczna 24h E1 z 9.10 od 19:00 pokrywa dobę 10.10 do 19:00, a resztę
+        (19:00-07:00) E0 może wziąć jako zmianę resztkową planu
+        (duty_rotation_manual_coverage.py). Podpowiedź "doby nie da się
+        obsadzić" byłaby tu fałszywa."""
+        shop, schedule, employees = self._shop_and_schedule()
+        employees[0].custom_roles["nie_chce_24h"] = True
+        schedule.get_day(employees[1], 9).set_full_day_shift("19:00")
+        schedule.get_day(employees[1], 9).is_locked = True
+        for emp in employees[1:]:
+            schedule.get_day(emp, 10).set_leave()
+
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertFalse(any("dzień 10" in m for m in messages), messages)
+
+    def test_locked_24h_shift_for_employee_who_refuses_24h_names_person_and_day(self):
+        """Ręcznie zablokowana zmiana 24h (od początku doby) osobie z "Nie
+        chce zmian 24h" przy tej zasadzie jako Wymaganej - sprzeczność
+        dowodliwa z danych, a komunikat był ogólny."""
+        shop, schedule, employees = self._shop_and_schedule(n=3)
+        employees[0].custom_roles["nie_chce_24h"] = True
+        schedule.get_day(employees[0], 29).set_full_day_shift("07:00")
+        schedule.get_day(employees[0], 29).is_locked = True
+
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertTrue(any("dzień 29" in m and "E0 G" in m and "24h" in m for m in messages), messages)

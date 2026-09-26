@@ -4,6 +4,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
+from logic.monthly_hours_status import monthly_hours_status
+from export.export_style import is_dino_style
+
+_OVERTIME_FONT = Font(bold=True, color="FFCC0000")
+
 def _format_hour(time_str):
     if not time_str:
         return ""
@@ -11,10 +16,20 @@ def _format_hour(time_str):
         return str(int(str(time_str).split(":")[0]))
     return str(time_str)
 
-def export_schedule_to_excel(schedule, year, month, path):
+def export_schedule_to_excel(schedule, year, month, path, shop=None, employees=None):
+    """`shop` - opcjonalny ShopConfig, wyłącznie do podświetlenia przekroczenia
+    miesięcznego limitu godzin pełnego etatu na czerwono (brak = brak
+    podświetlenia, zachowanie sprzed tej funkcji). `employees` - opcjonalna
+    lista zamiast schedule.employees, do wydruku pojedynczego pracownika."""
+    if not is_dino_style(shop):
+        from export.security_excel_exporter import export_security_schedule_to_excel
+        return export_security_schedule_to_excel(schedule, year, month, path, shop=shop, employees=employees)
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Grafik"
+
+    employees = employees if employees is not None else schedule.employees
 
     days_in_month = calendar.monthrange(year, month)[1]
     weekdays = ["Pn", "Wt", "Śr", "Cz", "Pt", "S", "N"]
@@ -58,7 +73,7 @@ def export_schedule_to_excel(schedule, year, month, path):
             ws.cell(row=5, column=col).fill = fill_sun
 
     # NAGŁÓWKI PODSUMOWANIA (odwzorowanie ImageExporter)
-    sum_labels = ["Godziny", "Urlop", "L4", "Razem"]
+    sum_labels = ["Godziny", "Urlop", "L4", "Razem", "Nadgodziny"]
     for i, lbl in enumerate(sum_labels):
         col = sum_col_start + i
         ws.merge_cells(start_row=4, start_column=col, end_row=5, end_column=col)
@@ -68,7 +83,7 @@ def export_schedule_to_excel(schedule, year, month, path):
 
     # DANE PRACOWNIKÓW
     cur_row = 6
-    for emp in schedule.employees:
+    for emp in employees:
         # Scalone nazwisko
         ws.merge_cells(start_row=cur_row, start_column=1, end_row=cur_row+2, end_column=1)
         name_cell = ws.cell(row=cur_row, column=1, value=emp.display_name())
@@ -102,28 +117,38 @@ def export_schedule_to_excel(schedule, year, month, path):
                 cells[0].font = Font(bold=True)
             elif not ds.is_empty():
                 cells[0].value = _format_hour(ds.start)
+                # Bez znacznika "(+1)" dla zmian przez północ - usunięty
+                # całkiem na życzenie użytkownika.
                 cells[1].value = _format_hour(ds.end)
                 cells[2].value = ds.total_as_str()
 
         # PODSUMOWANIE W WIERSZU (na prawo)
+        hours_status = shop is not None and monthly_hours_status(schedule, shop, emp)
+        over_minutes = hours_status["over_minutes"] if hours_status else 0
+        overtime_str = f"{over_minutes // 60}:{over_minutes % 60:02d}"
+
         values = [
             schedule.total_hours_for_employee(emp),
             schedule.leave_hours_for_employee(emp),
             schedule.sick_hours_for_employee(emp),
-            schedule.total_with_leave_and_sick_for_employee(emp)
+            schedule.total_with_leave_and_sick_for_employee(emp),
+            overtime_str,
         ]
 
         for i, val in enumerate(values):
             col = sum_col_start + i
             ws.merge_cells(start_row=cur_row, start_column=col, end_row=cur_row+2, end_column=col)
-            ws.cell(row=cur_row, column=col, value=val).alignment = align_center
+            cell = ws.cell(row=cur_row, column=col, value=val)
+            cell.alignment = align_center
+            if hours_status and hours_status["is_over"] and i in (0, 4):
+                cell.font = _OVERTIME_FONT
 
         cur_row += 3
 
     # Krawędzie i szerokości
     ws.column_dimensions["A"].width = 25
     ws.column_dimensions["B"].width = 5
-    for col_idx in range(1, sum_col_start + 4):
+    for col_idx in range(1, sum_col_start + 5):
         col_ltr = get_column_letter(col_idx)
         if col_idx > 2: ws.column_dimensions[col_ltr].width = 6
         # Krawędzie tylko dla tabeli (od wiersza 3), omijamy nagłówek główny

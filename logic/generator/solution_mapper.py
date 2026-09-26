@@ -1,3 +1,4 @@
+from logic.generator.duty_rotation_manual_coverage import CUSTOM_KEYS, DAY_MINUTES, format_minutes, get_plan
 from ortools.sat.python import cp_model
 from datetime import datetime, timedelta
 from model.day_schedule import calc_start, calc_end
@@ -15,7 +16,10 @@ def save_solution(
     SHIFT_CLOSE,
     START_SHIFTS,
     END_SHIFTS,
-    trace=None
+    trace=None,
+    shift_night=None,
+    duty_shifts=None,
+    round_clock_shifts=None,
 ):
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         print("❌ BRAK ROZWIĄZANIA")
@@ -49,7 +53,14 @@ def save_solution(
         solver_open_per_day[d] = open_count
         solver_close_per_day[d] = close_count
 
-        print(f"Dzień {d}: OPEN={open_count} CLOSE={close_count} WORK={work_count}")
+        night_count = 0
+        if shift_night is not None:
+            night_count = sum(
+                solver.Value(x[e, d, shift_night])
+                for e in range(len(employees))
+            )
+
+        print(f"Dzień {d}: OPEN={open_count} CLOSE={close_count} WORK={work_count} NIGHT={night_count}")
 
     for e in range(len(employees)):
         emp = employees[e]
@@ -76,7 +87,83 @@ def save_solution(
                     print(f"[SKIP LOCKED] emp={e} day={d}")
                 continue
 
-            hours = shop.get_open_hours_for_day(d)
+            # SHIFT_NIGHT (Etap C planu zmian nocnych) ma własne, stałe
+            # godziny niezależne od open_hours dnia - sprawdzane przed
+            # get_open_hours_for_day poniżej, żeby dzień bez zwykłych godzin
+            # otwarcia (np. przyszły profil 24/7 bez "dnia handlowego") nie
+            # gubił cicho przypisanej zmiany nocnej.
+            if shift_night is not None and solver.Value(x[e, d, shift_night]) == 1:
+                night_hours = shop.get_location(emp).get_night_shift_hours()
+                if night_hours:
+                    night_start, night_end = night_hours
+                    schedule.set_day_hours(emp, d, night_start, night_end)
+                    if trace is not None:
+                        trace.log_assignment(e, d, shift_night, "solver_assignment")
+                continue
+
+            # Rotacja służby 24/7 (Etap B "plan profil ochrona") - podobnie
+            # jak SHIFT_NIGHT, ma własne, stałe godziny niezależne od
+            # open_hours dnia, więc sprawdzana też przed
+            # get_open_hours_for_day poniżej.
+            if duty_shifts is not None:
+                rotation = shop.get_location(emp).get_duty_rotation()
+                assigned_duty = False
+                if rotation:
+                    plan = get_plan(duty_shifts)
+                    for key, shift_id in duty_shifts.items():
+                        if solver.Value(x[e, d, shift_id]) != 1:
+                            continue
+                        if key in CUSTOM_KEYS:
+                            # Zmiana resztkowa doby zaplanowanej wokół
+                            # ręcznych wpisów (duty_rotation_manual_coverage.py).
+                            piece_start, piece_end = plan.day_pieces(emp.location_key or "", d)[CUSTOM_KEYS.index(key)]
+                            if piece_end - piece_start >= DAY_MINUTES:
+                                schedule.set_day_full_day_shift(emp, d, format_minutes(piece_start))
+                            else:
+                                schedule.set_day_hours(emp, d, format_minutes(piece_start), format_minutes(piece_end))
+                        elif key == "weekend_full":
+                            schedule.set_day_full_day_shift(emp, d, rotation[key]["start"])
+                        else:
+                            window = rotation[key]
+                            schedule.set_day_hours(emp, d, window["start"], window["end"])
+                        if trace is not None:
+                            trace.log_assignment(e, d, shift_id, "solver_assignment")
+                        assigned_duty = True
+                        break
+                if assigned_duty:
+                    continue
+
+            # Rotacja całodobowa "ogólna" (round_clock_constraint.py) - jak
+            # duty_rotation wyżej, własne, stałe (per kafelek) godziny
+            # niezależne od open_hours dnia, sprawdzane przed
+            # get_open_hours_for_day poniżej.
+            if round_clock_shifts is not None:
+                start_hour = shop.get_location(emp).get_round_clock_start_hour()
+                if start_hour:
+                    from logic.generator.round_clock_constraint import (
+                        round_clock_tile_count,
+                        round_clock_tile_start_hour,
+                    )
+
+                    n_tiles = round_clock_tile_count(shop.standard_daily_hours)
+                    assigned_tile = False
+                    for tile_index in range(n_tiles):
+                        if solver.Value(x[e, d, round_clock_shifts[tile_index]]) != 1:
+                            continue
+                        tile_start = round_clock_tile_start_hour(
+                            start_hour, tile_index, shop.standard_daily_hours
+                        )
+                        eff_hours = get_effective_daily_hours(emp, shop)
+                        tile_end = calc_end(tile_start, eff_hours)
+                        schedule.set_day_hours(emp, d, tile_start, tile_end)
+                        if trace is not None:
+                            trace.log_assignment(e, d, round_clock_shifts[tile_index], "solver_assignment")
+                        assigned_tile = True
+                        break
+                    if assigned_tile:
+                        continue
+
+            hours = shop.get_location(emp).get_open_hours_for_day(d)
             if not hours:
                 continue
 
@@ -138,13 +225,12 @@ def save_solution(
         saved_open = 0
         saved_close = 0
 
-        hours = shop.get_open_hours_for_day(d)
-        if not hours:
-            continue
-
-        open_t, close_t = hours
-
         for emp in employees:
+            hours = shop.get_location(emp).get_open_hours_for_day(d)
+            if not hours:
+                continue
+            open_t, close_t = hours
+
             ds = schedule.get_day(emp, d)
 
             if not ds.start or not ds.end:

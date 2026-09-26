@@ -137,7 +137,7 @@ def build_random_project(
                 day_state.set_sick()
                 metadata["blocked_days"].append({"employee": employee.display_name(), "day": day, "type": "sick"})
             elif roll < leave_probability + sick_probability + locked_probability:
-                hours = shop.get_open_hours_for_day(day)
+                hours = shop.get_location(employee).get_open_hours_for_day(day)
                 if hours:
                     day_state.is_locked = True
                     day_state.start = hours[0]

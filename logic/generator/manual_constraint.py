@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from logic.generator.constraints_basic import is_location_open_for_employee
+
 
 def resolve_manual_shift(
     start,
@@ -48,13 +50,34 @@ def add_manual_shift_constraints(
     SHIFT_CLOSE,
     START_SHIFT_MAP,
     END_SHIFT_MAP,
-    trace=None
+    trace=None,
+    shift_night=None,
 ):
     if trace is not None:
         trace.log_constraint("manual_shift", "apply locked/manual day assignments")
 
     for e in range(len(employees)):
         emp = employees[e]
+
+        # Pracownicy rotacji 24/7 (duty_rotation) mają swoją, równoległą
+        # wersję tego constraintu - logic/generator/duty_rotation_manual_constraint.py
+        # (patrz jej docstring dla pełnego uzasadnienia). Ten stary model
+        # OPEN/CLOSE/START/END/NIGHT nie zna pięciu zmian duty_rotation, a
+        # próba dopasowania ręcznej blokady do niego dawała model sprzeczny
+        # z add_duty_rotation_gate_constraint. Zero zmiany zachowania dla
+        # każdego projektu bez duty_rotation (czyli każdego dzisiejszego
+        # projektu Dino) - get_duty_rotation() zawsze zwraca None/pusty
+        # słownik dla lokalizacji bez tej konfiguracji.
+        if shop.get_location(emp).get_duty_rotation():
+            continue
+
+        # Analogicznie: pracownicy rotacji całodobowej "ogólnej" (round-clock,
+        # patrz logic/generator/round_clock_constraint.py) mają swoją,
+        # równoległą wersję tego constraintu -
+        # round_clock_manual_constraint.py. Zero zmiany zachowania dla
+        # każdej lokalizacji bez ustawionej round_clock_start_hour.
+        if shop.get_location(emp).get_round_clock_start_hour():
+            continue
 
         for d in days:
 
@@ -63,6 +86,13 @@ def add_manual_shift_constraints(
             # 🔵 Zablokowany typ zmiany (1=rano/2=popołudnie) — solver sam
             # dobiera konkretny slot z odpowiedniej grupy.
             shift_class = getattr(day_state, "shift_class", None)
+            if shift_class in ("1", "2") and not is_location_open_for_employee(shop, emp, d):
+                # Dzień zamknięty w lokalizacji pracownika ("Nieczynne",
+                # święto) - typ zmiany ustawiony, zanim dzień stał się
+                # zamknięty, nie ma czego wymuszać (add_non_trade_day_constraints
+                # i tak zeruje dzień; wymuszenie robiło cały miesiąc
+                # niewykonalnym, a wcześniej dawało niewidoczną zmianę).
+                continue
             if shift_class in ("1", "2"):
                 if shift_class == "1":
                     allowed = {SHIFT_OPEN, *START_SHIFT_MAP.keys()}
@@ -93,25 +123,44 @@ def add_manual_shift_constraints(
                     model.Add(x[e, d, s] == 0)
                 continue
 
-            hours = shop.get_open_hours_for_day(d)
-            if not hours:
-                continue
+            # 🌙 zmiana nocna (Etap D planu zmian nocnych) - rozpoznawana po
+            # dokładnym dopasowaniu do skonfigurowanego okna tej lokalizacji
+            # (jedyny wariant, jaki UI w ogóle pozwala zablokować, patrz
+            # logic/schedule_controller.py). Sprawdzana przed
+            # get_open_hours_for_day, bo okno nocne nie zależy od zwykłych
+            # godzin otwarcia i dzień bez nich nie powinien tracić locka.
+            shift = None
+            if shift_night is not None:
+                night_hours = shop.get_location(emp).get_night_shift_hours()
+                if night_hours and (start, end) == night_hours:
+                    shift = shift_night
 
-            open_time, close_time = hours
+            if shift is None:
+                hours = shop.get_location(emp).get_open_hours_for_day(d)
+                if not hours:
+                    # Dzień zamknięty - add_non_trade_day_constraints zostawia
+                    # zablokowaną zmianę tego dnia tej funkcji, a bez godzin
+                    # otwarcia nie da się jej dopasować: blokujemy wszystko
+                    # (inaczej solver mógłby tu przydzielić niewidoczną zmianę).
+                    for s in all_shifts:
+                        model.Add(x[e, d, s] == 0)
+                    continue
 
-            shift = resolve_manual_shift(
-                start,
-                end,
-                open_time,
-                close_time,
-                {v: k for k, v in START_SHIFT_MAP.items()},
-                {v: k for k, v in END_SHIFT_MAP.items()}
-            )
+                open_time, close_time = hours
 
-            if shift == "OPEN":
-                shift = SHIFT_OPEN
-            elif shift == "CLOSE":
-                shift = SHIFT_CLOSE
+                shift = resolve_manual_shift(
+                    start,
+                    end,
+                    open_time,
+                    close_time,
+                    {v: k for k, v in START_SHIFT_MAP.items()},
+                    {v: k for k, v in END_SHIFT_MAP.items()}
+                )
+
+                if shift == "OPEN":
+                    shift = SHIFT_OPEN
+                elif shift == "CLOSE":
+                    shift = SHIFT_CLOSE
 
             # 🔥 KLUCZOWA POPRAWKA:
             # jeśli nie umiemy dopasować zmiany → blokujemy wszystko

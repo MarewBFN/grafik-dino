@@ -15,6 +15,7 @@ Priorytetem jest czytelny kod i stabilny generator grafików.
 - Nie dodawaj nowych bibliotek bez mojej zgody.
 - Nie twórz środowiska .venv ani nie zmieniaj sposobu uruchamiania projektu.
 - Preferuj prostsze rozwiązania zamiast nadmiernej abstrakcji.
+- Pracuj na branchu `integration/enyo-only` (lokalnie i na origin) - to jedyny roboczy branch obok `main`. Nie twórz nowych branchy (w tym branchy sesji/agenta) bez wyraźnej potrzeby i mojej zgody. Jeśli już jakiś powstanie (np. wymuszony przez środowisko pracy), scal go do `integration/enyo-only` i usuń najszybciej jak to możliwe, zamiast zostawiać go wiszący.
 
 ## Styl pracy
 

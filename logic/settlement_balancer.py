@@ -29,7 +29,7 @@ def compute_safe_adjustment_bounds(emp, shop):
     return (-_MAX_TRIM_MINUTES, _MAX_EXTEND_MINUTES)
 
 
-def classify_editable_side(ds, shop, day):
+def classify_editable_side(ds, shop, day, emp=None):
     """Która krawędź zmiany jest "bezpieczna" do ruszenia w danym dniu.
 
     Zwraca "start", "end" albo None (dzień pusty/urlop/L4/nie-handlowy —
@@ -38,7 +38,19 @@ def classify_editable_side(ds, shop, day):
     if ds.is_empty() or ds.is_leave or getattr(ds, "is_sick", False) or getattr(ds, "is_day_off", False):
         return None
 
-    hours = shop.get_open_hours_for_day(day)
+    if ds.crosses_midnight():
+        # Zmiana nocna (plan zmian nocnych, Etap B/C) to sztywny,
+        # skonfigurowany blok lokalizacji - nie wolno jej tu przycinać ani
+        # wydłużać krawędziowo, bo przestałaby dokładnie pasować do
+        # night_shift i manual_constraint.py przestałby ją rozpoznawać przy
+        # kolejnym "napraw" (Etap D). Cały dzień nadal można zwolnić, patrz
+        # balance_employee_hours - tylko nie da się go tu "dotrimować".
+        return None
+
+    # Godziny WŁASNEJ lokalizacji pracownika (emp=None tylko dla wywołań bez
+    # znanego pracownika - fallback na godziny projektu) - Lokalizacje są
+    # źródłem prawdy dla generatora, patrz model/location.py.
+    hours = shop.get_location(emp).get_open_hours_for_day(day) if emp is not None else shop.get_open_hours_for_day(day)
     if not hours:
         return None
 
@@ -104,10 +116,18 @@ def balance_employee_hours(schedule, shop, employee, target_minutes):
         summary["reached_target"] = True
         return summary
 
+    # Zmiana nocna nigdy nie ma "bezpiecznej krawędzi" (classify_editable_side
+    # zwraca dla niej None - patrz komentarz tam), ale wciąż może zostać w
+    # całości zwolniona poniżej, gdy nadwyżka jest duża - stąd osobny
+    # warunek `crosses_midnight()`, żeby nie wypadła z candidate_days
+    # całkowicie i nie stała się niebalansowalna.
     candidate_days = [
         day for day in days
         if shop.is_trade_day(day)
-        and classify_editable_side(schedule.get_day(employee, day), shop, day) is not None
+        and (
+            classify_editable_side(schedule.get_day(employee, day), shop, day, emp=employee) is not None
+            or schedule.get_day(employee, day).crosses_midnight()
+        )
     ]
 
     # Duża nadwyżka: zamiast dłubać po 15 minut, zwolnij całe dni. Wolno
@@ -143,7 +163,7 @@ def balance_employee_hours(schedule, shop, employee, target_minutes):
             break
 
         ds = schedule.get_day(employee, day)
-        side = classify_editable_side(ds, shop, day)
+        side = classify_editable_side(ds, shop, day, emp=employee)
         if side is None:
             continue
 

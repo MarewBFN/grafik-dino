@@ -1,46 +1,18 @@
 import os
-from pyexpat import model
 
 from ortools.sat.python import cp_model
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
-from model.constraint_policy import ConstraintPolicy
-from model.day_schedule import calc_start, calc_end
 from logic.generator.solver import build_objective, solve_model
 from logic.generator.solution_mapper import save_solution
-from logic.generator.constraints_basic import (
-    add_one_shift_per_day_constraint,
-    add_non_trade_day_constraints,
-    add_leave_constraints,
-    add_day_off_constraints,
-)
-from logic.generator.constraints_staff import (
-    add_fixed_staff_shift_constraints,
-    add_max_consecutive_constraint,
-)
-from logic.generator.rest_constraint import (
-    add_rest_11h_constraint,
-    add_rest_11h_constraint_simplified,
-)
-from logic.generator.meat_constraint import (add_meat_constraint, add_meat_coverage_constraint)
-from logic.generator.meat_light_budget import build_meat_light_duty
-from logic.generator.hours_constraint import (
-    add_monthly_hours_constraint,
-    add_balance_constraint
-)
-from logic.generator.manual_constraint import add_manual_shift_constraints
-from logic.generator.constraints_logic import add_work_dependency_constraint
-from logic.generator.objective import (
-    add_open_close_penalty,
-    add_work_balance_penalty,
-    add_morning_afternoon_balance_penalty,
-    add_edge_shift_bonus,
-    add_workload_balance_penalty,
-)
-from logic.generator.availability_constraint import add_availability_constraint
-from logic.generator.night_constraint import add_no_night_constraint
-from logic.generator.afternoon_constraint import add_no_afternoon_constraint
+from logic.generator.constraint_registry import ConstraintContext, apply_registry
+from logic.generator.constraints_basic import is_location_open_for_employee
 from logic.generator.trace import ConstraintTraceLogger
+
+# Only the "dino_retail" business profile exists today; AutoScheduleGenerator
+# looks up shop.business_type through model.business_profile.get_profile, but
+# there's only one constraint wiring module to look up so far.
+from logic.generator import dino_retail_profile
 
 class AutoScheduleGenerator:
 
@@ -83,6 +55,62 @@ class AutoScheduleGenerator:
             self.SHIFT_WORK_END_60: 60,
             self.SHIFT_WORK_END_75: 75,
         }
+
+        # Sztywny blok zmiany nocnej (Etap C planu zmian nocnych) - istnieje
+        # w tej samej, wspólnej przestrzeni zmiennych x[e,d,s] dla KAŻDEGO
+        # profilu (tak jak SHIFT_OPEN/CLOSE), ale logic/generator/night_shift_constraint.py
+        # blokuje ją twardo (x[e,d,SHIFT_NIGHT]==0) dla każdego pracownika,
+        # którego lokalizacja nie ma skonfigurowanego night_shift (Etap B) -
+        # więc dla dzisiejszych projektów (żadna lokalizacja go nie ma) to
+        # zero zmiany zachowania, tylko nieużywane zmienne w modelu.
+        self.SHIFT_NIGHT = 14
+
+        # Rotacja służby 24/7 (np. ochrona) - "plan profil ochrona (analiza
+        # specyfikacji klienta).md", sekcja 12, Etap B. Istnieją w tej samej,
+        # wspólnej przestrzeni zmiennych x[e,d,s] dla KAŻDEGO profilu (tak
+        # jak SHIFT_NIGHT), ale logic/generator/duty_rotation_constraint.py
+        # blokuje je twardo dla każdego pracownika, którego lokalizacja nie
+        # ma skonfigurowanej duty_rotation (Etap A) - dla dzisiejszych
+        # projektów (żadna lokalizacja jej nie ma) to zero zmiany
+        # zachowania, tylko nieużywane zmienne w modelu.
+        self.SHIFT_DUTY_WEEKDAY_LONG = 15
+        self.SHIFT_DUTY_WEEKDAY_SHORT = 16
+        self.SHIFT_DUTY_WEEKEND_FULL = 17
+        self.SHIFT_DUTY_WEEKEND_HALF_A = 18
+        self.SHIFT_DUTY_WEEKEND_HALF_B = 19
+        # Zmiany "resztkowe" rotacji (custom_0..N) - kawałki doby
+        # dopasowane wokół ręcznych wpisów niepasujących do rotacji (patrz
+        # logic/generator/duty_rotation_manual_coverage.py). Blokowane
+        # bramą rotacji wszędzie poza dobami, dla których plan je wyznaczył.
+        from logic.generator.duty_rotation_manual_coverage import CUSTOM_KEYS, DutyShiftMap
+        from logic.generator.round_clock_constraint import MAX_ROUND_CLOCK_TILES
+        first_custom_id = 20 + MAX_ROUND_CLOCK_TILES
+        self.DUTY_SHIFTS = DutyShiftMap({
+            "weekday_long": self.SHIFT_DUTY_WEEKDAY_LONG,
+            "weekday_short": self.SHIFT_DUTY_WEEKDAY_SHORT,
+            "weekend_full": self.SHIFT_DUTY_WEEKEND_FULL,
+            "weekend_half_a": self.SHIFT_DUTY_WEEKEND_HALF_A,
+            "weekend_half_b": self.SHIFT_DUTY_WEEKEND_HALF_B,
+            **{key: first_custom_id + i for i, key in enumerate(CUSTOM_KEYS)},
+        })
+        self.DUTY_CUSTOM_SHIFTS = [self.DUTY_SHIFTS[key] for key in CUSTOM_KEYS]
+
+        # Rotacja całodobowa "ogólna" dla lokalizacji 24/7 z ustawioną
+        # godziną rozpoczęcia (LocationConfig.round_clock_start_hour) - patrz
+        # logic/generator/round_clock_constraint.py. W odróżnieniu od
+        # SHIFT_DUTY_* (pięć nazwanych zmian specyficznych dla Ochrony), to
+        # MAX_ROUND_CLOCK_TILES jednakowych "kafelków" - ile z nich faktycznie
+        # jest w użyciu dla danego projektu zależy od shop.standard_daily_hours
+        # (patrz round_clock_tile_count) i jest egzekwowane przez
+        # add_round_clock_gate_constraint (kafelki >= N zawsze zablokowane).
+        # Istnieją w tej samej, wspólnej przestrzeni zmiennych x[e,d,s] dla
+        # KAŻDEGO profilu, ale ta brama blokuje je twardo dla każdego
+        # pracownika, którego lokalizacja nie ma round_clock_start_hour - dla
+        # dzisiejszych projektów (żadna lokalizacja go nie ma) to zero zmiany
+        # zachowania, tylko nieużywane zmienne w modelu.
+        from logic.generator.round_clock_constraint import MAX_ROUND_CLOCK_TILES
+        self.ROUND_CLOCK_SHIFTS = list(range(20, 20 + MAX_ROUND_CLOCK_TILES))
+
         # wszystkie zmiany (tu można dodawać kolejne typy zmian)
         self.ALL_SHIFTS = (
             self.SHIFT_OPEN,
@@ -100,25 +128,20 @@ class AutoScheduleGenerator:
             self.SHIFT_WORK_END_45,
             self.SHIFT_WORK_END_60,
             self.SHIFT_WORK_END_75,
+
+            self.SHIFT_NIGHT,
+
+            self.SHIFT_DUTY_WEEKDAY_LONG,
+            self.SHIFT_DUTY_WEEKDAY_SHORT,
+            self.SHIFT_DUTY_WEEKEND_FULL,
+            self.SHIFT_DUTY_WEEKEND_HALF_A,
+            self.SHIFT_DUTY_WEEKEND_HALF_B,
+
+            *self.ROUND_CLOCK_SHIFTS,
+
+            *self.DUTY_CUSTOM_SHIFTS,
         )
 
-        # Wagi dla soft constraintów (im wyższa, tym ważniejszy constraint)    
-        self.constraint_weights = {
-            "meat": 1000,
-            "meat_coverage": 1500,
-            "meat_light_usage": 400,
-            "rest_11h": 5000,
-            "balance": 1000,
-            "max_consecutive": 100,
-            "open": 200,
-            "close": 200,
-            "monthly_hours": 250,
-            "availability": 5000,
-            "no_night": 5000,
-            "no_afternoon": 5000,
-            "morning_afternoon_balance": 10000,
-            "add_edge_shift_bonus": 1000,
-        }
     # ==================================================
     # PUBLIC
     # ==================================================
@@ -152,6 +175,11 @@ class AutoScheduleGenerator:
         from logic.manager_schedule import apply_all_manager_schedules
         apply_all_manager_schedules(self.schedule, self.shop)
 
+        # Ręczne wpisy pracowników rotacji liczone jako pokrycie doby -
+        # plan liczony z zablokowanych dni, więc dopiero po ich ustaleniu.
+        from logic.generator.duty_rotation_manual_coverage import build_duty_coverage_plan
+        self.DUTY_SHIFTS.plan = build_duty_coverage_plan(self.schedule, self.shop, self.schedule.employees)
+
         for emp in self.schedule.employees:
             object.__setattr__(emp, '_orig_daily_hours', emp.daily_hours)
 
@@ -163,7 +191,16 @@ class AutoScheduleGenerator:
         min_open = self.shop.constraints.get("min_open_staff", 3)
         min_close = self.shop.constraints.get("min_close_staff", 3)
         max_consecutive = self.shop.constraints.get("max_consecutive_days", 4)
-        trade_days = [d for d in days if self.shop.is_trade_day(d)]
+        # Dzień, w którym lokalizacja KAŻDEGO pracownika jest zamknięta
+        # ("Nieczynne", święto, ręczne zamknięcie dnia), nie jest dniem
+        # obsady - add_non_trade_day_constraints blokuje w nim wszystkie
+        # zmiany, więc wymogi obsady (open/close/mięso/role) byłyby w nim
+        # niespełnialne. Projekt bez pracowników - bez zmian.
+        trade_days = [
+            d for d in days
+            if self.shop.is_trade_day(d)
+            and (not employees or any(is_location_open_for_employee(self.shop, emp, d) for emp in employees))
+        ]
 
         print("Liczba pracowników:", len(employees))
         print("Dni w miesiącu:", len(days))
@@ -190,383 +227,48 @@ class AutoScheduleGenerator:
 
         x = self._create_variables(model, employees, days)
 
-        add_non_trade_day_constraints(model, x, employees, days, self.shop, self.ALL_SHIFTS, trace=trace)
-        add_leave_constraints(model, x, employees, days, self.schedule, self.ALL_SHIFTS, trace=trace)
-        add_day_off_constraints(model, x, employees, days, self.schedule, self.ALL_SHIFTS, trace=trace)
-        add_manual_shift_constraints(
-            model,
-            x,
-            employees,
-            days,
-            self.schedule,
-            self.shop,
-            self.ALL_SHIFTS,
-            self.SHIFT_OPEN,
-            self.SHIFT_CLOSE,
-            self.START_SHIFT_MAP,
-            self.END_SHIFT_MAP,
-            trace=trace
-        )
-        add_work_dependency_constraint(
-            model,
-            x,
-            employees,
-            days,
-            self.SHIFT_OPEN,
-            self.SHIFT_CLOSE,
-            self.ALL_SHIFTS,
-            trace=trace
-        )
-        add_one_shift_per_day_constraint(model, x, employees, days, self.ALL_SHIFTS, trace=trace)
-
-        # Osoby is_meat_light: pula zapasowa dla obłożenia mięsa, używana tylko
-        # gdy brak innej możliwości. Budżet ich "mięsnego" czasu jest twardo
-        # ograniczony do max 1h/dzień/osobę (build_meat_light_duty) i ta sama
-        # pula (shift_duty_sum / slot_duty_sum) jest współdzielona przez
-        # wszystkie poniższe constrainty mięsne, żeby limit nie dało się obejść
-        # przez inny z nich. Waga "meat_light_usage" w objective dodatkowo
-        # zniechęca do używania ich, gdy jest dostępny prawdziwy "mięsiarz".
-        slot_duty_sum, shift_duty_sum = build_meat_light_duty(
-            model, x, employees, trade_days, self.shop,
-            self.SHIFT_OPEN, self.SHIFT_CLOSE,
-            self.START_SHIFT_MAP, self.END_SHIFT_MAP,
-        )
-        meat_light_penalties = []
-
-        open_violations = self._apply_policy(
-            "open",
-            hard_fn=lambda: add_fixed_staff_shift_constraints(
-                model, x, employees, trade_days,
-                self.SHIFT_OPEN,
-                min_open,
-                soft=False,
-                trace=trace,
-                meat_light_penalties=meat_light_penalties,
-                shift_duty_sum=shift_duty_sum
-            ),
-            soft_fn=lambda: add_fixed_staff_shift_constraints(
-                model, x, employees, trade_days,
-                self.SHIFT_OPEN,
-                min_open,
-                soft=True,
-                trace=trace,
-                meat_light_penalties=meat_light_penalties,
-                shift_duty_sum=shift_duty_sum
-            )
+        ctx = ConstraintContext(
+            model=model,
+            x=x,
+            employees=employees,
+            days=days,
+            trade_days=trade_days,
+            schedule=self.schedule,
+            shop=self.shop,
+            all_shifts=self.ALL_SHIFTS,
+            shift_open=self.SHIFT_OPEN,
+            shift_close=self.SHIFT_CLOSE,
+            start_shift_map=self.START_SHIFT_MAP,
+            end_shift_map=self.END_SHIFT_MAP,
+            trace=trace,
+            shift_night=self.SHIFT_NIGHT,
+            duty_shifts=self.DUTY_SHIFTS,
+            round_clock_shifts=self.ROUND_CLOCK_SHIFTS,
         )
 
-        close_violations = self._apply_policy(
-            "close",
-            hard_fn=lambda: add_fixed_staff_shift_constraints(
-                model, x, employees, trade_days,
-                self.SHIFT_CLOSE,
-                min_close,
-                soft=False,
-                trace=trace,
-                meat_light_penalties=meat_light_penalties,
-                shift_duty_sum=shift_duty_sum
-            ),
-            soft_fn=lambda: add_fixed_staff_shift_constraints(
-                model, x, employees, trade_days,
-                self.SHIFT_CLOSE,
-                min_close,
-                soft=True,
-                trace=trace,
-                meat_light_penalties=meat_light_penalties,
-                shift_duty_sum=shift_duty_sum
-            )
-        )
+        from model.business_profile import get_custom_profile
+        custom = get_custom_profile(self.shop.business_type)
 
-        rest_11h_mode = self.shop.constraints.get("rest_11h_mode", "standard")
-
-        if rest_11h_mode == "simplified":
-            rest_hard_fn = lambda: add_rest_11h_constraint_simplified(
-                model,
-                x,
-                employees,
-                days,
-                trade_days,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=False,
-                trace=trace
-            )
-            rest_soft_fn = lambda: add_rest_11h_constraint_simplified(
-                model,
-                x,
-                employees,
-                days,
-                trade_days,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=True,
-                trace=trace
-            )
+        if custom is not None:
+            from logic.generator import custom_profile_wiring
+            wiring = custom_profile_wiring
+            wiring.setup_context(ctx)
+            specs = wiring.build_specs(custom)
+            weights = wiring.build_weights(custom)
         else:
-            rest_hard_fn = lambda: add_rest_11h_constraint(
-                model,
-                x,
-                employees,
-                days,
-                trade_days,
-                self.shop,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=False,
-                trace=trace
-            )
-            rest_soft_fn = lambda: add_rest_11h_constraint(
-                model,
-                x,
-                employees,
-                days,
-                trade_days,
-                self.shop,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=True,
-                trace=trace
-            )
+            # Only "dino_retail" has its own hard-coded wiring module today;
+            # every user-authored profile goes through custom_profile_wiring
+            # above instead.
+            wiring = dino_retail_profile
+            wiring.setup_context(ctx)
+            specs = wiring.ALL_SPECS
+            weights = wiring.CONSTRAINT_WEIGHTS
 
-        rest_violations = self._apply_policy(
-            "rest_11h",
-            hard_fn=rest_hard_fn,
-            soft_fn=rest_soft_fn
-        )
-
-        balance_violations = self._apply_policy(
-            "balance",
-            hard_fn=lambda: add_balance_constraint(
-                model, x, employees, days, self.shop, self.ALL_SHIFTS, soft=False, trace=trace
-            ),
-            soft_fn=lambda: add_balance_constraint(
-                model, x, employees, days, self.shop, self.ALL_SHIFTS, soft=True, trace=trace
-            )
-        )
-
-        availability_violations = self._apply_policy(
-            "availability",
-            hard_fn=lambda: add_availability_constraint(
-                model,
-                x,
-                employees,
-                days,
-                self.shop,
-                self.ALL_SHIFTS,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=False,
-                trace=trace
-            ),
-            soft_fn=lambda: add_availability_constraint(
-                model,
-                x,
-                employees,
-                days,
-                self.shop,
-                self.ALL_SHIFTS,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=True,
-                trace=trace
-            )
-        )
-
-        night_violations = self._apply_policy(
-            "no_night",
-            hard_fn=lambda: add_no_night_constraint(
-                model,
-                x,
-                employees,
-                days,
-                self.shop,
-                self.ALL_SHIFTS,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=False,
-                trace=trace
-            ),
-            soft_fn=lambda: add_no_night_constraint(
-                model,
-                x,
-                employees,
-                days,
-                self.shop,
-                self.ALL_SHIFTS,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=True,
-                trace=trace
-            )
-        )
-
-        afternoon_violations = self._apply_policy(
-            "no_afternoon",
-            hard_fn=lambda: add_no_afternoon_constraint(
-                model,
-                x,
-                employees,
-                days,
-                self.ALL_SHIFTS,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=False,
-                trace=trace
-            ),
-            soft_fn=lambda: add_no_afternoon_constraint(
-                model,
-                x,
-                employees,
-                days,
-                self.ALL_SHIFTS,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=True,
-                trace=trace
-            )
-        )
-
-        meat_violations = self._apply_policy(
-            "meat",
-            hard_fn=lambda: add_meat_constraint(
-                model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=False, trace=trace,
-                meat_light_penalties=meat_light_penalties,
-                shift_duty_sum=shift_duty_sum
-            ),
-            soft_fn=lambda: add_meat_constraint(
-                model, x, employees, days, trade_days, self.ALL_SHIFTS, self.SHIFT_OPEN, self.SHIFT_CLOSE, soft=True, trace=trace,
-                meat_light_penalties=meat_light_penalties,
-                shift_duty_sum=shift_duty_sum
-            )
-        )
-
-        coverage_violations = self._apply_policy(
-            "meat_coverage",
-            hard_fn=lambda: add_meat_coverage_constraint(
-                model, x, employees, trade_days, self.shop, self.SHIFT_OPEN, self.SHIFT_CLOSE, self.START_SHIFT_MAP, self.END_SHIFT_MAP, soft=False, trace=trace,
-                meat_light_penalties=meat_light_penalties,
-                slot_duty_sum=slot_duty_sum
-            ),
-            soft_fn=lambda: add_meat_coverage_constraint(
-                model, x, employees, trade_days, self.shop,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP,
-                soft=True,
-                trace=trace,
-                meat_light_penalties=meat_light_penalties,
-                slot_duty_sum=slot_duty_sum
-            )
-        )
-
-        max_consec_violations = self._apply_policy(
-            "max_consecutive",
-            hard_fn=lambda: add_max_consecutive_constraint(
-                model, x, employees, days, max_consecutive, self.ALL_SHIFTS, soft=False, trace=trace
-            ),
-            soft_fn=lambda: add_max_consecutive_constraint(
-                model, x, employees, days, max_consecutive, self.ALL_SHIFTS, soft=True, trace=trace
-            )
-        )
-
-        monthly_hours_violations = self._apply_policy(
-            "monthly_hours",
-            hard_fn=lambda: add_monthly_hours_constraint(
-                model, x, employees, days, self.schedule, self.shop, self.ALL_SHIFTS, soft=False, trace=trace
-            ),
-            soft_fn=lambda: add_monthly_hours_constraint(
-                model, x, employees, days, self.schedule, self.shop, self.ALL_SHIFTS, soft=True, trace=trace
-            )
-        )
-
-
-        all_soft_violations = []
-        all_soft_violations.extend(rest_violations)
-        all_soft_violations.extend(balance_violations)
-        all_soft_violations.extend(meat_violations)
-        all_soft_violations.extend(coverage_violations)
-        if meat_light_penalties:
-            meat_light_weight = self.constraint_weights.get("meat_light_usage", 400)
-            all_soft_violations.extend(meat_light_weight * t for t in meat_light_penalties)
-        all_soft_violations.extend(max_consec_violations)
-        all_soft_violations.extend(open_violations)
-        all_soft_violations.extend(close_violations)
-        all_soft_violations.extend(monthly_hours_violations)
+        all_soft_violations = apply_registry(ctx, specs, weights)
         all_soft_violations.extend(
-            add_edge_shift_bonus(
-                model,
-                x,
-                employees,
-                trade_days,
-                self.SHIFT_WORK_START_15,
-                self.SHIFT_WORK_END_15
-            )
-        )        
-        all_soft_violations.extend(
-            add_morning_afternoon_balance_penalty(
-                model,
-                x,
-                employees,
-                days,
-                self.shop,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP
-            )
+            wiring.build_objective_terms(ctx, self.SHIFT_WORK_START_15, self.SHIFT_WORK_END_15)
         )
-        all_soft_violations.extend(availability_violations)
-        all_soft_violations.extend(night_violations)
-        all_soft_violations.extend(afternoon_violations)
-        all_soft_violations.extend(
-            add_work_balance_penalty(
-                model,
-                x,
-                employees,
-                trade_days,
-                self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP
-            )
-        )
-        all_soft_violations.extend(
-            add_workload_balance_penalty(
-                model,
-                x,
-                employees,
-                days,
-                self.ALL_SHIFTS
-            )
-        )
-        all_soft_violations.extend(
-            add_open_close_penalty(
-                x,
-                employees,
-                trade_days,
-                self.SHIFT_OPEN,
-                self.SHIFT_CLOSE
-            )
-        )
+
         if is_fix:
             from logic.generator.fix import setup_fix_hints_and_penalties
             fix_penalties = setup_fix_hints_and_penalties(
@@ -580,7 +282,9 @@ class AutoScheduleGenerator:
                 self.SHIFT_OPEN,
                 self.SHIFT_CLOSE,
                 self.START_SHIFT_MAP,
-                self.END_SHIFT_MAP
+                self.END_SHIFT_MAP,
+                shift_night=self.SHIFT_NIGHT,
+                duty_shifts=self.DUTY_SHIFTS,
             )
             all_soft_violations.extend(fix_penalties)
 
@@ -602,7 +306,10 @@ class AutoScheduleGenerator:
             self.SHIFT_CLOSE,
             self.START_SHIFT_MAP,
             self.END_SHIFT_MAP,
-            trace=trace
+            trace=trace,
+            shift_night=self.SHIFT_NIGHT,
+            duty_shifts=self.DUTY_SHIFTS,
+            round_clock_shifts=self.ROUND_CLOCK_SHIFTS,
         )
 
         # SPRZĄTANIE: Przywracamy oryginalne daily_hours, żeby UI i zapisy nie świrowały
@@ -654,35 +361,3 @@ class AutoScheduleGenerator:
                     x[e, d, s] = model.NewBoolVar(f"x_e{e}_d{d}_s{s}")
         print(f"[MODEL] variables: {len(x)}")
         return x
-    
-    def _apply_policy(
-        self,
-        policy_name,
-        hard_fn,
-        soft_fn=None
-    ):
-        from model.constraint_policy import ConstraintPolicy
-
-        policy = self.shop.constraint_policies.get(policy_name)
-        weight = self.constraint_weights.get(policy_name, 1)
-        print(f"[POLICY] {policy_name} -> {policy}")
-
-        if policy == ConstraintPolicy.MANDATORY:
-            print(f"[HARD] {policy_name}")
-            hard_fn()
-            return []
-
-        elif policy == ConstraintPolicy.PREFERRED:
-            print(f"[SOFT] {policy_name} weight={weight}")
-            if soft_fn:
-                violations = soft_fn()
-                # zamieniamy violation vars na weighted terms
-                return [weight * v for v in violations]
-            else:
-                hard_fn()
-                return []
-
-        elif policy == ConstraintPolicy.DISABLED:
-            return []
-
-        return []

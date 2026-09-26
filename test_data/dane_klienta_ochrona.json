@@ -1,0 +1,939 @@
+{
+  "schedule": {
+    "year": 2026,
+    "month": 10,
+    "is_generated": false,
+    "employees": [
+      {
+        "first_name": "?",
+        "last_name": "Bohdan",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "gzuk_leczyce",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Cybula",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "nadlesnictwo_cewice",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Długosz",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "gzuk_leczyce",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Gojtowski",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "gzuk_leczyce",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Gołębiewski",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Kardaś",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "lakpol_slupsk",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "M.",
+        "last_name": "Kaufman",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "pge_ustka_westerplatte",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "K.",
+        "last_name": "Korzyński",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "pge_ustka_westerplatte",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Krauze",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Krefft",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "Z.",
+        "last_name": "Krzysztofiak",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "pge_ustka_westerplatte",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Mejna",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "apartamenty_leba",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Morawiak",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "apartamenty_leba",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Młyński",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Piepiórka",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "J.",
+        "last_name": "Pośpiech",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "pge_ustka_westerplatte",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Reszke",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "gzuk_leczyce",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Rijewski",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "lakpol_slupsk",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Sowiecki",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "pge_ustka_westerplatte",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Stencel",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Szmydtka",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "gzuk_leczyce",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Szwarc",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "nadlesnictwo_cewice",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Szyca",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {
+          "nie_chce_24h": true
+        },
+        "location_key": "ubojnia_gosz_waga_biuro",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Wardyn",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "lakpol_slupsk",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Witkowski",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "apartamenty_leba",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      }
+    ]
+  },
+  "shop_config": {
+    "year": 2026,
+    "month": 10,
+    "name": "Dane klienta (test) - Ochrona (6 placówek)",
+    "business_type": "ochrona_dane_klienta_test",
+    "locations": {
+      "ubojnia_gosz_waga_biuro": {
+        "key": "ubojnia_gosz_waga_biuro",
+        "name": "Ubojnia Drobiu GOSZ - waga/biuro",
+        "open_hours": {
+          "0": [
+            "00:00",
+            "23:45"
+          ],
+          "1": [
+            "00:00",
+            "23:45"
+          ],
+          "2": [
+            "00:00",
+            "23:45"
+          ],
+          "3": [
+            "00:00",
+            "23:45"
+          ],
+          "4": [
+            "00:00",
+            "23:45"
+          ],
+          "5": [
+            "00:00",
+            "23:45"
+          ],
+          "6": [
+            "00:00",
+            "23:45"
+          ]
+        },
+        "trade_sundays": [],
+        "public_holidays": [],
+        "day_overrides": {},
+        "constraints": {
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "max_consecutive_days": 4
+        },
+        "is_24_7": true,
+        "round_clock_start_hour": null,
+        "duty_rotation": {
+          "weekend_half_a": {
+            "start": "08:00",
+            "end": "20:00"
+          },
+          "weekend_half_b": {
+            "start": "20:00",
+            "end": "08:00"
+          },
+          "weekend_full": {
+            "start": "08:00"
+          },
+          "only_12_24h": true
+        },
+        "closed_on_public_holidays": false
+      },
+      "pge_ustka_westerplatte": {
+        "key": "pge_ustka_westerplatte",
+        "name": "PGE Ustka, ul. Westerplatte 4",
+        "open_hours": {
+          "0": [
+            "00:00",
+            "23:45"
+          ],
+          "1": [
+            "00:00",
+            "23:45"
+          ],
+          "2": [
+            "00:00",
+            "23:45"
+          ],
+          "3": [
+            "00:00",
+            "23:45"
+          ],
+          "4": [
+            "00:00",
+            "23:45"
+          ],
+          "5": [
+            "00:00",
+            "23:45"
+          ],
+          "6": [
+            "00:00",
+            "23:45"
+          ]
+        },
+        "trade_sundays": [],
+        "public_holidays": [],
+        "day_overrides": {},
+        "constraints": {
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "max_consecutive_days": 4
+        },
+        "is_24_7": true,
+        "round_clock_start_hour": null,
+        "duty_rotation": {
+          "weekend_half_a": {
+            "start": "08:00",
+            "end": "20:00"
+          },
+          "weekend_half_b": {
+            "start": "20:00",
+            "end": "08:00"
+          },
+          "weekend_full": {
+            "start": "08:00"
+          },
+          "only_12_24h": true,
+          "prefer_24h": true
+        },
+        "closed_on_public_holidays": false
+      },
+      "gzuk_leczyce": {
+        "key": "gzuk_leczyce",
+        "name": "GZUK Łęczyce",
+        "open_hours": {
+          "0": [
+            "00:00",
+            "23:45"
+          ],
+          "1": [
+            "00:00",
+            "23:45"
+          ],
+          "2": [
+            "00:00",
+            "23:45"
+          ],
+          "3": [
+            "00:00",
+            "23:45"
+          ],
+          "4": [
+            "00:00",
+            "23:45"
+          ],
+          "5": [
+            "00:00",
+            "23:45"
+          ],
+          "6": [
+            "00:00",
+            "23:45"
+          ]
+        },
+        "trade_sundays": [],
+        "public_holidays": [],
+        "day_overrides": {},
+        "constraints": {
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "max_consecutive_days": 4
+        },
+        "is_24_7": true,
+        "round_clock_start_hour": null,
+        "duty_rotation": {
+          "weekend_half_a": {
+            "start": "15:00",
+            "end": "07:00"
+          },
+          "weekend_half_b": {
+            "start": "07:00",
+            "end": "15:00"
+          },
+          "weekend_full": {
+            "start": "07:00"
+          },
+          "only_12_24h": true
+        },
+        "closed_on_public_holidays": false
+      },
+      "apartamenty_leba": {
+        "key": "apartamenty_leba",
+        "name": "Łeba, Apartamenty Nadmorska 33",
+        "open_hours": {
+          "0": [
+            "00:00",
+            "23:45"
+          ],
+          "1": [
+            "00:00",
+            "23:45"
+          ],
+          "2": [
+            "00:00",
+            "23:45"
+          ],
+          "3": [
+            "00:00",
+            "23:45"
+          ],
+          "4": [
+            "00:00",
+            "23:45"
+          ],
+          "5": [
+            "00:00",
+            "23:45"
+          ],
+          "6": [
+            "00:00",
+            "23:45"
+          ]
+        },
+        "trade_sundays": [],
+        "public_holidays": [],
+        "day_overrides": {},
+        "constraints": {
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "max_consecutive_days": 4
+        },
+        "is_24_7": true,
+        "round_clock_start_hour": null,
+        "duty_rotation": {
+          "weekend_half_a": {
+            "start": "08:00",
+            "end": "20:00"
+          },
+          "weekend_half_b": {
+            "start": "20:00",
+            "end": "08:00"
+          },
+          "weekend_full": {
+            "start": "08:00"
+          },
+          "only_12_24h": true,
+          "prefer_24h": true
+        },
+        "closed_on_public_holidays": false
+      },
+      "lakpol_slupsk": {
+        "key": "lakpol_slupsk",
+        "name": "LakPol Słupsk",
+        "open_hours": {
+          "0": [
+            "00:00",
+            "23:45"
+          ],
+          "1": [
+            "00:00",
+            "23:45"
+          ],
+          "2": [
+            "00:00",
+            "23:45"
+          ],
+          "3": [
+            "00:00",
+            "23:45"
+          ],
+          "4": [
+            "00:00",
+            "23:45"
+          ],
+          "5": [
+            "00:00",
+            "23:45"
+          ],
+          "6": [
+            "00:00",
+            "23:45"
+          ]
+        },
+        "trade_sundays": [],
+        "public_holidays": [],
+        "day_overrides": {},
+        "constraints": {
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "max_consecutive_days": 4
+        },
+        "is_24_7": true,
+        "round_clock_start_hour": null,
+        "duty_rotation": {
+          "weekend_half_a": {
+            "start": "07:00",
+            "end": "19:00"
+          },
+          "weekend_half_b": {
+            "start": "19:00",
+            "end": "07:00"
+          },
+          "weekend_full": {
+            "start": "07:00"
+          },
+          "only_12_24h": true,
+          "prefer_24h": true
+        },
+        "closed_on_public_holidays": false
+      },
+      "nadlesnictwo_cewice": {
+        "key": "nadlesnictwo_cewice",
+        "name": "P.P. Nadleśnictwo Cewice",
+        "open_hours": {
+          "0": [
+            null,
+            null
+          ],
+          "1": [
+            null,
+            null
+          ],
+          "2": [
+            null,
+            null
+          ],
+          "3": [
+            null,
+            null
+          ],
+          "4": [
+            null,
+            null
+          ],
+          "5": [
+            null,
+            null
+          ],
+          "6": [
+            null,
+            null
+          ]
+        },
+        "trade_sundays": [],
+        "public_holidays": [],
+        "day_overrides": {},
+        "constraints": {
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "max_consecutive_days": 4
+        },
+        "is_24_7": false,
+        "round_clock_start_hour": null,
+        "duty_rotation": null,
+        "closed_on_public_holidays": true
+      }
+    },
+    "open_hours": {
+      "0": [
+        "05:30",
+        "23:00"
+      ],
+      "1": [
+        "05:30",
+        "22:45"
+      ],
+      "2": [
+        "05:30",
+        "22:45"
+      ],
+      "3": [
+        "05:30",
+        "22:45"
+      ],
+      "4": [
+        "05:30",
+        "22:45"
+      ],
+      "5": [
+        "05:30",
+        "22:45"
+      ],
+      "6": [
+        "05:30",
+        "22:45"
+      ]
+    },
+    "night_shift": null,
+    "duty_rotation": null,
+    "quick_mode_presets": [],
+    "trade_sundays": [],
+    "day_overrides": {},
+    "constraints": {
+      "max_consecutive_days": 4,
+      "min_open_staff": 3,
+      "min_close_staff": 3,
+      "force_fulltime_845": true,
+      "rest_11h_mode": "standard",
+      "solver_time_limit_seconds": 60
+    },
+    "cell_display_mode": "compact",
+    "hours_display_mode": "standard",
+    "show_grid_legend": false,
+    "public_holidays": [],
+    "standard_daily_hours": 8.0,
+    "constraint_policies": {
+      "rest_11h": "MANDATORY",
+      "meat": "PREFERRED",
+      "balance": "DISABLED",
+      "max_consecutive": "PREFERRED",
+      "open": "MANDATORY",
+      "close": "MANDATORY",
+      "monthly_hours": "DISABLED",
+      "meat_coverage": "PREFERRED",
+      "availability": "PREFERRED",
+      "no_night": "PREFERRED",
+      "no_afternoon": "PREFERRED",
+      "duty_rotation_coverage": "MANDATORY",
+      "duty_rotation_no24h": "MANDATORY",
+      "round_clock_coverage": "MANDATORY"
+    }
+  }
+}
