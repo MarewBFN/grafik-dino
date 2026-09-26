@@ -101,6 +101,38 @@ def test_unchecking_without_configured_weekday_windows_shows_an_error(monkeypatc
     assert shop.get_duty_rotation()["only_12_24h"] is True
 
 
+def test_saving_does_not_crash_when_a_location_cant_follow_the_global_toggle():
+    """Zgłoszone 2026-09-26: projekt z dwiema lokalizacjami o RÓŻNYCH
+    only_12_24h - globalny checkbox pokazuje tylko pierwszą znalezioną
+    wartość (tu: site_a=False), a wymuszenie jej na site_b (only_12_24h=True,
+    bez zapisanych weekday_long/short) wywalało cały zapis Konfiguracji
+    wyjątkiem "brakuje: weekday_long, weekday_short", nawet gdy użytkownik
+    otwierał Konfigurację bez dotykania tego checkboxa w ogóle."""
+    shop = ShopConfig(2026, 8)
+    loc_a = LocationConfig(key="site_a", name="Site A")
+    loc_a.set_duty_rotation(ROTATION)  # only_12_24h=False, ma weekday_long/short
+    shop.locations["site_a"] = loc_a
+
+    loc_b = LocationConfig(key="site_b", name="Site B")
+    loc_b.set_duty_rotation({
+        "only_12_24h": True,
+        "weekend_full": ROTATION["weekend_full"],
+        "weekend_half_a": ROTATION["weekend_half_a"],
+        "weekend_half_b": ROTATION["weekend_half_b"],
+    })  # only_12_24h=True: weekday_long/short never provided, so never stored
+    shop.locations["site_b"] = loc_b
+
+    dialog = ConfigDialog(None, shop)
+    assert dialog.only_12_24h.isChecked() is False  # pierwsza znaleziona: site_a
+
+    dialog._save()  # nie zmieniono checkboxa - nie powinno rzucić wyjątku
+
+    # site_b nie dało się bezpiecznie przełączyć na only_12_24h=False -
+    # zostawiony bez zmian zamiast wywalać cały zapis.
+    assert shop.locations["site_b"].get_duty_rotation()["only_12_24h"] is True
+    assert shop.locations["site_a"].get_duty_rotation()["only_12_24h"] is False
+
+
 def test_location_duty_rotation_survives_a_config_save_round_trip():
     """Regresja: _LocationRow nie niesie duty_rotation (brak UI do jego
     edycji), więc rekonstrukcja LocationConfig przy zapisie musiała się

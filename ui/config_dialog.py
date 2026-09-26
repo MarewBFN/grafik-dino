@@ -311,13 +311,9 @@ class ConfigDialog(QDialog):
             location_label.setObjectName("sectionLabel")
             outer.addWidget(location_label)
 
-            self.is_24_7_check = QCheckBox("Działalność całodobowa (24/7)")
-            self.is_24_7_check.setChecked(self.location.is_24_7)
-            self.is_24_7_check.toggled.connect(self._on_hours_tab_24_7_toggled)
-            outer.addWidget(self.is_24_7_check)
-
             # Ten sam widget/tooltip co ui/locations_dialog.py::_LocationRow -
-            # patrz LocationConfig.is_closed_for_public_holiday().
+            # patrz LocationConfig.is_closed_for_public_holiday(). Nad "24/7"
+            # niżej (na życzenie użytkownika, 2026-09-26, dla czytelności).
             self.closed_on_public_holidays_check = QCheckBox("Zamknięte w polskie święta ustawowe")
             self.closed_on_public_holidays_check.setChecked(self.location.closed_on_public_holidays)
             self.closed_on_public_holidays_check.setToolTip(
@@ -329,6 +325,11 @@ class ConfigDialog(QDialog):
                 "zawsze wygrywa."
             )
             outer.addWidget(self.closed_on_public_holidays_check)
+
+            self.is_24_7_check = QCheckBox("Działalność całodobowa (24/7)")
+            self.is_24_7_check.setChecked(self.location.is_24_7)
+            self.is_24_7_check.toggled.connect(self._on_hours_tab_24_7_toggled)
+            outer.addWidget(self.is_24_7_check)
 
         hours_source = self.location.open_hours if self.location is not None else self.shop_config.open_hours
         self.hours_editor = WeeklyHoursEditor(hours_source)
@@ -813,11 +814,31 @@ class ConfigDialog(QDialog):
                     merged = dict(self.shop_config.duty_rotation)
                     merged["only_12_24h"] = only_12_24h_value
                     self.shop_config.duty_rotation = normalize_duty_rotation(merged)
+                # Ten jeden checkbox pokazuje tylko PIERWSZĄ znalezioną
+                # konfigurację rotacji (patrz self._duty_rotation_configs
+                # wyżej) - w projekcie z kilkoma lokalizacjami o RÓŻNYCH
+                # only_12_24h wymuszenie tej samej wartości na WSZYSTKICH
+                # potrafiło rzucić wyjątkiem i wywalić cały zapis Konfiguracji
+                # (zgłoszenie użytkownika 2026-09-26), nawet gdy użytkownik
+                # otwierał zakładkę zupełnie innej lokalizacji: lokalizacja z
+                # only_12_24h=True w ogóle nie ma zapisanych weekday_long/
+                # weekday_short (nie są jej potrzebne), więc wymuszenie na niej
+                # only_12_24h=False zawsze łamie walidację "brakuje:
+                # weekday_long, weekday_short". W przeciwieństwie do
+                # self.shop_config.duty_rotation wyżej (jedyny obiekt, który
+                # ten checkbox naprawdę reprezentuje - błąd tam ma zostać
+                # zgłoszony użytkownikowi, patrz
+                # test_unchecking_without_configured_weekday_windows_shows_an_error),
+                # lokalizację, na którą ten checkbox nie pasuje, zostawiamy
+                # bez zmian zamiast wywalać zapis reszty Konfiguracji.
                 for loc in self.shop_config.locations.values():
                     if loc.duty_rotation:
                         merged = dict(loc.duty_rotation)
                         merged["only_12_24h"] = only_12_24h_value
-                        loc.duty_rotation = normalize_duty_rotation(merged)
+                        try:
+                            loc.duty_rotation = normalize_duty_rotation(merged)
+                        except ValueError:
+                            pass
 
             # Zakładka "Godziny otwarcia" traktowana tak samo jak wiersz tej
             # lokalizacji w oknie Lokalizacje (na życzenie użytkownika) - ten

@@ -130,6 +130,16 @@ class DayOverrideDialogClosedDayTests(unittest.TestCase):
         dialog.closed_check.setChecked(True)
         self.assertTrue(dialog.hours_form_widget.isHidden())
 
+    def test_hours_form_keeps_its_layout_space_when_hidden(self):
+        """Zgłoszone 2026-09-26: setVisible(False) na hours_form_widget bez
+        retainSizeWhenHidden kolapsuje layout do zera wysokości, więc
+        "Dzień wolny ustawowo"/przyciski niżej skaczą w pionie przy każdym
+        przełączeniu "Nieczynne tego dnia" - patrz _on_closed_toggled."""
+        shop = ShopConfig(2026, 8)
+        dialog = DayOverrideDialog(None, 3, ("08:00", "20:00"), shop)
+
+        assert dialog.hours_form_widget.sizePolicy().retainSizeWhenHidden() is True
+
     def test_closed_day_prefills_fallback_hours_instead_of_zeros_when_reopened(self):
         shop = ShopConfig(2026, 8)
         dialog = DayOverrideDialog(None, 3, (None, None), shop, fallback_hours=("09:00", "18:00"))

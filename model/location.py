@@ -366,18 +366,23 @@ class LocationConfig:
         loc.constraints = dict(DEFAULT_LOCATION_CONSTRAINTS)
         loc.constraints.update(data.get("constraints", {}))
         duty_rotation = data.get("duty_rotation")
-        # Obie ścieżki zapisu (ui/locations_dialog.py, ui/config_dialog.py)
-        # zawsze trzymają duty_rotation i is_24_7 w parze - jedyny sposób,
-        # w jaki mogą się rozjechać w pliku, to dane sprzed scalenia
-        # checkboxa "Rotacja służby 24/7" z "Działalność całodobowa (24/7)"
-        # (demo/install_*.py, stare zapisane projekty). Zignorowanie
-        # osieroconego duty_rotation tutaj (przy wczytaniu, nie w
-        # get_duty_rotation() - ten mechanizm jest CELOWO niezależny od
-        # is_24_7 dla generatora/testów, patrz jego docstring) gwarantuje,
-        # że to, co widać w Konfiguracji/Lokalizacjach (is_24_7 odznaczone,
-        # konkretne godziny), zawsze pokrywa się z tym, co robi generator -
-        # zgłoszenie użytkownika (2026-09-25), test_data/dane_klienta_ochrona.json.
-        loc.duty_rotation = dict(duty_rotation) if duty_rotation and loc.is_24_7 else None
+        # duty_rotation samo w sobie w pełni definiuje obsadę tej lokalizacji
+        # dla generatora (get_duty_rotation() jest CELOWO niezależne od
+        # is_24_7 - patrz jej docstring), więc jest tu źródłem prawdy - NIE
+        # kasujemy go, gdy plik ma is_24_7=False obok skonfigurowanego
+        # duty_rotation (dokładnie taki stan miały wszystkie lokalizacje w
+        # test_data/dane_klienta_ochrona.json). Wcześniejsza wersja tego kodu
+        # (2026-09-25) w tej sytuacji cicho zerowała duty_rotation, żeby
+        # "zgadzało się" z is_24_7 w UI - to niszczyło prawdziwą konfigurację
+        # rotacji przy każdym wczytaniu pliku (grafik przestawał generować
+        # zmiany rotacji, wiersz "Obłożenie" przestawał widzieć tę
+        # lokalizację) zamiast naprawić niespójność we właściwą stronę.
+        # Zamiast tego: is_24_7 dociąga się DO duty_rotation, żeby checkbox w
+        # UI od razu pokazywał to, co grafik i tak już robi (zgłoszenie
+        # użytkownika 2026-09-26).
+        loc.duty_rotation = dict(duty_rotation) if duty_rotation else None
+        if loc.duty_rotation:
+            loc.is_24_7 = True
         return loc
 
 

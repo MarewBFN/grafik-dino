@@ -83,6 +83,26 @@ class _LocationRow(QFrame):
         top.addWidget(self.remove_btn)
         outer.addLayout(top)
 
+        # Automatyczne zamknięcie w polskie święta ustawowe (biblioteka
+        # `holidays`, patrz logic/utils/holidays_pl.py) - niezależne od 24/7,
+        # bo dotyczy zarówno zwykłych godzin otwarcia, jak i rotacji służby
+        # (LocationConfig.duty_rotation w ogóle nie zna pojęcia "godziny
+        # otwarcia" - patrz LocationConfig.is_closed_for_public_holiday()).
+        # Domyślnie włączone - część placówek nie wymaga ochrony w święta,
+        # część (np. obiekty krytyczne) zostaje mimo to 24/7. Nad "24/7"
+        # niżej (na życzenie użytkownika, 2026-09-26, dla czytelności).
+        self.closed_on_public_holidays_check = QCheckBox("Zamknięte w polskie święta ustawowe")
+        self.closed_on_public_holidays_check.setChecked(bool(closed_on_public_holidays))
+        self.closed_on_public_holidays_check.setToolTip(
+            "Gdy zaznaczone, ta lokalizacja jest automatycznie traktowana "
+            "jako nieczynna (grafik i generator) w polskie święta ustawowo "
+            "wolne od pracy - obowiązuje też dla rotacji 24/7. Odznacz dla "
+            "obiektów chronionych bez przerwy, również w święta. Ręczne "
+            "nadpisanie konkretnego dnia (dwuklik na nagłówku w grafiku) "
+            "zawsze wygrywa."
+        )
+        outer.addWidget(self.closed_on_public_holidays_check)
+
         is_24_7_row = QHBoxLayout()
         self.is_24_7_check = QCheckBox("Działalność całodobowa (24/7)")
         self.is_24_7_check.setChecked(bool(is_24_7))
@@ -99,25 +119,6 @@ class _LocationRow(QFrame):
         self.toggle_hours_btn.clicked.connect(self._toggle_hours_expanded)
         is_24_7_row.addWidget(self.toggle_hours_btn)
         outer.addLayout(is_24_7_row)
-
-        # Automatyczne zamknięcie w polskie święta ustawowe (biblioteka
-        # `holidays`, patrz logic/utils/holidays_pl.py) - niezależne od 24/7,
-        # bo dotyczy zarówno zwykłych godzin otwarcia, jak i rotacji służby
-        # (LocationConfig.duty_rotation w ogóle nie zna pojęcia "godziny
-        # otwarcia" - patrz LocationConfig.is_closed_for_public_holiday()).
-        # Domyślnie włączone - część placówek nie wymaga ochrony w święta,
-        # część (np. obiekty krytyczne) zostaje mimo to 24/7.
-        self.closed_on_public_holidays_check = QCheckBox("Zamknięte w polskie święta ustawowe")
-        self.closed_on_public_holidays_check.setChecked(bool(closed_on_public_holidays))
-        self.closed_on_public_holidays_check.setToolTip(
-            "Gdy zaznaczone, ta lokalizacja jest automatycznie traktowana "
-            "jako nieczynna (grafik i generator) w polskie święta ustawowo "
-            "wolne od pracy - obowiązuje też dla rotacji 24/7. Odznacz dla "
-            "obiektów chronionych bez przerwy, również w święta. Ręczne "
-            "nadpisanie konkretnego dnia (dwuklik na nagłówku w grafiku) "
-            "zawsze wygrywa."
-        )
-        outer.addWidget(self.closed_on_public_holidays_check)
 
         self.hours_editor = WeeklyHoursEditor(open_hours)
         self.hours_editor.setEnabled(not is_24_7)

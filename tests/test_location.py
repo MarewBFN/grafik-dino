@@ -262,21 +262,22 @@ def test_old_project_without_locations_field_migrates_to_one_default_location():
     assert restored._migrated_default_location is True
 
 
-# --- from_dict() musi odrzucić duty_rotation osierocone bez is_24_7
-# (zgłoszenie użytkownika 2026-09-25: test_data/dane_klienta_ochrona.json ma
-# lokalizacje z is_24_7=False i skonfigurowanymi konkretnymi godzinami
-# pracy, ale z osieroconym duty_rotation z dawnych danych testowych (sprzed
-# scalenia checkboxa "Rotacja służby 24/7" z "Działalność całodobowa
-# (24/7)") - generator mimo to przydzielał zmiany 24h/12h+12h, bo
-# get_duty_rotation() samo w sobie jest celowo niezależne od is_24_7 (patrz
-# jej docstring - generator/testy legalnie konstruują lokalizacje z
-# duty_rotation bez is_24_7). Obie ścieżki zapisu (LocationsDialog,
-# ConfigDialog) zawsze trzymają te dwa pola w parze, więc jedyne miejsce,
-# gdzie mogą się faktycznie rozjechać, to wczytanie pliku - tam (nie w
-# get_duty_rotation()) ma to być naprawione. ---
+# --- from_dict() musi zachować duty_rotation osierocone bez is_24_7, i
+# dociągnąć is_24_7 do niego (zgłoszenie użytkownika 2026-09-26:
+# test_data/dane_klienta_ochrona.json ma lokalizacje z is_24_7=False i
+# skonfigurowanymi konkretnymi godzinami pracy, ale z pełnym duty_rotation z
+# dawnych danych testowych (sprzed scalenia checkboxa "Rotacja służby 24/7"
+# z "Działalność całodobowa (24/7)")). Poprzednia wersja tego kodu
+# (2026-09-25, patrz git blame) w tej sytuacji kasowała duty_rotation przy
+# wczytaniu, co ciszej niszczyło prawdziwą konfigurację rotacji (generator
+# przestawał przydzielać zmiany 24h/12h+12h, wiersz "Obłożenie" przestawał
+# widzieć tę lokalizację) - dokładnie to zgłosił użytkownik. duty_rotation
+# samo w sobie w pełni definiuje obsadę dla generatora (get_duty_rotation()
+# jest CELOWO niezależne od is_24_7 - patrz jej docstring), więc jest
+# źródłem prawdy: zamiast kasować je, is_24_7 dociąga się do niego. ---
 
 
-def test_from_dict_drops_orphaned_duty_rotation_when_24_7_is_off():
+def test_from_dict_syncs_is_24_7_on_when_duty_rotation_is_configured():
     rotation = {
         "weekend_half_a": {"start": "08:00", "end": "20:00"},
         "weekend_half_b": {"start": "20:00", "end": "08:00"},
@@ -289,8 +290,8 @@ def test_from_dict_drops_orphaned_duty_rotation_when_24_7_is_off():
 
     restored = LocationConfig.from_dict(loc.to_dict())
 
-    assert restored.is_24_7 is False
-    assert restored.get_duty_rotation() is None
+    assert restored.is_24_7 is True
+    assert restored.get_duty_rotation() == rotation
     assert restored.open_hours == {i: ("08:00", "20:00") for i in range(7)}
 
 
@@ -308,6 +309,27 @@ def test_from_dict_keeps_duty_rotation_when_24_7_is_on():
     restored = LocationConfig.from_dict(loc.to_dict())
 
     assert restored.get_duty_rotation() == rotation
+
+
+def test_loading_real_client_test_data_keeps_every_locations_duty_rotation():
+    """test_data/dane_klienta_ochrona.json (dane realnego klienta ochrony) ma
+    wszystkie lokalizacje z duty_rotation zapisane z is_24_7=False - to
+    dokładnie ten stan, który from_dict() musi teraz zachować (patrz testy
+    wyżej), zamiast ciszej zerować duty_rotation przy każdym wczytaniu."""
+    import json
+
+    path = ROOT / "test_data" / "dane_klienta_ochrona.json"
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    shop = ShopConfig.from_dict(data["shop_config"])
+
+    locations_with_rotation = {
+        key: loc for key, loc in shop.locations.items() if loc.get_duty_rotation() is not None
+    }
+    assert len(locations_with_rotation) == 5
+    for key, loc in locations_with_rotation.items():
+        assert loc.is_24_7 is True, f"{key}: is_24_7 should sync to duty_rotation's presence"
 
 
 def test_get_duty_rotation_is_independent_of_is_24_7_for_in_memory_objects():

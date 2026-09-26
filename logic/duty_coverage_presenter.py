@@ -48,14 +48,20 @@ def is_day_fully_covered(schedule, shop, employees, day: int) -> bool:
         assigned = [schedule.get_day(employees[e], day) for e in indices]
         assigned = [ds for ds in assigned if not ds.is_empty()]
 
+        # Jedna osoba na zmianie 24h fizycznie pokrywa całą dobę - bez
+        # względu na to, czy to dzień roboczy czy weekend, i bez względu na
+        # only_12_24h (zgłoszone 2026-09-26: wcześniej sprawdzane tylko w
+        # gałęzi weekend/only_12_24h niżej, więc doba pokryta zmianą 24h w
+        # zwykły dzień roboczy pokazywała się jako niepokryta).
+        if any(ds.is_full_day for ds in assigned):
+            continue
+
         if wd < 5 and not rotation.get("only_12_24h"):
             long_ok = any(_matches_window(ds, rotation["weekday_long"]) for ds in assigned)
             short_ok = any(_matches_window(ds, rotation["weekday_short"]) for ds in assigned)
             if not (long_ok and short_ok):
                 return False
         else:
-            if any(ds.is_full_day for ds in assigned):
-                continue
             half_a_ok = any(_matches_window(ds, rotation["weekend_half_a"]) for ds in assigned)
             half_b_ok = any(_matches_window(ds, rotation["weekend_half_b"]) for ds in assigned)
             if not (half_a_ok and half_b_ok):

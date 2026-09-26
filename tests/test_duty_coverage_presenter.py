@@ -81,6 +81,18 @@ def test_weekday_not_covered_when_short_shift_is_missing():
     assert is_day_fully_covered(schedule, shop, [long_emp, other_emp], MONDAY) is False
 
 
+def test_weekday_fully_covered_by_a_single_24h_shift():
+    """Zgłoszone 2026-09-26: doba fizycznie pokryta jedną zmianą 24h w
+    zwykły dzień roboczy (bez only_12_24h) pokazywała się jako niepokryta,
+    bo is_full_day był sprawdzany tylko w gałęzi weekend/only_12_24h."""
+    shop = _shop_with_rotation()
+    emp = Employee(last_name="A", first_name="A", location_key="site1")
+    schedule = _schedule_with(shop, emp)
+    schedule.get_day(emp, MONDAY).set_full_day_shift("06:00")
+
+    assert is_day_fully_covered(schedule, shop, [emp], MONDAY) is True
+
+
 def test_weekend_fully_covered_by_a_single_24h_shift():
     shop = _shop_with_rotation()
     emp = Employee(last_name="A", first_name="A", location_key="site1")

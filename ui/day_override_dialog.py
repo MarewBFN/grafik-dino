@@ -69,6 +69,14 @@ class DayOverrideDialog(QDialog):
         form.addRow("Otwarcie", self.start_edit)
         form.addRow("Zamknięcie", self.end_edit)
 
+        # Zarezerwuj miejsce w layoucie nawet gdy schowany (setVisible(False)
+        # niżej w _on_closed_toggled) - inaczej reszta okna (checkbox "Dzień
+        # wolny ustawowo", przyciski) skacze w pionie przy każdym przełączeniu
+        # "Nieczynne tego dnia" (zgłoszone 2026-09-26).
+        policy = self.hours_form_widget.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)
+        self.hours_form_widget.setSizePolicy(policy)
+
         root.addWidget(self.hours_form_widget)
 
         is_closed = not self.current_hours[0] or not self.current_hours[1]

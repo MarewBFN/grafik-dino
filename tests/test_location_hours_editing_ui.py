@@ -26,6 +26,45 @@ from ui.config_dialog import ConfigDialog
 from ui.locations_dialog import LocationsDialog, _LocationRow
 
 
+def _widget_layout_index(layout, widget):
+    for i in range(layout.count()):
+        item = layout.itemAt(i)
+        if item.widget() is widget:
+            return i
+        if item.layout() is not None and _contains_widget(item.layout(), widget):
+            return i
+    raise AssertionError("widget not found in layout")
+
+
+def _contains_widget(layout, widget):
+    return any(layout.itemAt(i).widget() is widget for i in range(layout.count()))
+
+
+def test_locations_dialog_row_shows_holiday_toggle_above_24_7_toggle():
+    """Kolejność zamieniona 2026-09-26 dla czytelności - patrz też ten sam
+    układ w ConfigDialog poniżej."""
+    row = _LocationRow(on_remove=lambda r: None)
+
+    holiday_index = _widget_layout_index(row.layout(), row.closed_on_public_holidays_check)
+    is_24_7_index = _widget_layout_index(row.layout(), row.is_24_7_check)
+
+    assert holiday_index < is_24_7_index
+
+
+def test_config_dialog_hours_tab_shows_holiday_toggle_above_24_7_toggle():
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1")
+    shop.locations["site1"] = loc
+
+    dialog = ConfigDialog(None, shop, location_key="site1")
+
+    hours_page = dialog.tabs.widget(dialog._tab_index_hours)
+    holiday_index = _widget_layout_index(hours_page.layout(), dialog.closed_on_public_holidays_check)
+    is_24_7_index = _widget_layout_index(hours_page.layout(), dialog.is_24_7_check)
+
+    assert holiday_index < is_24_7_index
+
+
 def test_hours_tab_shows_the_selected_locations_name():
     shop = ShopConfig(2026, 8)
     loc = LocationConfig(key="site1", name="Galeria Płn")
