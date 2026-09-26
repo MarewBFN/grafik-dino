@@ -28,7 +28,7 @@ from logic.duty_coverage_presenter import is_day_fully_covered, project_uses_dut
 from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.monthly_hours_status import monthly_hours_status
 from logic.schedule_presenter import SchedulePresenter
-from logic.utils.time_utils import classify_shift_as_morning_or_afternoon, format_hours_as_fraction
+from logic.utils.time_utils import classify_shift_as_morning_or_afternoon, format_hours_as_fraction, fraction_hour
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
 from model.constraint_policy import ConstraintPolicy
 from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
@@ -403,6 +403,17 @@ class LockedCellDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+def _ghost_brush(hex_color: str, alpha: int) -> QBrush:
+    """Półprzezroczysty "ghost" nalot (kolumna "pamięć poprzedniego
+    miesiąca" - patrz DayHeaderView.paintSection/ScheduleGrid._fill_
+    previous_month_cell) - prawdziwa przezroczystość (QColor.setAlpha),
+    nie płaski, w pełni kryjący kolor, żeby dane spod niej (biały fillRect
+    siatki, a w nagłówku zwykły styl sekcji) w widoczny sposób prześwitywały."""
+    color = QColor(hex_color)
+    color.setAlpha(alpha)
+    return QBrush(color)
+
+
 class DayHeaderView(QHeaderView):
     """Nagłówek dni z paskiem podświetlającym te dni, dla których godziny
     pracy sklepu zostały ręcznie nadpisane (ShopConfig.day_overrides).
@@ -429,13 +440,15 @@ class DayHeaderView(QHeaderView):
 
     def paintSection(self, painter, rect, logicalIndex):
         if logicalIndex == self.info_column:
-            # Zwykłe QTableWidgetItem.setBackground() nie działa w nagłówku
-            # (patrz docstring klasy) - to jedyny sposób, żeby ta kolumna
-            # miała WYRAŹNIE inne (tu: "ghost" - wyszarzone) tło niż zwykłe
-            # dni, sygnalizując, że to dane czysto informacyjne z
+            # Normalny styl sekcji nagłówka najpierw (tak jak zwykłe dni),
+            # a "ghost" (patrz _ghost_brush) tylko jako półprzezroczysty
+            # nalot NA WIERZCHU - żeby rzeczywiście prześwitywał spod niego
+            # zwykły wygląd nagłówka, zamiast go całkiem zastępować płaskim
+            # kolorem. Sygnalizuje, że to dane czysto informacyjne z
             # poprzedniego miesiąca. Przyciemniony tekst dopełnia efekt.
+            super().paintSection(painter, rect, logicalIndex)
             painter.save()
-            painter.fillRect(rect, QColor(theme.BG_PREVIOUS_MONTH_HEADER))
+            painter.fillRect(rect, _ghost_brush(theme.GHOST_TINT, theme.GHOST_ALPHA))
             painter.setPen(QColor(theme.TEXT_MUTED))
             text = self.model().headerData(logicalIndex, self.orientation(), Qt.DisplayRole)
             painter.drawText(rect, Qt.AlignCenter, str(text) if text is not None else "")
@@ -865,13 +878,17 @@ class ScheduleGrid(QTableWidget):
             # Bez strzałki/znacznika przejścia w kolejny miesiąc - tak samo
             # jak zwykłe komórki siatki nie dopisują "(+1)" do tekstu zmiany
             # nocnej (patrz SchedulePresenter._shift_view), tylko odróżniają
-            # ją kolorem tła. Tu ten sam kolor (SHIFT_NIGHT), tylko "ghost"
-            # (wyszarzony razem z resztą tej kolumny - patrz niżej).
-            item.setText(carry.end)
-            item.setBackground(QBrush(QColor(
-                theme.BG_PREVIOUS_MONTH_CELL_NIGHT if carry.crosses_midnight
-                else theme.BG_PREVIOUS_MONTH_CELL
-            )))
+            # ją kolorem tła (tu: ten sam pomysł, ale "ghost" - patrz
+            # _ghost_brush). Tekst respektuje to samo ustawienie co zwykłe
+            # komórki (menu Wygląd -> "Wygląd komórek kompaktowych") - w
+            # trybie "Ułamki" sama godzina bez minut, tak jak fraction_hour()
+            # skraca ją wszędzie indziej.
+            fractions = getattr(self.shop_config, "hours_display_mode", "standard") == "fractions"
+            item.setText(fraction_hour(carry.end) if fractions else carry.end)
+            item.setBackground(_ghost_brush(
+                theme.GHOST_TINT_NIGHT if carry.crosses_midnight else theme.GHOST_TINT,
+                theme.GHOST_ALPHA_NIGHT if carry.crosses_midnight else theme.GHOST_ALPHA,
+            ))
             item.setForeground(QBrush(QColor(theme.TEXT_MUTED)))
             crossing_note = (
                 " Zmiana wchodziła już w dzień 1 tego miesiąca."
@@ -882,7 +899,7 @@ class ScheduleGrid(QTableWidget):
                 "Dane informacyjne - nieedytowalne tutaj."
             )
         else:
-            item.setBackground(QBrush(QColor(theme.BG_PREVIOUS_MONTH_CELL)))
+            item.setBackground(_ghost_brush(theme.GHOST_TINT, theme.GHOST_ALPHA))
 
         self.setItem(row, 1, item)
 
@@ -1140,11 +1157,11 @@ class ScheduleGrid(QTableWidget):
             if self._prev_col_offset:
                 # Kolumna "pamięć poprzedniego miesiąca" nie ma znaczenia
                 # dla wierszy podsumowania - te dotyczą TEGO miesiąca. Ten
-                # sam "ghost" odcień co reszta kolumny (patrz
+                # sam "ghost" nalot co reszta kolumny (patrz
                 # _fill_previous_month_cell), żeby cała kolumna była
-                # jednolicie wyszarzona, nie tylko wiersze pracowników.
+                # jednolicie przyciemniona, nie tylko wiersze pracowników.
                 info_filler = QTableWidgetItem("")
-                info_filler.setBackground(QBrush(QColor(theme.BG_PREVIOUS_MONTH_CELL)))
+                info_filler.setBackground(_ghost_brush(theme.GHOST_TINT, theme.GHOST_ALPHA))
                 self.setItem(row, 1, info_filler)
 
             for day in range(1, days + 1):

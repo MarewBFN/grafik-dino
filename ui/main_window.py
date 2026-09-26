@@ -179,6 +179,9 @@ class MainWindow(QMainWindow):
         # panel boczny.
         self.user_id_label = QLabel(f"ID użytkownika: {self.user_id}")
         self.user_id_label.setObjectName("mutedHint")
+        # Lekki odstęp od prawej krawędzi okna - bez tego tekst przylegał
+        # bezpośrednio do rogu paska stanu.
+        self.user_id_label.setContentsMargins(0, 0, 8, 0)
         self.statusBar().addPermanentWidget(self.user_id_label)
 
         self.statusBar().showMessage("Gotowe")
@@ -455,10 +458,6 @@ class MainWindow(QMainWindow):
             self.btn_buy.setObjectName("successButton")
             self.btn_buy.clicked.connect(self._open_buy_page)
             layout.addWidget(self.btn_buy)
-
-        self.version_label = QLabel(f"Wersja: {APP_VERSION}")
-        self.version_label.setObjectName("mutedHint")
-        layout.addWidget(self.version_label)
 
         return outer_panel
 

@@ -3,16 +3,20 @@ BG_HEADER = "#e7edf6"
 BG_WEEKEND = "#eef2f7"
 BG_DISABLED = "#dde4ee"
 # Kolumna "pamięć poprzedniego miesiąca" w ScheduleGrid (patrz
-# ScheduleGrid.build()) - "ghost" (lekko wyszarzony) odcień całej kolumny
-# zamiast płaskiego żółtego wyróżnienia (zgłoszenie użytkownika
-# 2026-09-26), żeby dane informacyjne z poprzedniego miesiąca były wyraźnie
-# odróżnialne, ale bez krzykliwego koloru odwracającego od niego uwagę.
-# Każdy odcień to bazowy kolor odpowiedniej komórki (nagłówek/zwykła
-# zmiana/zmiana nocna) zmieszany po połowie z szarością - stąd trzy blisko
-# siebie leżące, ale wciąż rozróżnialne odcienie.
-BG_PREVIOUS_MONTH_HEADER = "#bdc3cd"
-BG_PREVIOUS_MONTH_CELL = "#c3c7cf"
-BG_PREVIOUS_MONTH_CELL_NIGHT = "#aeb6d0"
+# ScheduleGrid.build()) - naprawdę półprzezroczysty "ghost" nalot na tę
+# kolumnę (QColor.setAlpha(), nie płaski kolor) zamiast żółtego
+# wyróżnienia (zgłoszenie użytkownika 2026-09-26; pierwsza, w pełni
+# nieprzezroczysta wersja "ghosta" z tego samego dnia też się nie
+# sprawdziła - zbyt płaska/szara). GHOST_TINT_NIGHT ma chłodniejszy,
+# fioletowy odcień (rodzina SHIFT_NIGHT) dla zmiany przechodzącej przez
+# północ - reszta kolumny (nagłówek, zwykła zmiana, puste komórki,
+# wiersze podsumowania) dostaje GHOST_TINT. Alpha dobrana tak, żeby nalot
+# był wyraźnie widoczny na białym tle siatki, ale wciąż czytelnie
+# przezroczysty - patrz ui/grid_view.py::_ghost_brush().
+GHOST_TINT = "#94a3b8"
+GHOST_TINT_NIGHT = "#818cf8"
+GHOST_ALPHA = 60
+GHOST_ALPHA_NIGHT = 95
 OK_GREEN = "#d6f4dd"
 WARN_YELLOW = "#fff0b3"
 ERR_RED = "#ffd0cf"
