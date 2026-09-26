@@ -988,7 +988,7 @@ class ScheduleGrid(QTableWidget):
 
             if self.compact_mode:
                 text = ""
-                # Menu Wygląd -> "Widok trybu szybkiego": w trybie "Ułamki"
+                # Menu Wygląd -> "Wygląd komórek kompaktowych": w trybie "Ułamki"
                 # widok kompaktowy pokazuje faktyczne godziny zmiany jako
                 # ułamek, godzina początku nad godziną końca (np. "8" nad
                 # "20"), zamiast dotychczasowych skrótów "N"/"1"/"2" - ten

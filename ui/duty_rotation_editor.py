@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from PySide6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QFrame, QGridLayout, QLabel, QVBoxLayout
 
 from model.location import normalize_duty_rotation
 from ui.time_input import TimeInputWidget
@@ -90,23 +90,23 @@ class DutyRotationEditor(QFrame):
         hint.setWordWrap(True)
         outer.addWidget(hint)
 
-        start_row = QWidget()
-        start_layout = QHBoxLayout(start_row)
-        start_layout.setContentsMargins(0, 0, 0, 0)
-        start_layout.addWidget(QLabel("Godzina rozpoczęcia doby:"))
-        self.start_input = TimeInputWidget()
-        start_layout.addWidget(self.start_input)
-        start_layout.addStretch()
-        outer.addWidget(start_row)
+        # Wspólna siatka (zamiast dwóch osobnych QHBoxLayout) - etykiety mają
+        # różną długość ("Godzina rozpoczęcia doby:" vs "Podział doby (2
+        # osoby) o:"), a pola godzin mają się zaczynać w tej samej kolumnie,
+        # nie "przyklejone" od razu za tekstem etykiety.
+        times_grid = QGridLayout()
+        times_grid.setContentsMargins(0, 0, 0, 0)
+        times_grid.setColumnStretch(2, 1)
 
-        split_row = QWidget()
-        split_layout = QHBoxLayout(split_row)
-        split_layout.setContentsMargins(0, 0, 0, 0)
-        split_layout.addWidget(QLabel("Podział doby (2 osoby) o:"))
+        times_grid.addWidget(QLabel("Godzina rozpoczęcia doby:"), 0, 0)
+        self.start_input = TimeInputWidget()
+        times_grid.addWidget(self.start_input, 0, 1)
+
+        times_grid.addWidget(QLabel("Podział doby (2 osoby) o:"), 1, 0)
         self.split_input = TimeInputWidget()
-        split_layout.addWidget(self.split_input)
-        split_layout.addStretch()
-        outer.addWidget(split_row)
+        times_grid.addWidget(self.split_input, 1, 1)
+
+        outer.addLayout(times_grid)
 
         self.summary_label = QLabel()
         self.summary_label.setObjectName("quickInfoHint")

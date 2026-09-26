@@ -207,7 +207,7 @@ class ShopConfig:
         # "compact" | "detailed"
         self.cell_display_mode = "compact"
 
-        # Menu Wygląd -> "Widok trybu szybkiego" - jak siatka grafiku
+        # Menu Wygląd -> "Wygląd komórek kompaktowych" - jak siatka grafiku
         # (ui/grid_view.py, przez logic/schedule_presenter.py) wyświetla
         # godziny zmiany w komórce. "standard" = dzisiejszy wygląd
         # (HH:MM/HH:MM w osobnych liniach). "fractions" = zwarty zapis

@@ -86,7 +86,7 @@ def previous_calendar_month(year: int, month: int) -> tuple[int, int]:
 
 def fraction_hour(time_str: str) -> str:
     """Sama godzina (bez zera wiodącego) dla trybu wyświetlania "Ułamki"
-    (menu Wygląd -> "Widok trybu szybkiego") - np. "08:00" -> "8". Niepełne
+    (menu Wygląd -> "Wygląd komórek kompaktowych") - np. "08:00" -> "8". Niepełne
     godziny (minuty != 00) są na razie tylko prosto zaokrąglane do
     najbliższej pełnej godziny (np. "8:30" -> "9") - dokładniejszy zapis
     ułamków godziny to świadomie odłożone rozszerzenie. Współdzielone przez

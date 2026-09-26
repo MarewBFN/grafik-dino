@@ -1,4 +1,4 @@
-"""Menu Wygląd -> "Widok trybu szybkiego" (ui/main_window.py::_build_menu) -
+"""Menu Wygląd -> "Wygląd komórek kompaktowych" (ui/main_window.py::_build_menu) -
 `ShopConfig.hours_display_mode` ("standard" | "fractions") steruje tym, jak
 godziny zmiany są pokazywane w komórce siatki grafiku, W OBU widokach:
 - widok kompaktowy (ui/grid_view.py::ScheduleGrid.compact_mode, domyślny -
@@ -274,7 +274,7 @@ class CompactModeGridCellTests(unittest.TestCase):
 
 class MainWindowMenuWiringTests(unittest.TestCase):
     """ui/main_window.py::_build_menu - nowe menu "Wygląd" i jego
-    podmenu "Widok trybu szybkiego". Pełna konstrukcja MainWindow() w
+    podmenu "Wygląd komórek kompaktowych". Pełna konstrukcja MainWindow() w
     izolowanym katalogu roboczym (patrz tests/test_main_window_tutorial_content.py),
     żeby autozapis last_project.json nie dotknął prawdziwego katalogu
     projektu."""

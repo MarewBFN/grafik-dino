@@ -701,7 +701,7 @@ class MainWindow(QMainWindow):
         # kliknięciu (patrz self._update_hours_display_menu wywoływane z
         # _sync_everything, żeby stan zaznaczenia nadążał za wczytanym
         # projektem).
-        hours_display_menu = QMenu("Widok trybu szybkiego", self)
+        hours_display_menu = QMenu("Wygląd komórek kompaktowych", self)
         self.hours_display_standard_action = hours_display_menu.addAction(
             "Standardowy (obecny)", lambda: self._set_hours_display_mode("standard")
         )
@@ -1502,10 +1502,10 @@ class MainWindow(QMainWindow):
             save_project_bundle("last_project.json", self.project, self.year, self.month)
         except OSError:
             pass
-        self.statusBar().showMessage("Zapisano widok trybu szybkiego.", 2500)
+        self.statusBar().showMessage("Zapisano wygląd komórek kompaktowych.", 2500)
 
     def _update_hours_display_menu(self):
-        """Zaznaczenie w menu Wygląd -> "Widok trybu szybkiego" ma zawsze
+        """Zaznaczenie w menu Wygląd -> "Wygląd komórek kompaktowych" ma zawsze
         odzwierciedlać aktualnie wczytany projekt - wołane z
         _sync_everything(), nie tylko z _set_hours_display_mode()."""
         mode = self.shop_config.hours_display_mode if self.shop_config else "standard"
