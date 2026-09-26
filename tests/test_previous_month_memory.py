@@ -441,6 +441,79 @@ class GridPreviousMonthColumnTests(unittest.TestCase):
         self.assertIn("08:00", cell.text())
 
 
+class GridPreviousMonthColumnDinoCompactFormattingTests(unittest.TestCase):
+    """Profil Dino w widoku kompaktowym pokazuje w zwykłych komórkach
+    "N"/"1"/"2" zamiast godzin (patrz ScheduleGrid._fill_day_cells) - ta
+    kolumna dostaje ten sam kod (ScheduleGrid._classify_previous_month_end),
+    żeby nie odstawać stylem (zgłoszenie użytkownika 2026-09-26). Styczeń
+    2026: 31 (ostatni dzień) to sobota, domyślne godziny 05:30-22:45 ->
+    środek dnia ok. 14:07."""
+
+    def _grid(self, schedule, shop, compact_mode=True):
+        grid = ScheduleGrid()
+        grid.set_data(schedule, shop, controller=None)
+        grid.compact_mode = compact_mode
+        grid.refresh()
+        return grid
+
+    def _schedule_with_carries(self, shop):
+        morning = Employee(last_name="Rano", first_name="A")  # koniec przed środkiem dnia
+        afternoon = Employee(last_name="Popo", first_name="B")  # koniec po środku dnia
+        night = Employee(last_name="Nocny", first_name="C")
+        schedule = MonthSchedule(shop.year, shop.month, employees=[morning, afternoon, night])
+        schedule.set_previous_month_end_shift(morning, "12:00", False)
+        schedule.set_previous_month_end_shift(afternoon, "22:00", False)
+        schedule.set_previous_month_end_shift(night, "06:00", True)
+        return schedule, {"morning": morning, "afternoon": afternoon, "night": night}
+
+    def _cell_text(self, grid, schedule, emp):
+        row = schedule.employees.index(emp)
+        return grid.item(row, 1).text()
+
+    def test_dino_compact_standard_shows_1_2_n(self):
+        shop = ShopConfig(2026, 2)
+        schedule, emp = self._schedule_with_carries(shop)
+
+        with patch("ui.grid_view.PREVIOUS_MONTH_MEMORY_ENABLED", True):
+            grid = self._grid(schedule, shop, compact_mode=True)
+
+        self.assertEqual(self._cell_text(grid, schedule, emp["morning"]), "1")
+        self.assertEqual(self._cell_text(grid, schedule, emp["afternoon"]), "2")
+        self.assertEqual(self._cell_text(grid, schedule, emp["night"]), "N")
+
+    def test_dino_compact_fractions_shows_fraction_not_1_2_n(self):
+        shop = ShopConfig(2026, 2)
+        shop.hours_display_mode = "fractions"
+        schedule, emp = self._schedule_with_carries(shop)
+
+        with patch("ui.grid_view.PREVIOUS_MONTH_MEMORY_ENABLED", True):
+            grid = self._grid(schedule, shop, compact_mode=True)
+
+        self.assertEqual(self._cell_text(grid, schedule, emp["afternoon"]), "22")
+        self.assertEqual(self._cell_text(grid, schedule, emp["morning"]), "12")
+
+    def test_dino_expanded_shows_full_time_not_1_2_n(self):
+        shop = ShopConfig(2026, 2)
+        schedule, emp = self._schedule_with_carries(shop)
+
+        with patch("ui.grid_view.PREVIOUS_MONTH_MEMORY_ENABLED", True):
+            grid = self._grid(schedule, shop, compact_mode=False)
+
+        self.assertEqual(self._cell_text(grid, schedule, emp["afternoon"]), "22:00")
+        self.assertEqual(self._cell_text(grid, schedule, emp["morning"]), "12:00")
+
+    def test_non_dino_profile_compact_shows_full_time_not_1_2_n(self):
+        shop = ShopConfig(2026, 2)
+        shop.business_type = "some_custom_profile"
+        schedule, emp = self._schedule_with_carries(shop)
+
+        with patch("ui.grid_view.PREVIOUS_MONTH_MEMORY_ENABLED", True):
+            grid = self._grid(schedule, shop, compact_mode=True)
+
+        self.assertEqual(self._cell_text(grid, schedule, emp["afternoon"]), "22:00")
+        self.assertEqual(self._cell_text(grid, schedule, emp["morning"]), "12:00")
+
+
 # ---------------------------------------------------------------------------
 # 4. Round-trip zapisu/wczytania projektu
 # ---------------------------------------------------------------------------

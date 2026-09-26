@@ -884,7 +884,17 @@ class ScheduleGrid(QTableWidget):
             # trybie "Ułamki" sama godzina bez minut, tak jak fraction_hour()
             # skraca ją wszędzie indziej.
             fractions = getattr(self.shop_config, "hours_display_mode", "standard") == "fractions"
-            item.setText(fraction_hour(carry.end) if fractions else carry.end)
+            if fractions:
+                text = fraction_hour(carry.end)
+            elif self.compact_mode and self.shop_config.business_type == DEFAULT_BUSINESS_TYPE:
+                # Profil Dino w widoku kompaktowym pokazuje wszędzie indziej
+                # "N"/"1"/"2" zamiast godzin (patrz _fill_day_cells) - żeby ta
+                # komórka nie odstawała stylem, dostaje ten sam, stary kod
+                # zamiast surowej godziny (zgłoszenie użytkownika 2026-09-26).
+                text = self._classify_previous_month_end(carry)
+            else:
+                text = carry.end
+            item.setText(text)
             item.setBackground(_ghost_brush(
                 theme.GHOST_TINT_NIGHT if carry.crosses_midnight else theme.GHOST_TINT,
                 theme.GHOST_ALPHA_NIGHT if carry.crosses_midnight else theme.GHOST_ALPHA,
@@ -902,6 +912,35 @@ class ScheduleGrid(QTableWidget):
             item.setBackground(_ghost_brush(theme.GHOST_TINT, theme.GHOST_ALPHA))
 
         self.setItem(row, 1, item)
+
+    def _classify_previous_month_end(self, carry) -> str:
+        """"1"/"2"/"N" dla profilu Dino w widoku kompaktowym (patrz wywołanie
+        w _fill_previous_month_cell) - ten sam trzyliterowy kod co zwykłe
+        komórki tego profilu w _fill_day_cells, tylko liczony z samej
+        godziny KOŃCA (nie znamy początku tamtej, poprzedniomiesięcznej
+        zmiany) - porównanie do środka godzin otwarcia dnia tygodnia
+        ostatniego dnia poprzedniego miesiąca (wzorzec tygodniowy
+        ShopConfig.open_hours, bez świąt/nadpisań konkretnej daty - ta sama,
+        uproszczona ścieżka co reszta "starego", jednolokalizacyjnego kodu
+        Dino w tej funkcji)."""
+        if carry.crosses_midnight:
+            return "N"
+
+        prev_year, prev_month = self._previous_month_year_month()
+        prev_wd = calendar.weekday(prev_year, prev_month, calendar.monthrange(prev_year, prev_month)[1])
+        hours = self.shop_config.open_hours.get(prev_wd)
+        if not hours or not hours[0] or not hours[1]:
+            return ""
+
+        try:
+            open_dt = datetime.strptime(hours[0], "%H:%M")
+            close_dt = datetime.strptime(hours[1], "%H:%M")
+            end_dt = datetime.strptime(carry.end, "%H:%M")
+        except ValueError:
+            return ""
+
+        midpoint = open_dt + (close_dt - open_dt) / 2
+        return "1" if end_dt <= midpoint else "2"
 
     def refresh(self):
         if not self.schedule or not self.shop_config:
