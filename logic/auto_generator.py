@@ -6,6 +6,7 @@ from model.shop_config import ShopConfig
 from logic.generator.solver import build_objective, solve_model
 from logic.generator.solution_mapper import save_solution
 from logic.generator.constraint_registry import ConstraintContext, apply_registry
+from logic.generator.constraints_basic import is_location_open_for_employee
 from logic.generator.trace import ConstraintTraceLogger
 
 # Only the "dino_retail" business profile exists today; AutoScheduleGenerator
@@ -77,13 +78,22 @@ class AutoScheduleGenerator:
         self.SHIFT_DUTY_WEEKEND_FULL = 17
         self.SHIFT_DUTY_WEEKEND_HALF_A = 18
         self.SHIFT_DUTY_WEEKEND_HALF_B = 19
-        self.DUTY_SHIFTS = {
+        # Zmiany "resztkowe" rotacji (custom_0..N) - kawałki doby
+        # dopasowane wokół ręcznych wpisów niepasujących do rotacji (patrz
+        # logic/generator/duty_rotation_manual_coverage.py). Blokowane
+        # bramą rotacji wszędzie poza dobami, dla których plan je wyznaczył.
+        from logic.generator.duty_rotation_manual_coverage import CUSTOM_KEYS, DutyShiftMap
+        from logic.generator.round_clock_constraint import MAX_ROUND_CLOCK_TILES
+        first_custom_id = 20 + MAX_ROUND_CLOCK_TILES
+        self.DUTY_SHIFTS = DutyShiftMap({
             "weekday_long": self.SHIFT_DUTY_WEEKDAY_LONG,
             "weekday_short": self.SHIFT_DUTY_WEEKDAY_SHORT,
             "weekend_full": self.SHIFT_DUTY_WEEKEND_FULL,
             "weekend_half_a": self.SHIFT_DUTY_WEEKEND_HALF_A,
             "weekend_half_b": self.SHIFT_DUTY_WEEKEND_HALF_B,
-        }
+            **{key: first_custom_id + i for i, key in enumerate(CUSTOM_KEYS)},
+        })
+        self.DUTY_CUSTOM_SHIFTS = [self.DUTY_SHIFTS[key] for key in CUSTOM_KEYS]
 
         # Rotacja całodobowa "ogólna" dla lokalizacji 24/7 z ustawioną
         # godziną rozpoczęcia (LocationConfig.round_clock_start_hour) - patrz
@@ -128,6 +138,8 @@ class AutoScheduleGenerator:
             self.SHIFT_DUTY_WEEKEND_HALF_B,
 
             *self.ROUND_CLOCK_SHIFTS,
+
+            *self.DUTY_CUSTOM_SHIFTS,
         )
 
     # ==================================================
@@ -163,6 +175,11 @@ class AutoScheduleGenerator:
         from logic.manager_schedule import apply_all_manager_schedules
         apply_all_manager_schedules(self.schedule, self.shop)
 
+        # Ręczne wpisy pracowników rotacji liczone jako pokrycie doby -
+        # plan liczony z zablokowanych dni, więc dopiero po ich ustaleniu.
+        from logic.generator.duty_rotation_manual_coverage import build_duty_coverage_plan
+        self.DUTY_SHIFTS.plan = build_duty_coverage_plan(self.schedule, self.shop, self.schedule.employees)
+
         for emp in self.schedule.employees:
             object.__setattr__(emp, '_orig_daily_hours', emp.daily_hours)
 
@@ -174,7 +191,16 @@ class AutoScheduleGenerator:
         min_open = self.shop.constraints.get("min_open_staff", 3)
         min_close = self.shop.constraints.get("min_close_staff", 3)
         max_consecutive = self.shop.constraints.get("max_consecutive_days", 4)
-        trade_days = [d for d in days if self.shop.is_trade_day(d)]
+        # Dzień, w którym lokalizacja KAŻDEGO pracownika jest zamknięta
+        # ("Nieczynne", święto, ręczne zamknięcie dnia), nie jest dniem
+        # obsady - add_non_trade_day_constraints blokuje w nim wszystkie
+        # zmiany, więc wymogi obsady (open/close/mięso/role) byłyby w nim
+        # niespełnialne. Projekt bez pracowników - bez zmian.
+        trade_days = [
+            d for d in days
+            if self.shop.is_trade_day(d)
+            and (not employees or any(is_location_open_for_employee(self.shop, emp, d) for emp in employees))
+        ]
 
         print("Liczba pracowników:", len(employees))
         print("Dni w miesiącu:", len(days))

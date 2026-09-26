@@ -531,32 +531,32 @@
         "name": "Ubojnia Drobiu GOSZ - waga/biuro",
         "open_hours": {
           "0": [
-            "05:30",
-            "23:00"
+            "00:00",
+            "23:45"
           ],
           "1": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "2": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "3": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "4": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "5": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "6": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ]
         },
         "trade_sundays": [],
@@ -567,7 +567,7 @@
           "min_close_staff": 3,
           "max_consecutive_days": 4
         },
-        "is_24_7": false,
+        "is_24_7": true,
         "round_clock_start_hour": null,
         "duty_rotation": {
           "weekend_half_a": {
@@ -582,39 +582,40 @@
             "start": "08:00"
           },
           "only_12_24h": true
-        }
+        },
+        "closed_on_public_holidays": false
       },
       "pge_ustka_westerplatte": {
         "key": "pge_ustka_westerplatte",
         "name": "PGE Ustka, ul. Westerplatte 4",
         "open_hours": {
           "0": [
-            "05:30",
-            "23:00"
+            "00:00",
+            "23:45"
           ],
           "1": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "2": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "3": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "4": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "5": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "6": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ]
         },
         "trade_sundays": [],
@@ -625,7 +626,7 @@
           "min_close_staff": 3,
           "max_consecutive_days": 4
         },
-        "is_24_7": false,
+        "is_24_7": true,
         "round_clock_start_hour": null,
         "duty_rotation": {
           "weekend_half_a": {
@@ -639,40 +640,42 @@
           "weekend_full": {
             "start": "08:00"
           },
-          "only_12_24h": true
-        }
+          "only_12_24h": true,
+          "prefer_24h": true
+        },
+        "closed_on_public_holidays": false
       },
       "gzuk_leczyce": {
         "key": "gzuk_leczyce",
         "name": "GZUK Łęczyce",
         "open_hours": {
           "0": [
-            "05:30",
-            "23:00"
+            "00:00",
+            "23:45"
           ],
           "1": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "2": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "3": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "4": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "5": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "6": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ]
         },
         "trade_sundays": [],
@@ -683,7 +686,7 @@
           "min_close_staff": 3,
           "max_consecutive_days": 4
         },
-        "is_24_7": false,
+        "is_24_7": true,
         "round_clock_start_hour": null,
         "duty_rotation": {
           "weekend_half_a": {
@@ -698,39 +701,40 @@
             "start": "07:00"
           },
           "only_12_24h": true
-        }
+        },
+        "closed_on_public_holidays": false
       },
       "apartamenty_leba": {
         "key": "apartamenty_leba",
         "name": "Łeba, Apartamenty Nadmorska 33",
         "open_hours": {
           "0": [
-            "05:30",
-            "23:00"
+            "00:00",
+            "23:45"
           ],
           "1": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "2": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "3": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "4": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "5": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "6": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ]
         },
         "trade_sundays": [],
@@ -741,7 +745,7 @@
           "min_close_staff": 3,
           "max_consecutive_days": 4
         },
-        "is_24_7": false,
+        "is_24_7": true,
         "round_clock_start_hour": null,
         "duty_rotation": {
           "weekend_half_a": {
@@ -755,40 +759,42 @@
           "weekend_full": {
             "start": "08:00"
           },
-          "only_12_24h": true
-        }
+          "only_12_24h": true,
+          "prefer_24h": true
+        },
+        "closed_on_public_holidays": false
       },
       "lakpol_slupsk": {
         "key": "lakpol_slupsk",
         "name": "LakPol Słupsk",
         "open_hours": {
           "0": [
-            "05:30",
-            "23:00"
+            "00:00",
+            "23:45"
           ],
           "1": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "2": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "3": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "4": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "5": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ],
           "6": [
-            "05:30",
-            "22:45"
+            "00:00",
+            "23:45"
           ]
         },
         "trade_sundays": [],
@@ -799,7 +805,7 @@
           "min_close_staff": 3,
           "max_consecutive_days": 4
         },
-        "is_24_7": false,
+        "is_24_7": true,
         "round_clock_start_hour": null,
         "duty_rotation": {
           "weekend_half_a": {
@@ -813,8 +819,10 @@
           "weekend_full": {
             "start": "07:00"
           },
-          "only_12_24h": true
-        }
+          "only_12_24h": true,
+          "prefer_24h": true
+        },
+        "closed_on_public_holidays": false
       },
       "nadlesnictwo_cewice": {
         "key": "nadlesnictwo_cewice",
@@ -859,7 +867,8 @@
         },
         "is_24_7": false,
         "round_clock_start_hour": null,
-        "duty_rotation": null
+        "duty_rotation": null,
+        "closed_on_public_holidays": true
       }
     },
     "open_hours": {
@@ -907,6 +916,7 @@
     },
     "cell_display_mode": "compact",
     "hours_display_mode": "standard",
+    "show_grid_legend": false,
     "public_holidays": [],
     "standard_daily_hours": 8.0,
     "constraint_policies": {

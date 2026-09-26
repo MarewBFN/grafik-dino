@@ -51,8 +51,14 @@ class ScheduleController:
         # przepuszczanie ich tutaj tylko tworzyłoby martwe, niezrozumiałe
         # dla generatora wpisy.
         if end_dt <= start_dt:
-            night_hours = self.shop_config.get_location(emp).get_night_shift_hours()
-            if night_hours != (start, end):
+            location = self.shop_config.get_location(emp)
+            # Pracownik rotacji służby 24/7 - dowolna zmiana przez północ
+            # (generator liczy ręczny wpis jako pokrycie doby, patrz
+            # logic/generator/duty_rotation_manual_coverage.py); end == start
+            # tylko jako zmiana 24h (set_day_full_day_shift).
+            crosses_for_duty = location.get_duty_rotation() and end_dt < start_dt
+            night_hours = location.get_night_shift_hours()
+            if night_hours != (start, end) and not crosses_for_duty:
                 return
 
         ds = self.schedule.get_day(emp, day)

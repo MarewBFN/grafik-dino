@@ -172,6 +172,12 @@ def normalize_duty_rotation(raw: dict | None) -> dict | None:
     }
     normalized["weekend_full"] = {"start": weekend_full_start}
     normalized["only_12_24h"] = only_12_24h
+    # "Preferuj zmiany 24h" (ui/duty_rotation_editor.py) - odwraca miękką
+    # preferencję generatora (logic/generator/duty_rotation_preference.py).
+    # Zapisywane tylko gdy włączone, żeby projekty bez tej opcji miały
+    # dokładnie ten sam słownik co wcześniej.
+    if raw.get("prefer_24h"):
+        normalized["prefer_24h"] = True
     return normalized
 
 
@@ -236,6 +242,21 @@ class LocationConfig:
             return False
         from logic.utils.holidays_pl import polish_public_holiday_days
         return day in polish_public_holiday_days(year, month)
+
+    def is_duty_day_closed(self, year: int, month: int, day: int) -> bool:
+        """True gdy doba rotacji służby zaczynająca się tego dnia ma zostać
+        bez obsady: zamknięte święto (is_closed_for_public_holiday) ALBO dzień
+        ręcznie oznaczony "Nieczynne tego dnia" (dwuklik na nagłówku w
+        grafiku - day_overrides[day] bez godzin). Rotacja nie korzysta z
+        godzin otwarcia, więc samo get_open_hours_for_day() jej nie dotyczy -
+        wcześniej dzień "Nieczynne" był w siatce szary i pusty, a generator
+        i tak go obsadzał (niewidoczne zmiany liczone do godzin i eksportu).
+        Ręczne nadpisanie Z godzinami otwiera dzień, także w święto."""
+        override = self.day_overrides.get(day)
+        if override is not None:
+            start, end = override
+            return not (start and end)
+        return self.is_closed_for_public_holiday(year, month, day)
 
     # Same logic as ShopConfig.weekday/is_trade_day/get_open_hours_for_day
     # (model/shop_config.py) - a location has no year/month of its own, so
@@ -371,18 +392,26 @@ class LocationConfig:
         # is_24_7 - patrz jej docstring), więc jest tu źródłem prawdy - NIE
         # kasujemy go, gdy plik ma is_24_7=False obok skonfigurowanego
         # duty_rotation (dokładnie taki stan miały wszystkie lokalizacje w
-        # test_data/dane_klienta_ochrona.json). Wcześniejsza wersja tego kodu
-        # (2026-09-25) w tej sytuacji cicho zerowała duty_rotation, żeby
-        # "zgadzało się" z is_24_7 w UI - to niszczyło prawdziwą konfigurację
-        # rotacji przy każdym wczytaniu pliku (grafik przestawał generować
-        # zmiany rotacji, wiersz "Obłożenie" przestawał widzieć tę
-        # lokalizację) zamiast naprawić niespójność we właściwą stronę.
-        # Zamiast tego: is_24_7 dociąga się DO duty_rotation, żeby checkbox w
-        # UI od razu pokazywał to, co grafik i tak już robi (zgłoszenie
-        # użytkownika 2026-09-26).
+        # test_data/dane_klienta_ochrona.json przed regeneracją). Wcześniejsza
+        # wersja tego kodu (2026-09-25) w tej sytuacji cicho zerowała
+        # duty_rotation, żeby "zgadzało się" z is_24_7 w UI - to niszczyło
+        # prawdziwą konfigurację rotacji przy każdym wczytaniu pliku (grafik
+        # przestawał generować zmiany rotacji, wiersz "Obłożenie" przestawał
+        # widzieć tę lokalizację) zamiast naprawić niespójność we właściwą
+        # stronę. Zamiast tego: is_24_7 dociąga się DO duty_rotation, żeby
+        # checkbox w UI od razu pokazywał to, co grafik i tak już robi
+        # (zgłoszenie użytkownika 2026-09-26).
         loc.duty_rotation = dict(duty_rotation) if duty_rotation else None
         if loc.duty_rotation:
             loc.is_24_7 = True
+            # Rotacja służby i rotacja całodobowa (round_clock_start_hour) mają
+            # wzajemnie wykluczające się bramy w generatorze - razem blokują
+            # pracownikom tej lokalizacji KAŻDĄ zmianę (generator bez
+            # rozwiązania). Rotacja służby to mechanizm ze specyfikacji klienta
+            # Enyo, a pole rotacji całodobowej jest ukryte w UI (patrz
+            # ui/locations_dialog.py::ROUND_CLOCK_UI_ENABLED) - wartość zapisana
+            # wcześniej obok rotacji służby jest więc ignorowana przy wczytaniu.
+            loc.round_clock_start_hour = None
         return loc
 
 

@@ -1540,3 +1540,222 @@ programu zielony (649 passed, 1 skipped) - żaden istniejący test nie
 odczytuje tego pliku bezpośrednio (testy duty_rotation używają własnych,
 syntetycznych replik tych samych wzorców godzinowych), więc rozszerzenie
 nie mogło nic zepsuć.
+
+## Ukrycie "Rotacji całodobowej" + twarde zamknięcie dni bez godzin otwarcia (2026-09-25)
+
+Przegląd przełączników okna Lokalizacje (na prośbę użytkownika) wykazał,
+sprawdzone na prawdziwym `AutoScheduleGenerator`:
+
+1. **"Rotacja całodobowa - godzina rozpoczęcia" + 24/7 = brak rozwiązania.**
+   Zaznaczone 24/7 zawsze zapisuje `duty_rotation` (edytor rotacji służby
+   nie ma stanu "wyłączony"), a bramy `duty_rotation_gate` i
+   `round_clock_gate` blokują sobie nawzajem wszystkie zmiany - pracownik
+   lokalizacji nie może dostać żadnej. Obsadę kafelków round-clock wymusza
+   do tego wyłącznie profil Dino. Specyfikację klienta (1 osoba na
+   zmianie, zmiany bez zazębiania, 16h+8h / 24h albo 12h+12h) spełnia
+   wyłącznie rotacja służby - decyzja użytkownika: pole round-clock
+   **UKRYTE** dla Enyo (flaga `ROUND_CLOCK_UI_ENABLED = False` w
+   `ui/locations_dialog.py`, importowana przez `ui/config_dialog.py`),
+   a `round_clock_start_hour` zapisane obok `duty_rotation` jest ignorowane
+   przy wczytaniu (`LocationConfig.from_dict`).
+2. **Dzień bez godzin otwarcia lokalizacji nie był zamknięty dla solvera.**
+   "Nieczynne" w godzinach otwarcia, "Zamknięte w polskie święta ustawowe"
+   i ręczne zamknięcie dnia działały tylko przy zapisie wyniku - solver
+   przydzielał w taki dzień zmiany (np. 5-6 w Poniedziałek Wielkanocny),
+   `save_solution` je pomijało, a te niewidoczne zmiany liczyły się do
+   godzin, odpoczynku i dni pod rząd (w dniu "Nieczynne" potrafiła też
+   zostać zmiana nocna 22:00-06:00). Naprawa w generycznym kodzie
+   (prawdziwy bug, dotyczy też Dino - zasada 2 wyżej):
+   `add_non_trade_day_constraints` blokuje wszystkie zmiany pracownika w
+   dniu, gdy jego lokalizacja nie ma godzin otwarcia (pracownicy rotacji
+   służby pominięci - nie korzystają z godzin otwarcia, święta mają własną
+   regułę), a `trade_days` w `AutoScheduleGenerator.generate()` pomija dni,
+   w których lokalizacja KAŻDEGO pracownika jest zamknięta (inaczej wymogi
+   obsady open/close/mięso/role byłyby w nich niespełnialne).
+
+Świadomie NIE ruszone (decyzja użytkownika): reguła dni niehandlowych
+nadal korzysta z kalendarza projektu, nie lokalizacji - dla Dino nie
+istnieją zmiany rotacji 24/7, więc problem nie występuje.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `ui/locations_dialog.py`, `ui/config_dialog.py` | `ROUND_CLOCK_UI_ENABLED = False` - pole "Rotacja całodobowa" UKRYTE, nic nie zapisuje | NIE (w main `True`, dla sklepów 24/7 Dino) |
+| `model/location.py` | `from_dict`: `round_clock_start_hour = None`, gdy lokalizacja ma `duty_rotation` | TAK |
+| `logic/generator/constraints_basic.py` | `add_non_trade_day_constraints` + nowa `is_location_open_for_employee()` - blokada dni bez godzin otwarcia lokalizacji | TAK |
+| `logic/auto_generator.py` | `trade_days` bez dni zamkniętych dla wszystkich pracowników | TAK |
+| `tests/test_round_clock.py` | Testy GUI z `patch(ROUND_CLOCK_UI_ENABLED=True)` + nowe: pole ukryte domyślnie, zapis czyści wartość, `from_dict` | TAK (poza testem ukrycia) |
+| `tests/test_night_shift_stress.py` | Scenariusz obsady nocnej: `closed_on_public_holidays = False` (sierpień 2026 ma 15.08 - wcześniej zmiana nocna po cichu omijała zamknięcie w święto, teraz dzień jest słusznie pusty) | TAK |
+| `tests/test_closed_day_toggle.py` | `GeneratorRespectsClosedLocationDayTests` - blokada "Nieczynne"/święta, rotacja służby nieblokowana, generacja end-to-end | TAK |
+
+## Test generatora na danych klienta i decyzje użytkownika (2026-09-25)
+
+Przebieg na 6 placówkach klienta (październik/listopad 2026, projekt
+zbudowany jak w UI: 24/7 + rotacja, zapis/odczyt, generowanie jak przycisk
+"Generuj") wykazał kilka niespójności UI <-> generator. Decyzje
+użytkownika i wdrożenie - kolejne wpisy poniżej.
+
+### Uproszczony edytor rotacji + "Preferuj zmiany 24h" + święta dla 24/7
+
+- **Edytor rotacji** (`ui/duty_rotation_editor.py`) przebudowany na
+  życzenie użytkownika ("rotacja zaczynająca się o konkretnej godzinie"
+  jest bardziej intuicyjna dla klienta): godzina rozpoczęcia doby S,
+  godzina podziału P (domyślnie S+12h) i "Preferuj zmiany 24h". Zapis
+  zawsze `only_12_24h=True`: każdego dnia 24h od S albo S->P + P->S.
+  Usuwa dwa błędy starego edytora: (1) różne godziny początku doby w
+  tygodniu i weekendzie dawały lukę w poniedziałek rano i podwójną obsadę
+  w sobotę (także przy DOMYŚLNYCH wartościach 09-17 / 08-20), (2) zmiana
+  24h startowała od pierwszej wpisanej godziny weekendu, a nie od początku
+  doby (podział wpisany "20:00-08:00" = 12h luki + 12h podwójnie przy
+  każdej zmianie 24h). Samej "Rotacji całodobowej" (round-clock) nie
+  przywrócono - kilka osób na zmianę, zakładki 30 min, role Dino, w
+  profilu ochrony nic nie obsadza; od niej wzięty jest tylko sposób
+  konfiguracji (jedna godzina rozpoczęcia).
+- **"Preferuj zmiany 24h"** (`duty_rotation["prefer_24h"]`, zapisywane
+  tylko gdy włączone) - `duty_rotation_preference.py` karze wtedy połówki
+  zamiast zmiany 24h. W październiku generator nie dał ani jednej zmiany
+  24h (0/62 dób) w PGE/Łebie/LakPol, które historycznie pracują tylko na
+  24h.
+- **Święta:** zaznaczenie 24/7 odznacza "Zamknięte w polskie święta
+  ustawowe" (Lokalizacje i Konfiguracja) - obiekt z rotacją jest
+  domyślnie chroniony także w święta. Zapisane projekty zachowują swoje
+  ustawienie. Okno zamknięcia w święto zostaje "doba rotacji" (np. 11.11
+  08:00 -> 12.11 08:00) - decyzja użytkownika.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `ui/duty_rotation_editor.py` | Nowy układ (start/podział/preferuj 24h), `rotation_start_and_split()` do odczytu starszych słowników | TAK |
+| `model/location.py` | `normalize_duty_rotation` zachowuje `prefer_24h` | TAK |
+| `logic/generator/duty_rotation_preference.py` | Kierunek preferencji zależny od `prefer_24h` | TAK |
+| `ui/locations_dialog.py`, `ui/config_dialog.py` | 24/7 odznacza zamknięcie w święta; tekst samouczka | TAK |
+| `tests/test_duty_rotation_editor.py` (przepisany), `tests/test_priority_hours_and_duty_preference.py`, `tests/test_location_hours_editing_ui.py` | Testy nowego edytora, odwróconej preferencji, domyślnych świąt dla 24/7 | TAK |
+
+### "Nieczynne tego dnia" zamyka dobę rotacji jak święto
+
+Dzień oznaczony w nagłówku grafiku jako "Nieczynne tego dnia" (day_overrides
+bez godzin) w placówce z rotacją: siatka rysowała go szary i pusty, a
+generator i tak go obsadzał - zmiany były niewidoczne, ale liczyły się do
+sum godzin i eksportu (Excel, karta pracy). Decyzja użytkownika: zamyka dobę
+jak zamknięte święto. Nowe `LocationConfig.is_duty_day_closed()` (ręczne
+zamknięcie ALBO święto; nadpisanie Z godzinami otwiera dzień także w
+święto) - używane przez `duty_rotation_public_holiday_constraint.py`,
+pomijanie pokrycia w `duty_rotation_constraint.py` i wiersz "Obłożenie"
+(`logic/duty_coverage_presenter.py`).
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/location.py` | `is_duty_day_closed()` | TAK |
+| `logic/generator/duty_rotation_public_holiday_constraint.py`, `logic/generator/duty_rotation_constraint.py`, `logic/duty_coverage_presenter.py` | `is_closed_for_public_holiday` -> `is_duty_day_closed` | TAK |
+| `tests/test_duty_rotation_public_holiday_constraint.py` | `TestManualClosedDayOverride` | TAK |
+
+### Komunikat o braku rozwiązania dla rotacji służby
+
+Urlop całej obsady LakPol 20.10 dawał "Dzień 1: brak pracownika otwarcia
+możliwego do pracy na otwarciu" - reguła Dino, bez wskazania placówki ani
+dnia. `build_infeasibility_summary` sprawdza teraz otwarcie/zamknięcie/
+mięso tylko dla profilu Dino i tylko dla pracowników bez rotacji, a dla
+rotacji służby dodaje: "{placówka}, dzień N: nikt z pracowników placówki
+nie jest dostępny (urlop/L4/wolne)" oraz przypadek jedynej dostępnej osoby
+z "Nie chce zmian 24h".
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/diagnostics.py` | `_add_duty_rotation_supply_messages`, filtr profilu/pracowników dla open/close/mięso | TAK |
+| `tests/test_generator_diagnostics.py` | `DutyRotationInfeasibilitySummaryTests` | TAK |
+
+### Dane testowe klienta: 24/7 + "Preferuj zmiany 24h"
+
+`test_data/dane_klienta_ochrona.json` miał rotację bez zaznaczonego 24/7 -
+`LocationConfig.from_dict()` pomija wtedy rotację, więc plik otwierał się
+jako placówki bez rotacji i grafik się nie generował (komunikaty Dino).
+`demo/install_client_sample_data.py` buduje teraz placówki tak jak UI
+(`_rotation_location`: 24/7, święta otwarte, rotacja), PGE/Łeba/LakPol z
+"Preferuj zmiany 24h". Plik wygenerowany ponownie. Weryfikacja
+(październik 2026, plik wczytany przez `load_project`): pełne pokrycie
+wszystkich 5 placówek, PGE/Łeba/LakPol 31/31 dób jako zmiana 24h,
+odpoczynek po 24h zgodny z (N-1)x24h.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `demo/install_client_sample_data.py` | `_rotation_location()`, `prefer_24h` dla 3 placówek | NIE - dane jednego klienta testowego |
+| `test_data/dane_klienta_ochrona.json` | Wygenerowany ponownie | NIE (jw.) |
+
+### Zasada "Wyrównanie godzin umowa/bez"
+
+Nowa zasada w Konfiguracji -> ustawienia zaawansowane (obok pozostałych,
+Preferowane/Wymagane/Wyłączone), tylko dla profili custom (ochrona).
+Domyślnie **Wyłączone** (decyzja użytkownika). Wyrównuje godziny osobno w
+grupach (placówka, "Umowa" tak/nie); priorytet "Umowa" działa dalej.
+"Preferowane" i "Wymagane" to oba wyłącznie term celu (Wymagane = 10x
+większa waga) - nigdy nie blokuje pokrycia. Kara dopiero za rozrzut
+większy niż najdłuższa dostępna w grupie zmiana (np. 12h przy samych
+12h, 24h gdy ktoś bierze 24h), urlop/L4 zaliczany jako udział w obsadzie,
+niepełny etat proporcjonalnie. Brak wpisu w starszym projekcie = wyłączone
+także w oknie Konfiguracji (`POLICY_MISSING_DEFAULTS`).
+
+Dane klienta (październik, zasada Preferowane): Ubojnia 96-108h (było
+60-144h), GZUK 136-152h, PGE 144-168h - zmiany 24h w PGE/Łebie/LakPol
+bez zmian (31/31).
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/priority_hours_constraint.py` | `add_hours_equalization_penalty`, `hours_equalization_weight` | TAK |
+| `logic/generator/custom_profile_wiring.py` | Etykieta zasady, domyślnie DISABLED, term celu | TAK |
+| `ui/config_dialog.py` | `POLICY_MISSING_DEFAULTS` | TAK |
+| `tests/test_priority_hours_and_duty_preference.py`, `tests/test_location_hours_editing_ui.py` | `TestHoursEqualization`, test domyślnej wartości w oknie | TAK |
+
+### Ręczne wpisy liczone jako pokrycie doby, dwuklik dla rotacji, "Obłożenie" po osi czasu
+
+**Problem (test na danych klienta):** ręczny wpis pracownika rotacji o
+godzinach innych niż zmiany placówki (preset 07:00-19:00 w PGE, gdzie
+zmiany to 08-20 / 20-08) był dla generatora niewidoczny - dokładał drugą
+osobę na 08-20 (dwie osoby 07-19), a odpoczynek wokół wpisu nie był
+sprawdzany. Dwuklik odrzucał nocną połówkę 20:00-08:00 i zmianę 24h, a
+przyjmował 22:00-06:00 (auto-wykryte okno nocne), którego rotacja nie zna -
+znowu dwie osoby naraz. Wiersz "Obłożenie" pokazywał OK we wszystkich tych
+przypadkach (sprawdzał tylko istnienie zmian o godzinach rotacji).
+
+**Decyzja użytkownika:** "Licz jako pokrycie" + "Przytnij i scal krótkie".
+
+- `logic/generator/duty_rotation_manual_coverage.py` (nowy): plan liczony
+  raz na generowanie. Doba, w którą wchodzi ręczny wpis niepasujący do
+  rotacji, jest "planowana": standardowy podział przycinany o wszystkie
+  ręczne wpisy tej doby, kawałki < 4h scalane ze stykającą się zmianą -
+  także przez granicę doby (np. 06:00-08:00 + 08:00-20:00 następnego dnia
+  = 06:00-20:00; sąsiednia doba dołączana wtedy do planu). Każdy kawałek =
+  zmiana resztkowa (custom_0..7, nowe ID 26-33) z dokładnie jedną osobą,
+  przypisana do komórki dnia, w którym się ZACZYNA. Ręczne wpisy = stałe
+  przedziały (godziny + odpoczynek). Przykład użytkownika daje dokładnie:
+  noc 9.10 20:00-07:00, 10.10 19:00-08:00.
+- Plan przekazywany jako atrybut `DutyShiftMap.plan` (dict z ID zmian
+  rotacji) - brama, pokrycie, ręczna blokada, odpoczynek, święta, suma
+  godzin (5 miejsc: monthly_hours, balance, Umowa, wyrównanie, fix) i
+  zapis wyniku widzą go bez zmiany sygnatur. Zwykły dict (testy) = stare
+  zachowanie.
+- `duty_rotation_rest_constraint.py` przepisany na okna czasowe dnia
+  (standardowe + resztkowe) i stałe przedziały ręczne (także poprzedni
+  miesiąc). Ręczna blokada dopasowuje teraz tylko zmiany ważne danego dnia.
+- Dwuklik (`ui/day_edit_dialog.py`, `ui/main_window.py::_edit_day`,
+  `ScheduleController.set_day_hours`): dla pracownika rotacji dowolne
+  godziny przez północ, "Cała doba (24h)", szybkie przyciski zmian
+  placówki; bez podpowiedzi okna nocnego 22-06.
+- `logic/duty_coverage_presenter.py`: "Obłożenie" = w każdej chwili doby
+  rotacji (od jej początku do początku następnej) dokładnie 1 osoba -
+  wykrywa luki i dwie osoby naraz, także na styku tygodnia i weekendu w
+  starszym schemacie.
+
+Weryfikacja na danych klienta: E2 (07-19) i E3 (20-08, 22-06, 24h ręcznie)
+- pełne pokrycie bez zakładek, odpoczynek >= 11h, "Obłożenie" OK każdego
+dnia; bez ręcznych wpisów wynik jak wcześniej. Scenariusz ze sprzecznymi
+ręcznymi wpisami (20-08 i następnego dnia 08-20 tej samej osobie) kończy
+się komunikatem "zablokowana przerwa wynosi tylko 0.00 h". Znane
+ograniczenie: kawałek ostatniej doby miesiąca zaczynający się już w
+następnym miesiącu jest pomijany (komunikat w logu).
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/duty_rotation_manual_coverage.py` (nowy) | Plan zmian resztkowych, `DutyShiftMap`, `match_duty_key`, `planned_minutes_expr` | TAK |
+| `logic/auto_generator.py` | ID zmian resztkowych, `DutyShiftMap`, plan po wyczyszczeniu dni | TAK |
+| `logic/generator/duty_rotation_constraint.py`, `duty_rotation_manual_constraint.py`, `duty_rotation_rest_constraint.py`, `duty_rotation_public_holiday_constraint.py`, `solution_mapper.py`, `hours_constraint.py`, `priority_hours_constraint.py`, `fix.py` | Obsługa planu | TAK |
+| `logic/duty_coverage_presenter.py`, `ui/grid_view.py` | "Obłożenie" po osi czasu, nowy dymek | TAK |
+| `ui/day_edit_dialog.py`, `ui/main_window.py`, `logic/schedule_controller.py` | Dwuklik dla rotacji | TAK |
+| `tests/test_duty_rotation_manual_coverage.py` (nowy), `tests/test_duty_coverage_presenter.py` | Testy planu, generowania, edycji, obłożenia | TAK |

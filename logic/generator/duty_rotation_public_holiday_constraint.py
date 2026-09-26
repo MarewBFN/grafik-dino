@@ -1,6 +1,8 @@
 """Zamyka lokalizacje z duty_rotation w polskie święta ustawowo wolne od
 pracy, gdy LocationConfig.closed_on_public_holidays jest włączone
-(domyślnie tak) - patrz LocationConfig.is_closed_for_public_holiday().
+(domyślnie tak) - patrz LocationConfig.is_closed_for_public_holiday() - oraz
+w dni ręcznie oznaczone "Nieczynne tego dnia" (nagłówek dnia w grafiku,
+day_overrides bez godzin) - patrz LocationConfig.is_duty_day_closed().
 
 Lokalizacje z duty_rotation w ogóle nie korzystają z open_hours/kalendarza
 handlowego (patrz duty_rotation_constraint.py) - `add_non_trade_day_constraints`
@@ -16,6 +18,9 @@ osobno pomija wymóg pokrycia dla tych samych dni, żeby nie zbudować modelu
 sprzecznego z samym sobą (twarde `count == 1` obok twardego `count == 0`)."""
 
 
+from logic.generator.duty_rotation_manual_coverage import custom_shift_ids
+
+
 def add_duty_rotation_public_holiday_constraint(
     model, x, employees, days, schedule, shop, duty_shifts, trace=None,
 ):
@@ -25,7 +30,10 @@ def add_duty_rotation_public_holiday_constraint(
             "closes duty-rotation locations on PL public holidays per the location's own setting",
         )
 
-    duty_shift_ids = set(duty_shifts.values())
+    # Bez zmian resztkowych (duty_rotation_manual_coverage.py) - kawałek po
+    # północy w zamknięty dzień należy do doby dnia poprzedniego, a brama
+    # rotacji i tak blokuje każdą zmianę resztkową, której plan nie wyznaczył.
+    duty_shift_ids = set(duty_shifts.values()) - set(custom_shift_ids(duty_shifts))
 
     for e, emp in enumerate(employees):
         rotation = shop.get_location(emp).get_duty_rotation()
@@ -37,7 +45,7 @@ def add_duty_rotation_public_holiday_constraint(
             continue
 
         for d in days:
-            if not location.is_closed_for_public_holiday(shop.year, shop.month, d):
+            if not location.is_duty_day_closed(shop.year, shop.month, d):
                 continue
 
             # Ręczne, jawne zablokowanie/przypisanie zmiany tego dnia

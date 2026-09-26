@@ -67,6 +67,7 @@ def setup_fix_hints_and_penalties(
     # ==================================================
     from logic.utils.time_utils import get_effective_daily_hours
     from logic.generator.hours_constraint import _shift_minutes_by_type, _duration_overrides_for_employee
+    from logic.generator.duty_rotation_manual_coverage import planned_minutes_expr
 
     nominal_hours = shop.get_full_time_nominal_hours()
     nominal_minutes = nominal_hours * 60
@@ -108,6 +109,7 @@ def setup_fix_hints_and_penalties(
                 for d in days
                 for s in all_shifts
             )
+            + planned_minutes_expr(x, e, emp, days, duty_shifts)
         )
 
         # 🔥 TWARDY LIMIT (mały margines)

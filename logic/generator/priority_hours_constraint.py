@@ -19,6 +19,7 @@ pełnego etatu razy wymiar etatu, pomniejszony o L4/urlop, przycięty do 0
 miejsca, które trzeba trzymać w synchronizacji, gdyby któreś się zmieniło.
 """
 
+from logic.generator.duty_rotation_manual_coverage import planned_minutes_expr
 from logic.generator.hours_constraint import _duration_overrides_for_employee, _shift_minutes_by_type
 from logic.utils.time_utils import get_effective_daily_hours
 
@@ -86,6 +87,7 @@ def add_priority_hours_shortfall_penalty(
         model.Add(
             total_minutes ==
             sum(x[e, d, s] * minutes_by_shift[s] for d in days for s in all_shifts)
+            + planned_minutes_expr(x, e, emp, days, duty_shifts)
         )
 
         under = model.NewIntVar(0, 50000, f"priority_hours_under_e{e}")
@@ -93,3 +95,140 @@ def add_priority_hours_shortfall_penalty(
         penalties.append(under)
 
     return [PRIORITY_WEIGHT * p for p in penalties]
+
+
+# ---------------------------------------------------------------------------
+# "Wyrównanie godzin umowa/bez" (zasada w Konfiguracji -> ustawienia
+# zaawansowane, decyzja użytkownika 2026-09-25). Klient wyłączył
+# balance/monthly_hours (liczy się wyłącznie pełne pokrycie), przez co w
+# danych klienta rozkład godzin w jednej placówce był dowolny - np. Ubojnia
+# (7 pełnych etatów, bez umowy): Krefft 60h, Szyca 144h.
+#
+# Wyrównuje godziny osobno w każdej grupie (placówka, ma "Umowa" / nie ma)
+# - priorytet "Umowa" (dobicie do nominału, wyżej) działa dalej niezależnie.
+# Zawsze wyłącznie term celu: "Preferowane" i "Wymagane" różnią się tylko
+# wagą, żadne z nich nie może zablokować pokrycia (zasada "pokrycie >
+# nadgodziny, ZAWSZE"). Kara dopiero za rozrzut większy niż najdłuższa
+# zmiana dostępna w grupie - rozrzut mniejszy niż jedna zmiana jest przy
+# zmianach 12h/24h nieunikniony i nie powinien przebijać np. "Preferuj
+# zmiany 24h".
+#
+# Urlop/L4 wlicza się jako "przepracowany" udział w obsadzie (dla rotacji
+# 24h/liczba osób placówki na dzień, dla zwykłych zmian - dzienny wymiar
+# pracownika), a niepełny etat liczy się proporcjonalnie (1/2 etatu =
+# połowa godzin pełnego etatu).
+# ---------------------------------------------------------------------------
+
+HOURS_EQUALIZATION_POLICY = "hours_equalization"
+HOURS_EQUALIZATION_LABEL = "Wyrównanie godzin umowa/bez"
+HOURS_EQUALIZATION_WEIGHT = 1
+HOURS_EQUALIZATION_MANDATORY_FACTOR = 10
+_FULL_TIME_SCALE = 10
+
+
+def hours_equalization_weight(policy) -> int:
+    """Waga termu wg ustawienia zasady; 0 = wyłączone (także gdy projekt
+    nie ma jeszcze tej zasady w ogóle - domyślnie wyłączona)."""
+    from model.constraint_policy import ConstraintPolicy
+
+    if policy == ConstraintPolicy.PREFERRED:
+        return HOURS_EQUALIZATION_WEIGHT
+    if policy == ConstraintPolicy.MANDATORY:
+        return HOURS_EQUALIZATION_WEIGHT * HOURS_EQUALIZATION_MANDATORY_FACTOR
+    return 0
+
+
+def _duty_tolerance_minutes(rotation, emp) -> int:
+    from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
+    from logic.generator.night_shift_constraint import night_shift_duration_minutes
+
+    keys = ["weekend_half_a", "weekend_half_b"]
+    if not rotation.get("only_12_24h"):
+        keys += ["weekday_long", "weekday_short"]
+    lengths = [
+        night_shift_duration_minutes((rotation[k]["start"], rotation[k]["end"]))
+        for k in keys if rotation.get(k)
+    ]
+    if not emp.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False):
+        lengths.append(24 * 60)
+    return max(lengths, default=24 * 60)
+
+
+def add_hours_equalization_penalty(
+    model,
+    x,
+    employees,
+    days,
+    schedule,
+    shop,
+    all_shifts,
+    shift_night=None,
+    duty_shifts=None,
+    weight=HOURS_EQUALIZATION_WEIGHT,
+    role_key=UMOWA_ROLE_KEY,
+):
+    if weight <= 0:
+        return []
+
+    location_sizes: dict[str, int] = {}
+    groups: dict[tuple[str, bool], list[int]] = {}
+    for e, emp in enumerate(employees):
+        key = emp.location_key or ""
+        location_sizes[key] = location_sizes.get(key, 0) + 1
+        groups.setdefault((key, emp.has_role(role_key)), []).append(e)
+
+    penalties = []
+    for (location_key, has_role), indices in groups.items():
+        if len(indices) < 2:
+            continue
+
+        norms = []
+        tolerance = 0
+        for e in indices:
+            emp = employees[e]
+            unavailable = sum(
+                1 for d in days
+                if schedule.get_day(emp, d).is_leave or getattr(schedule.get_day(emp, d), "is_sick", False)
+            )
+            if unavailable >= len(days):
+                continue
+
+            daily_minutes = int(get_effective_daily_hours(emp, shop) * 60)
+            rotation = shop.get_location(emp).get_duty_rotation()
+            if rotation:
+                share_per_day = (24 * 60) // max(location_sizes[location_key], 1)
+                shift_tolerance = _duty_tolerance_minutes(rotation, emp)
+            else:
+                share_per_day = daily_minutes
+                shift_tolerance = daily_minutes
+
+            minutes_by_shift = _shift_minutes_by_type(
+                all_shifts, daily_minutes, _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts),
+            )
+            fraction = min(max(emp.employment_fraction, 0.01), 1.0)
+            scale = max(1, round(_FULL_TIME_SCALE / fraction))
+
+            norm = model.NewIntVar(0, 10_000_000, f"equalize_norm_e{e}")
+            model.Add(
+                norm == scale * (
+                    sum(x[e, d, s] * minutes_by_shift[s] for d in days for s in all_shifts)
+                    + planned_minutes_expr(x, e, emp, days, duty_shifts)
+                    + unavailable * share_per_day
+                )
+            )
+            norms.append(norm)
+            tolerance = max(tolerance, shift_tolerance * _FULL_TIME_SCALE)
+
+        if len(norms) < 2:
+            continue
+
+        tag = f"{location_key}_{int(has_role)}"
+        highest = model.NewIntVar(0, 10_000_000, f"equalize_max_{tag}")
+        lowest = model.NewIntVar(0, 10_000_000, f"equalize_min_{tag}")
+        model.AddMaxEquality(highest, norms)
+        model.AddMinEquality(lowest, norms)
+        excess = model.NewIntVar(0, 10_000_000, f"equalize_excess_{tag}")
+        model.Add(excess >= highest - lowest - tolerance)
+        penalties.append(excess)
+
+    return [weight * p for p in penalties]

@@ -213,3 +213,62 @@ def test_only_12_24h_weekday_not_covered_by_a_16h_shift():
     schedule.get_day(emp, MONDAY).set_hours("06:00", "22:00")
 
     assert is_day_fully_covered(schedule, shop, [emp], MONDAY) is False
+
+
+# --- Pokrycie liczone po osi czasu (2026-09-25) ---
+
+def test_two_people_at_the_same_time_is_not_covered():
+    """Dawniej: OK, bo istniały obie standardowe połówki - mimo że
+    dodatkowa osoba pracowała równolegle."""
+    shop = _shop_with_rotation(rotation=ROTATION_ONLY_12_24H)
+    a, b, c = (Employee(last_name=n, first_name="X", location_key="site1") for n in "ABC")
+    schedule = _schedule_with(shop, a, b, c)
+    schedule.get_day(a, MONDAY).set_hours("06:00", "18:00")
+    schedule.get_day(b, MONDAY).set_hours("18:00", "06:00")
+    schedule.get_day(c, MONDAY).set_hours("07:00", "15:00")
+
+    assert is_day_fully_covered(schedule, shop, [a, b, c], MONDAY) is False
+
+
+def test_non_standard_hours_that_cover_the_day_exactly_count():
+    """Ręczny wpis 05:00-17:00 + zmiana resztkowa generatora 17:00-06:00,
+    a noc z poprzedniego dnia przycięta do 18:00-05:00."""
+    shop = _shop_with_rotation(rotation=ROTATION_ONLY_12_24H)
+    a, b, c, d = (Employee(last_name=n, first_name="X", location_key="site1") for n in "ABCD")
+    schedule = _schedule_with(shop, a, b, c, d)
+    schedule.get_day(a, MONDAY - 1).set_hours("06:00", "18:00")
+    schedule.get_day(b, MONDAY - 1).set_hours("18:00", "05:00")
+    schedule.get_day(c, MONDAY).set_hours("05:00", "17:00")
+    schedule.get_day(d, MONDAY).set_hours("17:00", "06:00")
+
+    assert is_day_fully_covered(schedule, shop, [a, b, c, d], MONDAY - 1) is True
+    assert is_day_fully_covered(schedule, shop, [a, b, c, d], MONDAY) is True
+
+
+def test_different_day_start_in_week_and_weekend_is_flagged():
+    """Starszy schemat: tydzień 06-22/22-06, weekend 08-20/20-08. W
+    poniedziałek 06:00-08:00 pracują dwie osoby (niedzielna noc trwa do
+    08:00), a w sobotę 06:00-08:00 nikt (piątkowa noc kończy się o 06:00)."""
+    rotation = {
+        "weekday_long": {"start": "06:00", "end": "22:00"},
+        "weekday_short": {"start": "22:00", "end": "06:00"},
+        "weekend_full": {"start": "08:00"},
+        "weekend_half_a": {"start": "08:00", "end": "20:00"},
+        "weekend_half_b": {"start": "20:00", "end": "08:00"},
+    }
+    shop = _shop_with_rotation(rotation=rotation)
+    a, b = (Employee(last_name=n, first_name="X", location_key="site1") for n in "AB")
+    schedule = _schedule_with(shop, a, b)
+    sunday, friday, saturday = MONDAY - 1, 7, 8
+    schedule.get_day(a, sunday).set_hours("08:00", "20:00")
+    schedule.get_day(b, sunday).set_hours("20:00", "08:00")
+    schedule.get_day(a, MONDAY).set_hours("06:00", "22:00")
+    schedule.get_day(b, MONDAY).set_hours("22:00", "06:00")
+    schedule.get_day(a, friday).set_hours("06:00", "22:00")
+    schedule.get_day(b, friday).set_hours("22:00", "06:00")
+    schedule.get_day(a, saturday).set_hours("08:00", "20:00")
+    schedule.get_day(b, saturday).set_hours("20:00", "08:00")
+
+    assert is_day_fully_covered(schedule, shop, [a, b], sunday) is True
+    assert is_day_fully_covered(schedule, shop, [a, b], MONDAY) is False
+    assert is_day_fully_covered(schedule, shop, [a, b], friday) is False

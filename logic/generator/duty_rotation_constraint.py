@@ -35,6 +35,7 @@ lokalizacji dzielą jedną grupę opartą o ShopConfig.duty_rotation.
 """
 
 from logic.generator.night_shift_constraint import night_shift_duration_minutes
+from logic.generator.duty_rotation_manual_coverage import CUSTOM_KEYS, custom_shift_ids, get_plan
 
 DUTY_ROTATION_KEYS = ("weekday_long", "weekday_short", "weekend_full", "weekend_half_a", "weekend_half_b")
 
@@ -58,6 +59,11 @@ def duty_rotation_minutes_for_employee(shop, employee, duty_shifts) -> dict:
 
     minutes = {}
     for key, shift_id in duty_shifts.items():
+        if key in CUSTOM_KEYS:
+            # Długość zmiany resztkowej zależy od dnia - liczona osobno
+            # (duty_rotation_manual_coverage.planned_minutes_expr).
+            minutes[shift_id] = 0
+            continue
         if key == "weekend_full":
             minutes[shift_id] = FULL_DAY_MINUTES
             continue
@@ -104,6 +110,9 @@ def add_duty_rotation_gate_constraint(model, x, employees, days, shop, duty_shif
     other_shift_ids = [s for s in all_shifts if s not in duty_shift_ids]
     weekday_ids = {duty_shifts[k] for k in _WEEKDAY_KEYS}
     weekend_ids = {duty_shifts[k] for k in _WEEKEND_KEYS}
+    plan = get_plan(duty_shifts)
+    custom_ids = custom_shift_ids(duty_shifts)
+    standard_ids = weekday_ids | weekend_ids
 
     for e, emp in enumerate(employees):
         rotation = shop.get_location(emp).get_duty_rotation()
@@ -127,6 +136,19 @@ def add_duty_rotation_gate_constraint(model, x, employees, days, shop, duty_shif
                 wrong_kind = weekend_ids if shop.weekday(d) < 5 else weekday_ids
             for s in wrong_kind:
                 model.Add(x[e, d, s] == 0)
+
+            # Zmiany resztkowe (duty_rotation_manual_coverage.py): istnieją
+            # tylko w dobach zaplanowanych wokół ręcznych wpisów - wtedy
+            # zastępują standardowy podział tej doby w całości.
+            if custom_ids:
+                pieces = plan.day_pieces(emp.location_key or "", d) if plan is not None else []
+                planned = plan is not None and plan.is_planned(emp.location_key or "", d)
+                for i, s in enumerate(custom_ids):
+                    if i >= len(pieces):
+                        model.Add(x[e, d, s] == 0)
+                if planned:
+                    for s in standard_ids:
+                        model.Add(x[e, d, s] == 0)
 
 
 def add_duty_rotation_no24h_gate_constraint(model, x, employees, days, duty_shifts, soft=False, trace=None):
@@ -156,6 +178,7 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
 
     violations = []
     groups = group_employees_with_duty_rotation(employees, shop)
+    plan = get_plan(duty_shifts)
 
     weekday_long = duty_shifts["weekday_long"]
     weekday_short = duty_shifts["weekday_short"]
@@ -179,12 +202,30 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
         location = shop.locations.get(location_key)
 
         for d in days:
+            # Zmiany resztkowe zaczynające się tego dnia (kawałki dób
+            # zaplanowanych wokół ręcznych wpisów, duty_rotation_manual_
+            # coverage.py) - dokładnie 1 osoba na każdej. Niezależne od
+            # zamknięcia TEGO dnia: kawałek po północy należy do doby dnia
+            # poprzedniego.
+            if plan is not None:
+                for i, _piece in enumerate(plan.day_pieces(location_key, d)):
+                    _exactly(
+                        sum(x[e, d, duty_shifts[CUSTOM_KEYS[i]]] for e in indices), 1, max_count,
+                        f"duty_custom{i}_{location_key}_d{d}",
+                    )
+
             # Lokalizacja zamknięta w polskie święto ustawowe (per lokalizacja
-            # - patrz LocationConfig.closed_on_public_holidays) - pomija
+            # - patrz LocationConfig.closed_on_public_holidays) albo ręcznie
+            # "Nieczynne tego dnia" (LocationConfig.is_duty_day_closed) - pomija
             # wymóg pokrycia tego dnia zamiast wymuszać count==1 sprzecznie z
             # add_duty_rotation_public_holiday_constraint (zeruje x[e,d,s] dla
             # tych samych dni, patrz base_specs.py).
-            if location is not None and location.is_closed_for_public_holiday(shop.year, shop.month, d):
+            if location is not None and location.is_duty_day_closed(shop.year, shop.month, d):
+                continue
+
+            # Doba zaplanowana wokół ręcznych wpisów - standardowy podział
+            # zastąpiony zmianami resztkowymi (wyżej).
+            if plan is not None and plan.is_planned(location_key, d):
                 continue
 
             wd = shop.weekday(d)

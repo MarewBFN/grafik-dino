@@ -120,6 +120,10 @@ def _build_24_7_guard_scenario(guard_count, seed, min_on_night=2, leave_probabil
     shop.constraints["solver_time_limit_seconds"] = 20
 
     loc = LocationConfig(key="site1", name="Obiekt")
+    # Ten scenariusz sprawdza obsadę nocną KAŻDEGO dnia, nie automatyczne
+    # zamknięcie w święta (domyślnie włączone, a sierpień 2026 ma 15.08) -
+    # ten sam wzorzec co tests/test_duty_rotation_scenario.py.
+    loc.closed_on_public_holidays = False
     shop.locations = {"site1": loc}
 
     schedule = MonthSchedule(YEAR, MONTH)

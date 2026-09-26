@@ -1238,7 +1238,12 @@ class MainWindow(QMainWindow):
             return
 
         ds = self.controller.get_day(emp, day)
-        night_hours = location.get_night_shift_hours()
+        duty_rotation = location.get_duty_rotation()
+        # Pracownik rotacji służby 24/7: dowolne godziny (także przez
+        # północ) i zmiana 24h - generator liczy ręczny wpis jako pokrycie.
+        # Automatycznie wykryte okno nocne 22:00-06:00 nie jest tu żadną
+        # zmianą rotacji, więc nie jest podpowiadane.
+        night_hours = None if duty_rotation else location.get_night_shift_hours()
         dialog = DayEditDialog(
             self,
             start=None if ds.is_leave else ds.start,
@@ -1247,6 +1252,8 @@ class MainWindow(QMainWindow):
             open_end=hours[1],
             daily_hours=emp.daily_hours,
             night_hours=night_hours,
+            duty_rotation=duty_rotation,
+            full_day=bool(getattr(ds, "is_full_day", False)),
         )
 
         if dialog.exec() != QDialog.Accepted:
@@ -1258,6 +1265,8 @@ class MainWindow(QMainWindow):
             self.controller.set_day_leave(emp, day)
         elif dialog.result_mode == "sick":
             self.controller.set_day_sick(emp, day)
+        elif dialog.result_mode == "full_day":
+            self.controller.set_day_full_day_shift(emp, day, dialog.result_start)
         elif dialog.result_mode == "hours":
             from datetime import datetime
 
@@ -1272,7 +1281,7 @@ class MainWindow(QMainWindow):
             is_configured_night_shift = (
                 night_hours is not None and (dialog.result_start, dialog.result_end) == night_hours
             )
-            if end_dt <= start_dt and not is_configured_night_shift:
+            if end_dt <= start_dt and not is_configured_night_shift and not duty_rotation:
                 QMessageBox.warning(self, "Błąd", "Godzina zakończenia musi być późniejsza niż rozpoczęcia.")
                 return
 

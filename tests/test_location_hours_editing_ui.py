@@ -215,3 +215,57 @@ def test_config_dialog_hours_tab_loads_and_saves_closed_on_public_holidays():
     dialog._save()
 
     assert shop.locations["site1"].closed_on_public_holidays is True
+
+
+def test_turning_on_24_7_unchecks_closed_on_public_holidays():
+    """Placówka 24/7 z rotacją służby jest domyślnie chroniona także w
+    święta (decyzja użytkownika 2026-09-25)."""
+    row = _row()
+    assert row.closed_on_public_holidays_check.isChecked() is True
+
+    row.is_24_7_check.setChecked(True)
+
+    assert row.closed_on_public_holidays_check.isChecked() is False
+
+
+def test_existing_24_7_location_keeps_its_saved_holiday_setting():
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1", closed_on_public_holidays=True)
+    loc.set_24_7(True)
+    shop.locations = {"site1": loc}
+
+    dialog = LocationsDialog(None, shop)
+
+    assert dialog._location_rows[0].closed_on_public_holidays_check.isChecked() is True
+
+
+def test_config_dialog_turning_on_24_7_unchecks_closed_on_public_holidays():
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1")
+    shop.locations["site1"] = loc
+
+    dialog = ConfigDialog(None, shop, location_key="site1")
+    dialog.is_24_7_check.setChecked(True)
+
+    assert dialog.closed_on_public_holidays_check.isChecked() is False
+
+
+def test_hours_equalization_rule_is_shown_for_custom_profile_and_disabled_when_missing():
+    """Nowa zasada "Wyrównanie godzin umowa/bez" - starszy projekt bez
+    zapisanego wpisu nie może jej po cichu włączyć samym zapisem okna."""
+    from model.business_profile import register_custom_profile
+    from model.constraint_policy import ConstraintPolicy
+    from model.custom_profile import CustomBusinessProfile
+
+    profile = CustomBusinessProfile(key="test_equalization_ui", display_name="T", roles=[], rules=[])
+    register_custom_profile(profile)
+    shop = ShopConfig(2026, 8)
+    shop.business_type = profile.key
+    shop.constraint_policies.pop("hours_equalization", None)
+
+    dialog = ConfigDialog(None, shop)
+    selector = dialog.policy_selectors["hours_equalization"]
+    assert selector.currentData() == ConstraintPolicy.DISABLED
+
+    dialog._save()
+    assert shop.constraint_policies.get("hours_equalization", ConstraintPolicy.DISABLED) == ConstraintPolicy.DISABLED

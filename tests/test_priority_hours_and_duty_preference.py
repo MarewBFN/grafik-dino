@@ -103,6 +103,30 @@ class TestPreferWeekendSplitOverFull:
         assert status == cp_model.OPTIMAL
         assert solver.Value(x[0, SATURDAY, WEEKEND_FULL]) == 1
 
+    def test_prefer_24h_flips_the_preference_to_full_day(self):
+        """"Preferuj zmiany 24h" w edytorze rotacji placówki - przy dwóch
+        chętnych osobach solver wybiera jedną zmianę 24h zamiast podziału."""
+        shop = ShopConfig(2026, 8)
+        loc = LocationConfig(key="site1", name="Site 1")
+        loc.set_duty_rotation(dict(ROTATION, prefer_24h=True))
+        shop.locations["site1"] = loc
+        employees = [Employee(last_name="Guard", first_name=n, location_key="site1") for n in "AB"]
+
+        model = cp_model.CpModel()
+        x = {(e, d, s): model.NewBoolVar(f"x_{e}_{d}_{s}") for e in range(2) for d in [SATURDAY] for s in ALL_SHIFTS}
+
+        add_duty_rotation_gate_constraint(model, x, employees, [SATURDAY], shop, DUTY_SHIFTS, ALL_SHIFTS)
+        add_duty_rotation_coverage_constraint(model, x, employees, [SATURDAY], shop, DUTY_SHIFTS, soft=False)
+        penalty = add_prefer_weekend_split_over_full_penalty(model, x, employees, [SATURDAY], shop, DUTY_SHIFTS)
+        model.Minimize(sum(penalty))
+
+        solver = cp_model.CpSolver()
+        assert solver.Solve(model) == cp_model.OPTIMAL
+        assert solver.Value(x[0, SATURDAY, WEEKEND_FULL]) + solver.Value(x[1, SATURDAY, WEEKEND_FULL]) == 1
+        assert all(
+            solver.Value(x[e, SATURDAY, s]) == 0 for e in range(2) for s in (WEEKEND_HALF_A, WEEKEND_HALF_B)
+        )
+
 
 def _priority_shop_and_schedule(n_regular_employees):
     profile = CustomBusinessProfile(
@@ -188,3 +212,81 @@ class TestPriorityHoursShortfallPenaltyUnit:
             model, x, [emp], days, schedule, shop, ALL_SHIFTS,
         )
         assert penalties == []
+
+
+# --- "Wyrównanie godzin umowa/bez" (decyzja użytkownika 2026-09-25) ---
+
+def _equalization_month(policy, umowa_count=0, n=6):
+    profile = CustomBusinessProfile(
+        key="test_hours_equalization", display_name="Test Equalization",
+        roles=[
+            RoleDefinition(key=UMOWA_ROLE_KEY, label="Umowa", show_summary_row=False),
+            RoleDefinition(key="nie_chce_24h", label="Nie chce 24h", show_summary_row=False),
+        ],
+        rules=[],
+    )
+    register_custom_profile(profile)
+    shop = ShopConfig(2026, 10)
+    shop.business_type = profile.key
+    loc = LocationConfig(key="site1", name="Site 1", closed_on_public_holidays=False)
+    loc.set_24_7(True)
+    loc.set_duty_rotation({
+        "only_12_24h": True,
+        "weekend_full": {"start": "08:00"},
+        "weekend_half_a": {"start": "08:00", "end": "20:00"},
+        "weekend_half_b": {"start": "20:00", "end": "08:00"},
+    })
+    shop.locations = {"site1": loc}
+    shop.constraint_policies.update(default_policies(profile))
+    shop.constraint_policies["balance"] = ConstraintPolicy.DISABLED
+    shop.constraint_policies["monthly_hours"] = ConstraintPolicy.DISABLED
+    if policy is not None:
+        shop.constraint_policies["hours_equalization"] = policy
+    schedule = MonthSchedule(2026, 10)
+    employees = []
+    for i in range(n):
+        roles = {"nie_chce_24h": True}
+        if i < umowa_count:
+            roles[UMOWA_ROLE_KEY] = True
+        emp = Employee(last_name=f"G{i}", first_name="X", location_key="site1", custom_roles=roles)
+        schedule.add_employee(emp)
+        employees.append(emp)
+    return shop, schedule, employees
+
+
+def _hours(schedule, emp):
+    return schedule.total_minutes_for_employee(emp) / 60
+
+
+class TestHoursEqualization:
+    def test_default_policy_for_custom_profiles_is_disabled(self):
+        shop, _, _ = _equalization_month(policy=None)
+        assert shop.constraint_policies["hours_equalization"] == ConstraintPolicy.DISABLED
+
+    def test_weight_by_policy(self):
+        from logic.generator.priority_hours_constraint import hours_equalization_weight
+
+        assert hours_equalization_weight(ConstraintPolicy.DISABLED) == 0
+        assert hours_equalization_weight(None) == 0
+        assert hours_equalization_weight(ConstraintPolicy.MANDATORY) > hours_equalization_weight(ConstraintPolicy.PREFERRED) > 0
+
+    def test_preferred_spreads_hours_within_one_shift(self):
+        shop, schedule, employees = _equalization_month(ConstraintPolicy.PREFERRED)
+        with redirect_stdout(io.StringIO()):
+            result = AutoScheduleGenerator(schedule, shop).generate(solver_time_limit_seconds=30, solver_workers=2)
+        assert result["success"], result
+        hours = [_hours(schedule, e) for e in employees]
+        assert max(hours) - min(hours) <= 12, hours
+
+    def test_umowa_and_non_umowa_are_equalized_separately(self):
+        """Osoby z "Umowa" idą najpierw do nominału (priorytet), reszta
+        dzieli pozostałe godziny równo między siebie."""
+        shop, schedule, employees = _equalization_month(ConstraintPolicy.PREFERRED, umowa_count=2)
+        with redirect_stdout(io.StringIO()):
+            result = AutoScheduleGenerator(schedule, shop).generate(solver_time_limit_seconds=30, solver_workers=2)
+        assert result["success"], result
+        umowa = [_hours(schedule, e) for e in employees[:2]]
+        others = [_hours(schedule, e) for e in employees[2:]]
+        assert min(umowa) > max(others), (umowa, others)
+        assert max(umowa) - min(umowa) <= 12, umowa
+        assert max(others) - min(others) <= 12, others

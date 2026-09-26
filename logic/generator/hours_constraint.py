@@ -1,3 +1,4 @@
+from logic.generator.duty_rotation_manual_coverage import planned_minutes_expr
 from logic.utils.time_utils import get_effective_daily_hours
 from logic.generator.night_shift_constraint import night_shift_minutes_for_employee
 from logic.generator.duty_rotation_constraint import duty_rotation_minutes_for_employee
@@ -78,6 +79,7 @@ def add_monthly_hours_constraint(
                 for d in days
                 for s in all_shifts
             )
+            + planned_minutes_expr(x, e, emp, days, duty_shifts)
         )
 
         all_totals.append(total_minutes)
@@ -181,6 +183,7 @@ def add_balance_constraint(
                 sum(x[e, d, s] * minutes_by_shift[s] for s in all_shifts)
                 for d in days
             )
+            + planned_minutes_expr(x, e, emp, days, duty_shifts)
         )
 
         if not soft:

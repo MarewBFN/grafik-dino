@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from logic.auto_generator import AutoScheduleGenerator
+from logic.generator.diagnostics import build_infeasibility_summary
 from logic.generator.night_constraint import add_no_night_constraint
 from logic.generator.trace import build_random_project
 from model.constraint_policy import ConstraintPolicy
@@ -154,3 +155,61 @@ class GeneratorDiagnosticsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DutyRotationInfeasibilitySummaryTests(unittest.TestCase):
+    """Projekt ochrony (rotacja służby 24/7) - komunikat o braku rozwiązania
+    ma wskazać placówkę i dzień, a nie regułę otwarcia/zamknięcia Dino."""
+
+    def _shop_and_schedule(self, n=3, no24h=False):
+        from model.location import LocationConfig
+
+        shop = ShopConfig(2026, 10)
+        shop.business_type = "custom_test_diag_duty"
+        loc = LocationConfig(key="site1", name="LakPol Słupsk")
+        loc.set_24_7(True)
+        loc.set_duty_rotation({
+            "only_12_24h": True,
+            "weekend_full": {"start": "07:00"},
+            "weekend_half_a": {"start": "07:00", "end": "19:00"},
+            "weekend_half_b": {"start": "19:00", "end": "07:00"},
+        })
+        shop.locations = {"site1": loc}
+        employees = [
+            Employee(
+                last_name=f"E{i}", first_name="G", location_key="site1",
+                custom_roles={"nie_chce_24h": True} if no24h else {},
+            )
+            for i in range(n)
+        ]
+        return shop, MonthSchedule(2026, 10, employees=employees), employees
+
+    def test_whole_location_on_leave_names_location_and_day(self):
+        shop, schedule, employees = self._shop_and_schedule()
+        for emp in employees:
+            schedule.get_day(emp, 20).set_leave()
+
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertEqual(
+            messages,
+            ["LakPol Słupsk, dzień 20: nikt z pracowników placówki nie jest dostępny "
+             "(urlop/L4/wolne) - doby nie da się obsadzić."],
+        )
+
+    def test_single_available_person_who_refuses_24h(self):
+        shop, schedule, employees = self._shop_and_schedule(n=2, no24h=True)
+        schedule.get_day(employees[0], 5).set_leave()
+
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertTrue(any("dzień 5" in m and "Nie chce" in m for m in messages), messages)
+
+    def test_no_dino_open_close_messages_for_duty_rotation_project(self):
+        shop, schedule, employees = self._shop_and_schedule()
+        for emp in employees:
+            schedule.get_day(emp, 20).set_leave()
+
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertFalse(any("otwarci" in m or "zamknięci" in m for m in messages), messages)
