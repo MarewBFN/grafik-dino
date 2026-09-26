@@ -975,8 +975,11 @@ class ScheduleGrid(QTableWidget):
             # dzień jawnie oznaczony "Nieczynne" (patrz WeeklyHoursEditor/
             # DayOverrideDialog - (None, None) w open_hours/day_overrides) -
             # get_open_hours_for_day() już sprawdza oba, per lokalizacja
-            # tego pracownika (patrz model/location.py).
-            if not self.shop_config.get_location(emp).get_open_hours_for_day(day):
+            # tego pracownika (patrz model/location.py). Komórka ze zmianą
+            # (np. kawałek doby rotacji służby z dnia poprzedniego po
+            # północy) nie jest maskowana - tło "nieczynne" nadaje jej
+            # SchedulePresenter.get_cell_view().
+            if not self.shop_config.get_location(emp).get_open_hours_for_day(day) and ds.is_empty():
                 item.setBackground(QBrush(QColor(theme.BG_DISABLED)))
                 self.setItem(row, day + self._prev_col_offset, item)
                 continue

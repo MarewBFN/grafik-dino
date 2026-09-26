@@ -33,6 +33,24 @@ def rotation_start_and_split(duty_rotation: dict | None) -> tuple[str, str]:
     return start, split
 
 
+def _start_split_problem(start: str, split: str) -> str | None:
+    """Komunikat, gdy (początek doby, podział) nie da się zapisać tak, żeby
+    generator dał ciągłą obsadę. Obie połówki są zmianami zaczynającymi się
+    w tym samym dniu kalendarzowym, a zmiana 24h - o początku doby; przy
+    podziale wcześniejszym niż początek doby (np. 20:00 i 08:00) doba
+    połówek zaczyna się o 08:00, a zmiana 24h o 20:00, więc dzień ze zmianą
+    24h obok dnia z połówkami daje 12h luki i 12h podwójnej obsady."""
+    if start == split:
+        return "Godzina podziału musi być inna niż godzina rozpoczęcia doby."
+    if split < start:
+        return (
+            f"Godzina rozpoczęcia doby ({start}) musi być wcześniejsza niż godzina "
+            f"podziału ({split}) - np. 07:00 i 19:00. Doby zaczynającej się "
+            "wieczorem generator nie potrafi poprawnie łączyć ze zmianami 24h."
+        )
+    return None
+
+
 class DutyRotationEditor(QFrame):
     """Edytor "Rotacja służby 24/7" (LocationConfig.duty_rotation).
 
@@ -124,8 +142,9 @@ class DutyRotationEditor(QFrame):
     def _update_summary(self) -> None:
         start = self.start_input.get_time_str()
         split = self.split_input.get_time_str()
-        if start == split:
-            self.summary_label.setText("Godzina podziału musi być inna niż godzina rozpoczęcia doby.")
+        problem = _start_split_problem(start, split)
+        if problem:
+            self.summary_label.setText(problem)
             return
         self.summary_label.setText(
             f"Zmiany: 24h od {start} albo {start}–{split} + {split}–{start}."
@@ -140,11 +159,15 @@ class DutyRotationEditor(QFrame):
         self._update_summary()
 
     def get_duty_rotation(self) -> dict:
-        """Może rzucić ValueError (patrz normalize_duty_rotation) gdy godzina
-        podziału == godzina rozpoczęcia - wywołujący (LocationsDialog._save(),
+        """Może rzucić ValueError gdy godzina podziału == godzina rozpoczęcia
+        (patrz normalize_duty_rotation) albo jest od niej wcześniejsza (patrz
+        _start_split_problem) - wywołujący (LocationsDialog._save(),
         ConfigDialog._save()) łapie i pokazuje użytkownikowi."""
         start = self.start_input.get_time_str()
         split = self.split_input.get_time_str()
+        problem = _start_split_problem(start, split)
+        if problem and start != split:
+            raise ValueError(problem)
         raw = {
             "weekend_half_a": {"start": start, "end": split},
             "weekend_half_b": {"start": split, "end": start},

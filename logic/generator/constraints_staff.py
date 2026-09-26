@@ -104,9 +104,16 @@ def add_max_consecutive_constraint(
     soft=False,
     trace=None,
     employee_indices=None,
+    fixed_work_days=None,
 ):
     if trace is not None:
         trace.log_constraint("max_consecutive", f"max_consecutive={max_consecutive} soft={soft}")
+
+    # fixed_work_days: {e: {dzień}} - dni pracy spoza zmiennych x (ręczne
+    # wpisy pracowników rotacji służby liczone jako stałe przedziały planu,
+    # patrz duty_rotation_manual_coverage.py) - liczone jak przepracowany
+    # dzień. Domyślnie brak, dokładnie dotychczasowe zachowanie.
+    fixed_work_days = fixed_work_days or {}
 
     violations = []
 
@@ -121,7 +128,7 @@ def add_max_consecutive_constraint(
                 x[e, d, s]
                 for d in range(start, start + max_consecutive + 1)
                 for s in all_shifts
-            )
+            ) + sum(1 for d in range(start, start + max_consecutive + 1) if d in fixed_work_days.get(e, ()))
 
             if not soft:
                 model.Add(work_sum <= max_consecutive)

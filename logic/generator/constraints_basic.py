@@ -8,7 +8,7 @@ def add_one_shift_per_day_constraint(model, x, employees, days, all_shifts, trac
                 sum(x[e, d, s] for s in all_shifts) <= 1
             )
 
-def add_non_trade_day_constraints(model, x, employees, days, shop, all_shifts, trace=None):
+def add_non_trade_day_constraints(model, x, employees, days, shop, all_shifts, trace=None, schedule=None):
     if trace is not None:
         trace.log_constraint("non_trade_day", "block work on non-trade days")
 
@@ -18,9 +18,34 @@ def add_non_trade_day_constraints(model, x, employees, days, shop, all_shifts, t
         # własną regułę (duty_rotation_public_holiday_constraint.py).
         uses_open_hours = not location.get_duty_rotation()
         for d in days:
-            if not shop.is_trade_day(d) or not is_location_open_for_employee(shop, emp, d, uses_open_hours):
+            if not shop.is_trade_day(d):
                 for s in all_shifts:
                     model.Add(x[e, d, s] == 0)
+                continue
+            if is_location_open_for_employee(shop, emp, d, uses_open_hours):
+                continue
+            # Ręcznie zablokowana zmiana z godzinami, wpisana zanim dzień
+            # stał się zamknięty ("Nieczynne", święto) - ręczne, jawne
+            # przypisanie wygrywa (ten sam priorytet co w
+            # duty_rotation_public_holiday_constraint.py), a co z nią zrobić
+            # (zmiana nocna / kafelek rotacji całodobowej - wymusić, reszta -
+            # wyzerować) decydują constrainty ręcznych blokad. Wcześniej
+            # zerowanie tutaj stało w sprzeczności z ich wymuszeniem x==1 i
+            # cały miesiąc wychodził bez rozwiązania.
+            if schedule is not None and _is_explicit_locked_shift(schedule.get_day(emp, d)):
+                continue
+            for s in all_shifts:
+                model.Add(x[e, d, s] == 0)
+
+
+def _is_explicit_locked_shift(day_state) -> bool:
+    return bool(
+        day_state.is_locked
+        and day_state.start
+        and day_state.end
+        and not day_state.is_leave
+        and not getattr(day_state, "is_sick", False)
+    )
 
 
 def is_location_open_for_employee(shop, emp, day, uses_open_hours=None):

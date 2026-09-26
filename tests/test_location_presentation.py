@@ -98,6 +98,28 @@ def test_closed_day_override_greys_out_the_cell():
     assert view.bg == theme.BG_DISABLED
 
 
+def test_closed_day_cell_still_shows_a_shift_that_is_there():
+    """Rotacja służby: kawałek doby dnia poprzedniego zaczynający się po
+    północy (duty_rotation_manual_coverage.py) trafia do komórki dnia
+    "Nieczynne". Szara, pusta komórka ukrywała zmianę, która mimo to liczy
+    się do godzin i eksportu."""
+    shop = ShopConfig(2026, 3)
+    loc = LocationConfig(key="loc_a", name="Obiekt A", open_hours={i: ("06:00", "14:00") for i in range(7)})
+    loc.day_overrides[3] = (None, None)
+    shop.locations["loc_a"] = loc
+
+    schedule = MonthSchedule(2026, 3)
+    emp = Employee(last_name="A", first_name="A", location_key="loc_a", daily_hours=8)
+    schedule.add_employee(emp)
+    schedule.set_day_hours(emp, 3, "01:30", "07:00")
+
+    view = SchedulePresenter(schedule, shop).get_cell_view(emp, 3)
+
+    assert view.bg == theme.BG_DISABLED
+    assert (view.text_start, view.text_end) == ("01:30", "07:00")
+    assert "01:30" in view.tooltip
+
+
 def test_open_day_in_other_location_is_unaffected_by_a_closed_day_elsewhere():
     shop = ShopConfig(2026, 3)
     loc_a = LocationConfig(key="loc_a", name="Obiekt A", open_hours={i: ("06:00", "14:00") for i in range(7)})

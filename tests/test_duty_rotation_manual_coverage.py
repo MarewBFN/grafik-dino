@@ -126,6 +126,83 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(planned_minutes_expr(x, 1, employees[1], days, duty_shifts), 0)
 
 
+class RestAroundPlannedDaysTests(unittest.TestCase):
+    def _model(self, schedule, shop, employees):
+        from ortools.sat.python import cp_model
+
+        from logic.generator.duty_rotation_manual_coverage import CUSTOM_KEYS
+        from logic.generator.duty_rotation_rest_constraint import add_duty_rotation_rest_constraint
+
+        keys = ("weekday_long", "weekday_short", "weekend_full", "weekend_half_a", "weekend_half_b", *CUSTOM_KEYS)
+        duty_shifts = DutyShiftMap({key: 100 + i for i, key in enumerate(keys)})
+        duty_shifts.plan = build_duty_coverage_plan(schedule, shop, employees)
+        days = list(range(1, schedule.days_in_month + 1))
+        model = cp_model.CpModel()
+        x = {
+            (e, d, s): model.NewBoolVar(f"x_{e}_{d}_{s}")
+            for e in range(len(employees)) for d in days for s in duty_shifts.values()
+        }
+        add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shifts, schedule=schedule)
+        return model, x, duty_shifts
+
+    def test_day_fully_covered_by_manual_entries_does_not_end_the_rest_lookahead(self):
+        """12.10 w całości ręcznie (08:00-19:00 + 19:00-08:00,
+        oba niepasujące do rotacji) - doba 12 zaplanowana bez żadnej zmiany
+        resztkowej. Po 24h 11.10 przy N=4 wymagane 72h odpoczynku, więc
+        13.10 08:00 (24h później) musi być zabronione - wcześniej pusty
+        dzień 12 kończył sprawdzanie kolejnych dni."""
+        from ortools.sat.python import cp_model
+
+        shop, schedule, employees = _project(n=4)
+        _lock(schedule, employees[0], 12, "08:00", "19:00")
+        _lock(schedule, employees[1], 12, "19:00", "08:00")
+        model, x, duty_shifts = self._model(schedule, shop, employees)
+        self.assertTrue(duty_shifts.plan.is_planned("pge", 12))
+        self.assertEqual(duty_shifts.plan.day_pieces("pge", 12), [])
+
+        model.Add(x[2, 11, duty_shifts["weekend_full"]] == 1)
+        model.Add(x[2, 13, duty_shifts["weekend_half_a"]] == 1)
+
+        self.assertEqual(cp_model.CpSolver().Solve(model), cp_model.INFEASIBLE)
+
+
+class MaxConsecutiveAroundPlannedDaysTests(unittest.TestCase):
+    def test_fixed_manual_entry_counts_as_a_work_day(self):
+        """Ręczny wpis 08:00-20:00 pasujący do rotacji (9.10) w dobie
+        zaplanowanej wokół cudzego wpisu 07:00-19:00 (10.10) jest stałym
+        przedziałem planu (x == 0) - wcześniej przez to znikał z "Dni pod
+        rząd" (przed planem liczył się jako x == 1)."""
+        from types import SimpleNamespace
+
+        from ortools.sat.python import cp_model
+
+        from logic.generator.base_specs import _build_max_consecutive
+        from logic.generator.duty_rotation_manual_coverage import CUSTOM_KEYS
+
+        shop, schedule, employees = _project()
+        shop.locations["pge"].constraints["max_consecutive_days"] = 4
+        _lock(schedule, employees[0], 9, "08:00", "20:00")
+        _lock(schedule, employees[1], 10, "07:00", "19:00")
+        keys = ("weekday_long", "weekday_short", "weekend_full", "weekend_half_a", "weekend_half_b", *CUSTOM_KEYS)
+        duty_shifts = DutyShiftMap({key: 100 + i for i, key in enumerate(keys)})
+        duty_shifts.plan = build_duty_coverage_plan(schedule, shop, employees)
+        self.assertTrue(duty_shifts.plan.is_fixed(employees[0], 9))
+
+        days = list(range(1, schedule.days_in_month + 1))
+        model = cp_model.CpModel()
+        all_shifts = list(duty_shifts.values())
+        x = {(e, d, s): model.NewBoolVar(f"x{e}_{d}_{s}") for e in range(len(employees)) for d in days for s in all_shifts}
+        ctx = SimpleNamespace(
+            model=model, x=x, employees=employees, days=days, shop=shop, all_shifts=all_shifts,
+            trace=None, duty_shifts=duty_shifts,
+        )
+        _build_max_consecutive(ctx, soft=False)
+        for d in (5, 6, 7, 8):
+            model.Add(x[0, d, duty_shifts["weekend_half_a"]] == 1)
+
+        self.assertEqual(cp_model.CpSolver().Solve(model), cp_model.INFEASIBLE)
+
+
 class GenerationTests(unittest.TestCase):
     def _generate(self, schedule, shop):
         with redirect_stdout(io.StringIO()):
@@ -169,6 +246,28 @@ class GenerationTests(unittest.TestCase):
 
         self.assertTrue(result["success"], result)
         self._assert_month_consistent(schedule, shop, employees)
+
+
+class ClosedDayCellTests(unittest.TestCase):
+    def test_grid_shows_a_piece_of_the_previous_doba_in_a_closed_days_cell(self):
+        """17.10 ręcznie 15:30-01:30, 18.10 "Nieczynne" - reszta doby 17
+        (01:30-08:00) to zmiana w komórce 18.10. Siatka maskowała komórki
+        dnia zamkniętego (szare, puste), więc zmiana liczona do godzin i
+        eksportu była niewidoczna."""
+        from ui.grid_view import ScheduleGrid
+
+        shop, schedule, employees = _project()
+        shop.locations["pge"].day_overrides[18] = (None, None)
+        schedule.get_day(employees[1], 18).set_hours("01:30", "08:00")
+
+        grid = ScheduleGrid()
+        grid.set_data(schedule, shop, ScheduleController(schedule, shop), location_filter="pge")
+        grid.refresh()
+
+        item = grid.item(1, 18 + grid._prev_col_offset)
+        self.assertIn("01:30", item.text())
+        empty_closed = grid.item(0, 18 + grid._prev_col_offset)
+        self.assertEqual(empty_closed.text(), "")
 
 
 class ManualEditingTests(unittest.TestCase):

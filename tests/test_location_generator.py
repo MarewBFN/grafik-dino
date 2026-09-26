@@ -160,6 +160,51 @@ def test_min_staff_with_role_rule_is_resolved_per_employee_location():
     assert build(2) is False, "one guard can never satisfy a 2-guard location threshold"
 
 
+def test_min_staff_with_role_rule_skips_days_when_every_role_holder_location_is_closed():
+    """11.11.2026 (święto): placówka A (wszyscy z rolą) zamknięta
+    (closed_on_public_holidays), placówka B czynna - dzień zostaje w
+    trade_days. Od kiedy dzień zamknięty lokalizacji blokuje wszystkie
+    zmiany (add_non_trade_day_constraints), reguła "min. 1 z rolą" była tego
+    dnia niespełnialna i cały miesiąc wychodził bez rozwiązania (wcześniej
+    solver "spełniał" ją niewidoczną zmianą w zamkniętej placówce)."""
+    rule = RuleInstance(
+        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="kier",
+        policy="MANDATORY", params={"min_count": 1, "scope": "any_shift"},
+    )
+    profile = CustomBusinessProfile(
+        key="custom_test_minstaff_closed_loc",
+        display_name="Test MinStaffClosedLoc",
+        roles=[RoleDefinition(key="kier", label="Kierownik")],
+        rules=[rule],
+    )
+    register_custom_profile(profile)
+
+    shop = ShopConfig(2026, 11)
+    shop.business_type = profile.key
+    shop.constraint_policies.update(default_policies(profile))
+    shop.constraint_policies["balance"] = ConstraintPolicy.DISABLED
+    shop.constraint_policies["monthly_hours"] = ConstraintPolicy.DISABLED
+    shop.locations = {
+        "a": LocationConfig(key="a", name="A", open_hours={i: ("08:00", "16:00") for i in range(7)}),
+        "b": LocationConfig(
+            key="b", name="B", open_hours={i: ("08:00", "16:00") for i in range(7)},
+            closed_on_public_holidays=False,
+        ),
+    }
+    employees = [
+        Employee(last_name=f"A{i}", first_name="X", location_key="a", custom_roles={"kier": True})
+        for i in range(3)
+    ] + [Employee(last_name=f"B{i}", first_name="X", location_key="b") for i in range(3)]
+    schedule = MonthSchedule(2026, 11, employees=employees)
+
+    with redirect_stdout(io.StringIO()):
+        result = AutoScheduleGenerator(schedule, shop).generate(solver_time_limit_seconds=20, solver_workers=2)
+
+    assert result["success"], result.get("infeasibility_reasons")
+    assert all(schedule.get_day(emp, 11).is_empty() for emp in employees[:3])
+    assert any(not schedule.get_day(emp, 12).is_empty() for emp in employees[:3])
+
+
 def test_shop_config_get_location_falls_back_to_self_without_locations():
     shop = ShopConfig(2026, 3)
     emp = Employee(last_name="Kowalski", first_name="Jan")

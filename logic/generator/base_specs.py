@@ -36,6 +36,7 @@ from logic.generator.duty_rotation_constraint import (
 )
 from logic.generator.duty_rotation_rest_constraint import add_duty_rotation_rest_constraint
 from logic.generator.duty_rotation_manual_constraint import add_duty_rotation_manual_shift_constraint
+from logic.generator.duty_rotation_manual_coverage import get_plan
 from logic.generator.duty_rotation_public_holiday_constraint import add_duty_rotation_public_holiday_constraint
 from logic.generator.round_clock_constraint import add_round_clock_gate_constraint
 from logic.generator.round_clock_rest_constraint import add_round_clock_rest_constraint
@@ -76,7 +77,8 @@ def _build_always_on_specs():
         ConstraintSpec(
             "non_trade_day",
             lambda ctx, soft: add_non_trade_day_constraints(
-                ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts, trace=ctx.trace
+                ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts, trace=ctx.trace,
+                schedule=ctx.schedule,
             ),
             always_on=True,
         ),
@@ -267,11 +269,22 @@ def _build_max_consecutive(ctx, soft):
         value = ctx.shop.get_location(emp).constraints.get("max_consecutive_days", 4)
         groups.setdefault(value, []).append(e)
 
+    # Ręczne wpisy pracowników rotacji służby, które plan pokrycia doby
+    # traktuje jako stałe przedziały (x == 0 tego dnia, patrz
+    # duty_rotation_manual_coverage.py), są dalej dniami pracy.
+    plan = get_plan(ctx.duty_shifts) if ctx.duty_shifts is not None else None
+    fixed_work_days = {}
+    if plan is not None:
+        for e, emp in enumerate(ctx.employees):
+            fixed_days = {d for d, _start, _end in plan.fixed_intervals(emp)}
+            if fixed_days:
+                fixed_work_days[e] = fixed_days
+
     violations = []
     for max_consecutive, indices in groups.items():
         violations.extend(add_max_consecutive_constraint(
             ctx.model, ctx.x, ctx.employees, ctx.days, max_consecutive, ctx.all_shifts,
-            soft=soft, trace=ctx.trace, employee_indices=indices,
+            soft=soft, trace=ctx.trace, employee_indices=indices, fixed_work_days=fixed_work_days,
         ))
     return violations
 
