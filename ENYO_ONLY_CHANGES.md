@@ -1819,3 +1819,45 @@ Każdy punkt ma test odtwarzający błąd (czerwony przed poprawką).
 | `ui/duty_rotation_editor.py` | Walidacja początek doby < podział | TAK |
 | `logic/generator/diagnostics.py` | Bez podpowiedzi "1 osoba" w dobach zaplanowanych, komunikat 24h vs "Nie chce 24h" | TAK |
 | `tests/…` (rotacja, dni zamknięte, round-clock, lokalizacje, prezentacja, diagnostyka, edytor) | Testy odtwarzające | TAK |
+
+## Audyt generatora konfiguracja -> wynik (2026-09-28)
+
+Eksperymentalny audyt (setki uruchomień generatora + niezależny walidator
+wyniku) - pełny raport: `GENERATOR_AUDIT.md`. Decyzje użytkownika: obsada
+otwarcia/zamknięcia zostaje "dokładnie N"; błędy profilu Dino tylko w
+raporcie (reproducery `xfail` w `tests/test_generator_audit_regressions.py`);
+dla Ochrony pakiet pełnego obłożenia placówek bez rotacji 24/7; nowe
+projekty Ochrony ze zmianą 8 h.
+
+- **Zakres zmiennej bilansu (333 h) robił małą placówkę 24/7
+  niewykonalną** mimo "Bilansu godzin" jako Preferowanego (domyślny dla
+  nowych projektów Ochrony) - `hours_constraint.py`.
+- **Placówki Ochrony bez rotacji 24/7 ("model godzin otwarcia")** -
+  `opening_hours_coverage.py`: bez sztywnej nocki 22:00-06:00, zmiany
+  przesunięte muszą mieścić się w godzinach, doba 00:00-23:45 dzielona na
+  zmiany od 00:00, ręczny wpis niepasujący do kształtu zmiany = stały
+  przedział (obłożenie/godziny/odpoczynek/dni pod rząd), nowa zasada
+  "Obłożenie godzin otwarcia" (domyślnie Wymagana, także przy braku wpisu).
+- **Nowy projekt Ochrony: `force_fulltime_845 = False`** (zmiana 8 h) -
+  `custom_profile_wiring.apply_new_project_defaults()` wołane w 3 miejscach
+  tworzenia projektu w `ui/main_window.py`. Istniejące projekty bez zmian.
+- **Limit czasu solvera (UNKNOWN) nie jest już zgłaszany jako "Wymagane
+  zasady są ze sobą sprzeczne"** - `diagnostics.py`, `auto_generator.py`.
+- **Tryb "Uproszczony" odpoczynku 11h** zakazywał tylko popołudnie -> rano,
+  więc przy różnych godzinach w kolejne dni wynik łamał Wymagane 11 h (8 h).
+  Dla placówek Ochrony bez rotacji pary zmian sąsiednich dni są liczone
+  dokładnie (`opening_hours_coverage.py`); Dino - tylko raport.
+- **Diagnostyka nowej zasady**: nikt z placówki niedostępny, za mało osób
+  (suma godzin < długość dnia), dzień zbyt długi dla kształtów zmian.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/hours_constraint.py` | Zakres sumy minut w bilansie = cały miesiąc | TAK |
+| `logic/generator/opening_hours_coverage.py` (nowy) | Model godzin otwarcia + zasada "Obłożenie godzin otwarcia" (tylko profil Ochrona) | DO USTALENIA (w main profil Ochrony nie jest domyślny) |
+| `logic/generator/constraint_registry.py` | `ConstraintSpec.default_policy` - polityka przy braku wpisu w projekcie | TAK |
+| `logic/generator/custom_profile_wiring.py` | Specyfikacje/wagi/etykieta/domyślna polityka nowej zasady, `apply_new_project_defaults()` | DO USTALENIA |
+| `logic/generator/base_specs.py`, `manual_constraint.py`, `round_clock_constraint.py`, `priority_hours_constraint.py`, `solution_mapper.py` | Podpięcie modelu godzin otwarcia (no-op dla Dino i innych profili) | DO USTALENIA |
+| `logic/generator/diagnostics.py`, `logic/auto_generator.py` | Komunikat przy limicie czasu, komunikat o braku dostępnych osób dla nowej zasady | TAK |
+| `ui/config_dialog.py` | Brak wpisu nowej zasady = "Wymagane" w UI | TAK |
+| `ui/main_window.py` | Nowy projekt: `apply_new_project_defaults()` | NIE (Enyo) |
+| `tests/schedule_validator.py`, `tests/generator_audit_harness.py`, `tests/test_generator_audit_regressions.py` | Walidator, harness kampanii, testy regresyjne + reproducery Dino (`xfail`) | TAK |

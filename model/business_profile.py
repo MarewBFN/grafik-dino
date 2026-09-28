@@ -46,6 +46,11 @@ class BusinessProfile:
 
 
 DEFAULT_BUSINESS_TYPE = "dino_retail"
+# Zdefiniowane tu (a nie przy build_default_ochrona_profile() niżej), bo
+# _load_persisted_custom_profiles() poniżej odwołuje się do tej stałej
+# pośrednio (przez custom_profile_wiring -> opening_hours_coverage) już przy
+# imporcie tego modułu - musi istnieć, zanim ta funkcja zostanie wywołana.
+DEFAULT_OCHRONA_PROFILE_KEY = "custom_ochrona"
 
 BUSINESS_PROFILES: dict[str, BusinessProfile] = {}
 
@@ -202,7 +207,6 @@ _load_persisted_custom_profiles()
 # "Obłożenie" (checkbox per pracownik) sprzed właściwego mechanizmu
 # LocationConfig.duty_rotation, który dziś liczy obłożenie automatycznie
 # per lokalizacja, nie jako ręczną flagę pracownika.
-DEFAULT_OCHRONA_PROFILE_KEY = "custom_ochrona"
 
 
 def build_default_ochrona_profile():

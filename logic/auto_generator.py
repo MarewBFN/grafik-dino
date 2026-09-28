@@ -349,6 +349,9 @@ class AutoScheduleGenerator:
             infeasibility_reasons = build_infeasibility_summary(
                 schedule_before_generation,
                 self.shop,
+                # UNKNOWN = limit czasu minął bez żadnego rozwiązania - solver
+                # NIE udowodnił sprzeczności zasad (audyt 2026-09-28).
+                timed_out=status == cp_model.UNKNOWN,
             )
 
         if trace_output_path is not None:

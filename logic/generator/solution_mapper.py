@@ -163,6 +163,25 @@ def save_solution(
                     if assigned_tile:
                         continue
 
+                # Kafelki doby modelu godzin otwarcia (Ochrona, placówki bez
+                # rotacji, dni 00:00-23:45) - opening_hours_coverage.py.
+                from logic.generator.opening_hours_coverage import tile_hours_for_assignment
+
+                assigned_tile = False
+                for tile_index, tile_shift in enumerate(round_clock_shifts):
+                    if solver.Value(x[e, d, tile_shift]) != 1:
+                        continue
+                    tile_hours = tile_hours_for_assignment(shop, emp, d, tile_index)
+                    if tile_hours is None:
+                        continue
+                    schedule.set_day_hours(emp, d, *tile_hours)
+                    if trace is not None:
+                        trace.log_assignment(e, d, tile_shift, "solver_assignment")
+                    assigned_tile = True
+                    break
+                if assigned_tile:
+                    continue
+
             hours = shop.get_location(emp).get_open_hours_for_day(d)
             if not hours:
                 continue

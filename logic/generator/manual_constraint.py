@@ -52,12 +52,18 @@ def add_manual_shift_constraints(
     END_SHIFT_MAP,
     trace=None,
     shift_night=None,
+    skip_indices=None,
 ):
     if trace is not None:
         trace.log_constraint("manual_shift", "apply locked/manual day assignments")
 
     for e in range(len(employees)):
         emp = employees[e]
+
+        # Model godzin otwarcia (Ochrona, placówki bez rotacji) ma własną,
+        # dokładną obsługę ręcznych wpisów - opening_hours_coverage.py.
+        if skip_indices and e in skip_indices:
+            continue
 
         # Pracownicy rotacji 24/7 (duty_rotation) mają swoją, równoległą
         # wersję tego constraintu - logic/generator/duty_rotation_manual_constraint.py

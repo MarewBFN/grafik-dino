@@ -789,8 +789,10 @@ class MainWindow(QMainWindow):
         from model.business_profile import get_custom_profile
         custom = get_custom_profile(dialog.result_business_type)
         if custom is not None:
-            from logic.generator.custom_profile_wiring import default_policies
-            self.shop_config.constraint_policies.update(default_policies(custom))
+            # Zasady domyślne + ustawienia nowego projektu profilu (np. 8 h
+            # zamiast "8h 30 min" dla Ochrony) - patrz apply_new_project_defaults.
+            from logic.generator.custom_profile_wiring import apply_new_project_defaults
+            apply_new_project_defaults(self.shop_config, custom)
 
         self._update_nominal_hours_label()
         self._sync_everything()
@@ -881,8 +883,10 @@ class MainWindow(QMainWindow):
         self.shop_config.business_type = profiles[0].key
         custom = get_custom_profile(self.shop_config.business_type)
         if custom is not None:
-            from logic.generator.custom_profile_wiring import default_policies
-            self.shop_config.constraint_policies.update(default_policies(custom))
+            # Zasady domyślne + ustawienia nowego projektu profilu (np. 8 h
+            # zamiast "8h 30 min" dla Ochrony) - patrz apply_new_project_defaults.
+            from logic.generator.custom_profile_wiring import apply_new_project_defaults
+            apply_new_project_defaults(self.shop_config, custom)
 
     def _sync_everything(self):
         # Bezpiecznik: tabela grafiku filtruje pracowników po location_key
@@ -2359,8 +2363,10 @@ class MainWindow(QMainWindow):
         from model.business_profile import get_custom_profile
         custom = get_custom_profile(wizard.result_business_type)
         if custom is not None:
-            from logic.generator.custom_profile_wiring import default_policies
-            self.shop_config.constraint_policies.update(default_policies(custom))
+            # Zasady domyślne + ustawienia nowego projektu profilu (np. 8 h
+            # zamiast "8h 30 min" dla Ochrony) - patrz apply_new_project_defaults.
+            from logic.generator.custom_profile_wiring import apply_new_project_defaults
+            apply_new_project_defaults(self.shop_config, custom)
         self.shop_config.constraint_policies.update(wizard.result_policy_overrides)
 
         self._update_nominal_hours_label()

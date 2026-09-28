@@ -60,6 +60,10 @@ class ConstraintSpec:
     # Always executed as a hard constraint, outside the MANDATORY/PREFERRED/
     # DISABLED policy system (mirrors today's "always-on" calls in generate()).
     always_on: bool = False
+    # Polityka, gdy projekt nie ma jeszcze wpisu dla tej zasady (np. zasada
+    # dodana po zapisaniu projektu). None = brak wpisu wyłącza zasadę, jak
+    # dotychczas.
+    default_policy: object = None
 
 
 def apply_registry(ctx: ConstraintContext, specs, weights: dict) -> list:
@@ -76,7 +80,7 @@ def apply_registry(ctx: ConstraintContext, specs, weights: dict) -> list:
             spec.build(ctx, False)
             continue
 
-        policy = ctx.shop.constraint_policies.get(spec.name)
+        policy = ctx.shop.constraint_policies.get(spec.name, spec.default_policy)
         weight = weights.get(spec.name, 1)
         print(f"[POLICY] {spec.name} -> {policy}")
 

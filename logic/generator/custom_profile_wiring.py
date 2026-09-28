@@ -29,13 +29,25 @@ from logic.generator.priority_hours_constraint import (
     hours_equalization_weight,
     nominal_hours_no_contract_weight,
 )
+from logic.generator.opening_hours_coverage import (
+    OPENING_HOURS_COVERAGE_LABEL,
+    OPENING_HOURS_COVERAGE_POLICY,
+    OPENING_HOURS_COVERAGE_WEIGHT,
+    add_opening_hours_coverage_constraint,
+    add_opening_hours_shape_constraint,
+    get_model,
+    profile_uses_opening_hours_model,
+    setup_opening_hours_model,
+)
+from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import RULE_TYPE_MIN_STAFF_WITH_ROLE, CustomBusinessProfile
 
 
 def setup_context(ctx) -> None:
-    # No shared cross-constraint state (like Dino's meat-light budget) exists
-    # for custom profiles today.
-    pass
+    # Model godzin otwarcia (placówki bez rotacji 24/7 profilu Ochrona) -
+    # patrz logic/generator/opening_hours_coverage.py. No-op dla pozostałych
+    # profili custom.
+    setup_opening_hours_model(ctx)
 
 
 def _build_no_night(ctx, soft):
@@ -78,6 +90,18 @@ def build_specs(custom: CustomBusinessProfile) -> list[ConstraintSpec]:
             build=functools.partial(builder, role_key=rule.role_key, **rule.params, **extra),
         ))
 
+    if profile_uses_opening_hours_model(custom.key):
+        specs.append(ConstraintSpec(
+            "opening_hours_shape",
+            lambda ctx, soft: add_opening_hours_shape_constraint(ctx),
+            always_on=True,
+        ))
+        specs.append(ConstraintSpec(
+            OPENING_HOURS_COVERAGE_POLICY,
+            add_opening_hours_coverage_constraint,
+            default_policy=ConstraintPolicy.MANDATORY,
+        ))
+
     return specs
 
 
@@ -89,6 +113,8 @@ def build_weights(custom: CustomBusinessProfile) -> dict:
     weights["no_afternoon"] = 5000
     for rule in custom.rules:
         weights[custom.rule_policy_key(rule)] = rule.weight
+    if profile_uses_opening_hours_model(custom.key):
+        weights[OPENING_HOURS_COVERAGE_POLICY] = OPENING_HOURS_COVERAGE_WEIGHT
     return weights
 
 
@@ -96,8 +122,6 @@ def default_policies(custom: CustomBusinessProfile) -> dict:
     """Policy defaults for a freshly-selected custom profile: MANDATORY rest,
     PREFERRED for the rest of the generic base, and whatever policy each rule
     was configured with in the wizard."""
-    from model.constraint_policy import ConstraintPolicy
-
     policies = {
         "rest_11h": ConstraintPolicy.MANDATORY,
         "balance": ConstraintPolicy.PREFERRED,
@@ -123,7 +147,22 @@ def default_policies(custom: CustomBusinessProfile) -> dict:
             policies[custom.rule_policy_key(rule)] = ConstraintPolicy(rule.policy)
         except ValueError:
             policies[custom.rule_policy_key(rule)] = ConstraintPolicy.PREFERRED
+    if profile_uses_opening_hours_model(custom.key):
+        # "Obłożenie godzin otwarcia" (decyzja użytkownika 2026-09-28) -
+        # pokrycie placówki jest ważniejsze niż godziny etatu.
+        policies[OPENING_HOURS_COVERAGE_POLICY] = ConstraintPolicy.MANDATORY
     return policies
+
+
+def apply_new_project_defaults(shop, custom: CustomBusinessProfile) -> None:
+    """Ustawienia świeżo utworzonego projektu tego profilu: domyślne zasady
+    oraz - dla profili z modelem godzin otwarcia (Ochrona) - zwykła zmiana
+    8 h zamiast Dino-owego "8h 30 min" (decyzja użytkownika 2026-09-28;
+    ukryta w tej wersji opcja "Wymuś 8h 30 min"). Istniejące projekty bez
+    zmian - ta funkcja jest wołana tylko przy tworzeniu projektu."""
+    shop.constraint_policies.update(default_policies(custom))
+    if profile_uses_opening_hours_model(custom.key):
+        shop.constraints["force_fulltime_845"] = False
 
 
 def build_policy_labels(custom: CustomBusinessProfile) -> tuple:
@@ -132,6 +171,8 @@ def build_policy_labels(custom: CustomBusinessProfile) -> tuple:
     labels.append(("no_night", "Zakaz pracy nocnej"))
     labels.append(("no_afternoon", "Zakaz pracy popołudniami"))
     labels.append((NOMINAL_HOURS_NO_CONTRACT_POLICY, NOMINAL_HOURS_NO_CONTRACT_LABEL))
+    if profile_uses_opening_hours_model(custom.key):
+        labels.append((OPENING_HOURS_COVERAGE_POLICY, OPENING_HOURS_COVERAGE_LABEL))
     for rule in custom.rules:
         labels.append((custom.rule_policy_key(rule), custom.rule_label(rule)))
     return tuple(labels)
@@ -156,7 +197,7 @@ def build_objective_terms(ctx, *_args, **_kwargs) -> list:
     # dla tego profilu.
     terms.extend(add_priority_hours_shortfall_penalty(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
-        shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
+        shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts, opening_model=get_model(ctx),
     ))
 
     # "Nominalny czas pracowników bez umowy" (Konfiguracja -> Zasady
@@ -181,6 +222,7 @@ def build_objective_terms(ctx, *_args, **_kwargs) -> list:
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
         shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
         weight=hours_equalization_weight(ctx.shop.constraint_policies.get(HOURS_EQUALIZATION_POLICY)),
+        opening_model=get_model(ctx),
     ))
 
     # Preferencja 12h+12h zamiast 24h w weekend dla lokalizacji z rotacją
