@@ -55,7 +55,75 @@ ta sama ścieżka co "Generuj grafik") -> GRAFIK -> WALIDATOR -> PASS / NARUSZEN
 
 ## Wyniki
 
-(uzupełniane po końcowym przebiegu — patrz sekcja „Co przetestowano”)
+### Końcowy, niezależny przebieg — tylko Enyo (Ochrona), aktualny kod, nowe seedy
+
+| Rodzina | Przypadki | Grafik powstał | Brak rozwiązania (prawdziwy / fałszywy) | Naruszenie twarde w gotowym grafiku |
+|---|---|---|---|---|
+| Dane klienta (6 placówek, 25 osób, X.2026–II.2027, urlopy/L4, bilans) | 15 | 15 | 0 | 0 |
+| Rotacja 24/7, losowe kombinacje | 98 | 78 | 20 (20 / 0) | 1* |
+| Placówki z godzinami otwarcia, losowe | 79 | 69 | 10 (10 / 0) | 0 |
+| Zasady × Wymagane/Preferowane/Wyłączone | 30 | 27 | 3 (3 / 0) | 0 |
+| Tryby odpoczynku (dokładny / uproszczony) | 4 | 4 | 0 | 0 |
+| Kilka placówek (rotacja + godziny) | 2 | 2 | 0 | 0 |
+| Stary schemat rotacji | 4 | 4 | 0 | 2** |
+| **Razem** | **232** | **199** | **33 (33 / 0)** | **3** |
+
+- Wszystkie 33 „brak rozwiązania” mają status INFEASIBLE udowodniony przez
+  solver (zero przekroczeń limitu czasu); audyt z poluzowaniem zasad nie
+  znalazł żadnego fałszywego. 21/33 mają konkretny komunikat (ręczna zmiana
+  24 h u osoby „Nie chce 24h” — 7, za mało osób na godziny otwarcia — 7,
+  została 1 osoba z „Nie chce 24h” — 5, zablokowana przerwa < 11 h — 1, dzień
+  za długi dla zmian — 1); **12/33 nadal ogólne** „Wymagane zasady są ze sobą
+  sprzeczne” (głównie pokrycie rotacji przy małych zespołach, urlopach i
+  odpoczynku po 24 h).
+- \* `ochF_rand_16` — fałszywy alarm walidatora (kawałek doby 5.01 po
+  północy trafia do komórki świątecznej 6.01, a należy do doby dnia 5);
+  walidator poprawiony, ponowne wykonanie: 0 naruszeń, obłożenie ciągłe.
+- \*\* Stary schemat rotacji — patrz „Obserwacje”.
+- We wszystkich 199 gotowych grafikach: obłożenie kwadrans po kwadransie
+  bez luk i bez podwójnej obsady (każda placówka 24/7 i z godzinami),
+  0 naruszeń Wymaganego odpoczynku, dni pod rząd, zakazu 24 h, dni
+  zamkniętych, godzin otwarcia i ręcznych wpisów.
+
+### Testy różnicowe A–E (zmiana jednego ustawienia → ponowne generowanie)
+
+| Test | Wynik |
+|---|---|
+| A/B: min. obsada otwarcia/zamknięcia 2 → 3 (Dino) | każdego dnia dokładnie 2, potem dokładnie 3 |
+| C/D: „Dni pod rząd” Wymagane → Wyłączone → Wymagane (Ochrona, 3 osoby) | maks. 4 → 9 → 4 dni pod rząd |
+| C/D: „Obłożenie godzin otwarcia” Wymagane → Wyłączone | 0 luk → luki (zasada przestaje działać) |
+| C: odpoczynek 11 h Wymagane → Wyłączone (2 osoby, połówki) | 0 naruszeń w obu (Wyłączone nie wymusza łamania) |
+| E: godziny 06:00–22:00 → rotacja 07:00/15:00 (15:00→07:00) → 06:00/22:00 (22:00→06:00) | kształty zmian dokładnie wg konfiguracji, obłożenie pełne |
+| „Preferuj zmiany 24h” wyłączone → włączone | 0 → 30 zmian 24 h w miesiącu |
+
+### Pierwsza kampania (Dino + Ochrona, kod przed poprawkami)
+
+243 konfiguracje: 189 grafików, 54 „brak rozwiązania”, 32 grafiki z
+naruszeniem twardym (Dino: nocka po zamknięciu, zmiany poza godzinami,
+obsada liczona łącznie dla kilku sklepów; Ochrona: zmiany poza godzinami
+placówki z godzinami). Niepowodzenia zbadane ręcznie: 16 z 34 w Ochronie
+wynikało z błędu zakresu bilansu (naprawiony), 1 w Dino z limitu czasu
+przy obciążonym CPU (fałszywy komunikat — naprawiony), reszta prawdziwa.
+Po poprawce bilansu (114 konfiguracji Ochrony): 18 „brak rozwiązania”, 0
+fałszywych.
+
+### Warstwa GUI
+
+- Okna Konfiguracja, Lokalizacje, Pracownik uruchamiane w Qt offscreen:
+  godziny (w tym „Nieczynne”), święta, 24/7, rotacja (początek/podział/
+  „Preferuj 24h”), zasady, „Umowa”, „Nie chce 24h”, lokalizacja pracownika —
+  trafiają do konfiguracji generatora poprawnie (Ochrona).
+- Projekt zbudowany oknami (grudzień 2026 ze świętami, zamknięta niedziela,
+  urlop, ręczne wpisy, ręczna zmiana 24 h) → OPTIMAL, 0 naruszeń.
+- Zapis/odczyt projektu: 243/243 konfiguracji bez strat.
+- Godziny przez północ (np. 15:00–07:00) w oknach godzin otwarcia są
+  odrzucane komunikatem — takie układy konfiguruje się rotacją 24/7
+  (początek/podział), co testy potwierdzają.
+
+### Zestaw testów
+
+Przed audytem: 829 passed, 1 skipped. Po audycie: **843 passed, 1 skipped,
+8 xfailed** (8 = reproducery błędów Dino, tylko raport).
 
 ## Naprawione (Ochrona + kod wspólny)
 
@@ -199,4 +267,35 @@ Dobre praktyki, które już były: niezależny audyt odpoczynku w
 
 ## Co przetestowano
 
-(uzupełniane)
+Ponad 700 uruchomień prawdziwego generatora (3 kampanie + audyty „brak
+rozwiązania” + eksperymenty celowane + testy różnicowe), m.in.:
+
+- **Rotacja 24/7 (Ochrona)** — 9 kształtów doby: 07:00/15:00 (15:00→07:00),
+  06:00/22:00 (22:00→06:00), 08:00/20:00, 07:00/19:00, 00:00/12:00,
+  05:30/22:45, 12:00/23:45, 00:00/08:00, 22:00/23:00; „Preferuj 24h” wł./wył.;
+  2–7 osób; „Nie chce 24h”, „Umowa”; urlop, L4, wolne (dwie ścieżki GUI),
+  ręczne wpisy pasujące do rotacji, zmiana 24 h, dowolne wpisy (także przez
+  północ); „Nieczynne tego dnia”; święta z „Zamknięte w święta” wł./wył.;
+  pamięć poprzedniego miesiąca (koniec przed/po północy); miesiące 28/29/30/31
+  dni (II.2027, II.2028, IV, IX, X, XI, XII, I); stary schemat tydzień/weekend.
+- **Placówki z godzinami (Ochrona)** — 05:30–22:45, 06:00–22:00, 08:00–16:00,
+  10:00–18:00, 06:00–23:00, 07:00–15:00, 00:00–23:45 (doba), weekend dobą,
+  tydzień mieszany (doby, zwykłe dni, zamknięty dzień); ½ i ¾ etatu; typ zmiany
+  rano/popołudnie; ręczne 22:00–06:00; nadpisania dni (zamknięte, 09:00–13:00);
+  „8h 30 min” wł./wył. (stare/nowe projekty).
+- **Zasady × tryby** — odpoczynek 11 h, dni pod rząd, godziny miesięczne,
+  bilans, wyrównanie godzin, pokrycie rotacji, zakaz 24 h, obłożenie godzin
+  otwarcia × Wymagane/Preferowane/Wyłączone; tryb odpoczynku dokładny/
+  uproszczony.
+- **Dino (pierwsza kampania)** — każda polityka × 3 tryby przy ciasnej i
+  normalnej obsadzie; obsada 0–5 przy 2N−1…2N+5 osobach i asymetryczna;
+  8 zestawów godzin × 3 miesiące; nadpisania dni, niedziele handlowe (projekt
+  i lokalizacja), święta; 2 sklepy o tych samych/różnych godzinach;
+  losowe ręczne wpisy (pasujące i nie), urlopy, L4, wolne, typ zmiany;
+  kierowniczka przy różnych godzinach.
+- **Dane klienta** — `test_data/dane_klienta_ochrona.json` (6 placówek, 25
+  osób) jako projekt Ochrony, 5 miesięcy × 3 warianty.
+
+Reprodukcja: `python tests/generator_audit_harness.py <rodziny> --only-profile
+ochrona --audit-infeasible --out <katalog>`; testy różnicowe:
+`python tests/generator_audit_harness.py --differential`.
