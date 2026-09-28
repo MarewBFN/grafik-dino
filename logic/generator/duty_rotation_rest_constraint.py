@@ -73,9 +73,14 @@ def _day_windows(rotation, weekday, duty_shifts, plan, location_key, day):
     wpisów) + zmiany resztkowe zaczynające się tego dnia."""
     windows = []
     if plan is None or not plan.is_planned(location_key, day):
+        # weekday_long/weekday_short są opcjonalne każda z osobna (patrz
+        # normalize_duty_rotation) - pomijamy tę, której ta lokalizacja nie
+        # skonfigurowała, inaczej window_offsets(rotation, key) rzuci
+        # KeyError (jej okno w ogóle nie istnieje w rotation).
         windows += [
             (duty_shifts[key], key == "weekend_full", *window_offsets(rotation, key))
             for key in _keys_for_day(rotation, weekday)
+            if rotation.get(key)
         ]
     if plan is not None:
         windows += [

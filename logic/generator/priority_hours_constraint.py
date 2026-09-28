@@ -44,16 +44,21 @@ def add_priority_hours_shortfall_penalty(
     shift_night=None,
     duty_shifts=None,
     role_key=UMOWA_ROLE_KEY,
+    invert=False,
+    weight=PRIORITY_WEIGHT,
 ):
-    """Lista ważonych IntVar (niedobór poniżej celu, w minutach) TYLKO dla
-    pracowników z rolą `role_key` - do dołożenia wprost do funkcji celu
-    (nie przez system polityk MANDATORY/PREFERRED/DISABLED, to term zawsze
-    aktywny dla oflagowanych pracowników, niezależnie od ustawień
+    """Lista ważonych IntVar (niedobór poniżej celu, w minutach) dla
+    pracowników z rolą `role_key` (albo, gdy `invert=True`, dla pracowników
+    BEZ tej roli - patrz add_no_contract_hours_shortfall_penalty poniżej) -
+    do dołożenia wprost do funkcji celu (nie przez system polityk
+    MANDATORY/PREFERRED/DISABLED dla `role_key`="umowa": ten term jest
+    zawsze aktywny dla oflagowanych pracowników, niezależnie od ustawień
     balance/monthly_hours)."""
     penalties = []
 
     for e, emp in enumerate(employees):
-        if not emp.has_role(role_key):
+        has_role = emp.has_role(role_key)
+        if has_role if invert else not has_role:
             continue
 
         daily_hours = get_effective_daily_hours(emp, shop)
@@ -94,7 +99,44 @@ def add_priority_hours_shortfall_penalty(
         model.Add(total_minutes + under >= target_minutes)
         penalties.append(under)
 
-    return [PRIORITY_WEIGHT * p for p in penalties]
+    return [weight * p for p in penalties]
+
+
+# ---------------------------------------------------------------------------
+# "Nominalny czas pracowników bez umowy" (zasada w Konfiguracji -> Zasady
+# generatora, decyzja użytkownika 2026-09-28) - pracownicy z rolą "Umowa"
+# zawsze są brani pod uwagę jako pierwsi (priorytet wyżej, zawsze aktywny,
+# patrz add_priority_hours_shortfall_penalty). Ci BEZ tej roli wcześniej nie
+# mieli żadnego mechanizmu dobijającego ich do nominału, gdy balance/
+# monthly_hours są wyłączone (typowe dla profilu Ochrona - "celujemy w pełne
+# pokrycie" - patrz demo/install_client_sample_data.py) - Wymiar etatu samego
+# w sobie tylko PRZELICZA nominał (nominal * employment_fraction), nie
+# wymusza niczego bez osobnego constraintu. Tylko dwa stany (Preferowane/
+# Wyłączone) - w odróżnieniu od reszty polityk, brak sensownego trybu
+# "Wymagane" (twardy wymóg ryzykowałby niewykonalność całego miesiąca za
+# każdym razem, gdy fizycznie zabraknie dla kogoś godzin - dokładnie ten sam
+# powód, dla którego priorytet "Umowa" wyżej też nigdy nie jest MANDATORY).
+# ---------------------------------------------------------------------------
+
+NOMINAL_HOURS_NO_CONTRACT_POLICY = "nominal_hours_no_umowa"
+NOMINAL_HOURS_NO_CONTRACT_LABEL = "Nominalny czas pracowników bez umowy"
+# Wyraźnie niższa niż PRIORITY_WEIGHT (10000, "Umowa" zawsze pierwsi w
+# kolejności), ale nadal ponad zwykłymi generycznymi wagami (rest_11h/
+# availability/duty_rotation_coverage = 5000 w base_specs.GENERIC_WEIGHTS) -
+# "kolejni w kolejności dobijania do nominału", nie zwykły, równorzędny cel.
+NOMINAL_HOURS_NO_CONTRACT_WEIGHT = 2000
+
+
+def nominal_hours_no_contract_weight(policy) -> int:
+    """Waga termu wg ustawienia zasady. Domyślnie WŁĄCZONE (w odróżnieniu od
+    hours_equalization_weight powyżej) - także gdy projekt nie ma jeszcze
+    tej zasady zapisanej wcale (stary projekt sprzed tej funkcji, albo nowy
+    utworzony poza kreatorem) - decyzja użytkownika: domyślnie Preferowane."""
+    from model.constraint_policy import ConstraintPolicy
+
+    if policy == ConstraintPolicy.DISABLED:
+        return 0
+    return NOMINAL_HOURS_NO_CONTRACT_WEIGHT
 
 
 # ---------------------------------------------------------------------------

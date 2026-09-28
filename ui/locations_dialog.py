@@ -514,13 +514,15 @@ class LocationsDialog(QDialog):
                 for wd, (start, end) in hours.items():
                     if not start or not end:
                         continue  # dzień oznaczony "Nieczynne"
-                    if _parse_time(end) <= _parse_time(start):
+                    # end < start = zmiana przechodząca przez północ, patrz
+                    # komentarz przy tej samej walidacji w ui/config_dialog.py.
+                    # Tylko end == start zostaje odrzucone (niejednoznaczne).
+                    if _parse_time(end) == _parse_time(start):
                         day_names = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
                         raise ValueError(
-                            f"Zamknięcie musi być później niż otwarcie tego samego dnia "
-                            f"({day_names[wd]}) dla lokalizacji: {name}. Zmiany przechodzące "
-                            "przez północ nie są jeszcze wspierane — dla działalności "
-                            "całodobowej zaznacz \"24/7\"."
+                            f"Godzina otwarcia i zamknięcia nie mogą być takie same "
+                            f"({day_names[wd]}) dla lokalizacji: {name}. Dla działalności "
+                            "całodobowej zaznacz \"24h\" przy tym dniu."
                         )
 
                 duty_rotation = None

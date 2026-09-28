@@ -12,10 +12,15 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
-from model.shop_config import normalize_quick_mode_presets
+from model.shop_config import (
+    STANDARD_QUICK_BUTTONS,
+    is_standard_button_visible,
+    normalize_quick_mode_presets,
+)
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 
@@ -23,6 +28,15 @@ QUICK_MODE_TUTORIAL_FLAG = "quick_mode_tutorial_seen.flag"
 
 
 _NAME_MAX_LENGTH = 10
+
+# "Praca" ma zupełnie inny UX (wymaga osobnego panelu Od/Do - patrz
+# ui/main_window.py time_panel) niż jeden klik reszty przycisków, i zostaje
+# permanentnie ukryta niezależnie od tej karty (patrz
+# MainWindow._update_quick_panel_profile_visibility) - nie pokazujemy dla
+# niej przełącznika "Pokaż", żeby nie sugerować działania, którego nie ma.
+_CONFIGURABLE_STANDARD_BUTTON_KEYS = tuple(
+    b["key"] for b in STANDARD_QUICK_BUTTONS if b["key"] != "work"
+)
 
 
 class _PresetRow(QFrame):
@@ -87,28 +101,95 @@ class _PresetRow(QFrame):
         return self.show_check.isChecked()
 
 
-class QuickModeSettingsDialog(QDialog):
-    """Konfiguracja nazwanych, ręcznie zdefiniowanych przedziałów czasowych
-    dla trybu szybkiego (ui/main_window.py::_build_quick_panel) - menu
-    Konfiguracja -> "Ustawienia trybu szybkiego", obok "Generator".
-    Każdy zapisany tu przedział pojawia się jako osobny przycisk w trybie
-    szybkim, zastępując ręczne wpisywanie godzin (przycisk "Praca")."""
+class _StandardButtonRow(QFrame):
+    """Jeden wbudowany przycisk trybu szybkiego (karta "Tryby domyślne") -
+    w odróżnieniu od _PresetRow wyżej, nazwa/zachowanie są stałe (opisane w
+    model/shop_config.py::STANDARD_QUICK_BUTTONS), edytowalna jest tylko
+    widoczność."""
 
-    def __init__(self, parent, presets):
+    def __init__(self, label: str, description: str, visible: bool):
+        super().__init__()
+        self.setObjectName("configCard")
+        layout = QHBoxLayout(self)
+
+        text_col = QVBoxLayout()
+        name_label = QLabel(label)
+        name_label.setObjectName("sectionLabel")
+        text_col.addWidget(name_label)
+
+        desc_label = QLabel(description)
+        desc_label.setObjectName("mutedHint")
+        desc_label.setWordWrap(True)
+        text_col.addWidget(desc_label)
+        layout.addLayout(text_col, 1)
+
+        self.show_check = QCheckBox("Pokaż")
+        self.show_check.setToolTip(
+            "Czy ten przycisk ma pojawiać się w trybie szybkim. Odznacz, żeby "
+            "go ukryć bez tracenia jego działania w kodzie - można go z powrotem "
+            "włączyć w każdej chwili."
+        )
+        self.show_check.setChecked(visible)
+        layout.addWidget(self.show_check)
+
+    def is_visible(self) -> bool:
+        return self.show_check.isChecked()
+
+
+class QuickModeSettingsDialog(QDialog):
+    """Konfiguracja trybu szybkiego (ui/main_window.py::_build_quick_panel) -
+    menu Konfiguracja -> "Ustawienia trybu szybkiego", obok "Generator".
+    Dwie zakładki:
+    - "Własne przedziały": nazwane przedziały czasowe zdefiniowane przez
+      użytkownika - każdy zapisany tu i zaznaczony "Pokaż" pojawia się jako
+      osobny przycisk w trybie szybkim.
+    - "Tryby domyślne": wbudowane przyciski (Rano/Popo/Może pracować/Usuń/
+      Wolne/Urlop/L4 itd. - patrz model/shop_config.py::STANDARD_QUICK_BUTTONS)
+      z opisem ich zachowania i przełącznikiem "Pokaż" - decyzja użytkownika
+      2026-09-28, żeby dało się je pokazywać/ukrywać tak samo jak własne
+      przedziały, niezależnie od domyślnych ustawień per profil działalności."""
+
+    def __init__(self, parent, presets, shop_config=None):
         super().__init__(parent)
         self.setWindowTitle("Ustawienia trybu szybkiego")
         self.setModal(True)
         # Szersze niż domyślne Qt, bo wiersz mieści nazwę + start/koniec +
         # "Cała doba" + "Pokaż" + "Usuń" - przy domyślnej szerokości pole
         # nazwy robiło się nieczytelnie wąskie.
-        self.resize(820, 460)
+        self.resize(820, 520)
         self.result_presets = None
+        self.result_standard_buttons = None
         self._rows: list[_PresetRow] = []
+        self._standard_button_rows: dict[str, _StandardButtonRow] = {}
+        self._shop_config = shop_config
         self._build_ui(presets or [])
         QTimer.singleShot(0, self._maybe_show_tutorial)
 
     def _build_ui(self, presets):
         root = QVBoxLayout(self)
+
+        self.tabs = QTabWidget()
+        root.addWidget(self.tabs, 1)
+        self.tabs.addTab(self._build_presets_tab(presets), "Własne przedziały")
+        self.tabs.addTab(self._build_standard_buttons_tab(), "Tryby domyślne")
+
+        buttons = QDialogButtonBox()
+        help_btn = QPushButton("Pomoc")
+        help_btn.setObjectName("secondaryButton")
+        cancel_btn = QPushButton("Anuluj")
+        self.save_btn = QPushButton("Zapisz")
+        self.save_btn.setObjectName("primaryButton")
+        buttons.addButton(help_btn, QDialogButtonBox.HelpRole)
+        buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
+        buttons.addButton(self.save_btn, QDialogButtonBox.AcceptRole)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self._save)
+        help_btn.clicked.connect(self._open_tutorial)
+        root.addWidget(buttons)
+
+    def _build_presets_tab(self, presets) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
 
         hint = QLabel(
             "Zdefiniuj własne, nazwane przedziały czasowe (np. \"Zmiana 16h\", "
@@ -120,12 +201,12 @@ class QuickModeSettingsDialog(QDialog):
         )
         hint.setObjectName("mutedHint")
         hint.setWordWrap(True)
-        root.addWidget(hint)
+        layout.addWidget(hint)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        root.addWidget(scroll, 1)
+        layout.addWidget(scroll, 1)
 
         host = QWidget()
         scroll.setWidget(host)
@@ -147,21 +228,48 @@ class QuickModeSettingsDialog(QDialog):
         self.add_btn = QPushButton("Dodaj przedział")
         self.add_btn.setObjectName("secondaryButton")
         self.add_btn.clicked.connect(lambda: self._add_row())
-        root.addWidget(self.add_btn)
+        layout.addWidget(self.add_btn)
 
-        buttons = QDialogButtonBox()
-        help_btn = QPushButton("Pomoc")
-        help_btn.setObjectName("secondaryButton")
-        cancel_btn = QPushButton("Anuluj")
-        self.save_btn = QPushButton("Zapisz")
-        self.save_btn.setObjectName("primaryButton")
-        buttons.addButton(help_btn, QDialogButtonBox.HelpRole)
-        buttons.addButton(cancel_btn, QDialogButtonBox.RejectRole)
-        buttons.addButton(self.save_btn, QDialogButtonBox.AcceptRole)
-        buttons.rejected.connect(self.reject)
-        buttons.accepted.connect(self._save)
-        help_btn.clicked.connect(self._open_tutorial)
-        root.addWidget(buttons)
+        return page
+
+    def _build_standard_buttons_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        hint = QLabel(
+            "Wbudowane przyciski trybu szybkiego - zawsze dostępne w kodzie, "
+            "\"Pokaż\" decyduje tylko, czy mają się pojawiać w panelu bocznym. "
+            "Domyślnie zależy to od rodzaju działalności projektu (np. Rano/Popo "
+            "tylko dla Dino) - odznaczenie/zaznaczenie tutaj i zapisanie nadpisuje "
+            "tę domyślną wartość dla tego projektu."
+        )
+        hint.setObjectName("mutedHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        layout.addWidget(scroll, 1)
+
+        host = QWidget()
+        scroll.setWidget(host)
+        rows_layout = QVBoxLayout(host)
+        rows_layout.setContentsMargins(0, 0, 0, 0)
+        rows_layout.setSpacing(8)
+
+        by_key = {b["key"]: b for b in STANDARD_QUICK_BUTTONS}
+        for key in _CONFIGURABLE_STANDARD_BUTTON_KEYS:
+            button = by_key[key]
+            row = _StandardButtonRow(
+                button["label"], button["description"],
+                is_standard_button_visible(self._shop_config, key),
+            )
+            self._standard_button_rows[key] = row
+            rows_layout.addWidget(row)
+
+        rows_layout.addStretch()
+        return page
 
     def _add_row(self, name="", start="08:00", end="16:00", full_day=False, visible=True):
         row = _PresetRow(self._remove_row, name, start, end, full_day, visible)
@@ -178,13 +286,15 @@ class QuickModeSettingsDialog(QDialog):
         steps = [
             TutorialStep(
                 "Ustawienia trybu szybkiego",
-                "Zdefiniuj własne, nazwane przedziały czasowe - każdy pojawi się "
-                "jako osobny przycisk w trybie szybkim, zamiast ręcznego "
-                "wpisywania godzin.",
+                "Dwie zakładki: \"Własne przedziały\" (Twoje nazwane godziny) i "
+                "\"Tryby domyślne\" (wbudowane przyciski, jak Rano/Popo/Może "
+                "pracować/Usuń/Wolne/Urlop/L4) - obie decydują, co pojawi się jako "
+                "przycisk w panelu trybu szybkiego.",
+                target=self.tabs,
             ),
             TutorialStep(
                 "Dodaj przedział",
-                "Kliknij, żeby dodać nowy przedział czasowy.",
+                "Kliknij, żeby dodać nowy, własny przedział czasowy.",
                 target=self.add_btn,
             ),
         ]
@@ -199,9 +309,16 @@ class QuickModeSettingsDialog(QDialog):
                 target=self._rows[0],
             ))
         steps.append(TutorialStep(
+            "Tryby domyślne",
+            "W tej zakładce pokazujesz/ukrywasz wbudowane przyciski (np. „Może "
+            "pracować” albo nowy „Usuń”, który całkowicie czyści zawartość "
+            "komórki) - każdy z opisem tego, co dokładnie robi.",
+            target=self.tabs,
+        ))
+        steps.append(TutorialStep(
             "Zapisz",
-            "Zapisz przedziały - od razu pojawią się jako przyciski w trybie "
-            "szybkim.",
+            "Zapisz zmiany z obu zakładek - od razu odzwierciedlą się w panelu "
+            "trybu szybkiego.",
             target=self.save_btn,
         ))
         return steps
@@ -251,4 +368,7 @@ class QuickModeSettingsDialog(QDialog):
             return
 
         self.result_presets = presets
+        self.result_standard_buttons = {
+            key: row.is_visible() for key, row in self._standard_button_rows.items()
+        }
         self.accept()

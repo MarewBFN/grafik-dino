@@ -26,7 +26,11 @@ class DaySchedule:
     is_locked: bool = False
     is_sick: bool = False
     is_day_off: bool = False
-    shift_class: str | None = None  # "1" (rano) / "2" (popołudnie) — typ zmiany zablokowany dla generatora
+    # "1" (rano) / "2" (popołudnie) - typ zmiany zablokowany dla generatora
+    # (Dino). "W" (może pracować) - bez typu, tylko "MUSI dostać jakąś
+    # zmianę tego dnia" (profile custom/Enyo, patrz ui/main_window.py
+    # "Może pracować"; w placówce z rotacją 24/7 oznacza całą dobę).
+    shift_class: str | None = None
 
     # Zmiana obejmująca całą dobę (np. służba 24h w ochronie - "plan profil
     # ochrona (analiza specyfikacji klienta).md", sekcja 12, Etap A).
@@ -45,6 +49,29 @@ class DaySchedule:
     def is_empty(self) -> bool:
         """Czy dzień jest pusty (wolne)."""
         return self.start is None and self.end is None
+
+    def is_blank(self) -> bool:
+        """Czy dzień jest kompletnie nietknięty (żadna informacja o zmianie:
+        ani wpisane godziny, ani świadome zablokowanie jako wolne/urlop/L4,
+        ani zablokowany typ zmiany) - w odróżnieniu od is_empty(), które
+        samo w sobie NIE odróżnia "nietknięty" od "świadomie zablokowany
+        jako wolne" (is_day_off/is_locked=True, ale start/end też None)."""
+        return self == DaySchedule()
+
+    def clear(self) -> None:
+        """Całkowicie zeruje informacje o zmianie tego dnia (przycisk "Usuń"
+        w trybie szybkim, ui/main_window.py) - w odróżnieniu od set_free()
+        (świadome "wolne", zablokowane dla generatora), to przywraca dzień
+        do stanu nietkniętego: generator ma pełną swobodę przy następnym
+        generowaniu, jakby ta komórka nigdy nie była ustawiona."""
+        self.start = None
+        self.end = None
+        self.is_leave = False
+        self.is_locked = False
+        self.is_sick = False
+        self.is_day_off = False
+        self.shift_class = None
+        self.is_full_day = False
 
     def set_free(self) -> None:
         """Ustawia dzień jako wolny."""

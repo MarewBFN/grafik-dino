@@ -105,6 +105,65 @@ def test_saving_hours_tab_writes_to_the_location_not_the_project():
     assert shop.open_hours == original_project_hours
 
 
+def test_saving_hours_tab_accepts_a_shift_crossing_midnight():
+    """GZUK (zgłoszenie klienta 2026-09-28): w tygodniu ochrona 15:00-07:00
+    (16h, przez północ). Wcześniej _save() odrzucało end < start bezwarunkowo -
+    patrz DayOverrideDialog dla analogicznego, jeszcze nienaprawionego
+    przypadku na pojedynczym dniu kalendarzowym."""
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1")
+    shop.locations["site1"] = loc
+
+    dialog = ConfigDialog(None, shop, location_key="site1")
+    start_edit, end_edit = dialog.hours_editor._edits[0]
+    start_edit.set_time_str("15:00")
+    end_edit.set_time_str("07:00")
+
+    dialog._save()
+
+    assert loc.open_hours[0] == ("15:00", "07:00")
+
+
+def test_saving_hours_tab_still_rejects_equal_start_and_end(monkeypatch):
+    """_save() łapie ValueError i pokazuje QMessageBox.critical (modalny -
+    w testach trzeba go zmockować, inaczej headless run wisi bez zamknięcia
+    okna) zamiast pozwalać wyjątkowi wyjść na zewnątrz - patrz ten sam wzorzec
+    w test_duty_rotation_config_ui.py."""
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1")
+    shop.locations["site1"] = loc
+
+    dialog = ConfigDialog(None, shop, location_key="site1")
+    start_edit, end_edit = dialog.hours_editor._edits[0]
+    start_edit.set_time_str("09:00")
+    end_edit.set_time_str("09:00")
+
+    shown = []
+    monkeypatch.setattr(
+        "ui.config_dialog.QMessageBox.critical",
+        lambda *args, **kwargs: shown.append(args),
+    )
+
+    dialog._save()
+
+    assert shown, "expected a QMessageBox.critical error when start == end"
+    assert loc.open_hours[0] != ("09:00", "09:00")
+
+
+def test_locations_dialog_accepts_a_shift_crossing_midnight():
+    shop = ShopConfig(2026, 8)
+    dialog = LocationsDialog(None, shop)
+    row = dialog._location_rows[0]
+    start_edit, end_edit = row.hours_editor._edits[0]
+    start_edit.set_time_str("15:00")
+    end_edit.set_time_str("07:00")
+
+    dialog._save()
+
+    saved = next(iter(shop.locations.values()))
+    assert saved.open_hours[0] == ("15:00", "07:00")
+
+
 def test_no_location_key_falls_back_to_project_wide_hours():
     """Back-compat for callers that don't pass location_key (e.g. old tests)."""
     shop = ShopConfig(2026, 8)

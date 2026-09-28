@@ -121,10 +121,15 @@ def normalize_duty_rotation(raw: dict | None) -> dict | None:
     ("plan profil ochrona (analiza specyfikacji klienta).md", sekcja 12,
     Etap A) - okna czasowe:
 
-    - `weekday_long` + `weekday_short`: dwie zmiany pokrywające razem całą
-      dobę w tygodniu (pon-pt), np. SHIFT_16H 06:00-22:00 + SHIFT_8H_NIGHT
-      22:00-06:00. Wymagane, chyba że `only_12_24h` jest włączone (patrz
-      niżej) - wtedy te dwa typy zmian w ogóle nie są używane.
+    - `weekday_long` + `weekday_short`: dwie zmiany w tygodniu (pon-pt),
+      zwykle razem pokrywające całą dobę, np. SHIFT_16H 06:00-22:00 +
+      SHIFT_8H_NIGHT 22:00-06:00. Każda z osobna OPCJONALNA - lokalizacja
+      może skonfigurować tylko jedną z nich (klient GZUK, 2026-09-28: sama
+      `weekday_long` 15:00-07:00, bez drugiej osoby na resztę doby - patrz
+      add_duty_rotation_coverage_constraint, która wymaga obsady TYLKO tej
+      skonfigurowanej) - wymagana jest co najmniej jedna z dwóch, chyba że
+      `only_12_24h` jest włączone (patrz niżej) - wtedy żadna nie jest w
+      ogóle używana.
     - `weekend_full`: sztywna zmiana 24h - tylko godzina startu, koniec z
       definicji 24h później (patrz DaySchedule.set_full_day_shift) - "end"
       w tym oknie jest niejednoznaczny (patrz normalize_night_shift), więc
@@ -140,21 +145,27 @@ def normalize_duty_rotation(raw: dict | None) -> dict | None:
 
     None/pusty słownik = lokalizacja nie używa tego mechanizmu (domyślne -
     zero zmiany zachowania dla każdego istniejącego projektu/lokalizacji).
-    Skonfigurowanie choć jednego wymaganego okna wymaga skonfigurowania
-    wszystkich pozostałych wymaganych - to jeden, spójny schemat rotacji,
-    nie da się użyć częściowo.
+    Weekend to jeden, spójny schemat (nie da się go skonfigurować częściowo);
+    tydzień jest elastyczny - patrz `weekday_long`/`weekday_short` wyżej.
     """
     if not raw:
         return None
 
     only_12_24h = bool(raw.get("only_12_24h", False))
-    required_pair_keys = dict(_WEEKEND_DUTY_PAIR_KEYS)
-    if not only_12_24h:
-        required_pair_keys.update(_WEEKDAY_DUTY_PAIR_KEYS)
-
-    missing = [key for key in (*required_pair_keys, "weekend_full") if not raw.get(key)]
+    # Weekend zawsze wymaga kompletu (weekend_full + obie połówki - wybór
+    # między nimi robi solver, patrz add_duty_rotation_coverage_constraint).
+    # Tydzień: weekday_long/weekday_short są OPCJONALNE każda z osobna (patrz
+    # docstring wyżej) - ale gdy duty_rotation w ogóle obejmuje tydzień
+    # (not only_12_24h), potrzeba co najmniej jednej z nich, inaczej tydzień
+    # nie miałby żadnej obsady w ogóle.
+    missing = [key for key in (*_WEEKEND_DUTY_PAIR_KEYS, "weekend_full") if not raw.get(key)]
     if missing:
         raise ValueError(f"Rotacja służby wymaga skonfigurowania wszystkich okien - brakuje: {', '.join(missing)}")
+    if not only_12_24h and not raw.get("weekday_long") and not raw.get("weekday_short"):
+        raise ValueError(
+            "Rotacja służby w tygodniu wymaga skonfigurowania co najmniej jednego okna "
+            "(długiej albo krótkiej zmiany)"
+        )
 
     weekend_full_start = raw["weekend_full"].get("start")
     if not weekend_full_start:

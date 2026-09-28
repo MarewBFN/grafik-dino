@@ -42,6 +42,15 @@ POLICY_OPTIONS = (
     ("Wyłączone", ConstraintPolicy.DISABLED),
 )
 
+# Wariant bez "Wymagane" - dla zasad, gdzie twardy wymóg ryzykowałby
+# niewykonalność całego miesiąca (ten sam powód, dla którego priorytet
+# "Umowa" w priority_hours_constraint.py też nigdy nie jest MANDATORY).
+POLICY_OPTIONS_TWO_STATE = (
+    ("Preferowane", ConstraintPolicy.PREFERRED),
+    ("Wyłączone", ConstraintPolicy.DISABLED),
+)
+POLICY_TWO_STATE_NAMES = {"nominal_hours_no_umowa"}
+
 # Zasady, których starsze projekty nie mają jeszcze zapisanych - brak wpisu
 # ma znaczyć to samo co w generatorze (inaczej samo otwarcie i zapisanie
 # Konfiguracji po cichu włączyłoby zasadę).
@@ -664,7 +673,8 @@ class ConfigDialog(QDialog):
             column = (index // split_at) * 2
             selector = QComboBox()
             selector.setMinimumWidth(125)
-            for text, value in POLICY_OPTIONS:
+            options = POLICY_OPTIONS_TWO_STATE if policy_name in POLICY_TWO_STATE_NAMES else POLICY_OPTIONS
+            for text, value in options:
                 selector.addItem(text, value)
             current_policy = self.shop_config.constraint_policies.get(
                 policy_name, POLICY_MISSING_DEFAULTS.get(policy_name, ConstraintPolicy.PREFERRED)
@@ -675,6 +685,12 @@ class ConfigDialog(QDialog):
                 # ani nie zachowujemy tej wartości. DISABLED (np. profil
                 # ochrony, gdzie klient świadomie nie chce bilansu wcale)
                 # zostaje nietknięty.
+                current_policy = ConstraintPolicy.PREFERRED
+            if policy_name in POLICY_TWO_STATE_NAMES and current_policy == ConstraintPolicy.MANDATORY:
+                # Ta zasada nie ma trybu "Wymagane" w ogóle (patrz
+                # POLICY_OPTIONS_TWO_STATE) - plik zapisany/edytowany poza
+                # tym oknem mógłby mimo to mieć tę wartość; traktujemy jak
+                # Preferowane zamiast zostawić selector bez zaznaczenia.
                 current_policy = ConstraintPolicy.PREFERRED
             selector.setCurrentIndex(selector.findData(current_policy))
             if policy_name == "balance":
@@ -798,12 +814,19 @@ class ConfigDialog(QDialog):
                     start_qt = _parse_time(start_str)
                     end_qt = _parse_time(end_str)
 
-                    if end_qt <= start_qt:
+                    # end < start = zmiana przechodząca przez północ (ten sam
+                    # zapis co LocationConfig.duty_rotation/night_shift) -
+                    # calc_end()/calc_start() (model/day_schedule.py) i
+                    # DaySchedule.set_hours() już to poprawnie liczą. Tylko
+                    # end == start zostaje odrzucone - niejednoznaczne: nie da
+                    # się odróżnić zmiany zerowej długości od pełnej doby w
+                    # tym modelu godzin HH:MM bez śledzenia daty (patrz "24h" w
+                    # WeeklyHoursEditor - 00:00-23:45, nie 00:00-00:00).
+                    if end_qt == start_qt:
                         day_names = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
                         raise ValueError(
-                            f"Zamknięcie musi być później niż otwarcie tego samego dnia ({day_names[wd]}). "
-                            "Zmiany przechodzące przez północ nie są jeszcze wspierane — dla działalności "
-                            "całodobowej ustaw np. 00:00–23:45."
+                            f"Godzina otwarcia i zamknięcia nie mogą być takie same ({day_names[wd]}). "
+                            "Dla działalności całodobowej zaznacz \"24h\" przy tym dniu."
                         )
 
                 target_hours = self.location.open_hours if self.location is not None else self.shop_config.open_hours

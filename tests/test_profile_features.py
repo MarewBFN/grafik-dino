@@ -158,34 +158,140 @@ def test_employee_dialog_shows_wymiar_etatu_for_dino():
     assert dialog.employment_fraction.parent() is not None
 
 
-def test_employee_dialog_hides_wymiar_etatu_for_ochrona():
-    """Ta wersja działalności (Ochrona) zawsze zatrudnia na pełny etat -
-    pole tylko myliłoby/nie miałoby zastosowania (patrz
-    ui/employee_dialog.py::__init__). Combo zostaje w pełni zbudowane,
-    tylko nie trafia do layoutu - _save() dalej działa niezmienione."""
+def _custom_shop_with_mixed_locations(key="custom_test_no_night_afternoon"):
+    """Custom (Enyo-style) profile with two locations: "plain" without duty
+    rotation and "duty" with it - used to test that no_night/no_afternoon
+    checkboxes toggle visibility with the SELECTED location, not the whole
+    project (unlike no_24h_check, which is project-wide)."""
+    from model.location import LocationConfig
+
+    profile = CustomBusinessProfile(
+        key=key, display_name="Test No Night/Afternoon", roles=[], rules=[],
+    )
+    register_custom_profile(profile)
+
+    shop = ShopConfig(2026, 3)
+    shop.business_type = profile.key
+    shop.locations["plain"] = LocationConfig(key="plain", name="Plain")
+    duty_loc = LocationConfig(key="duty", name="Duty 24/7")
+    duty_loc.set_duty_rotation({
+        "only_12_24h": True,
+        "weekend_full": {"start": "08:00"},
+        "weekend_half_a": {"start": "08:00", "end": "20:00"},
+        "weekend_half_b": {"start": "20:00", "end": "08:00"},
+    })
+    shop.locations["duty"] = duty_loc
+    return shop
+
+
+def test_employee_dialog_shows_no_night_afternoon_for_custom_profile_plain_location():
+    shop = _custom_shop_with_mixed_locations()
+    dialog = EmployeeDialog(None, shop_config=shop, default_location_key="plain")
+
+    # isVisible() is always False for any widget inside a QDialog that was
+    # never actually shown (QApplication never mapped it on screen) -
+    # isHidden() reflects the explicit setVisible() call regardless, so
+    # it's the correct check here (see also main_window.py's own comment
+    # on this exact Qt pitfall, _relayout_quick_btn_grid).
+    assert dialog.no_night_check is not None
+    assert dialog.no_afternoon_check is not None
+    assert not dialog.no_night_check.isHidden()
+    assert not dialog.no_afternoon_check.isHidden()
+
+
+def test_employee_dialog_hides_no_night_afternoon_for_duty_rotation_location():
+    shop = _custom_shop_with_mixed_locations()
+    dialog = EmployeeDialog(None, shop_config=shop, default_location_key="duty")
+
+    assert dialog.no_night_check is not None
+    assert dialog.no_night_check.isHidden()
+    assert dialog.no_afternoon_check.isHidden()
+
+
+def test_employee_dialog_no_night_afternoon_visibility_follows_location_combo():
+    shop = _custom_shop_with_mixed_locations()
+    dialog = EmployeeDialog(None, shop_config=shop, default_location_key="plain")
+    assert not dialog.no_night_check.isHidden()
+
+    idx = dialog.location_combo.findData("duty")
+    dialog.location_combo.setCurrentIndex(idx)
+    assert dialog.no_night_check.isHidden()
+
+    idx = dialog.location_combo.findData("plain")
+    dialog.location_combo.setCurrentIndex(idx)
+    assert not dialog.no_night_check.isHidden()
+
+
+def test_employee_dialog_dino_profile_has_no_dedicated_no_night_checkboxes():
+    """Dino already shows no_night/no_afternoon through the generic role
+    loop (dino_retail_profile roles) - the new dedicated checkboxes must
+    not duplicate them."""
+    shop = ShopConfig(2026, 3)  # dino_retail
+    dialog = EmployeeDialog(None, shop_config=shop)
+
+    assert dialog.no_night_check is None
+    assert dialog.no_afternoon_check is None
+    assert "no_night" in dialog.role_checkboxes
+    assert "no_afternoon" in dialog.role_checkboxes
+
+
+def test_employee_dialog_save_writes_no_night_for_plain_location():
+    shop = _custom_shop_with_mixed_locations()
+    dialog = EmployeeDialog(None, shop_config=shop, default_location_key="plain")
+    dialog.last_name.setText("Kowalski")
+    dialog.no_night_check.setChecked(True)
+    dialog._save()
+
+    assert dialog.employee_result.no_night is True
+    assert dialog.employee_result.no_afternoon is False
+
+
+def test_employee_dialog_save_preserves_no_night_when_location_has_duty_rotation():
+    shop = _custom_shop_with_mixed_locations()
+    existing = Employee(
+        last_name="Kowalski", first_name="A", location_key="plain", no_night=True,
+    )
+    dialog = EmployeeDialog(None, employee=existing, shop_config=shop)
+
+    # Switch to the duty-rotation location - checkbox disappears, but the
+    # employee's existing no_night=True must survive the save, not be wiped.
+    idx = dialog.location_combo.findData("duty")
+    dialog.location_combo.setCurrentIndex(idx)
+    assert dialog.no_night_check.isHidden()
+
+    dialog._save()
+    assert dialog.employee_result.no_night is True
+
+
+def test_employee_dialog_shows_wymiar_etatu_for_ochrona():
+    """Przywrócone dla wszystkich profili (decyzja użytkownika 2026-09-28) -
+    wpływa wyłącznie na przeliczenie nominalnego czasu pracy, więc ma sens
+    też dla Ochrony, nie tylko Dino (patrz ui/employee_dialog.py::_build_ui)."""
     from model.business_profile import DEFAULT_OCHRONA_PROFILE_KEY
 
     shop = ShopConfig(2026, 3)
     shop.business_type = DEFAULT_OCHRONA_PROFILE_KEY
     dialog = EmployeeDialog(None, shop_config=shop)
 
-    assert dialog.employment_fraction.parent() is None
+    assert dialog.employment_fraction.parent() is not None
     assert dialog.employment_fraction.currentData() == 1.0  # domyślnie pełny etat
 
 
-def test_employee_dialog_save_still_works_with_wymiar_etatu_hidden():
+def test_employee_dialog_save_persists_chosen_wymiar_etatu_for_ochrona():
     from model.business_profile import DEFAULT_OCHRONA_PROFILE_KEY
 
     shop = ShopConfig(2026, 3)
     shop.business_type = DEFAULT_OCHRONA_PROFILE_KEY
     dialog = EmployeeDialog(None, shop_config=shop)
     dialog.last_name.setText("Kowalski")
+    idx = dialog.employment_fraction.findData(0.5)
+    dialog.employment_fraction.setCurrentIndex(idx)
 
     dialog._save()
 
     saved = dialog.employee_result
     assert saved is not None
-    assert saved.employment_fraction == 1.0
+    assert saved.employment_fraction == 0.5
 
 
 def test_save_succeeds_without_a_first_name():

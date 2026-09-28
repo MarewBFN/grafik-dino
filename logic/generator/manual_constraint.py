@@ -83,10 +83,10 @@ def add_manual_shift_constraints(
 
             day_state = schedule.get_day(emp, d)
 
-            # 🔵 Zablokowany typ zmiany (1=rano/2=popołudnie) — solver sam
-            # dobiera konkretny slot z odpowiedniej grupy.
+            # 🔵 Zablokowany typ zmiany (1=rano/2=popołudnie/W=może pracować)
+            # — solver sam dobiera konkretny slot z odpowiedniej grupy.
             shift_class = getattr(day_state, "shift_class", None)
-            if shift_class in ("1", "2") and not is_location_open_for_employee(shop, emp, d):
+            if shift_class in ("1", "2", "W") and not is_location_open_for_employee(shop, emp, d):
                 # Dzień zamknięty w lokalizacji pracownika ("Nieczynne",
                 # święto) - typ zmiany ustawiony, zanim dzień stał się
                 # zamknięty, nie ma czego wymuszać (add_non_trade_day_constraints
@@ -103,6 +103,16 @@ def add_manual_shift_constraints(
                 for s in all_shifts:
                     if s not in allowed:
                         model.Add(x[e, d, s] == 0)
+                continue
+
+            # 🔵 "W" (może pracować) - żaden konkretny typ zmiany, tylko
+            # wymuszenie, że ten dzień NIE jest wolny: generator musi
+            # przydzielić dokładnie jedną zmianę, dokładny typ/godzinę
+            # dobiera sam zgodnie z resztą constraintów tej lokalizacji
+            # (obsada, no_night/no_afternoon itd. - te tylko zawężają zbiór
+            # dozwolonych `s`, więc naturalnie z tym współgrają).
+            if shift_class == "W":
+                model.Add(sum(x[e, d, s] for s in all_shifts) == 1)
                 continue
 
             # 🔴 URLop

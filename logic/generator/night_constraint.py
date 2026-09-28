@@ -26,6 +26,7 @@ def add_no_night_constraint(
     soft=False,
     trace=None,
     shift_night=None,
+    schedule=None,
 ):
     if trace is not None:
         trace.log_constraint("no_night", f"soft={soft}")
@@ -58,6 +59,18 @@ def add_no_night_constraint(
         )
 
         for d in days:
+
+            # Ręczny wpis (is_locked - godziny wpisane wprost albo dzień
+            # wolny/urlop/L4, NIE zablokowany typ zmiany "1"/"2"/"W", patrz
+            # DaySchedule.set_shift_class) już w pełni determinuje przydział
+            # tego dnia przez add_manual_shift_constraints (always-on, woła
+            # się przed tym constraintem) - albo wymusza dokładnie jedną
+            # zmianę, albo zeruje wszystko. Planista czasem MUSI ręcznie
+            # wstawić nockę osobie z no_night (wyjątkowa sytuacja) - bez tego
+            # wyjątku taki wpis budował model sprzeczny z samym sobą
+            # (x==1 tam, x==0 tutaj) i cały miesiąc szedł w INFEASIBLE.
+            if schedule is not None and schedule.get_day(emp, d).is_locked:
+                continue
 
             # OPEN/CLOSE/START/END forbidding - shared with
             # generic_rules.py::build_role_time_restriction (see that

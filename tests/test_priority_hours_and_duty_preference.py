@@ -213,6 +213,119 @@ class TestPriorityHoursShortfallPenaltyUnit:
         )
         assert penalties == []
 
+    def test_invert_selects_employees_without_the_role(self):
+        """invert=True (patrz "Nominalny czas pracowników bez umowy",
+        custom_profile_wiring.py) - dokładnie odwrotny filtr niż domyślny:
+        tylko pracownicy BEZ roli "umowa" dostają shortfall term."""
+        shop = ShopConfig(2026, 3)
+        umowa_emp = Employee(
+            last_name="Umowa", first_name="A", employment_fraction=1.0,
+            custom_roles={UMOWA_ROLE_KEY: True},
+        )
+        other_emp = Employee(last_name="Zwykly", first_name="B", employment_fraction=1.0)
+        schedule = MonthSchedule(2026, 3)
+        schedule.add_employee(umowa_emp)
+        schedule.add_employee(other_emp)
+
+        days = list(range(1, schedule.days_in_month + 1))
+        model = cp_model.CpModel()
+        x = {
+            (e, d, s): model.NewBoolVar(f"x_{e}_{d}_{s}")
+            for e in range(2) for d in days for s in ALL_SHIFTS
+        }
+
+        default_penalties = add_priority_hours_shortfall_penalty(
+            model, x, [umowa_emp, other_emp], days, schedule, shop, ALL_SHIFTS,
+        )
+        inverted_penalties = add_priority_hours_shortfall_penalty(
+            model, x, [umowa_emp, other_emp], days, schedule, shop, ALL_SHIFTS, invert=True,
+        )
+        assert len(default_penalties) == 1  # only the "umowa" employee
+        assert len(inverted_penalties) == 1  # only the non-"umowa" employee
+
+    def test_weight_parameter_scales_the_penalty_terms(self):
+        """Forcing the employee to work nothing makes the shortfall exactly
+        equal target_minutes - minimizing the returned (weighted) term must
+        then land on weight * target_minutes, proving `weight` isn't
+        silently ignored."""
+        shop = ShopConfig(2026, 3)
+        emp = Employee(last_name="Zwykly", first_name="B", employment_fraction=1.0)
+        schedule = MonthSchedule(2026, 3)
+        schedule.add_employee(emp)
+
+        days = list(range(1, schedule.days_in_month + 1))
+        model = cp_model.CpModel()
+        x = {(0, d, s): model.NewBoolVar(f"x_{d}_{s}") for d in days for s in ALL_SHIFTS}
+        for d in days:
+            for s in ALL_SHIFTS:
+                model.Add(x[0, d, s] == 0)
+
+        weight = 7
+        penalties = add_priority_hours_shortfall_penalty(
+            model, x, [emp], days, schedule, shop, ALL_SHIFTS, invert=True, weight=weight,
+        )
+        assert len(penalties) == 1
+        model.Minimize(sum(penalties))
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+        target_minutes = int(shop.get_full_time_nominal_hours() * 60)
+        assert solver.ObjectiveValue() == weight * target_minutes
+
+
+class TestNominalHoursNoContractPolicy:
+    """"Nominalny czas pracowników bez umowy" (Konfiguracja -> Zasady
+    generatora, decyzja użytkownika 2026-09-28) - domyślnie Preferowane,
+    tylko dwa stany (Preferowane/Wyłączone, patrz ui/config_dialog.py::
+    POLICY_TWO_STATE_NAMES)."""
+
+    def test_disabled_policy_has_zero_weight(self):
+        from logic.generator.priority_hours_constraint import nominal_hours_no_contract_weight
+
+        assert nominal_hours_no_contract_weight(ConstraintPolicy.DISABLED) == 0
+
+    def test_preferred_and_missing_policy_default_to_enabled(self):
+        """Domyślnie WŁĄCZONE - w odróżnieniu od hours_equalization_weight
+        (domyślnie wyłączone) - decyzja użytkownika: nawet stary projekt bez
+        tej zasady zapisanej jeszcze wcale ma ją de facto Preferowaną."""
+        from logic.generator.priority_hours_constraint import (
+            NOMINAL_HOURS_NO_CONTRACT_WEIGHT,
+            nominal_hours_no_contract_weight,
+        )
+
+        assert nominal_hours_no_contract_weight(ConstraintPolicy.PREFERRED) == NOMINAL_HOURS_NO_CONTRACT_WEIGHT
+        assert nominal_hours_no_contract_weight(None) == NOMINAL_HOURS_NO_CONTRACT_WEIGHT
+
+    def test_weight_lower_than_umowa_priority_weight(self):
+        """"Umowa" musi zostać pierwsza w kolejności - patrz docstring
+        modułu i PRIORITY_WEIGHT."""
+        from logic.generator.priority_hours_constraint import (
+            NOMINAL_HOURS_NO_CONTRACT_WEIGHT,
+            PRIORITY_WEIGHT,
+        )
+
+        assert 0 < NOMINAL_HOURS_NO_CONTRACT_WEIGHT < PRIORITY_WEIGHT
+
+    def test_default_policies_seeds_preferred_for_new_custom_profiles(self):
+        from logic.generator.priority_hours_constraint import NOMINAL_HOURS_NO_CONTRACT_POLICY
+
+        profile = CustomBusinessProfile(key="test_nominal_no_umowa_defaults", display_name="Test", roles=[], rules=[])
+        policies = default_policies(profile)
+        assert policies[NOMINAL_HOURS_NO_CONTRACT_POLICY] == ConstraintPolicy.PREFERRED
+
+    def test_build_policy_labels_includes_the_new_policy(self):
+        from logic.generator.custom_profile_wiring import build_policy_labels
+        from logic.generator.priority_hours_constraint import (
+            NOMINAL_HOURS_NO_CONTRACT_LABEL,
+            NOMINAL_HOURS_NO_CONTRACT_POLICY,
+        )
+
+        profile = CustomBusinessProfile(key="test_nominal_no_umowa_labels", display_name="Test", roles=[], rules=[])
+        labels = dict(build_policy_labels(profile))
+        assert labels[NOMINAL_HOURS_NO_CONTRACT_POLICY] == NOMINAL_HOURS_NO_CONTRACT_LABEL
+
 
 # --- "Wyrównanie godzin umowa/bez" (decyzja użytkownika 2026-09-25) ---
 

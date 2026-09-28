@@ -153,6 +153,7 @@ class AutoScheduleGenerator:
         trace_output_path=None,
         solver_time_limit_seconds=60,
         solver_workers=None,
+        location_key=None,
     ):
         if solver_workers is None:
             # Zahardkodowane 10 wątków przeciążało słabsze maszyny (mniej
@@ -166,17 +167,40 @@ class AutoScheduleGenerator:
         if trace is None:
             trace = ConstraintTraceLogger()
 
+        # Generowanie "dla wybranej obecnie placówki" (zgłoszenie klienta
+        # 2026-09-28) - location_key ograniczą model CP-SAT (i czyszczenie
+        # dni niżej) do pracowników TEJ lokalizacji; wszystkie pozostałe
+        # placówki zostają całkowicie nietknięte, także te ich pracowników,
+        # którzy akurat mają zablokowane/urlopowe dni. Brak location_key
+        # (albo projekt bez zdefiniowanych lokalizacji w ogóle) - dokładnie
+        # dzisiejsze zachowanie, cały projekt naraz. Żaden constraint w
+        # generatorze nie wymaga widzieć pracowników INNEJ lokalizacji
+        # naraz (duty_rotation/round_clock/min_staff_with_role są już
+        # grupowane per lokalizacja wewnątrz), więc zwykłe przefiltrowanie
+        # listy pracowników przed zbudowaniem modelu jest tu wystarczające.
+        if location_key is not None and self.shop.locations:
+            employees = [e for e in self.schedule.employees if e.location_key == location_key]
+        else:
+            employees = self.schedule.employees
+
         if not is_fix:
-            self.schedule.clear_unlocked_days()
+            self.schedule.clear_unlocked_days(employees)
 
         # Kierowniczki (is_manager) mają sztywny, cotygodniowy grafik -
         # odświeżamy go przed każdym generowaniem, żeby nikt nie musiał
         # wpisywać tych godzin ręcznie ani pilnować, że ich dane przetrwały.
+        # Celowo NIE ograniczone do `employees` (idempotentne, dotyka
+        # wyłącznie dni menadżerek - bezpieczne odświeżyć zawsze, niezależnie
+        # od tego, dla której lokalizacji akurat generujemy).
         from logic.manager_schedule import apply_all_manager_schedules
         apply_all_manager_schedules(self.schedule, self.shop)
 
         # Ręczne wpisy pracowników rotacji liczone jako pokrycie doby -
         # plan liczony z zablokowanych dni, więc dopiero po ich ustaleniu.
+        # Celowo z PEŁNEJ listy self.schedule.employees (nie `employees`) -
+        # to tylko dane wejściowe (per lokalizacja i tak, patrz moduł), a
+        # bramy rotacji niżej odpytują go wyłącznie dla pracowników obecnych
+        # w modelu.
         from logic.generator.duty_rotation_manual_coverage import build_duty_coverage_plan
         self.DUTY_SHIFTS.plan = build_duty_coverage_plan(self.schedule, self.shop, self.schedule.employees)
 
@@ -185,7 +209,6 @@ class AutoScheduleGenerator:
 
         model = cp_model.CpModel()
 
-        employees = self.schedule.employees
         days = list(range(1, self.schedule.days_in_month + 1))
 
         min_open = self.shop.constraints.get("min_open_staff", 3)

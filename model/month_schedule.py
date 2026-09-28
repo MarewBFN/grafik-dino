@@ -385,8 +385,14 @@ class MonthSchedule:
         self.add_employee(new)
         self._data[new] = days_data
 
-    def clear_unlocked_days(self):
-        for emp in self.employees:
+    def clear_unlocked_days(self, employees=None):
+        """Domyślnie czyści WSZYSTKICH pracowników - `employees` (podzbiór
+        self.employees) pozwala ograniczyć czyszczenie do wybranej grupy, np.
+        tylko pracowników jednej lokalizacji przy generowaniu grafiku dla
+        pojedynczej placówki (patrz AutoScheduleGenerator.generate()) - bez
+        tego generowanie dla jednej placówki kasowałoby też niezablokowane
+        dni WSZYSTKICH pozostałych placówek."""
+        for emp in (employees if employees is not None else self.employees):
             for d in range(1, self.days_in_month + 1):
                 day_data = self.get_day(emp, d)
 

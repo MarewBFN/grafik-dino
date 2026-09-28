@@ -32,7 +32,7 @@ FORBIDDEN_PHRASES = [
 
 
 def _known_widgets(dialog):
-    widgets = {dialog.add_btn, dialog.save_btn}
+    widgets = {dialog.add_btn, dialog.save_btn, dialog.tabs}
     widgets.update(dialog._rows)
     return widgets
 

@@ -75,6 +75,60 @@ def test_multi_location_generator_resolves_each_employees_own_location_hours():
     assert checked_any, "generator produced no assigned shifts to check"
 
 
+def test_generate_with_location_key_leaves_other_locations_completely_untouched():
+    """"Generuj grafik" powinien dotyczyć wyłącznie obecnie wybranej
+    placówki (zgłoszenie klienta 2026-09-28) - wcześniej generate() zawsze
+    budował model CP-SAT (i czyścił niezablokowane dni) dla WSZYSTKICH
+    pracowników projektu naraz, niezależnie od tego, która lokalizacja była
+    akurat wybrana w UI."""
+    profile = CustomBusinessProfile(
+        key="custom_test_location_scope",
+        display_name="Test LocationScope",
+        roles=[RoleDefinition(key="worker", label="Pracownik")],
+        rules=[],
+    )
+    register_custom_profile(profile)
+
+    shop = ShopConfig(2026, 3)
+    shop.business_type = profile.key
+    shop.constraint_policies.update(default_policies(profile))
+
+    loc_a = LocationConfig(key="loc_a", name="Obiekt A", open_hours={i: ("08:00", "16:00") for i in range(7)})
+    loc_b = LocationConfig(key="loc_b", name="Obiekt B", open_hours={i: ("08:00", "16:00") for i in range(7)})
+    shop.locations = {"loc_a": loc_a, "loc_b": loc_b}
+
+    schedule = MonthSchedule(2026, 3)
+    alfa = Employee(last_name="Alfa", first_name="A", location_key="loc_a", custom_roles={"worker": True})
+    beta = Employee(last_name="Beta", first_name="B", location_key="loc_b", custom_roles={"worker": True})
+    for emp in (alfa, beta):
+        schedule.add_employee(emp)
+
+    # Istniejące, NIEzablokowane dane pracownika loc_b - clear_unlocked_days()
+    # by je dziś skasowało nawet przy generowaniu dla samej loc_a.
+    beta_day = schedule.get_day(beta, 5)
+    beta_day.set_hours("09:00", "13:00")
+
+    with redirect_stdout(io.StringIO()):
+        result = AutoScheduleGenerator(schedule, shop).generate(
+            solver_time_limit_seconds=10, solver_workers=2, location_key="loc_a",
+        )
+
+    assert result["success"], result["infeasibility_reasons"]
+
+    # loc_a dostała prawdziwy grafik.
+    assert any(
+        schedule.get_day(alfa, day).start for day in range(1, schedule.days_in_month + 1)
+    ), "loc_a employee got no assigned shifts"
+
+    # loc_b - ani ruszona (dzień 5 przetrwał tak, jak był wpisany), ani nic
+    # dopisanego w pozostałe dni.
+    assert (schedule.get_day(beta, 5).start, schedule.get_day(beta, 5).end) == ("09:00", "13:00")
+    for day in range(1, schedule.days_in_month + 1):
+        if day == 5:
+            continue
+        assert schedule.get_day(beta, day).is_empty(), f"loc_b day {day} should stay untouched"
+
+
 def test_max_consecutive_days_is_resolved_per_employee_location():
     profile = CustomBusinessProfile(
         key="custom_test_maxconsec",

@@ -192,9 +192,13 @@ def _doba_bounds(shop, rotation, day: int) -> tuple[int, int]:
 
 
 def _pattern_intervals(shop, rotation, day: int) -> list:
+    # weekday_long/weekday_short są opcjonalne każda z osobna (patrz
+    # normalize_duty_rotation) - pomijamy klucz, którego ta lokalizacja nie
+    # skonfigurowała, inaczej window_offsets rzuci KeyError.
     return [
         tuple(day * DAY_MINUTES + v for v in window_offsets(rotation, key))
         for key in pattern_keys(rotation, shop.weekday(day))
+        if rotation.get(key)
     ]
 
 

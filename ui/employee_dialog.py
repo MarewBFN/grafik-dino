@@ -78,6 +78,19 @@ class EmployeeDialog(QDialog):
             return True
         return any(loc.get_duty_rotation() for loc in self.shop_config.locations.values())
 
+    def _selected_location_has_duty_rotation(self) -> bool:
+        """Czy WYBRANA w combo lokalizacja (nie cały projekt, w odróżnieniu
+        od _project_uses_duty_rotation powyżej) ma pełną rotację 24/7 -
+        steruje widocznością no_night_check/no_afternoon_check poniżej,
+        które mają sens tylko poza rotacją 24/7 (tam pracownik i tak nigdy
+        nie dostanie starego typu zmiany OPEN/CLOSE/START/END/NIGHT, patrz
+        add_duty_rotation_gate_constraint)."""
+        if self.location_combo is None:
+            return False
+        key = self.location_combo.currentData()
+        location = self.locations.get(key)
+        return bool(location and location.get_duty_rotation())
+
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setSpacing(15)
@@ -121,7 +134,14 @@ class EmployeeDialog(QDialog):
 
         self.employment_fraction = QComboBox()
         self.employment_fraction.addItem("1/1 (pełny etat)", 1.0)
-        self.employment_fraction.addItem("1/1 (pełny etat) max 8:00", 1.01)
+        if self.profile.key == DEFAULT_BUSINESS_TYPE:
+            # "Max 8:00" (kierowniczka - patrz _on_manager_toggled/
+            # force_fulltime_845) to konwencja stricte Dino. Dla innych
+            # profili 1/1 to zwykła pełna zmiana (decyzja użytkownika
+            # 2026-09-28, patrz logic/utils/time_utils.py::get_effective_daily_hours) -
+            # bez tej opcji w ogóle, żeby nie sugerować nieistniejącego
+            # dla nich rozróżnienia.
+            self.employment_fraction.addItem("1/1 (pełny etat) max 8:00", 1.01)
         self.employment_fraction.addItem("7/8", 0.875)
         self.employment_fraction.addItem("3/4", 0.75)
         self.employment_fraction.addItem("5/8", 0.625)
@@ -132,15 +152,13 @@ class EmployeeDialog(QDialog):
         form.addRow("Nazwisko:", self.last_name)
         form.addRow("Imię (opcjonalnie):", self.first_name)
 
-        # Pokazywane tylko dla Dino - dla każdego profilu Ochrona (na tę
-        # chwilę jedyny inny w tej wersji działalności, niezależnie od
-        # dokładnego klucza profilu) klient zawsze zatrudnia na pełny etat,
-        # pole tylko myliłoby/nie miałoby zastosowania. Combo zostaje w
-        # pełni zbudowane i domyślnie na indeksie 0 (1.0 - pełny etat),
-        # _save() dalej czyta currentData() bez zmian - tym samym wzorcem
-        # co ukryte "Progi obsady" w ConfigDialog (patrz ENYO_ONLY_CHANGES.md).
-        if self.shop_config is None or self.shop_config.business_type == DEFAULT_BUSINESS_TYPE:
-            form.addRow("Wymiar etatu:", self.employment_fraction)
+        # Przywrócone dla wszystkich profili (decyzja użytkownika
+        # 2026-09-28) - wpływa WYŁĄCZNIE na przeliczenie nominalnego czasu
+        # pracy (shop.get_full_time_nominal_hours() * employment_fraction,
+        # patrz hours_constraint.py/priority_hours_constraint.py/
+        # monthly_hours_status.py), więc ma sens dla każdej branży, nie
+        # tylko Dino.
+        form.addRow("Wymiar etatu:", self.employment_fraction)
 
         if self.locations:
             # Bez opcji "Brak" - projekt ma zawsze co najmniej jedną
@@ -208,6 +226,40 @@ class EmployeeDialog(QDialog):
             )
             flags_layout.addWidget(self.no_24h_check)
 
+        # "Nie pracuje w godzinach nocnych"/"Nie pracuje na popołudniu" -
+        # pola Employee.no_night/no_afternoon istnieją zawsze (patrz
+        # model/employee.py), Dino pokazuje je przez generyczną pętlę ról
+        # wyżej (profil dino_retail je definiuje). Dla innych profili
+        # (Ochrona/Enyo) profile.roles ich nie ma, więc dedykowane
+        # checkboxy tutaj - mają sens TYLKO w lokalizacji bez rotacji 24/7
+        # (w rotacji pracownik i tak nigdy nie dostanie starego typu zmiany,
+        # patrz _selected_location_has_duty_rotation), więc widoczność
+        # przełącza się dynamicznie z wyborem lokalizacji w combo powyżej,
+        # nie raz przy otwarciu okna jak no_24h_check (ten jest per PROJEKT,
+        # nie per lokalizacja pracownika).
+        self.no_night_check = None
+        self.no_afternoon_check = None
+        if self.profile.key != DEFAULT_BUSINESS_TYPE:
+            self.no_night_check = QCheckBox("Nie pracuje w godzinach nocnych (22:00-6:00)")
+            self.no_night_check.setToolTip(
+                "Ta osoba nigdy nie dostanie od generatora zmiany dotykającej "
+                "godzin nocnych (22:00-6:00). Ręczny wpis nockę nadal można "
+                "wprowadzić wyjątkowo - generator go uszanuje."
+            )
+            flags_layout.addWidget(self.no_night_check)
+
+            self.no_afternoon_check = QCheckBox("Nie pracuje na popołudniu")
+            self.no_afternoon_check.setToolTip(
+                "Ta osoba nigdy nie dostanie od generatora zmiany popołudniowej "
+                "- tylko poranne. Ręczny wpis nadal można wprowadzić wyjątkowo."
+            )
+            flags_layout.addWidget(self.no_afternoon_check)
+
+            if self.location_combo is not None:
+                self.location_combo.currentIndexChanged.connect(
+                    self._update_no_night_afternoon_visibility
+                )
+
         content_layout.addWidget(self.flags_card)
         content_layout.addStretch()
 
@@ -267,6 +319,13 @@ class EmployeeDialog(QDialog):
             if idx >= 0:
                 self.employment_fraction.setCurrentIndex(idx)
 
+    def _update_no_night_afternoon_visibility(self):
+        if self.no_night_check is None:
+            return
+        visible = not self._selected_location_has_duty_rotation()
+        self.no_night_check.setVisible(visible)
+        self.no_afternoon_check.setVisible(visible)
+
     def _fill_from_employee(self):
         if not self.employee:
             # Nowy pracownik: kombo lokalizacji i tak zawsze ma co najmniej
@@ -276,6 +335,12 @@ class EmployeeDialog(QDialog):
             if self.location_combo is not None:
                 idx = self.location_combo.findData(self.default_location_key or "")
                 self.location_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            # setCurrentIndex() only emits currentIndexChanged when the
+            # index actually moves - explicit call so a new employee still
+            # gets correct initial no_night/no_afternoon visibility even
+            # when the default location (already selected at index 0)
+            # happens to be the one with duty_rotation.
+            self._update_no_night_afternoon_visibility()
             return
         self.last_name.setText(self.employee.last_name)
         self.first_name.setText(self.employee.first_name)
@@ -290,9 +355,15 @@ class EmployeeDialog(QDialog):
             self.employment_fraction.setCurrentIndex(idx)
         if self.no_24h_check is not None:
             self.no_24h_check.setChecked(self.employee.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False))
+        if self.no_night_check is not None:
+            self.no_night_check.setChecked(self.employee.no_night)
+            self.no_afternoon_check.setChecked(self.employee.no_afternoon)
         if self.location_combo is not None:
             idx = self.location_combo.findData(self.employee.location_key)
             self.location_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        # Patrz komentarz przy analogicznym wywołaniu wyżej (ścieżka nowego
+        # pracownika) - jawne wywołanie zamiast polegać wyłącznie na sygnale.
+        self._update_no_night_afternoon_visibility()
 
     def _build_tutorial_steps(self):
         steps = [
@@ -326,6 +397,17 @@ class EmployeeDialog(QDialog):
                 "Zaznacz, jeśli ta osoba nie powinna dostawać pojedynczej zmiany "
                 "24h przy rotacji służby - dostanie wtedy dwie zmiany po 12h.",
                 target=self.no_24h_check,
+            ))
+        # Krok tylko gdy logicznie widoczne (nie isVisible() - niemiarodajne
+        # przed pokazaniem całego okna, patrz analogiczny komentarz przy
+        # ui/main_window.py::_relayout_quick_btn_grid).
+        if self.no_night_check is not None and not self._selected_location_has_duty_rotation():
+            steps.append(TutorialStep(
+                "Nie pracuje w nocy / popołudniami",
+                "Zaznacz, jeśli ta osoba nie powinna dostawać od generatora zmian "
+                "nocnych i/lub popołudniowych - widoczne tylko dla lokalizacji bez "
+                "rotacji 24/7. Ręczny wpis takiej zmiany nadal będzie respektowany.",
+                target=self.no_night_check,
             ))
         steps.append(TutorialStep(
             "Zapisz",
@@ -393,6 +475,22 @@ class EmployeeDialog(QDialog):
             # wolno cicho zgubić wartości, gdyby jednak była już ustawiona
             # (np. lokalizacja z rotacją została w międzyczasie usunięta).
             custom_roles[NIE_CHCE_24H_ROLE_KEY] = self.employee.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False)
+
+        # no_night/no_afternoon - dedykowane checkboxy (patrz _build_ui),
+        # widoczne/uwzględniane tylko dla WYBRANEJ lokalizacji bez rotacji
+        # 24/7. Gdy niewidoczne (Dino - nie ma tych checkboxów wcale, albo
+        # Enyo z lokalizacją 24/7 wybraną) - zachowaj dotychczasową wartość
+        # zamiast cichego wyzerowania, tym samym wzorcem co no_24h_check
+        # wyżej. Dla Dino profile.roles JUŻ ustawił legacy_roles["no_night"]/
+        # ["no_afternoon"] w pętli wyżej - nadpisujemy tylko gdy dedykowany
+        # checkbox faktycznie istnieje (czyli nigdy dla Dino).
+        if self.no_night_check is not None:
+            if not self._selected_location_has_duty_rotation():
+                legacy_roles["no_night"] = self.no_night_check.isChecked()
+                legacy_roles["no_afternoon"] = self.no_afternoon_check.isChecked()
+            else:
+                legacy_roles["no_night"] = self.employee.no_night if self.employee else False
+                legacy_roles["no_afternoon"] = self.employee.no_afternoon if self.employee else False
 
         location_key = self.location_combo.currentData() if self.location_combo is not None else ""
 

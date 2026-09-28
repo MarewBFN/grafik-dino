@@ -217,3 +217,56 @@ def test_full_month_only_12_24h_three_employees():
 
 def test_full_month_only_12_24h_four_employees_one_no24h():
     _generate_and_verify(2026, 11, n_employees=4, no24h_count=1, rotation=ROTATION_ONLY_12_24H)
+
+
+# --- GZUK (klient, 2026-09-28): w tygodniu TYLKO jedna, 16h zmiana wieczorno-
+# -nocna (15:00-07:00), bez drugiej osoby na resztę doby; w weekend pełna
+# doba 24h. Wcześniej weekday_short było zawsze wymagane i obowiązkowo
+# obsadzane razem z weekday_long - patrz normalize_duty_rotation i
+# add_duty_rotation_coverage_constraint (obie strony pary teraz opcjonalne
+# każda z osobna). ---
+
+ROTATION_GZUK_WEEKDAY_LONG_ONLY = {
+    "weekday_long": {"start": "15:00", "end": "07:00"},
+    "weekend_full": {"start": "07:00"},
+    "weekend_half_a": {"start": "07:00", "end": "15:00"},
+    "weekend_half_b": {"start": "15:00", "end": "07:00"},
+    "prefer_24h": True,
+}
+
+
+def test_full_month_gzuk_weekday_long_only_never_forces_a_second_weekday_shift():
+    shop, schedule, employees = _build_month(
+        2026, 11, n_employees=3, no24h_count=0, rotation=ROTATION_GZUK_WEEKDAY_LONG_ONLY,
+    )
+
+    with redirect_stdout(io.StringIO()):
+        result = AutoScheduleGenerator(schedule, shop).generate(solver_time_limit_seconds=60)
+
+    assert result["success"] is True, result.get("infeasibility_reasons")
+
+    for day in range(1, schedule.days_in_month + 1):
+        wd = shop.weekday(day)
+        assigned = [
+            (emp, schedule.get_day(emp, day))
+            for emp in employees
+            if not schedule.get_day(emp, day).is_empty()
+        ]
+
+        if wd < 5:
+            # Dokładnie 1 osoba, dokładnie na skonfigurowanym oknie - NIGDY
+            # druga osoba na "resztę doby" (weekday_short nie istnieje w tej
+            # konfiguracji - to właśnie jest sedno naprawy).
+            assert len(assigned) == 1, f"day {day} (weekday): expected exactly 1 person, got {assigned}"
+            _, ds = assigned[0]
+            assert (ds.start, ds.end) == ("15:00", "07:00"), (day, ds.start, ds.end)
+            assert not ds.is_full_day
+        else:
+            full_day = [(emp, ds) for emp, ds in assigned if ds.is_full_day]
+            halves = [(emp, ds) for emp, ds in assigned if not ds.is_full_day]
+            if full_day:
+                assert len(full_day) == 1 and not halves, (day, assigned)
+            else:
+                assert len(halves) == 2, (day, assigned)
+                starts_ends = sorted((ds.start, ds.end) for _, ds in halves)
+                assert starts_ends == [("07:00", "15:00"), ("15:00", "07:00")], (day, starts_ends)

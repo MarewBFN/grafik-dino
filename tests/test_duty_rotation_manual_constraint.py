@@ -260,6 +260,132 @@ class TestDutyRotationManualShiftEndToEnd:
         ds = schedule.get_day(employees[0], 7)
         assert (ds.start, ds.is_full_day, ds.is_locked) == ("06:00", True, True)
 
+
+ROTATION_ONLY_12_24H = {
+    "only_12_24h": True,
+    "weekend_full": {"start": "06:00"},
+    "weekend_half_a": {"start": "06:00", "end": "18:00"},
+    "weekend_half_b": {"start": "18:00", "end": "06:00"},
+}
+
+
+def _shop_with_rotation_only_12_24h():
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1")
+    loc.set_duty_rotation(ROTATION_ONLY_12_24H)
+    shop.locations["site1"] = loc
+    return shop
+
+
+class TestDutyRotationManualShiftCanWork:
+    """shift_class == "W" ("Może pracować" w trybie szybkim, ui/main_window.py) -
+    rekomendacja "ma pracować tego dnia", NIE ręczny wpis (is_locked zostaje
+    False, patrz DaySchedule.set_shift_class) - w odróżnieniu od reszty tej
+    klasy testów wyżej."""
+
+    def test_weekend_day_forces_the_full_24h_shift(self):
+        shop = _shop_with_rotation()  # no only_12_24h - plain weekday split
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1")
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
+        schedule.get_day(emp, SATURDAY).set_shift_class("W")
+
+        model, x = _model_and_x([emp], [SATURDAY])
+        add_duty_rotation_gate_constraint(model, x, [emp], [SATURDAY], shop, DUTY_SHIFTS, ALL_SHIFTS)
+        add_duty_rotation_manual_shift_constraint(model, x, [emp], [SATURDAY], schedule, shop, DUTY_SHIFTS)
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        assert solver.Value(x[0, SATURDAY, WEEKEND_FULL]) == 1
+        for s in ALL_SHIFTS:
+            if s != WEEKEND_FULL:
+                assert solver.Value(x[0, SATURDAY, s]) == 0
+
+    def test_only_12_24h_forces_the_full_24h_shift_even_on_a_weekday(self):
+        shop = _shop_with_rotation_only_12_24h()
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1")
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
+        schedule.get_day(emp, WEEKDAY).set_shift_class("W")
+
+        model, x = _model_and_x([emp], [WEEKDAY])
+        add_duty_rotation_gate_constraint(model, x, [emp], [WEEKDAY], shop, DUTY_SHIFTS, ALL_SHIFTS)
+        add_duty_rotation_manual_shift_constraint(model, x, [emp], [WEEKDAY], schedule, shop, DUTY_SHIFTS)
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        assert solver.Value(x[0, WEEKDAY, WEEKEND_FULL]) == 1
+
+    def test_plain_weekday_without_only_12_24h_forces_one_of_the_two_roles(self):
+        """No single person can cover a whole plain weekday alone here
+        (doba split 16h+8h between two different people) - "W" must fall
+        back to "one of the two roles", not the impossible full 24h."""
+        shop = _shop_with_rotation()  # no only_12_24h
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1")
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
+        schedule.get_day(emp, WEEKDAY).set_shift_class("W")
+
+        model, x = _model_and_x([emp], [WEEKDAY])
+        add_duty_rotation_gate_constraint(model, x, [emp], [WEEKDAY], shop, DUTY_SHIFTS, ALL_SHIFTS)
+        add_duty_rotation_manual_shift_constraint(model, x, [emp], [WEEKDAY], schedule, shop, DUTY_SHIFTS)
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        assert solver.Value(x[0, WEEKDAY, WEEKEND_FULL]) == 0
+        chosen = solver.Value(x[0, WEEKDAY, WEEKDAY_LONG]) + solver.Value(x[0, WEEKDAY, WEEKDAY_SHORT])
+        assert chosen == 1
+
+    def test_closed_day_is_a_noop(self):
+        """Location explicitly closed that day ("Nieczynne") - nothing to
+        force, must not fight add_duty_rotation_public_holiday_constraint's
+        own zeroing of every duty shift that day."""
+        shop = _shop_with_rotation()
+        shop.locations["site1"].day_overrides[WEEKDAY] = ("", "")
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1")
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
+        schedule.get_day(emp, WEEKDAY).set_shift_class("W")
+
+        model, x = _model_and_x([emp], [WEEKDAY])
+        add_duty_rotation_manual_shift_constraint(model, x, [emp], [WEEKDAY], schedule, shop, DUTY_SHIFTS)
+        for s in DUTY_SHIFTS.values():
+            model.Add(x[0, WEEKDAY, s] == 0)  # what the public-holiday constraint would do
+
+        status = cp_model.CpSolver().Solve(model)
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    def test_end_to_end_generation_assigns_full_day_for_can_work_on_pge_ustka_style_location(self):
+        """Real client shape (PGE Ustka: only_12_24h=True) - full
+        AutoScheduleGenerator run, not just the isolated constraint."""
+        profile = CustomBusinessProfile(key="test_can_work_e2e", display_name="Test Ochrona", roles=[], rules=[])
+        register_custom_profile(profile)
+
+        shop = ShopConfig(2026, 3)
+        shop.business_type = profile.key
+        shop.set_duty_rotation(ROTATION_ONLY_12_24H)
+        shop.constraint_policies.update(default_policies(profile))
+
+        schedule = MonthSchedule(2026, 3)
+        employees = [Employee(last_name=n, first_name=n, employment_fraction=1.0) for n in "ABCD"]
+        for e in employees:
+            schedule.add_employee(e)
+        # 2026-03-02 is a Monday - an ordinary weekday, exercising the
+        # only_12_24h "full day every day" branch, not just a weekend.
+        schedule.get_day(employees[0], 2).set_shift_class("W")
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            result = AutoScheduleGenerator(shop=shop, schedule=schedule).generate(solver_time_limit_seconds=20)
+
+        assert result["success"], result
+        ds = schedule.get_day(employees[0], 2)
+        assert ds.is_full_day is True
+        assert ds.start == "06:00"
+
     def test_two_employees_locked_off_via_grid_view_off_action_still_covers_the_day(self):
         """Reprodukcja end-to-end zgłoszonego przez użytkownika bugu: 4-osobowa
         placówka only_12_24h (wszyscy "nie_chce_24h" - podział wymuszony),

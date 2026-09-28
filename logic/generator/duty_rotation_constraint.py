@@ -16,9 +16,12 @@ Trzy constrainty:
   zmian (stary model OPEN/CLOSE/START/END/NIGHT jej nie dotyczy), albo nie
   używa ich wcale. Zawsze twardy, poza systemem polityk.
 - add_duty_rotation_no24h_gate_constraint: pracownicy z flagą
-  "nie_chce_24h" nie dostają weekend_full - to reguła biznesowa
-  ("musimy to uszanować" - klient), więc idzie przez system polityk
-  (domyślnie MANDATORY), nie always_on.
+  "nie_chce_24h" nie dostają weekend_full W WEEKEND (sob/nd) - to reguła
+  biznesowa ("musimy to uszanować" - klient), więc idzie przez system
+  polityk (domyślnie MANDATORY), nie always_on. Dotyczy WYŁĄCZNIE
+  weekendu - w dni robocze (także przy only_12_24h, gdzie weekend_full
+  jest technicznie dostępny każdego dnia) generator nadal może przydzielić
+  tej osobie zmianę 24h.
 - add_duty_rotation_coverage_constraint: dokładnie 1 osoba na
   weekday_long/weekday_short każdego dnia roboczego; w weekend albo
   dokładnie 1 na weekend_full, albo dokładnie po 1 na obu połówkach -
@@ -137,6 +140,16 @@ def add_duty_rotation_gate_constraint(model, x, employees, days, shop, duty_shif
             for s in wrong_kind:
                 model.Add(x[e, d, s] == 0)
 
+            # weekday_long/weekday_short są OPCJONALNE każda z osobna
+            # (patrz normalize_duty_rotation - klient GZUK, 2026-09-28: sama
+            # weekday_long 15:00-07:00, bez obsady reszty doby) - typ zmiany
+            # bez skonfigurowanego okna nie istnieje dla tej lokalizacji,
+            # tak jak przy braku rotation w ogóle wyżej.
+            if not rotation.get("only_12_24h") and shop.weekday(d) < 5:
+                for key in _WEEKDAY_KEYS:
+                    if not rotation.get(key):
+                        model.Add(x[e, d, duty_shifts[key]] == 0)
+
             # Zmiany resztkowe (duty_rotation_manual_coverage.py): istnieją
             # tylko w dobach zaplanowanych wokół ręcznych wpisów - wtedy
             # zastępują standardowy podział tej doby w całości.
@@ -151,7 +164,7 @@ def add_duty_rotation_gate_constraint(model, x, employees, days, shop, duty_shif
                         model.Add(x[e, d, s] == 0)
 
 
-def add_duty_rotation_no24h_gate_constraint(model, x, employees, days, duty_shifts, soft=False, trace=None):
+def add_duty_rotation_no24h_gate_constraint(model, x, employees, days, shop, duty_shifts, soft=False, trace=None):
     if trace is not None:
         trace.log_constraint("duty_rotation_no24h", f"soft={soft}")
 
@@ -162,6 +175,13 @@ def add_duty_rotation_no24h_gate_constraint(model, x, employees, days, duty_shif
         if not emp.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False):
             continue
         for d in days:
+            if shop.weekday(d) < 5:
+                # Flaga dotyczy tylko weekendów (patrz tooltip w
+                # ui/employee_dialog.py) - w dni robocze, także przy
+                # only_12_24h (gdzie weekend_full jest dostępny każdego
+                # dnia, patrz docstring modułu), generator wciąż ma prawo
+                # przydzielić tej osobie 24h.
+                continue
             if soft:
                 v = model.NewBoolVar(f"duty_no24h_violation_e{e}_d{d}")
                 model.Add(x[e, d, weekend_full] <= v)
@@ -231,14 +251,22 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
             wd = shop.weekday(d)
 
             if wd < 5 and not only_12_24h:
-                _exactly(
-                    sum(x[e, d, weekday_long] for e in indices), 1, max_count,
-                    f"duty_weekday_long_{location_key}_d{d}",
-                )
-                _exactly(
-                    sum(x[e, d, weekday_short] for e in indices), 1, max_count,
-                    f"duty_weekday_short_{location_key}_d{d}",
-                )
+                # Każdy typ zmiany w tygodniu wymaga obsady TYLKO gdy ta
+                # lokalizacja go faktycznie skonfigurowała - patrz
+                # normalize_duty_rotation (obie strony opcjonalne z osobna).
+                # Nieskonfigurowany typ ma zmienną zablokowaną na 0 przez
+                # add_duty_rotation_gate_constraint, więc żądanie count==1
+                # byłoby tu zawsze niespełnialne.
+                if rotation.get("weekday_long"):
+                    _exactly(
+                        sum(x[e, d, weekday_long] for e in indices), 1, max_count,
+                        f"duty_weekday_long_{location_key}_d{d}",
+                    )
+                if rotation.get("weekday_short"):
+                    _exactly(
+                        sum(x[e, d, weekday_short] for e in indices), 1, max_count,
+                        f"duty_weekday_short_{location_key}_d{d}",
+                    )
                 continue
 
             # Weekend (albo KAŻDY dzień, gdy only_12_24h): albo dokładnie 1

@@ -305,7 +305,7 @@ def _build_duty_rotation_coverage(ctx, soft):
 
 def _build_duty_rotation_no24h(ctx, soft):
     return add_duty_rotation_no24h_gate_constraint(
-        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.duty_shifts,
+        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.duty_shifts,
         soft=soft, trace=ctx.trace,
     )
 

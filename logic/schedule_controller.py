@@ -33,6 +33,19 @@ class ScheduleController:
         ds.is_locked = True
         ds.shift_class = None
 
+    def clear_day(self, emp, day):
+        """Przycisk "Usuń" w trybie szybkim - w odróżnieniu od
+        set_day_free() (świadome "wolne", zablokowane) całkowicie zeruje
+        informacje o zmianie tego dnia, zwracając komórkę do stanu
+        nietkniętego (patrz DaySchedule.clear()/is_blank())."""
+        ds = self.schedule.get_day(emp, day)
+
+        if ds.is_blank():
+            return
+
+        self.snapshot()
+        ds.clear()
+
     def set_day_hours(self, emp, day, start, end):
         from datetime import datetime
 
@@ -164,7 +177,12 @@ class ScheduleController:
         ds.shift_class = None
 
     def set_shift_class(self, emp, day, code):
-        if code not in ("1", "2"):
+        # "1"/"2" (rano/popołudnie, Dino) - typ zmiany zablokowany, generator
+        # dobiera dokładną godzinę. "W" (może pracować, Enyo/custom - patrz
+        # ui/main_window.py "Może pracować") - ta sama mechanika: żadnej
+        # konkretnej godziny, tylko sygnał "MUSI dostać jakąś zmianę tego
+        # dnia" (w placówce z rotacją 24/7: całą dobę).
+        if code not in ("1", "2", "W"):
             return
 
         if not self.shop_config.is_trade_day(day):
@@ -197,17 +215,19 @@ class ScheduleController:
     def get_day(self, emp, day):
         return self.schedule.get_day(emp, day)
 
-    def generate_schedule(self, force=False):
+    def generate_schedule(self, force=False, location_key=None):
         from logic.auto_generator import AutoScheduleGenerator
 
         # Keep an undo entry only when generation actually changes the schedule.
         schedule_before_generation = self.schedule.snapshot()
         shop_before_generation = deepcopy(self.shop_config)
         generator = AutoScheduleGenerator(self.schedule, self.shop_config)
-        
+
         is_fix = getattr(self.schedule, "is_generated", False) and not force
         time_limit = self.shop_config.constraints.get("solver_time_limit_seconds", 60)
-        result = generator.generate(is_fix=is_fix, solver_time_limit_seconds=time_limit)
+        result = generator.generate(
+            is_fix=is_fix, solver_time_limit_seconds=time_limit, location_key=location_key,
+        )
         
         if result and result.get("success"):
             self.history.append((schedule_before_generation, shop_before_generation))

@@ -40,11 +40,10 @@ from logic.utils.time_utils import previous_calendar_month
 from ui.export_preview_dialog import show_export_preview
 from ui.previous_month_shift_dialog import PreviousMonthShiftDialog
 from ui.marquee_text import MarqueeLabel, WrappingLocationButton
-from model.business_profile import DEFAULT_BUSINESS_TYPE
 from model.location import format_open_hours_summary
 from model.month_schedule import MonthSchedule, PREVIOUS_MONTH_MEMORY_ENABLED
 from model.monthly_project import MonthlyProject
-from model.shop_config import ShopConfig
+from model.shop_config import ShopConfig, STANDARD_QUICK_BUTTONS, is_standard_button_visible
 from persistence.project_io import (
     assign_missing_location_keys,
     load_project_bundle,
@@ -70,13 +69,14 @@ from version import APP_VERSION
 class GeneratorWorker(QObject):
     finished = Signal(object)
 
-    def __init__(self, controller, force=False):
+    def __init__(self, controller, force=False, location_key=None):
         super().__init__()
         self.controller = controller
         self.force = force
+        self.location_key = location_key
 
     def run(self):
-        result = self.controller.generate_schedule(force=self.force)
+        result = self.controller.generate_schedule(force=self.force, location_key=self.location_key)
         self.finished.emit(result)
 
 
@@ -484,22 +484,23 @@ class MainWindow(QMainWindow):
 
         self.btn_work = QPushButton("Praca")
         self.btn_work.setCheckable(True)
-        self.btn_work.setToolTip("Wprowadź dokładne godziny pracy dla wybranej komórki.")
         self.btn_work.clicked.connect(lambda: self._set_quick_shift("WORK"))
 
         self.btn_morning = QPushButton("Rano")
         self.btn_morning.setCheckable(True)
-        self.btn_morning.setToolTip(
-            "Blokuje zmianę na typ „rano” — dokładną godzinę dobierze później generator."
-        )
         self.btn_morning.clicked.connect(lambda: self._set_quick_shift("MORNING_CLASS"))
 
         self.btn_afternoon = QPushButton("Popo")
         self.btn_afternoon.setCheckable(True)
-        self.btn_afternoon.setToolTip(
-            "Blokuje zmianę na typ „popołudnie” — dokładną godzinę dobierze później generator."
-        )
         self.btn_afternoon.clicked.connect(lambda: self._set_quick_shift("AFTERNOON_CLASS"))
+
+        self.btn_can_work = QPushButton("Może pracować")
+        self.btn_can_work.setCheckable(True)
+        self.btn_can_work.clicked.connect(lambda: self._set_quick_shift("CAN_WORK"))
+
+        self.btn_delete = QPushButton("Usuń")
+        self.btn_delete.setCheckable(True)
+        self.btn_delete.clicked.connect(lambda: self._set_quick_shift("DELETE"))
 
         self.btn_off = QPushButton("Wolne")
         self.btn_off.setCheckable(True)
@@ -513,22 +514,44 @@ class MainWindow(QMainWindow):
         self.btn_sick.setCheckable(True)
         self.btn_sick.clicked.connect(lambda: self._set_quick_shift("SICK"))
 
-        for btn in (
-            self.btn_work, self.btn_morning, self.btn_afternoon,
-            self.btn_off, self.btn_leave, self.btn_sick,
-        ):
+        # {klucz STANDARD_QUICK_BUTTONS: widget} - widoczność/kolejność w
+        # siatce sterowana teraz jednym mechanizmem (is_standard_button_visible,
+        # patrz _relayout_quick_btn_grid) zamiast osobnych, zaszytych w kodzie
+        # warunków per przycisk (dawne is_retail/"Praca" zawsze .hide()).
+        self._quick_standard_button_widgets = {
+            "work": self.btn_work,
+            "morning": self.btn_morning,
+            "afternoon": self.btn_afternoon,
+            "can_work": self.btn_can_work,
+            "delete": self.btn_delete,
+            "off": self.btn_off,
+            "leave": self.btn_leave,
+            "sick": self.btn_sick,
+        }
+        self._quick_standard_button_shift_type = {
+            "work": "WORK",
+            "morning": "MORNING_CLASS",
+            "afternoon": "AFTERNOON_CLASS",
+            "can_work": "CAN_WORK",
+            "delete": "DELETE",
+            "off": "OFF",
+            "leave": "LEAVE",
+            "sick": "SICK",
+        }
+        # Opis zachowania - jedno źródło prawdy (STANDARD_QUICK_BUTTONS,
+        # model/shop_config.py) współdzielone z zakładką "Tryby domyślne"
+        # w ui/quick_mode_settings_dialog.py, żeby oba miejsca nigdy się nie
+        # rozjechały.
+        for button in STANDARD_QUICK_BUTTONS:
+            self._quick_standard_button_widgets[button["key"]].setToolTip(button["description"])
+
+        for btn in self._quick_standard_button_widgets.values():
             btn.setObjectName("secondaryButton")
             btn.setMinimumHeight(36)
 
-        # "Praca" (ręczne wpisywanie godzin) - schowany na rzecz nazwanych
-        # przedziałów z "Ustawień trybu szybkiego" (Konfiguracja), ale
-        # zostaje w pełni działający w kodzie (_set_quick_shift("WORK"),
-        # time_panel poniżej) na prośbę z 2026-09-17.
-        self.btn_work.hide()
-
         # Pozycje w siatce są przeliczane dynamicznie w _relayout_quick_btn_grid()
-        # (tak, żeby ukrycie Rano/Popo dla profili innych niż Dino/retail -
-        # patrz _update_quick_panel_profile_visibility - nie zostawiało pustych
+        # (tak, żeby przyciski ukryte wg profilu/zapisanej konfiguracji -
+        # patrz _update_quick_panel_profile_visibility - nie zostawiały pustych
         # komórek), więc tu tylko budujemy layout, bez addWidget.
         self._relayout_quick_btn_grid()
 
@@ -936,36 +959,44 @@ class MainWindow(QMainWindow):
             action.triggered.connect(lambda checked=False, k=key: self._select_location(k))
         menu.exec(self.btn_location_name.mapToGlobal(self.btn_location_name.rect().bottomLeft()))
 
+    # Kolejność wyświetlania wbudowanych przycisków w siatce trybu szybkiego
+    # (2x4 gdy wszystkie widoczne) - "Praca" celowo pominięta: pozostaje w
+    # pełni działająca w kodzie (_set_quick_shift("WORK"), time_panel niżej),
+    # ale nie ma sensownego miejsca w tej siatce (wymaga wpisania godzin
+    # ręcznie w osobnym panelu poniżej, w odróżnieniu od reszty - jeden
+    # klik), więc widoczność w tym gridzie steruje tylko tym, czy w ogóle da
+    # się ją włączyć w "Tryby domyślne"; do samego grida nie trafia.
+    _QUICK_BTN_GRID_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "sick")
+
     def _relayout_quick_btn_grid(self):
-        """Przelicza pozycje przycisków trybu szybkiego tak, żeby Rano/Popo,
-        ukryte dla profili innych niż Dino/retail (patrz
-        _update_quick_panel_profile_visibility), nie zostawiały pustych
-        komórek w siatce. Celowo NIE opiera się na isHidden()/isVisible() -
-        oba zależą od tego, czy cały widget jest już faktycznie pokazany w
-        oknie (fałszywie widoczne jako "ukryte" zanim main_window.show() w
-        ogóle się wykona), tylko bezpośrednio na profilu projektu."""
+        """Przelicza pozycje przycisków trybu szybkiego tak, żeby te ukryte
+        (wg profilu/zapisanej konfiguracji - patrz model/shop_config.py::
+        is_standard_button_visible) nie zostawiały pustych komórek w
+        siatce. Celowo NIE opiera się na isHidden()/isVisible() - oba zależą
+        od tego, czy cały widget jest już faktycznie pokazany w oknie
+        (fałszywie widoczne jako "ukryte" zanim main_window.show() w ogóle
+        się wykona), tylko bezpośrednio na is_standard_button_visible()."""
         while self.quick_btn_grid.count():
             self.quick_btn_grid.takeAt(0)
 
-        is_retail = (
-            self.shop_config.business_type == DEFAULT_BUSINESS_TYPE
-            if self.shop_config else True
-        )
-        buttons = (
-            [self.btn_morning, self.btn_afternoon] if is_retail else []
-        ) + [self.btn_off, self.btn_leave, self.btn_sick]
+        buttons = [
+            self._quick_standard_button_widgets[key]
+            for key in self._QUICK_BTN_GRID_ORDER
+            if is_standard_button_visible(self.shop_config, key)
+        ]
 
         cols = 3
         for i, btn in enumerate(buttons):
             self.quick_btn_grid.addWidget(btn, i // cols, i % cols)
 
     def _update_quick_panel_profile_visibility(self):
-        """Rano/Popo to skróty specyficzne dla profilu Dino/retail (klasy
-        zmian sklepowych) - dla innych profili (np. Ochrona) są schowane, ale
-        w pełni działające w kodzie, gdyby jednak okazały się potrzebne."""
-        is_retail = self.shop_config.business_type == DEFAULT_BUSINESS_TYPE
-        self.btn_morning.setVisible(is_retail)
-        self.btn_afternoon.setVisible(is_retail)
+        """Widoczność każdego wbudowanego przycisku trybu szybkiego wg
+        is_standard_button_visible() (zapisane ustawienie projektu, inaczej
+        domyślne wg profilu - np. Rano/Popo tylko Dino, Może pracować tylko
+        profile custom) - wołane przy każdej zmianie profilu/lokalizacji i
+        po zapisaniu "Ustawień trybu szybkiego"."""
+        for key, btn in self._quick_standard_button_widgets.items():
+            btn.setVisible(key != "work" and is_standard_button_visible(self.shop_config, key))
         self._relayout_quick_btn_grid()
 
     def _update_settlement_section_visibility(self):
@@ -1159,10 +1190,29 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Generowanie", "Dodaj pracowników przed generowaniem grafiku.")
             return
 
+        # Generuj tylko dla obecnie wybranej placówki (zgłoszenie klienta
+        # 2026-09-28) - "Generuj grafik" nie powinien dotykać pozostałych
+        # placówek projektu. Brak zdefiniowanych lokalizacji (projekt
+        # jednolokalizacyjny) - self.selected_location_key jest wtedy None,
+        # więc AutoScheduleGenerator.generate() dostaje None i generuje
+        # cały projekt, dokładnie jak dotychczas.
+        location_key = self.selected_location_key
+        if self.shop_config.locations and location_key is not None:
+            location_employees = [
+                e for e in self.schedule.employees if e.location_key == location_key
+            ]
+            if not location_employees:
+                location_name = self.shop_config.locations[location_key].name
+                QMessageBox.information(
+                    self, "Generowanie",
+                    f"Dodaj pracowników do lokalizacji „{location_name}” przed generowaniem grafiku.",
+                )
+                return
+
         self._show_loading()
 
         self.thread = QThread()
-        self.worker = GeneratorWorker(self.controller, force=force)
+        self.worker = GeneratorWorker(self.controller, force=force, location_key=location_key)
 
         self.worker.moveToThread(self.thread)
 
@@ -1533,12 +1583,16 @@ class MainWindow(QMainWindow):
         )
 
     def _open_quick_mode_settings(self):
-        dialog = QuickModeSettingsDialog(self, self.shop_config.quick_mode_presets)
+        dialog = QuickModeSettingsDialog(
+            self, self.shop_config.quick_mode_presets, self.shop_config,
+        )
         if dialog.exec() != QDialog.Accepted:
             return
 
         self.shop_config.quick_mode_presets = dialog.result_presets
+        self.shop_config.set_quick_mode_standard_buttons(dialog.result_standard_buttons)
         self._rebuild_quick_preset_buttons()
+        self._update_quick_panel_profile_visibility()
         try:
             save_project_bundle("last_project.json", self.project, self.year, self.month)
         except OSError:
@@ -2009,12 +2063,8 @@ class MainWindow(QMainWindow):
         self.quick_selected_shift = shift_type
 
         # reset
-        self.btn_work.setChecked(False)
-        self.btn_morning.setChecked(False)
-        self.btn_afternoon.setChecked(False)
-        self.btn_off.setChecked(False)
-        self.btn_leave.setChecked(False)
-        self.btn_sick.setChecked(False)
+        for btn in self._quick_standard_button_widgets.values():
+            btn.setChecked(False)
         for btn in self.quick_preset_buttons.values():
             btn.setChecked(False)
 
@@ -2025,18 +2075,12 @@ class MainWindow(QMainWindow):
         self.quick_duration_label.setEnabled(is_work)
 
         # aktywny
-        if shift_type == "WORK":
-            self.btn_work.setChecked(True)
-        elif shift_type == "MORNING_CLASS":
-            self.btn_morning.setChecked(True)
-        elif shift_type == "AFTERNOON_CLASS":
-            self.btn_afternoon.setChecked(True)
-        elif shift_type == "OFF":
-            self.btn_off.setChecked(True)
-        elif shift_type == "LEAVE":
-            self.btn_leave.setChecked(True)
-        elif shift_type == "SICK":
-            self.btn_sick.setChecked(True)
+        key = next(
+            (k for k, st in self._quick_standard_button_shift_type.items() if st == shift_type),
+            None,
+        )
+        if key is not None:
+            self._quick_standard_button_widgets[key].setChecked(True)
         elif shift_type.startswith("PRESET:"):
             btn = self.quick_preset_buttons.get(shift_type.split(":", 1)[1])
             if btn:

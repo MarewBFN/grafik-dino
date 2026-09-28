@@ -159,12 +159,24 @@ class TestDutyRotationLeaveSweep:
             half_a_workers = [a for a in assignments if a.start == half_a[0] and a.end == half_a[1] and not a.is_full_day]
             half_b_workers = [a for a in assignments if a.start == half_b[0] and a.end == half_b[1] and not a.is_full_day]
 
-            # Wszyscy mają nie_chce_24h -> weekend_full strukturalnie
-            # niedostępny (patrz add_duty_rotation_no24h_gate_constraint) -
-            # pokrycie MUSI iść przez dokładnie 1 osobę na każdej połówce.
-            assert len(full_day) == 0, f"day {day}: unexpected full-day shift with all nie_chce_24h"
-            assert len(half_a_workers) == 1, f"day {day}: half_a coverage = {len(half_a_workers)}"
-            assert len(half_b_workers) == 1, f"day {day}: half_b coverage = {len(half_b_workers)}"
+            if shop.weekday(day) >= 5:
+                # nie_chce_24h dotyczy tylko weekendu -> weekend_full
+                # niedostępny w sobotę/niedzielę (patrz
+                # add_duty_rotation_no24h_gate_constraint) - pokrycie MUSI
+                # iść przez dokładnie 1 osobę na każdej połówce.
+                assert len(full_day) == 0, f"day {day}: unexpected full-day shift on a weekend with all nie_chce_24h"
+                assert len(half_a_workers) == 1, f"day {day}: half_a coverage = {len(half_a_workers)}"
+                assert len(half_b_workers) == 1, f"day {day}: half_b coverage = {len(half_b_workers)}"
+            else:
+                # W dni robocze flaga nie obowiązuje - pokrycie idzie albo
+                # przez 1 osobę na całej dobie, albo przez dokładnie 1 na
+                # każdej połówce, nigdy inna kombinacja.
+                if full_day:
+                    assert len(full_day) == 1, f"day {day}: expected exactly 1 full-day worker, got {len(full_day)}"
+                    assert len(half_a_workers) == 0 and len(half_b_workers) == 0, f"day {day}: mix of full-day and half coverage"
+                else:
+                    assert len(half_a_workers) == 1, f"day {day}: half_a coverage = {len(half_a_workers)}"
+                    assert len(half_b_workers) == 1, f"day {day}: half_b coverage = {len(half_b_workers)}"
 
         # Target rzeczywiście nie ma zapisanej żadnej zmiany w zablokowane dni
         # (add_leave_constraints wymusza x==0 -> solution_mapper nic nie pisze).
@@ -190,9 +202,11 @@ class TestDutyRotationLeaveSweep:
         status = monthly_hours_status(schedule, shop, target)
         expected_target = _expected_target_minutes(shop, target, schedule, leave_days, 0)
         assert status["target_minutes"] == expected_target
-        # Target nie mógł pracować w dni L4/urlopu - worked <= dostępne dni x 12h.
+        # Target nie mógł pracować w dni L4/urlopu - worked <= dostępne dni x
+        # 24h (od poprawki "nie_chce_24h tylko w weekend" dni robocze mogą
+        # dać targetowi pełną dobę 24h zamiast 12h+12h).
         available_days = DAYS_IN_MONTH - leave_days
-        assert status["worked_minutes"] <= available_days * 12 * 60
+        assert status["worked_minutes"] <= available_days * 24 * 60
 
 
 class TestDutyRotationScarcePoolGracefulInfeasibility:

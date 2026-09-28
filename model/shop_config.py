@@ -122,6 +122,118 @@ def normalize_quick_mode_presets(raw: list[dict] | None) -> list[dict]:
     return presets
 
 
+# Wbudowane (nieusuwalne) przyciski trybu szybkiego - w odróżnieniu od
+# ręcznie definiowanych przedziałów (quick_mode_presets wyżej), zawsze te
+# same, ale ich widoczność jest teraz konfigurowalna (Konfiguracja ->
+# "Ustawienia trybu szybkiego" -> zakładka "Tryby domyślne", decyzja
+# użytkownika 2026-09-28) zamiast sztywno zaszytej w kodzie
+# (ui/main_window.py sprawdzało kiedyś business_type wprost). `default_visible`
+# to domyślna widoczność wg profilu, użyta TYLKO gdy projekt nie ma jeszcze
+# jawnie zapisanej wartości dla tego klucza (patrz is_standard_button_visible)
+# - stary projekt bez tej konfiguracji zachowuje się dokładnie jak dziś.
+STANDARD_QUICK_BUTTONS: tuple[dict, ...] = (
+    {
+        "key": "work",
+        "label": "Praca",
+        "description": (
+            "Ręczne wpisanie dokładnych godzin pracy dla wybranej komórki - "
+            "zamiast typu zmiany, konkretny start/koniec."
+        ),
+        "default_visible": lambda business_type: False,
+    },
+    {
+        "key": "morning",
+        "label": "Rano",
+        "description": (
+            "Blokuje typ zmiany na „rano” (kod „1”) - dokładną godzinę "
+            "dobierze generator spośród porannych wariantów danej placówki."
+        ),
+        "default_visible": lambda business_type: business_type == DEFAULT_BUSINESS_TYPE,
+    },
+    {
+        "key": "afternoon",
+        "label": "Popo",
+        "description": (
+            "Blokuje typ zmiany na „popołudnie” (kod „2”) - dokładną godzinę "
+            "dobierze generator spośród popołudniowych wariantów danej placówki."
+        ),
+        "default_visible": lambda business_type: business_type == DEFAULT_BUSINESS_TYPE,
+    },
+    {
+        "key": "can_work",
+        "label": "Może pracować",
+        "description": (
+            "Sygnał dla generatora, że pracownik MA/MOŻE pracować tego dnia (kod "
+            "„W”) - w placówce z rotacją 24/7 dostanie całą dobę (24h), w "
+            "pozostałych placówkach generator dobierze zmianę zgodną z jej zasadami."
+        ),
+        "default_visible": lambda business_type: business_type != DEFAULT_BUSINESS_TYPE,
+    },
+    {
+        "key": "delete",
+        "label": "Usuń",
+        "description": (
+            "Całkowicie usuwa informacje o zmianie w tej komórce (godziny, blokadę, "
+            "urlop/L4, zablokowany typ zmiany) - komórka wraca do stanu "
+            "nietkniętego, generator może przydzielić ją od nowa przy następnym "
+            "generowaniu."
+        ),
+        "default_visible": lambda business_type: True,
+    },
+    {
+        "key": "off",
+        "label": "Wolne",
+        "description": (
+            "Blokuje dzień jako celowo wolny - generator nigdy nie przydzieli tu "
+            "żadnej zmiany."
+        ),
+        "default_visible": lambda business_type: True,
+    },
+    {
+        "key": "leave",
+        "label": "Urlop",
+        "description": "Oznacza dzień jako urlop.",
+        "default_visible": lambda business_type: True,
+    },
+    {
+        "key": "sick",
+        "label": "L4",
+        "description": "Oznacza dzień jako zwolnienie chorobowe.",
+        "default_visible": lambda business_type: True,
+    },
+)
+
+STANDARD_QUICK_BUTTON_KEYS = tuple(b["key"] for b in STANDARD_QUICK_BUTTONS)
+
+
+def normalize_quick_mode_standard_buttons(raw: dict | None) -> dict[str, bool]:
+    """Waliduje/porządkuje nadpisania widoczności wbudowanych przycisków
+    trybu szybkiego (ShopConfig.quick_mode_standard_buttons) - tylko znane
+    klucze (patrz STANDARD_QUICK_BUTTON_KEYS), reszta cicho odrzucona (plik
+    z przyszłej/innej wersji programu)."""
+    if not raw:
+        return {}
+    return {key: bool(raw[key]) for key in STANDARD_QUICK_BUTTON_KEYS if key in raw}
+
+
+def is_standard_button_visible(shop_config, key: str) -> bool:
+    """Efektywna widoczność jednego wbudowanego przycisku: jawnie zapisane
+    ustawienie projektu (quick_mode_standard_buttons), jeśli istnieje,
+    inaczej domyślna wartość wg profilu (default_visible) - patrz komentarz
+    przy STANDARD_QUICK_BUTTONS."""
+    saved = None
+    if shop_config is not None:
+        saved = shop_config.quick_mode_standard_buttons.get(key)
+    if saved is not None:
+        return bool(saved)
+
+    button = next((b for b in STANDARD_QUICK_BUTTONS if b["key"] == key), None)
+    if button is None:
+        return False
+    business_type = shop_config.business_type if shop_config is not None else DEFAULT_BUSINESS_TYPE
+    return button["default_visible"](business_type)
+
+
 class ShopConfig:
     """
     Konfiguracja sklepu:
@@ -268,6 +380,14 @@ class ShopConfig:
         # dokładnie jak dziś (przycisk "Praca" widoczny, ręczne wpisywanie).
         self.quick_mode_presets: list[dict] = []
 
+        # Nadpisania widoczności wbudowanych przycisków trybu szybkiego
+        # (Praca/Rano/Popo/Może pracować/Usuń/Wolne/Urlop/L4 - patrz
+        # STANDARD_QUICK_BUTTONS wyżej) - {key: bool}. Puste domyślnie:
+        # brak wpisu dla danego klucza = użyj domyślnej wartości wg profilu
+        # (patrz is_standard_button_visible), więc stary projekt bez tej
+        # konfiguracji zachowuje się dokładnie jak dziś.
+        self.quick_mode_standard_buttons: dict[str, bool] = {}
+
         # Nowy projekt startuje zawsze z jedną, domyślną lokalizacją zasiedloną
         # z powyższych pól (patrz DEFAULT_LOCATION_KEY/_default_location_from_shop
         # wyżej) - "projekt zawsze ma co najmniej jedną lokalizację" jest
@@ -399,6 +519,9 @@ class ShopConfig:
     def set_quick_mode_presets(self, raw: list[dict] | None) -> None:
         self.quick_mode_presets = normalize_quick_mode_presets(raw)
 
+    def set_quick_mode_standard_buttons(self, raw: dict | None) -> None:
+        self.quick_mode_standard_buttons = normalize_quick_mode_standard_buttons(raw)
+
     # ==========================================================
     # LOKALIZACJE (Etap 3b)
     # ==========================================================
@@ -432,6 +555,7 @@ class ShopConfig:
             "night_shift": self.night_shift,
             "duty_rotation": self.duty_rotation,
             "quick_mode_presets": self.quick_mode_presets,
+            "quick_mode_standard_buttons": self.quick_mode_standard_buttons,
             "trade_sundays": list(self.trade_sundays),
             "day_overrides": self.day_overrides,
             "constraints": self.constraints,
@@ -466,6 +590,10 @@ class ShopConfig:
             # Plik z ręcznie popsutą/starszą, niepoprawną konfiguracją -
             # traktujemy jak brak presetów zamiast blokować wczytanie projektu.
             cfg.quick_mode_presets = []
+
+        cfg.quick_mode_standard_buttons = normalize_quick_mode_standard_buttons(
+            data.get("quick_mode_standard_buttons")
+        )
 
         # open_hours
         cfg.open_hours = {

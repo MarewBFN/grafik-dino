@@ -32,8 +32,54 @@ from logic.utils.time_utils import classify_shift_as_morning_or_afternoon, forma
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
 from model.constraint_policy import ConstraintPolicy
 from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
+from model.shop_config import STANDARD_QUICK_BUTTONS, is_standard_button_visible
 from utils import resource_path
 from ui import theme
+
+# DaySchedule.shift_class kody (patrz set_shift_class) -> etykieta w
+# tooltipie/legendzie. "1"/"2" (rano/popołudnie, Dino), "W" (może pracować,
+# profile custom - patrz ui/main_window.py "Może pracować").
+_SHIFT_CLASS_LABELS = {"1": "rano", "2": "popołudnie", "W": "może pracować"}
+
+# STANDARD_QUICK_BUTTONS key -> shift_type dla _apply_quick_shift (patrz
+# ui/main_window.py::_quick_standard_button_shift_type - ta sama mapa,
+# zduplikowana tutaj zamiast czytana z main_window, żeby menu kontekstowe
+# (contextMenuEvent) działało nawet gdy main_window to lekki stub bez tego
+# atrybutu, np. w testach). "work" (Praca) celowo pominięty - wymaga
+# osobnego panelu godzin (Od/Do), nie pasuje do jednego kliknięcia w menu.
+_STANDARD_BUTTON_SHIFT_TYPE = {
+    "morning": "MORNING_CLASS",
+    "afternoon": "AFTERNOON_CLASS",
+    "can_work": "CAN_WORK",
+    "delete": "DELETE",
+    "off": "OFF",
+    "leave": "LEAVE",
+    "sick": "SICK",
+}
+_STANDARD_BUTTON_MENU_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "sick")
+
+
+def _quick_mode_context_menu_entries(shop):
+    """(standard_entries, preset_entries), każdy [(etykieta, shift_type), ...] -
+    dokładnie te tryby trybu szybkiego, które są "Widoczne" dla `shop`
+    (patrz model/shop_config.py::is_standard_button_visible/quick_mode_presets).
+    Czysta funkcja (bez QMenu) - łatwa do przetestowania osobno od
+    contextMenuEvent, które z tego korzysta do zbudowania właściwego menu."""
+    if shop is None:
+        return [], []
+
+    by_key = {b["key"]: b for b in STANDARD_QUICK_BUTTONS}
+    standard_entries = [
+        (by_key[key]["label"], _STANDARD_BUTTON_SHIFT_TYPE[key])
+        for key in _STANDARD_BUTTON_MENU_ORDER
+        if is_standard_button_visible(shop, key)
+    ]
+    preset_entries = [
+        (preset["name"], f"PRESET:{preset['name']}")
+        for preset in shop.quick_mode_presets
+        if preset.get("visible", True)
+    ]
+    return standard_entries, preset_entries
 
 
 def _grayed_icon(icon: QIcon, size: int = 64, opacity: float = 0.55) -> QIcon:
@@ -1000,13 +1046,15 @@ class ScheduleGrid(QTableWidget):
 
             shift_class = getattr(ds, "shift_class", None)
             if shift_class and ds.is_empty():
-                item.setText(shift_class)
+                # "W" (może pracować) dostaje zielony ptaszek zamiast litery -
+                # "1"/"2" zostają jako cyfry (Dino).
+                item.setText("✅" if shift_class == "W" else shift_class)
 
                 brush = QBrush(QColor(205, 205, 205))
                 brush.setStyle(Qt.BDiagPattern)
 
                 item.setBackground(brush)
-                label = "rano" if shift_class == "1" else "popołudnie"
+                label = _SHIFT_CLASS_LABELS.get(shift_class, shift_class)
                 item.setToolTip(
                     f"Zablokowany typ zmiany: {label} — generator dobierze godzinę."
                 )
@@ -1111,7 +1159,7 @@ class ScheduleGrid(QTableWidget):
 
             if shift_class:
                 tooltip = item.toolTip()
-                label = "rano" if shift_class == "1" else "popołudnie"
+                label = _SHIFT_CLASS_LABELS.get(shift_class, shift_class)
                 class_info = f"🔒 Zablokowany typ zmiany: {label} — godzinę dobrał generator."
 
                 if tooltip:
@@ -1520,23 +1568,37 @@ class ScheduleGrid(QTableWidget):
             return
 
         emp = self._visible_employees[row]
-        ds = self.schedule.get_day(emp, day)
-        
+
         menu = QMenu(self)
-        
+
         act_copy = menu.addAction("Kopiuj dzień")
         act_paste = menu.addAction("Wklej dzień")
         act_paste.setEnabled(self._clipboard_day is not None)
-        
-        menu.addSeparator()
-        
-        act_unlock = menu.addAction("Odblokuj")
-        act_unlock.setEnabled(getattr(ds, "is_locked", False))
 
-        act_clear = menu.addAction("Wyczyść komórkę")
+        # Tryby domyślne (wbudowane) + własne przedziały - te same, które są
+        # zaznaczone jako "Widoczne" w Ustawieniach trybu szybkiego (patrz
+        # _quick_mode_context_menu_entries), dokładnie ten sam efekt co
+        # kliknięcie odpowiadającego przycisku w panelu bocznym na tej
+        # komórce. Rozdzielone poziomą kreską od Kopiuj/Wklej wyżej i między
+        # sobą (tak jak po kopiuj/wklej) - "Tryby domyślne" to ustawienia
+        # domyślne, przedziały niżej są ręcznie zdefiniowane przez klienta.
+        # Separatory tylko gdy faktycznie coś rozdzielają - bez pustej
+        # kreski na końcu, gdyby brakło shop_config albo wszystko było
+        # ukryte.
+        shop = self.main_window.shop_config if self.main_window is not None else None
+        standard_entries, preset_entries = _quick_mode_context_menu_entries(shop)
+
+        if standard_entries or preset_entries:
+            menu.addSeparator()
+
+        standard_actions = {menu.addAction(label): shift for label, shift in standard_entries}
+
+        if standard_entries and preset_entries:
+            menu.addSeparator()
+        preset_actions = {menu.addAction(label): shift for label, shift in preset_entries}
 
         action = menu.exec(global_pos)
-        
+
         if action == act_copy:
             self._clipboard_day = self.controller.copy_day_snapshot(emp, day)
             if self.main_window:
@@ -1544,26 +1606,21 @@ class ScheduleGrid(QTableWidget):
         elif action == act_paste:
             self.controller.paste_day_snapshot(emp, day, self._clipboard_day)
             self.refresh()
-        elif action == act_unlock:
-            self.controller.snapshot() # Ręczny zapis przed manipulacją obiektem
-            ds.is_locked = False
-            self.refresh()
-
-        elif action == act_clear:
-            self.controller.snapshot()
-            ds.start = None
-            ds.end = None
-            ds.is_leave = False
-            ds.is_sick = False
-            ds.is_locked = False
-            ds.shift_class = None
-            self.refresh()
+        elif action in standard_actions:
+            self._apply_quick_shift(row, col, shift=standard_actions[action])
+        elif action in preset_actions:
+            self._apply_quick_shift(row, col, shift=preset_actions[action])
 
     def _open_header_context_menu(self, pos):
         # Zachowuję sygnaturę z Twojego oryginalnego kodu (teraz zastąpione przez double_click)
         pass
 
-    def _apply_quick_shift(self, row, col):
+    def _apply_quick_shift(self, row, col, shift=None):
+        """`shift` domyślnie czytany z panelu trybu szybkiego
+        (main_window.quick_selected_shift) - jawnie podany przez menu
+        kontekstowe (contextMenuEvent), które stosuje wybrany tryb na TEJ
+        komórce niezależnie od tego, co jest akurat zaznaczone w panelu
+        bocznym."""
         if not self.main_window:
             return
 
@@ -1571,7 +1628,8 @@ class ScheduleGrid(QTableWidget):
         day = self._column_to_day(col)
         if day is None:
             return
-        shift = self.main_window.quick_selected_shift
+        if shift is None:
+            shift = self.main_window.quick_selected_shift
 
         start = None
         end = None
@@ -1603,6 +1661,11 @@ class ScheduleGrid(QTableWidget):
             self.refresh()
             return
 
+        elif shift == "DELETE":
+            self.controller.clear_day(emp, day)
+            self.refresh()
+            return
+
         elif isinstance(shift, str) and shift.startswith("PRESET:"):
             preset_name = shift.split(":", 1)[1]
             presets = self.main_window.shop_config.quick_mode_presets
@@ -1614,8 +1677,8 @@ class ScheduleGrid(QTableWidget):
             self.refresh()
             return
 
-        elif shift in ("MORNING_CLASS", "AFTERNOON_CLASS"):
-            code = "1" if shift == "MORNING_CLASS" else "2"
+        elif shift in ("MORNING_CLASS", "AFTERNOON_CLASS", "CAN_WORK"):
+            code = {"MORNING_CLASS": "1", "AFTERNOON_CLASS": "2", "CAN_WORK": "W"}[shift]
             self.controller.set_shift_class(emp, day, code)
             self.refresh()
             return

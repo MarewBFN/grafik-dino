@@ -136,21 +136,38 @@ class TestDutyRotationGate:
 
 class TestDutyRotationNo24hGate:
     def test_nie_chce_24h_employee_cannot_get_weekend_full(self):
+        shop = ShopConfig(2026, 8)
         emp = Employee(last_name="Guard", first_name="A", custom_roles={"nie_chce_24h": True})
         model, x = _model_and_x([emp], [SATURDAY])
 
-        add_duty_rotation_no24h_gate_constraint(model, x, [emp], [SATURDAY], DUTY_SHIFTS, soft=False)
+        add_duty_rotation_no24h_gate_constraint(model, x, [emp], [SATURDAY], shop, DUTY_SHIFTS, soft=False)
         model.Add(x[0, SATURDAY, WEEKEND_FULL] == 1)
 
         status = cp_model.CpSolver().Solve(model)
         assert status == cp_model.INFEASIBLE
 
     def test_regular_employee_can_get_weekend_full(self):
+        shop = ShopConfig(2026, 8)
         emp = Employee(last_name="Guard", first_name="A")
         model, x = _model_and_x([emp], [SATURDAY])
 
-        add_duty_rotation_no24h_gate_constraint(model, x, [emp], [SATURDAY], DUTY_SHIFTS, soft=False)
+        add_duty_rotation_no24h_gate_constraint(model, x, [emp], [SATURDAY], shop, DUTY_SHIFTS, soft=False)
         model.Add(x[0, SATURDAY, WEEKEND_FULL] == 1)
+
+        status = cp_model.CpSolver().Solve(model)
+        assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    def test_nie_chce_24h_employee_can_still_get_24h_on_a_weekday_with_only_12_24h(self):
+        """only_12_24h: weekend_full is technically assignable on any day
+        of the week (see module docstring) - but the "nie chce 24h" flag
+        is a weekend-only preference, so a weekday assignment must stay
+        feasible for these employees too."""
+        shop = ShopConfig(2026, 8)
+        emp = Employee(last_name="Guard", first_name="A", custom_roles={"nie_chce_24h": True})
+        model, x = _model_and_x([emp], [WEEKDAY])
+
+        add_duty_rotation_no24h_gate_constraint(model, x, [emp], [WEEKDAY], shop, DUTY_SHIFTS, soft=False)
+        model.Add(x[0, WEEKDAY, WEEKEND_FULL] == 1)
 
         status = cp_model.CpSolver().Solve(model)
         assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
@@ -239,7 +256,7 @@ class TestDutyRotationCoverage:
 
         add_one_shift_per_day_constraint(model, x, employees, [SATURDAY], ALL_SHIFTS)
         add_duty_rotation_coverage_constraint(model, x, employees, [SATURDAY], shop, DUTY_SHIFTS, soft=False)
-        add_duty_rotation_no24h_gate_constraint(model, x, employees, [SATURDAY], DUTY_SHIFTS, soft=False)
+        add_duty_rotation_no24h_gate_constraint(model, x, employees, [SATURDAY], shop, DUTY_SHIFTS, soft=False)
 
         solver = cp_model.CpSolver()
         status = solver.Solve(model)

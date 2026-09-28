@@ -95,7 +95,7 @@ def _build_no_night(ctx, soft):
     return add_no_night_constraint(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts,
         ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
-        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night,
+        soft=soft, trace=ctx.trace, shift_night=ctx.shift_night, schedule=ctx.schedule,
     )
 
 
@@ -103,7 +103,7 @@ def _build_no_afternoon(ctx, soft):
     return add_no_afternoon_constraint(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.all_shifts,
         ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
-        soft=soft, trace=ctx.trace,
+        soft=soft, trace=ctx.trace, schedule=ctx.schedule,
     )
 
 

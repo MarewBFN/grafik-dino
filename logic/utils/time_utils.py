@@ -11,12 +11,26 @@ from model.location import (  # noqa: F401
 
 
 def get_effective_daily_hours(emp, shop):
-    # 🔴 specjalny fulltime max 8h
-    if emp.employment_fraction == 1.01:
+    # Wymiar 1.01 ("1/1 max 8:00") i force_fulltime_845 (8h30 zamiast
+    # standardowego wymiaru dla pełnego etatu) to konwencje SPECYFICZNE dla
+    # Dino (kierowniczka/opener itd.) - ukryte w UI dla innych profili
+    # (patrz ui/employee_dialog.py), więc bez sensu też tutaj. Inne profile
+    # (Ochrona/Enyo): 1/1 to zwykła pełna zmiana, zawsze
+    # standard_daily_hours * employment_fraction (decyzja użytkownika
+    # 2026-09-28).
+    # Import lokalny - model.business_profile na module-level tego modułu
+    # importuje w końcu z powrotem logic.generator.rest_constraint (poprzez
+    # register_custom_profile -> custom_profile_wiring -> base_specs), które
+    # importuje get_effective_daily_hours stąd - cykl przy imporcie na
+    # poziomie modułu.
+    from model.business_profile import DEFAULT_BUSINESS_TYPE
+
+    is_dino = getattr(shop, "business_type", DEFAULT_BUSINESS_TYPE) == DEFAULT_BUSINESS_TYPE
+
+    if is_dino and emp.employment_fraction == 1.01:
         hours = 8.0
 
-    # 🔴 normalny fulltime z wymuszeniem 8:30
-    elif shop.constraints.get("force_fulltime_845", False) and emp.employment_fraction == 1.0:
+    elif is_dino and shop.constraints.get("force_fulltime_845", False) and emp.employment_fraction == 1.0:
         hours = 8.50
 
     else:

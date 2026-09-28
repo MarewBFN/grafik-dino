@@ -69,6 +69,15 @@ class ScheduleControllerShiftClassTests(unittest.TestCase):
         controller.undo()
         self.assertIsNone(controller.get_day(emp, 1).shift_class)
 
+    def test_set_shift_class_accepts_can_work_code(self):
+        """"W" (Może pracować, ui/main_window.py) - trzeci dozwolony kod
+        obok "1"/"2"."""
+        controller, emp = self._controller()
+        controller.set_shift_class(emp, 1, "W")
+
+        self.assertEqual(controller.get_day(emp, 1).shift_class, "W")
+        self.assertEqual(len(controller.history), 1)
+
     def test_other_setters_clear_shift_class(self):
         controller, emp = self._controller()
         controller.set_shift_class(emp, 1, "1")
@@ -130,6 +139,72 @@ class ManualConstraintShiftClassTests(unittest.TestCase):
         chosen = [s for s in all_shifts if solver2.Value(x2[0, 1, s]) == 1]
         self.assertEqual(len(chosen), 1)
         self.assertIn(chosen[0], morning_slots)
+
+    def test_can_work_forces_exactly_one_shift_of_any_type(self):
+        """"W" (Może pracować) - w odróżnieniu od "1"/"2" nie zawęża do
+        rano/popołudnie, tylko wymusza, że dzień NIE jest wolny (dokładnie
+        jedna zmiana z całego zbioru), typ dobiera solver."""
+        SHIFT_OPEN, SHIFT_CLOSE = 0, 1
+        START_SHIFT_MAP = {2: 15}
+        END_SHIFT_MAP = {8: 15}
+        all_shifts = (SHIFT_OPEN, SHIFT_CLOSE, *START_SHIFT_MAP, *END_SHIFT_MAP)
+
+        shop = ShopConfig(2026, 8)
+        schedule = MonthSchedule(2026, 8)
+        emp = Employee("Nowak", "Anna")
+        schedule.add_employee(emp)
+        schedule.get_day(emp, 1).set_shift_class("W")
+
+        model = cp_model.CpModel()
+        x = {(0, 1, s): model.NewBoolVar(f"x_{s}") for s in all_shifts}
+        add_manual_shift_constraints(
+            model, x, [emp], [1], schedule, shop, all_shifts,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+        )
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        self.assertIn(status, (cp_model.OPTIMAL, cp_model.FEASIBLE))
+        chosen = [s for s in all_shifts if solver.Value(x[0, 1, s]) == 1]
+        self.assertEqual(len(chosen), 1)
+
+        # And it must actually be forced (not just allowed) - the "day off"
+        # solution (all shifts 0) has to be infeasible.
+        model2 = cp_model.CpModel()
+        x2 = {(0, 1, s): model2.NewBoolVar(f"x_{s}") for s in all_shifts}
+        add_manual_shift_constraints(
+            model2, x2, [emp], [1], schedule, shop, all_shifts,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+        )
+        for s in all_shifts:
+            model2.Add(x2[0, 1, s] == 0)
+        status2 = cp_model.CpSolver().Solve(model2)
+        self.assertEqual(status2, cp_model.INFEASIBLE)
+
+    def test_can_work_is_a_noop_on_a_closed_day(self):
+        SHIFT_OPEN, SHIFT_CLOSE = 0, 1
+        all_shifts = (SHIFT_OPEN, SHIFT_CLOSE)
+
+        shop = ShopConfig(2026, 8)
+        shop.locations = {}  # forces get_open_hours_for_day empty via shop-level fallback
+        schedule = MonthSchedule(2026, 8)
+        emp = Employee("Nowak", "Anna")
+        schedule.add_employee(emp)
+        schedule.get_day(emp, 1).set_shift_class("W")
+        # Explicit "Nieczynne" override at the shop level.
+        shop.day_overrides[1] = ("", "")
+
+        model = cp_model.CpModel()
+        x = {(0, 1, s): model.NewBoolVar(f"x_{s}") for s in all_shifts}
+        add_manual_shift_constraints(
+            model, x, [emp], [1], schedule, shop, all_shifts,
+            SHIFT_OPEN, SHIFT_CLOSE, {}, {},
+        )
+        for s in all_shifts:
+            model.Add(x[0, 1, s] == 0)
+
+        status = cp_model.CpSolver().Solve(model)
+        self.assertIn(status, (cp_model.OPTIMAL, cp_model.FEASIBLE))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
+import io
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from contextlib import redirect_stdout
 from pathlib import Path
 import sys
 import unittest
@@ -15,6 +17,7 @@ if str(ROOT) not in sys.path:
 
 _app = QApplication.instance() or QApplication([])
 
+from logic.auto_generator import AutoScheduleGenerator
 from logic.generator.custom_profile_wiring import default_policies
 from logic.generator.fix import setup_fix_hints_and_penalties
 from logic.generator.manual_constraint import add_manual_shift_constraints
@@ -171,7 +174,44 @@ class NoNightConstraintShiftNightTests(unittest.TestCase):
     "successfully", silently violating their restriction instead of the
     generator reporting infeasible."""
 
-    def test_no_night_employee_cannot_be_manually_locked_into_night_shift(self):
+    def test_no_night_employee_manually_locked_into_night_shift_is_respected(self):
+        """A planner sometimes MUST manually put a no_night employee on a
+        night shift (exceptional situation) - that manual entry has to win
+        instead of making the whole month INFEASIBLE. add_no_night_constraint
+        skips any day the schedule already has locked (is_locked) when it's
+        given the schedule, since add_manual_shift_constraints (always-on)
+        already fully pins that day by itself."""
+        shop = _shop_with_night()
+        emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1", no_night=True)
+        schedule = MonthSchedule(2026, 8)
+        schedule.add_employee(emp)
+        schedule.set_day_hours(emp, 3, *NIGHT_HOURS)
+        schedule.get_day(emp, 3).is_locked = True
+
+        model = cp_model.CpModel()
+        x = {(0, 3, s): model.NewBoolVar(f"x_{s}") for s in ALL_SHIFTS}
+
+        add_manual_shift_constraints(
+            model, x, [emp], [3], schedule, shop, ALL_SHIFTS,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+            shift_night=SHIFT_NIGHT,
+        )
+        add_no_night_constraint(
+            model, x, [emp], [3], shop, ALL_SHIFTS,
+            SHIFT_OPEN, SHIFT_CLOSE, START_SHIFT_MAP, END_SHIFT_MAP,
+            soft=False, shift_night=SHIFT_NIGHT, schedule=schedule,
+        )
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        self.assertIn(status, (cp_model.OPTIMAL, cp_model.FEASIBLE))
+        self.assertEqual(solver.Value(x[0, 3, SHIFT_NIGHT]), 1)
+
+    def test_no_night_employee_manual_lock_without_schedule_param_still_hard_blocked(self):
+        """Backward-compatible default: callers that don't pass `schedule`
+        (schedule=None) keep the old, unconditional hard block - only
+        callers that opt in by passing the schedule get the manual-override
+        exception above."""
         shop = _shop_with_night()
         emp = Employee(last_name="Kowalski", first_name="Jan", location_key="site1", no_night=True)
         schedule = MonthSchedule(2026, 8)
@@ -776,6 +816,53 @@ class LocationsDialogRenameBugTests(unittest.TestCase):
         # key, get_location would silently fall back to the project-wide
         # default hours (05:30/22:45) instead of the location's own.
         self.assertEqual(shop.get_location(emp).get_open_hours_for_day(3), ("08:00", "20:00"))
+
+
+class CustomProfileNoNightManualOverrideEndToEndTests(unittest.TestCase):
+    """The real client-facing scenario behind restoring no_night/no_afternoon
+    for custom (Enyo) profiles: MANDATORY policy (default_policies in
+    custom_profile_wiring.py) must never let the generator itself assign a
+    night shift to a no_night employee, but a planner's manual override must
+    still go through end-to-end (full AutoScheduleGenerator.generate() run,
+    not just the isolated constraint)."""
+
+    def test_manually_locked_night_shift_for_no_night_employee_still_generates(self):
+        profile = CustomBusinessProfile(
+            key="test_no_night_manual_e2e", display_name="Test Ochrona", roles=[], rules=[],
+        )
+        register_custom_profile(profile)
+
+        shop = ShopConfig(2026, 8)
+        shop.business_type = profile.key
+        # LocationConfig defaults already overlap 22:00-06:00 (see
+        # _shop_with_night above), so get_night_shift_hours() auto-detects
+        # the standard night window without any duty_rotation involved.
+        shop.locations["site1"] = LocationConfig(key="site1", name="Site 1")
+        shop.constraint_policies.update(default_policies(profile))
+
+        schedule = MonthSchedule(2026, 8)
+        employees = [
+            Employee(last_name=n, first_name=n, location_key="site1", employment_fraction=1.0)
+            for n in "ABC"
+        ]
+        target = Employee(
+            last_name="Kowalski", first_name="Jan", location_key="site1",
+            employment_fraction=1.0, no_night=True,
+        )
+        employees.append(target)
+        for emp in employees:
+            schedule.add_employee(emp)
+
+        schedule.set_day_hours(target, 3, *NIGHT_HOURS)
+        schedule.get_day(target, 3).is_locked = True
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            result = AutoScheduleGenerator(shop=shop, schedule=schedule).generate(solver_time_limit_seconds=20)
+
+        self.assertTrue(result["success"], result)
+        ds = schedule.get_day(target, 3)
+        self.assertEqual((ds.start, ds.end, ds.is_locked), (*NIGHT_HOURS, True))
 
 
 if __name__ == "__main__":

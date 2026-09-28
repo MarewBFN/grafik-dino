@@ -78,6 +78,58 @@ class WeeklyHoursEditorClosedDayTests(unittest.TestCase):
         self.assertEqual(hours[1], ("08:00", "20:00"))
 
 
+class WeeklyHoursEditorFullDayToggleTests(unittest.TestCase):
+    """"24h" per-day toggle (ui/weekly_hours_editor.py) - GZUK, zgłoszenie
+    klienta 2026-09-28: weekend obsadzony całą dobę, więc zamiast wpisywać
+    00:00/23:45 ręcznie na dwóch dniach, jeden checkbox robi to samo."""
+
+    def test_checking_fullday_returns_full_day_hours(self):
+        editor = WeeklyHoursEditor({5: ("08:00", "20:00")})
+        editor._fullday_checks[5].setChecked(True)
+
+        self.assertEqual(editor.get_hours()[5], ("00:00", "23:45"))
+
+    def test_fullday_disables_time_inputs(self):
+        editor = WeeklyHoursEditor({5: ("08:00", "20:00")})
+        editor._fullday_checks[5].setChecked(True)
+
+        start_edit, end_edit = editor._edits[5]
+        self.assertFalse(start_edit.isEnabled())
+        self.assertFalse(end_edit.isEnabled())
+
+    def test_set_hours_with_full_day_sentinel_preselects_fullday_checkbox(self):
+        editor = WeeklyHoursEditor({5: ("00:00", "23:45")})
+
+        self.assertTrue(editor._fullday_checks[5].isChecked())
+        self.assertFalse(editor._closed_checks[5].isChecked())
+
+    def test_checking_fullday_unchecks_closed(self):
+        editor = WeeklyHoursEditor({5: (None, None)})
+        self.assertTrue(editor._closed_checks[5].isChecked())
+
+        editor._fullday_checks[5].setChecked(True)
+
+        self.assertFalse(editor._closed_checks[5].isChecked())
+        self.assertEqual(editor.get_hours()[5], ("00:00", "23:45"))
+
+    def test_checking_closed_unchecks_fullday(self):
+        editor = WeeklyHoursEditor({5: ("00:00", "23:45")})
+        self.assertTrue(editor._fullday_checks[5].isChecked())
+
+        editor._closed_checks[5].setChecked(True)
+
+        self.assertFalse(editor._fullday_checks[5].isChecked())
+        self.assertEqual(editor.get_hours()[5], (None, None))
+
+    def test_other_days_unaffected_by_one_fullday_day(self):
+        editor = WeeklyHoursEditor({5: ("00:00", "23:45"), 1: ("08:00", "20:00")})
+
+        hours = editor.get_hours()
+
+        self.assertEqual(hours[5], ("00:00", "23:45"))
+        self.assertEqual(hours[1], ("08:00", "20:00"))
+
+
 class DayOverrideDialogClosedDayTests(unittest.TestCase):
     def test_saving_closed_day_returns_none_hours(self):
         shop = ShopConfig(2026, 8)

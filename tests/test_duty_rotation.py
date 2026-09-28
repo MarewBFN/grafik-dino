@@ -70,12 +70,33 @@ def test_normalize_duty_rotation_only_12_24h_preserves_weekday_windows_if_presen
     assert result["weekday_short"] == VALID_ROTATION["weekday_short"]
 
 
-def test_normalize_duty_rotation_requires_all_five_windows():
-    required_keys = [k for k in VALID_ROTATION if k != "only_12_24h"]
-    for missing_key in required_keys:
+def test_normalize_duty_rotation_requires_all_three_weekend_windows():
+    for missing_key in ("weekend_full", "weekend_half_a", "weekend_half_b"):
         raw = {k: v for k, v in VALID_ROTATION.items() if k != missing_key}
         with pytest.raises(ValueError):
             normalize_duty_rotation(raw)
+
+
+def test_normalize_duty_rotation_weekday_long_and_short_are_each_optional():
+    """Klient GZUK (2026-09-28): w tygodniu tylko jedna, 16h zmiana
+    (15:00-07:00), bez drugiej osoby na resztę doby - druga strona pary nie
+    powinna być wymagana. Patrz też add_duty_rotation_coverage_constraint,
+    która wymaga obsady TYLKO tej faktycznie skonfigurowanej."""
+    raw_long_only = {k: v for k, v in VALID_ROTATION.items() if k != "weekday_short"}
+    result = normalize_duty_rotation(raw_long_only)
+    assert result["weekday_long"] == VALID_ROTATION["weekday_long"]
+    assert "weekday_short" not in result
+
+    raw_short_only = {k: v for k, v in VALID_ROTATION.items() if k != "weekday_long"}
+    result = normalize_duty_rotation(raw_short_only)
+    assert result["weekday_short"] == VALID_ROTATION["weekday_short"]
+    assert "weekday_long" not in result
+
+
+def test_normalize_duty_rotation_requires_at_least_one_weekday_window():
+    raw = {k: v for k, v in VALID_ROTATION.items() if k not in ("weekday_long", "weekday_short")}
+    with pytest.raises(ValueError):
+        normalize_duty_rotation(raw)
 
 
 def test_normalize_duty_rotation_rejects_equal_start_end_on_a_pair_window():
