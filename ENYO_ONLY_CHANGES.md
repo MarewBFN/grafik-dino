@@ -1505,7 +1505,7 @@ nie wpisywać ręcznie zablokowanych zmian):
 | Placówka | Dlaczego nie pasuje |
 |---|---|
 | **MZGK Krzywoustego** | Różna długość zmiany w różne dni tygodnia (8h/7h w tygodniu, 6h sobota, 4h niedziela) - `logic/utils/time_utils.py::get_effective_daily_hours()` liczy JEDNĄ, stałą długość zmiany na pracownika (`standard_daily_hours * employment_fraction`), niezależną od dnia tygodnia. Nie istnieje mechanizm zmiennej długości zmiany per-dzień - wymagałoby nowej funkcji generatora. |
-| **Brico Marche Wejcherowo**, **Brico Marche Lębork**, **Sprzątanie** | Pojedyncza, ciągła zmiana na cały okres otwarcia (np. 8:00-20:00, 12h; 14:00-21:00, 7h). Profil "Ochrona" (`rules=[]`) nie wymusza w ogóle obsady zwykłych zmian OPEN/CLOSE dla żadnej lokalizacji (świadoma decyzja profilu - brak `min_staff_with_role`), a długość zmiany OPEN/CLOSE jest zakotwiczona na jednej, wspólnej dla CAŁEGO `ShopConfig` wartości `standard_daily_hours` - dopasowanie jej naraz do 12h i 7h w jednym pliku wymagałoby kruchych sztuczek (globalne ustawienie + dostrajanie ułamków etatu na granicy zaokrągleń 15-minutowych), które łatwo dają wynik NIEZGODNY z zadanymi godzinami zamiast go odtwarzać. |
+| **Brico Marche Wejcherowo**, **Brico Marche Lębork**, **Sprzątanie** | *(Nieaktualne od 2026-09-28 - model godzin otwarcia; Brico dodane, patrz sekcja „Brico Marché w danych klienta (2026-09-28)” niżej.)* Pojedyncza, ciągła zmiana na cały okres otwarcia (np. 8:00-20:00, 12h; 14:00-21:00, 7h). Profil "Ochrona" (`rules=[]`) nie wymusza w ogóle obsady zwykłych zmian OPEN/CLOSE dla żadnej lokalizacji (świadoma decyzja profilu - brak `min_staff_with_role`), a długość zmiany OPEN/CLOSE jest zakotwiczona na jednej, wspólnej dla CAŁEGO `ShopConfig` wartości `standard_daily_hours` - dopasowanie jej naraz do 12h i 7h w jednym pliku wymagałoby kruchych sztuczek (globalne ustawienie + dostrajanie ułamków etatu na granicy zaokrągleń 15-minutowych), które łatwo dają wynik NIEZGODNY z zadanymi godzinami zamiast go odtwarzać. |
 
 ### Obserwacja warta uwagi klienta (potwierdza wcześniejszą z sekcji PGE wyżej)
 
@@ -1952,3 +1952,36 @@ modelu godzin otwarcia (placówki Ochrony bez rotacji, np. GZUK):
 | `ui/config_dialog.py` | Pole maks. obsady w „Zasadach generatora” | DO USTALENIA |
 | `logic/generator/opening_hours_coverage.py` | `employee_uses_opening_hours_model`, `max_staff_for_view` | DO USTALENIA |
 | `README.md` | Nowy opis programu | TAK (po dopasowaniu do DinGo!) |
+
+## Brico Marché w danych klienta (2026-09-28)
+
+Powód pominięcia Brico z sekcji „Rozszerzenie danych klienta o kolejne
+placówki (2026-09-22)” (jedna wspólna długość zmiany OPEN/CLOSE dla całego
+projektu, brak reguły obsady) zniknął wraz z modelem godzin otwarcia
+(`logic/generator/opening_hours_coverage.py`): jedna osoba na całe okno
+dnia, długość zmiany z godzin danej placówki i dnia.
+
+- `demo/install_client_sample_data.py`: **Brico Marché Wejherowo** i
+  **Brico Marché Lębork** - placówki bez 24/7, pn-sob 08:00-20:00 (klient:
+  jedna zmiana 8-20, jeden pracownik na cały dzień), niedziela zamknięta,
+  zamknięte w święta ustawowe; po 3 pracowników z placeholderami nazwisk
+  („Brico W. 1”… - klient nie podał nazwisk).
+- **Niedziela handlowa** = ręczne nadpisanie dnia z godzinami (dwuklik na
+  nagłówku dnia, np. 08:00-16:00) - profil Ochrona nie ma kalendarza
+  handlowego (`trade_sundays` nic nie zmienia). Test: niedziele 11 i 25.10
+  z 08:00-16:00 dostają dokładnie jedną zmianę 08:00-16:00, pozostałe
+  niedziele puste.
+- `test_data/dane_klienta_ochrona.json` wygenerowany na nowo (8 placówek,
+  31 pracowników; zasady wg aktualnych domyślnych profilu). Generator na
+  całym projekcie (październik 2026): OPTIMAL, w obu Brico każdy dzień
+  pn-sob dokładnie jedna zmiana 08:00-20:00, niedziele bez zmian.
+- MZGK Krzywoustego i Sprzątanie nadal niedodane - mechanizm już jest
+  (sprawdzone przebiegiem: 8/7/6/4 h i 14:00-21:00 obsadzone dokładnie),
+  brak potwierdzonych godzin startu/końca od klienta.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `demo/install_client_sample_data.py` | Dwie placówki Brico + pracownicy | NIE - dane jednego konkretnego klienta testowego |
+| `test_data/dane_klienta_ochrona.json` | 8 placówek, 31 pracowników | NIE (jw.) |
+| `tests/test_generator_audit_regressions.py` | Brico: jedna zmiana 8-20, niedziela zamknięta, niedziele handlowe 8-16 | DO USTALENIA (model godzin otwarcia) |
+| `tests/test_location.py` | Brico w danych klienta | NIE (jw.) |

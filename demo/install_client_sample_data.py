@@ -13,7 +13,7 @@ przykład) - to są PRAWDZIWE nazwiska i PRAWDZIWE wzorce zmian sześciu
 placówek, które faktycznie pasują do modelu duty_rotation (każda ma
 potwierdzoną zmianę dzienną I nocną/24h - patrz normalize_duty_rotation(),
 które wymaga kompletnego schematu, nie da się skonfigurować samej połowy
-doby):
+doby), plus dwa sklepy Brico z godzinami otwarcia (punkty 7-8):
 
 1. Ubojnia Drobiu GOSZ - waga/biuro: 7 pracowników, obserwowany wzorzec
    8:00-20:00 (dzień) + 20:00-8:00 (noc), naprzemiennie, każdego dnia
@@ -57,25 +57,23 @@ doby):
    i plan profil ochrona...md), więc pusta konfiguracja tu oznacza
    dosłownie: generator nic tu nie przydzieli, dopóki klient nie poda
    konkretnego wzorca.
+7-8. Brico Marche Wejherowo, Brico Marche Lębork (po 3 pracowników) -
+   placówki z godzinami otwarcia, BEZ rotacji 24/7: pn-sob 08:00-20:00,
+   niedziela domyślnie zamknięta, zamknięte w polskie święta ustawowe.
+   Klient: jedna zmiana 8-20, jeden pracownik na cały dzień - dokładnie
+   to, co robi model godzin otwarcia Ochrony
+   (logic/generator/opening_hours_coverage.py: jedna osoba na całe okno
+   dnia, zasada "Obłożenie godzin otwarcia", "Maks. obsada naraz" = 1).
+   Niedziela handlowa = ręczne nadpisanie dnia z godzinami (dwuklik na
+   nagłówku dnia -> np. 08:00-16:00) - profil Ochrona nie ma kalendarza
+   handlowego, więc trade_sundays nic tu nie zmienia.
 
-Cztery placówki z tej samej listy klienta ŚWIADOMIE pominięte (patrz
-ENYO_ONLY_CHANGES.md po pełne uzasadnienie, potwierdzone z użytkownikiem
-przed dopisaniem czegokolwiek) - żadna nie pasuje do dzisiejszych
-mechanizmów generatora bez nowej pracy w kodzie:
-- MZGK Krzywoustego: różna długość zmiany w różne dni tygodnia (8h/7h w
-  tygodniu, 6h sobota, 4h niedziela) - `get_effective_daily_hours()`
-  liczy JEDNĄ, stałą długość zmiany na pracownika, niezależną od dnia
-  tygodnia; nie istnieje mechanizm zmiennej długości zmiany per-dzień.
-- Brico Marche Wejcherowo, Brico Marche Lębork, Sprzątanie: pojedyncza,
-  ciągła zmiana na cały okres otwarcia (np. 8:00-20:00, 12h). Profil
-  "Ochrona" (rules=[]) nie wymusza w ogóle obsady zwykłych zmian
-  OPEN/CLOSE (brak takiej reguły - to świadoma decyzja profilu, patrz
-  build_profile() niżej), a długość zmiany OPEN/CLOSE jest zakotwiczona na
-  jednej, wspólnej dla CAŁEGO ShopConfig wartości
-  (`standard_daily_hours`) - dopasowanie jej naraz do 12h (Brico) i 7h
-  (Sprzątanie) w jednym pliku wymagałoby kruchych sztuczek (globalne
-  ustawienie + dostrajanie ułamków etatu na granicy zaokrągleń), które
-  łatwo dają wynik NIEZGODNY z zadanymi godzinami zamiast go odtwarzać.
+Dwie placówki z tej samej listy klienta jeszcze NIE dodane (MZGK
+Krzywoustego: 8h/7h w tygodniu, 6h sobota, 4h niedziela; Sprzątanie:
+14:00-21:00). Pierwotny powód (patrz ENYO_ONLY_CHANGES.md, 2026-09-22) -
+jedna, wspólna długość zmiany dla całego projektu - zniknął wraz z modelem
+godzin otwarcia (2026-09-28), tak jak dla Brico wyżej; brakuje tylko
+potwierdzonych godzin startu/końca od klienta.
 
 Użycie:
     python demo/install_client_sample_data.py
@@ -228,9 +226,25 @@ def _nadlesnictwo_cewice_location() -> LocationConfig:
     return loc
 
 
+BRICO_OPEN_HOURS = {
+    **{wd: ("08:00", "20:00") for wd in range(6)},  # pn-sob: jedna zmiana 8-20
+    6: (None, None),  # niedziela zamknięta (handlowa = ręczne nadpisanie dnia)
+}
+
+
+def _brico_location(key: str, name: str) -> LocationConfig:
+    """Placówka z godzinami otwarcia (bez 24/7) - jak w UI: Lokalizacje bez
+    "Działalność całodobowa", godziny w Konfiguracja -> "Godziny otwarcia".
+    closed_on_public_holidays zostaje domyślne (True) - sklep zamknięty w
+    święta ustawowe."""
+    loc = LocationConfig(key=key, name=name)
+    loc.open_hours = dict(BRICO_OPEN_HOURS)
+    return loc
+
+
 def build_shop_config(profile: CustomBusinessProfile) -> ShopConfig:
     shop = ShopConfig(YEAR, MONTH)
-    shop.name = "Dane klienta (test) - Ochrona (6 placówek)"
+    shop.name = "Dane klienta (test) - Ochrona (8 placówek)"
     shop.business_type = profile.key
 
     locations = [
@@ -240,6 +254,8 @@ def build_shop_config(profile: CustomBusinessProfile) -> ShopConfig:
         _apartamenty_leba_location(),
         _lakpol_slupsk_location(),
         _nadlesnictwo_cewice_location(),
+        _brico_location("brico_wejherowo", "Brico Marché Wejherowo"),
+        _brico_location("brico_lebork", "Brico Marché Lębork"),
     ]
     shop.locations = {loc.key: loc for loc in locations}
 
@@ -281,6 +297,12 @@ LAKPOL_SLUPSK_EMPLOYEES = [
 NADLESNICTWO_CEWICE_EMPLOYEES = [
     "Cybula", "Szwarc",
 ]
+
+# Klient nie podał nazwisk dla Brico - jawne placeholdery, nie zgadywane.
+BRICO_EMPLOYEES = {
+    "brico_wejherowo": ["Brico W. 1", "Brico W. 2", "Brico W. 3"],
+    "brico_lebork": ["Brico L. 1", "Brico L. 2", "Brico L. 3"],
+}
 
 
 def build_employees() -> list[Employee]:
@@ -325,6 +347,13 @@ def build_employees() -> list[Employee]:
             employment_fraction=1.0,
             location_key="nadlesnictwo_cewice",
         ))
+    for location_key, names in BRICO_EMPLOYEES.items():
+        for last_name in names:
+            employees.append(Employee(
+                last_name=last_name, first_name="?",
+                employment_fraction=1.0,
+                location_key=location_key,
+            ))
     return employees
 
 

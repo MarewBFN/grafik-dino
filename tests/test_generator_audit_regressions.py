@@ -449,6 +449,48 @@ def test_ochrona_long_day_is_one_shift_not_a_gap():
     _assert_exact_coverage(outcome)
 
 
+# Brico Marché (demo/install_client_sample_data.py): pn-sob 08:00-20:00, jeden
+# pracownik na cały dzień, niedziela zamknięta. Niedziela handlowa = ręczne
+# nadpisanie dnia z innymi godzinami (profil Ochrona nie ma kalendarza
+# handlowego). Październik 2026: niedziele 4, 11, 18, 25.
+BRICO_HOURS = {**{wd: ("08:00", "20:00") for wd in range(6)}, 6: (None, None)}
+BRICO_TRADE_SUNDAYS = {"11": ["08:00", "16:00"], "25": ["08:00", "16:00"]}
+
+
+def _windows_by_day(outcome):
+    """{dzień: [(start, koniec) w minutach od północy tego dnia]}"""
+    by_day = {}
+    for _name, day, (start, end) in _shift_intervals(outcome):
+        base = (day - 1) * 1440
+        by_day.setdefault(day, []).append((start - base, end - base))
+    return by_day
+
+
+def test_brico_one_person_for_the_whole_day_and_sunday_closed():
+    outcome = run_case(_ochrona_regular("brico", BRICO_HOURS, 3), time_limit=30)
+
+    _assert_exact_coverage(outcome)
+    by_day = _windows_by_day(outcome)
+    sundays = {4, 11, 18, 25}
+    assert not sundays & set(by_day)
+    assert set(by_day) == set(range(1, 32)) - sundays
+    for day, shifts in by_day.items():
+        assert shifts == [(8 * 60, 20 * 60)], (day, shifts)
+
+
+def test_brico_trade_sundays_with_other_hours_get_one_shift_of_those_hours():
+    spec = _ochrona_regular("brico_trade_sunday", BRICO_HOURS, 3)
+    spec["locations"][0]["day_overrides"] = BRICO_TRADE_SUNDAYS
+    outcome = run_case(spec, time_limit=30)
+
+    _assert_exact_coverage(outcome)
+    by_day = _windows_by_day(outcome)
+    assert not {4, 18} & set(by_day)
+    for day, shifts in by_day.items():
+        expected = (8 * 60, 16 * 60) if day in (11, 25) else (8 * 60, 20 * 60)
+        assert shifts == [expected], (day, shifts)
+
+
 # ---------------------------------------------------------------------------
 # Komunikat przy limicie czasu (status UNKNOWN != sprzeczne zasady)
 # ---------------------------------------------------------------------------

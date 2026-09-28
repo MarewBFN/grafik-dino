@@ -470,3 +470,26 @@ def test_employee_location_key_defaults_empty_and_round_trips():
 
     restored = MonthSchedule.from_dict(schedule.to_dict())
     assert restored.employees[0].location_key == "galeria_pn"
+
+
+def test_real_client_test_data_has_brico_stores_with_opening_hours():
+    """Brico Marché Wejherowo/Lębork (demo/install_client_sample_data.py):
+    placówki z godzinami otwarcia bez rotacji - pn-sob 08:00-20:00,
+    niedziela zamknięta, zamknięte w święta."""
+    import json
+
+    path = ROOT / "test_data" / "dane_klienta_ochrona.json"
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    shop = ShopConfig.from_dict(data["shop_config"])
+
+    for key in ("brico_wejherowo", "brico_lebork"):
+        loc = shop.locations[key]
+        assert loc.is_24_7 is False
+        assert loc.get_duty_rotation() is None
+        assert loc.closed_on_public_holidays is True
+        assert {wd: loc.open_hours[wd] for wd in range(6)} == {wd: ("08:00", "20:00") for wd in range(6)}
+        assert not any(loc.open_hours[6])
+        staff = [e for e in data["schedule"]["employees"] if e["location_key"] == key]
+        assert len(staff) == 3

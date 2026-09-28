@@ -26,6 +26,126 @@
       },
       {
         "first_name": "?",
+        "last_name": "Brico L. 1",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "brico_lebork",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Brico L. 2",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "brico_lebork",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Brico L. 3",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "brico_lebork",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Brico W. 1",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "brico_wejherowo",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Brico W. 2",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "brico_wejherowo",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
+        "last_name": "Brico W. 3",
+        "is_opener": false,
+        "is_meat": false,
+        "is_meat_light": false,
+        "is_manager": false,
+        "no_night": false,
+        "no_afternoon": false,
+        "custom_roles": {},
+        "location_key": "brico_wejherowo",
+        "monthly_target_hours": 160,
+        "daily_hours": 8,
+        "employment_fraction": 1.0,
+        "availability": {},
+        "settlement_target_minutes": null,
+        "previous_month_shift_end": null,
+        "previous_month_shift_crosses_midnight": null,
+        "days": {}
+      },
+      {
+        "first_name": "?",
         "last_name": "Cybula",
         "is_opener": false,
         "is_meat": false,
@@ -523,7 +643,7 @@
   "shop_config": {
     "year": 2026,
     "month": 10,
-    "name": "Dane klienta (test) - Ochrona (6 placówek)",
+    "name": "Dane klienta (test) - Ochrona (8 placówek)",
     "business_type": "ochrona_dane_klienta_test",
     "locations": {
       "ubojnia_gosz_waga_biuro": {
@@ -869,6 +989,98 @@
         "round_clock_start_hour": null,
         "duty_rotation": null,
         "closed_on_public_holidays": true
+      },
+      "brico_wejherowo": {
+        "key": "brico_wejherowo",
+        "name": "Brico Marché Wejherowo",
+        "open_hours": {
+          "0": [
+            "08:00",
+            "20:00"
+          ],
+          "1": [
+            "08:00",
+            "20:00"
+          ],
+          "2": [
+            "08:00",
+            "20:00"
+          ],
+          "3": [
+            "08:00",
+            "20:00"
+          ],
+          "4": [
+            "08:00",
+            "20:00"
+          ],
+          "5": [
+            "08:00",
+            "20:00"
+          ],
+          "6": [
+            null,
+            null
+          ]
+        },
+        "trade_sundays": [],
+        "public_holidays": [],
+        "day_overrides": {},
+        "constraints": {
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "max_consecutive_days": 4
+        },
+        "is_24_7": false,
+        "round_clock_start_hour": null,
+        "duty_rotation": null,
+        "closed_on_public_holidays": true
+      },
+      "brico_lebork": {
+        "key": "brico_lebork",
+        "name": "Brico Marché Lębork",
+        "open_hours": {
+          "0": [
+            "08:00",
+            "20:00"
+          ],
+          "1": [
+            "08:00",
+            "20:00"
+          ],
+          "2": [
+            "08:00",
+            "20:00"
+          ],
+          "3": [
+            "08:00",
+            "20:00"
+          ],
+          "4": [
+            "08:00",
+            "20:00"
+          ],
+          "5": [
+            "08:00",
+            "20:00"
+          ],
+          "6": [
+            null,
+            null
+          ]
+        },
+        "trade_sundays": [],
+        "public_holidays": [],
+        "day_overrides": {},
+        "constraints": {
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "max_consecutive_days": 4
+        },
+        "is_24_7": false,
+        "round_clock_start_hour": null,
+        "duty_rotation": null,
+        "closed_on_public_holidays": true
       }
     },
     "open_hours": {
@@ -904,6 +1116,7 @@
     "night_shift": null,
     "duty_rotation": null,
     "quick_mode_presets": [],
+    "quick_mode_standard_buttons": {},
     "trade_sundays": [],
     "day_overrides": {},
     "constraints": {
@@ -929,11 +1142,15 @@
       "monthly_hours": "DISABLED",
       "meat_coverage": "PREFERRED",
       "availability": "PREFERRED",
-      "no_night": "PREFERRED",
-      "no_afternoon": "PREFERRED",
+      "no_night": "MANDATORY",
+      "no_afternoon": "MANDATORY",
       "duty_rotation_coverage": "MANDATORY",
       "duty_rotation_no24h": "MANDATORY",
-      "round_clock_coverage": "MANDATORY"
+      "round_clock_coverage": "MANDATORY",
+      "hours_equalization": "DISABLED",
+      "nominal_hours_no_umowa": "PREFERRED",
+      "opening_hours_coverage": "MANDATORY",
+      "max_staff_at_once": "PREFERRED"
     }
   }
 }
