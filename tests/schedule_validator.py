@@ -329,7 +329,12 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
                 continue
             if rotation:
                 loc = cfg.location(emp)
+                # Zmiana należy do doby, w której się zaczyna (kawałek doby
+                # dnia poprzedniego po północy trafia do komórki następnego
+                # dnia - także gdy ten jest zamknięty).
                 doba_day = day
+                if day > 1 and start < cfg.doba(rotation, day)[0]:
+                    doba_day = day - 1
                 if cfg.duty_day_closed(loc, doba_day):
                     add(Violation("closed_day", f"zmiana rotacji w dzień zamknięty ({fmt_abs(start)})", emp.display_name(), day))
                 continue
