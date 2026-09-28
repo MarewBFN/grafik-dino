@@ -55,6 +55,71 @@ ta sama ścieżka co "Generuj grafik") -> GRAFIK -> WALIDATOR -> PASS / NARUSZEN
 
 ## Wyniki
 
+### Placówki z godzinami przez północ i dobą 24h (GZUK) — po przepisaniu modelu
+
+Zgłoszenie: pn–pt 15:00–07:00, sob–nd 24h; „celujemy w prawidłowe
+obłożenie, nawet gdy generator nie zwróci braku rozwiązania”.
+
+**Stan przed poprawką** (plik klienta `test1.myp`, generowanie per placówka
+jak w GUI): wynik OPTIMAL, a w GZUK ok. **59% kwadransów otwarcia bez nikogo**
+i 4–6 osób naraz na sztywnej nocce 22:00–06:00. Przyczyny:
+
+1. model godzin otwarcia działał tylko dla klucza profilu „custom_ochrona” —
+   plik klienta („ochrona_dane_klienta_test”) i demo („ochrona_enyo”) szły
+   starą ścieżką (brak reguły obsady, sztywna nocka, zmiany 8 h pod etat);
+2. doba „24h” liczona 00:00–24:00: piątkowa nocka nachodziła na sobotę
+   00:00–07:00, a poniedziałek 00:00–07:00 zostawał bez ochrony;
+3. zmiany 8 h zakotwiczone przy otwarciu/zamknięciu — przy „min. 1 osoba”
+   generator dokładał drugie/trzecie osoby, żeby dobić godziny (43–60%
+   czasu otwarcia podwójnie);
+4. typ zmiany „W” był dla tych pracowników ignorowany.
+
+**Decyzje użytkownika**: każdy profil Ochrony (rola „Nie chce 24h”); jedna
+osoba na całe okno (15:00–07:00 = 16 h, doba = 24 h albo 2×12 h); doba od
+końca nocki (ciągle pt 15:00 → pn 07:00); nakładki dozwolone, ale sterowane
+nową zasadą „Maks. obsada naraz” (liczba osób + Wymagana/Preferowana/
+Wyłączona). Szczegóły zmian: `ENYO_ONLY_CHANGES.md`.
+
+**Po poprawce** — `test1.myp`: GZUK i Ubojnia OPTIMAL, 0 kwadransów bez
+nikogo, 0 kwadransów z 2 osobami, ciągłość pt 15:00 → sob 07:00 → nd 07:00 →
+pn 07:00, 0 naruszeń walidatora; „Umowa” w Ubojni dobita do 176 h.
+
+Nowa rodzina kampanii `weird_hours` (92 konfiguracje: GZUK, 22–06, 18–06,
+23–07, 15–07 cały tydzień, 00:00–00:00 i 07:00–07:00 z pliku, noc w
+tygodniu + dzień w weekend, rano w tygodniu + doba w weekend, doba pt–nd,
+mieszane przez północ; losowo role „Umowa”/„Nie chce 24h”, „Nie pracuje w
+nocy/na popołudniu”, urlopy/L4/wolne, ręczne wpisy częściowe i 24 h, typy
+„W/1/2”, pamięć poprzedniego miesiąca, święta, nadpisania dni, tryby
+wszystkich zasad, limit obsady 1–2, profil `custom_ochrona` i profil
+klienta):
+
+| Przypadki | Grafik powstał | Brak rozwiązania (prawdziwy / fałszywy) | Naruszenie twarde w gotowym grafiku |
+|---|---|---|---|
+| 92 | 84 | 8 / **0** | **0** |
+
+- W każdym grafiku z „Obłożeniem” Wymaganym: 0 kwadransów bez nikogo; z
+  „Maks. obsadą” Wymaganą/Preferowaną: 0 kwadransów ponad limit poza
+  jednym przypadkiem, w którym przekroczenie wymusiły ręczne wpisy + typ
+  zmiany (Preferowana — raportowane).
+- Wszystkie 8 braków rozwiązania to sprzeczności danych wejściowych: typ
+  zmiany „W/1/2” w dniu, w którym każda zmiana łamie Wymaganą zasadę tej
+  osoby („Nie pracuje w nocy/na popołudniu”, odpoczynek od jej ręcznego
+  wpisu, limit obsady zajęty ręcznymi wpisami). Wcześniej komunikat był
+  ogólny („sprzeczne zasady”) — teraz każdy z 8 przypadków ma konkretną
+  przyczynę (dzień, osoba, zasada).
+
+Regresja po przepisaniu — wcześniejsze rodziny Enyo (`ochrona_final`,
+`ochrona_regular_final`, `ochrona_client`, `rest_modes`): 196 przypadków,
+180 grafików, 16 prawdziwych braków rozwiązania, **0 fałszywych, 0 naruszeń
+twardych**. Cały projekt `test1.myp` naraz (6 placówek, w tym 3 z rotacją
+24/7): OPTIMAL, 0 luk i 0 podwójnej obsady w każdej placówce, 0 naruszeń.
+
+Nowe testy regresyjne (`tests/test_generator_audit_regressions.py`):
+ciągłość GZUK, profil z rolą „Nie chce 24h”, połówki dla „Nie chce 24h”,
+zmiana resztkowa wokół ręcznego wpisu, „W”, 9 wariantów dziwnych godzin,
+tryby „Maks. obsady naraz” i jej pole w Konfiguracji (GUI → generator),
+pamięć poprzedniego miesiąca, diagnostyka „W” + „Nie pracuje w nocy”.
+
 ### Końcowy, niezależny przebieg — tylko Enyo (Ochrona), aktualny kod, nowe seedy
 
 | Rodzina | Przypadki | Grafik powstał | Brak rozwiązania (prawdziwy / fałszywy) | Naruszenie twarde w gotowym grafiku |
@@ -135,7 +200,11 @@ Przed audytem: 829 passed, 1 skipped. Po audycie: **843 passed, 1 skipped,
    „Wymagane zasady są ze sobą sprzeczne”. W kampanii: 16 z 34 przypadków
    „brak rozwiązania” Ochrony miało tę przyczynę.
 2. **Placówki Ochrony bez rotacji 24/7 — pakiet pełnego obłożenia**
-   (decyzja użytkownika), `logic/generator/opening_hours_coverage.py`:
+   (decyzja użytkownika), `logic/generator/opening_hours_coverage.py`.
+   *Kształty zmian opisane w tym punkcie (warianty przesunięte, doba
+   00–08/08–16/16–24) zastąpiło przepisanie modelu po zgłoszeniu GZUK — patrz
+   „Placówki z godzinami przez północ i dobą 24h” wyżej: jedna osoba na całe
+   okno, doba 24 h / 2×12 h od końca poprzedniego okna.*
    - brak sztywnej nocki 22:00–06:00 (wcześniej dla placówki do 22:45 ludzie
      pracowali do 06:00, ok. 7 h po zamknięciu),
    - zmiany przesunięte od otwarcia/zamknięcia muszą mieścić się w

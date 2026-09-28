@@ -333,6 +333,7 @@ class AutoScheduleGenerator:
             shift_night=self.SHIFT_NIGHT,
             duty_shifts=self.DUTY_SHIFTS,
             round_clock_shifts=self.ROUND_CLOCK_SHIFTS,
+            opening_model=ctx.extra.get("opening_hours_model"),
         )
 
         # SPRZĄTANIE: Przywracamy oryginalne daily_hours, żeby UI i zapisy nie świrowały

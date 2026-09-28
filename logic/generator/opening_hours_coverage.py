@@ -1,66 +1,106 @@
-"""Obłożenie godzin otwarcia placówek BEZ rotacji 24/7 dla profilu Ochrona
-(decyzja użytkownika 2026-09-28, audyt generatora przed wydaniem).
+"""Model godzin otwarcia placówek Ochrony BEZ rotacji 24/7 - placówki z
+godzinami z edytora tygodnia (np. GZUK: pn-pt 15:00-07:00, sob-nd 24h).
 
-Przed tą zmianą placówka Ochrony z godzinami z edytora tygodnia (nie 24/7)
-nie miała ŻADNEJ reguły obsady - generator przydzielał tam zmiany tylko pod
-godziny etatu - a do tego:
+Przed tym modelem taka placówka nie miała żadnej reguły obsady (generator
+dokładał zmiany tylko pod godziny etatu), dostawała sztywną nockę 22:00-06:00
+i zmiany zakotwiczone przy otwarciu/zamknięciu - efekt dla GZUK: ok. 60%
+godzin otwarcia bez nikogo, a na nocce 4-6 osób naraz, przy wyniku OPTIMAL.
 
-- sztywna zmiana nocna 22:00-06:00 (LocationConfig.get_night_shift_hours)
-  włączała się dla każdej placówki, której godziny choć trochę nachodzą na
-  22:00-06:00 (np. do 22:45), więc ludzie pracowali ok. 7 h po zamknięciu;
-- zmiany przesunięte od otwarcia/zamknięcia (START/END) wychodziły poza
-  godziny otwarcia przy krótkich dniach (np. 10:00-18:00: 10:45-19:15);
-- doby 00:00-23:45 nie dało się pokryć (zmiany zakotwiczone przy otwarciu/
-  zamknięciu zostawiają lukę w środku dnia);
-- ręczny wpis niepasujący do żadnego wzorca zmiany był dla generatora
-  niewidoczny (nie liczył się do obsady, odpoczynku, dni pod rząd, godzin).
+Decyzje użytkownika (2026-09-28):
 
-"Model godzin otwarcia" dla tych pracowników:
+1. Zakres: każdy profil Ochrony - profil „custom_ochrona” albo każdy profil
+   custom z rolą „Nie chce 24h” (np. ochrona_enyo, ochrona_dane_klienta_test).
+   Dino i pozostałe profile custom - bez zmian.
+2. Jedna osoba na całe okno dnia: 15:00-07:00 = jedna zmiana 16 h. Doba
+   (00:00-23:45, przycisk „24h”) = jedna zmiana 24 h albo dwie połówki po
+   12 h (np. „Nie chce 24h” w weekend, urlopy) - jak rotacja 24/7.
+3. Doba zaczyna się tam, gdzie kończy się okno dnia poprzedniego: pt
+   15:00-07:00 + sob/nd 24h = ciągle od pt 15:00 do pn 07:00 (sobota
+   07:00-07:00, niedziela 07:00-07:00). Ogólniej: okno dnia zaczyna się nie
+   wcześniej niż skończyło się okno poprzednie (okna się nie nakładają).
+4. Nakładki są dozwolone, ale sterowane zasadą „Maks. obsada naraz”
+   (MAX_STAFF_POLICY): liczba osób (Konfiguracja, domyślnie 1) i tryb
+   Wymagana/Preferowana/Wyłączona (domyślnie Preferowana, waga wyższa niż
+   „Umowa”, więc drugiej osoby nie dokłada się tylko po to, żeby dobić
+   godziny etatu).
 
-1. Brak sztywnej nocki (SHIFT_NIGHT zawsze 0).
-2. Zwykły dzień: OPEN i CLOSE jak dotąd; warianty START/END tylko gdy
-   mieszczą się w godzinach otwarcia (decyzja użytkownika: "warianty
-   przesunięte w godzinach").
-3. Doba (otwarcie 00:00, zamknięcie 23:45 lub później): wyłącznie kolejne
-   zmiany od 00:00 o długości zmiany standardowej (kafelki
-   ROUND_CLOCK_SHIFTS, np. 00-08, 08-16, 16-24) - bez sztywnej nocki.
-4. Ręczny wpis pasujący DOKŁADNIE (początek i koniec) do dozwolonego kształtu
-   zmiany tego dnia = ta zmiana; każdy inny = stały przedział: liczy się do
-   obłożenia, godzin, odpoczynku i dni pod rząd, a generator nie dokłada
-   temu pracownikowi tego dnia żadnej zmiany.
-5. Zasada "Obłożenie godzin otwarcia" (OPENING_HOURS_COVERAGE_POLICY,
-   domyślnie Wymagana): w każdym kwadransie godzin otwarcia placówki co
-   najmniej 1 osoba z tej placówki.
+Zasady modelu dla pracowników takiej placówki:
 
-Profil Dino i pozostałe profile custom - bez zmian (decyzja użytkownika:
-błędy Dino tylko raportowane, patrz raport audytu).
+- jedyne dozwolone zmiany to kształty okien (cała zmiana / połówki doby) i
+  zmiany resztkowe wokół ręcznych wpisów; brak sztywnej nocki i zmian
+  OPEN/CLOSE/START/END;
+- zmiana należy do dnia (komórki grafiku), w którym się zaczyna;
+- ręczny wpis pasujący dokładnie do kształtu = ta zmiana; każdy inny =
+  stały przedział: liczy się do obłożenia, obsady naraz, godzin, odpoczynku
+  i dni pod rząd, a pozostała część okna dostaje zmianę resztkową;
+- odpoczynek: 11 h po każdej zmianie, po zmianie 24 h - (N-1)x24 h, nie
+  mniej niż 24 h (N = osoby placówki bez „Nie chce 24h”, jak rotacja 24/7);
+- „Obłożenie godzin otwarcia” (OPENING_HOURS_COVERAGE_POLICY, domyślnie
+  Wymagana): w każdym kwadransie okna co najmniej 1 osoba z placówki;
+- „Nie chce 24h”: bez zmiany 24 h w sobotę/niedzielę (zasada
+  duty_rotation_no24h, jak w rotacji 24/7).
 """
 
-from datetime import datetime
-
-from logic.generator.round_clock_constraint import (
-    round_clock_tile_count,
-    round_clock_tile_spacing_minutes,
-)
-from logic.utils.time_utils import get_effective_daily_hours
+import calendar
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 
 DAY = 24 * 60
+HALF_DAY = DAY // 2
 SLOT = 15
 MIN_REST_MINUTES = 11 * 60
-FULL_DAY_CLOSE_MINUTES = 23 * 60 + 45
+# Okno trwające co najmniej 23:45 to doba - konwencja „24h” z edytora
+# tygodnia (00:00-23:45); plik projektu może też mieć 07:00-07:00.
+FULL_DAY_MIN_LENGTH = DAY - SLOT
+# Ile dni poprzedniego miesiąca (wg wzorca tygodnia) liczyć, żeby ustalić,
+# gdzie kończy się okno sprzed dnia 1 (kotwica doby w dniu 1).
+WARMUP_DAYS = 7
+NIGHT_START = 22 * 60
+NIGHT_END = 6 * 60
+AFTERNOON_START = 12 * 60
 
 OPENING_HOURS_COVERAGE_POLICY = "opening_hours_coverage"
 OPENING_HOURS_COVERAGE_LABEL = "Obłożenie godzin otwarcia"
-OPENING_HOURS_COVERAGE_WEIGHT = 5000
+OPENING_HOURS_COVERAGE_WEIGHT = 5000  # za kwadrans bez obsady
+
+MAX_STAFF_POLICY = "max_staff_at_once"
+MAX_STAFF_LABEL = "Maks. obsada naraz"
+MAX_STAFF_CONSTRAINT_KEY = "max_staff_at_once"
+DEFAULT_MAX_STAFF = 1
+# Za każdą nadmiarową osobo-minutę - więcej niż „Umowa” (10000 za minutę
+# niedoboru, priority_hours_constraint.PRIORITY_WEIGHT): przy Preferowanej
+# generator nie dokłada drugiej osoby tylko po to, żeby dobić godziny.
+MAX_STAFF_WEIGHT = 20000
+# Lekka zachęta do całej doby zamiast dwóch połówek (połówki dla „Nie chce
+# 24h” i urlopów) - tylko rozstrzyga remisy, nie przebija żadnej zasady.
+PREFER_FULL_DAY_WEIGHT = 5
+
+KIND_FULL = "full"
+KIND_HALF_A = "half_a"
+KIND_HALF_B = "half_b"
+KIND_RESIDUAL = "residual"
 
 
-def _profiles():
+# ---------------------------------------------------------------------------
+# Profil
+# ---------------------------------------------------------------------------
+
+def custom_profile_uses_opening_hours_model(custom) -> bool:
+    """Profil Ochrony: „custom_ochrona” albo profil custom z rolą „Nie chce 24h”."""
+    if custom is None:
+        return False
+    from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
     from model.business_profile import DEFAULT_OCHRONA_PROFILE_KEY
-    return frozenset({DEFAULT_OCHRONA_PROFILE_KEY})
+
+    if getattr(custom, "key", None) == DEFAULT_OCHRONA_PROFILE_KEY:
+        return True
+    return any(getattr(role, "key", None) == NIE_CHCE_24H_ROLE_KEY for role in getattr(custom, "roles", ()))
 
 
 def profile_uses_opening_hours_model(business_type) -> bool:
-    return business_type in _profiles()
+    from model.business_profile import get_custom_profile
+
+    return custom_profile_uses_opening_hours_model(get_custom_profile(business_type))
 
 
 def uses_opening_hours_model(shop) -> bool:
@@ -72,102 +112,242 @@ def is_regular_location(location_view) -> bool:
     return not location_view.get_duty_rotation() and not location_view.get_round_clock_start_hour()
 
 
+def _has_no24h_role(emp) -> bool:
+    from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
+
+    return bool(getattr(emp, "custom_roles", {}).get(NIE_CHCE_24H_ROLE_KEY, False))
+
+
+# ---------------------------------------------------------------------------
+# Okna dni
+# ---------------------------------------------------------------------------
+
 def _minutes(value: str) -> int:
     t = datetime.strptime(value, "%H:%M")
     return t.hour * 60 + t.minute
 
 
-def _fmt(minute_of_day: int) -> str:
+def fmt_minutes(minute_of_day: int) -> str:
     minute_of_day %= DAY
     return f"{minute_of_day // 60:02d}:{minute_of_day % 60:02d}"
 
 
-def day_window(location_view, day):
-    """(start, end) godzin otwarcia w minutach od północy dnia `day` (end >
-    start; doba 00:00-23:45 => end = 24:00) albo None, gdy zamknięte."""
-    hours = location_view.get_open_hours_for_day(day)
-    if not hours:
+@dataclass(frozen=True)
+class Window:
+    """Okno obsady dnia `day`: [start, end) w minutach od początku miesiąca
+    (dzień 1, 00:00 = 0)."""
+    day: int
+    start: int
+    end: int
+    is_full_day: bool
+
+
+@dataclass(frozen=True)
+class Shape:
+    """Dozwolona zmiana: [start, end) w minutach od początku miesiąca, rodzaj
+    i dzień okna, do którego należy."""
+    start: int
+    end: int
+    kind: str
+    window_day: int
+
+    @property
+    def length(self) -> int:
+        return self.end - self.start
+
+
+def parse_open_hours(hours):
+    """(czy doba, początek, koniec) w minutach od północy dnia albo None.
+    Koniec wcześniej niż początek = przejście przez północ; okno co
+    najmniej 23:45 (00:00-23:45, 07:00-07:00) = doba 24 h od początku."""
+    if not hours or not hours[0] or not hours[1]:
         return None
     start, end = _minutes(hours[0]), _minutes(hours[1])
-    if start == 0 and end >= FULL_DAY_CLOSE_MINUTES:
-        return 0, DAY
-    if end <= start:
-        end += DAY
-    return start, end
+    length = (end - start) % DAY or DAY
+    if length >= FULL_DAY_MIN_LENGTH:
+        return True, start, start + DAY
+    return False, start, start + length
 
 
-def is_full_day(window) -> bool:
-    return window is not None and window == (0, DAY)
+def _place(parsed, day, base, last_end):
+    """Okno na osi miesiąca, przesunięte tak, żeby zaczynało się nie
+    wcześniej niż koniec poprzedniego (doba zachowuje 24 h)."""
+    if parsed is None:
+        return None
+    is_full_day, start, end = parsed
+    start, end = base + start, base + end
+    if last_end is not None and last_end > start:
+        if is_full_day:
+            end += last_end - start
+        start = last_end
+        if start >= end:
+            return None
+    return Window(day, start, end, is_full_day)
 
 
-def tile_length_minutes(emp, shop) -> int:
-    """Długość kafelka doby dla pracownika - efektywne godziny, ale nie
-    dłużej niż odstęp między kafelkami (żeby doba dzieliła się bez nakładek
-    i bez wychodzenia poza północ, także przy "8h 30 min")."""
-    eff = int(get_effective_daily_hours(emp, shop) * 60)
-    return min(eff, round_clock_tile_spacing_minutes(shop.standard_daily_hours))
+def location_windows(view, year, month, days_in_month):
+    """{dzień: Window} placówki na cały miesiąc. Dni poprzedniego miesiąca
+    liczone z tygodniowego wzorca godzin (bez ręcznych nadpisań) - tylko po
+    to, żeby wiedzieć, gdzie kończy się okno sprzed dnia 1."""
+    first = date(year, month, 1)
+    pattern = getattr(view, "get_weekly_open_hours_on", None)
+    last_end = None
+    if pattern is not None:
+        for back in range(WARMUP_DAYS, 0, -1):
+            window = _place(parse_open_hours(pattern(first - timedelta(days=back))), None, -back * DAY, last_end)
+            if window is not None:
+                last_end = window.end if last_end is None else max(last_end, window.end)
+    windows = {}
+    for day in range(1, days_in_month + 1):
+        window = _place(parse_open_hours(view.get_open_hours_for_day(day)), day, (day - 1) * DAY, last_end)
+        if window is not None:
+            windows[day] = window
+            last_end = window.end if last_end is None else max(last_end, window.end)
+    return windows
 
+
+def window_shapes(window):
+    if not window.is_full_day:
+        return [Shape(window.start, window.end, KIND_FULL, window.day)]
+    middle = window.start + HALF_DAY
+    return [
+        Shape(window.start, window.end, KIND_FULL, window.day),
+        Shape(window.start, middle, KIND_HALF_A, window.day),
+        Shape(middle, window.end, KIND_HALF_B, window.day),
+    ]
+
+
+def _subtract(start, end, intervals):
+    """Części [start, end) nieprzykryte żadnym z `intervals`."""
+    pieces = []
+    t = start
+    for a, b in sorted(intervals):
+        if b <= t or a >= end:
+            continue
+        if a > t:
+            pieces.append((t, a))
+        t = max(t, b)
+        if t >= end:
+            break
+    if t < end:
+        pieces.append((t, end))
+    return pieces
+
+
+def _overlaps_night(start, end) -> bool:
+    first = start // DAY - 1
+    for k in range(first, end // DAY + 1):
+        night_start = k * DAY + NIGHT_START
+        night_end = (k + 1) * DAY + NIGHT_END
+        if start < night_end and night_start < end:
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------------------
 
 class OpeningHoursModel:
-    """Dozwolone kształty zmian (na osi miesiąca), ręczne stałe przedziały i
-    dopasowania ręcznych wpisów - liczone raz na generowanie."""
+    """Okna placówek, dozwolone kształty zmian (per komórka dnia), ręczne
+    stałe przedziały i dopasowania ręcznych wpisów - liczone raz na
+    generowanie."""
 
     def __init__(self, ctx):
-        self.shop = ctx.shop
+        shop = ctx.shop
+        self.shop = shop
         self.days = list(ctx.days)
         self.employees = ctx.employees
+        self.days_in_month = calendar.monthrange(shop.year, shop.month)[1]
+        self.month_end = self.days_in_month * DAY
+        self.shape_ids = list(ctx.round_clock_shifts or [])
+
         self.indices = [
             e for e, emp in enumerate(ctx.employees)
-            if is_regular_location(ctx.shop.get_location(emp))
+            if is_regular_location(shop.get_location(emp))
         ]
         self.index_set = set(self.indices)
-        self.n_tiles = round_clock_tile_count(ctx.shop.standard_daily_hours)
-        self.spacing = round_clock_tile_spacing_minutes(ctx.shop.standard_daily_hours)
-        self.tile_ids = list(ctx.round_clock_shifts[: self.n_tiles]) if ctx.round_clock_shifts else []
-
-        self.windows = {}      # (e, d) -> {shift_id: (abs_start, abs_end)}
-        self.fixed = {}        # e -> [(d, abs_start, abs_end)]
-        self.manual_shift = {}  # (e, d) -> shift_id (dokładnie dopasowany ręczny wpis)
-        self.manual_blocked = set()  # (e, d) - dzień zablokowany bez zmiany z generatora
-
+        self.location_of = {}   # e -> klucz placówki
+        self.members = {}       # klucz placówki -> [e]
+        self.views = {}
         for e in self.indices:
             emp = ctx.employees[e]
-            location = ctx.shop.get_location(emp)
-            eff = int(get_effective_daily_hours(emp, ctx.shop) * 60)
-            tile_len = tile_length_minutes(emp, ctx.shop)
+            key = emp.location_key or ""
+            self.location_of[e] = key
+            self.members.setdefault(key, []).append(e)
+            self.views.setdefault(key, shop.get_location(emp))
+
+        self.windows_by_location = {
+            key: location_windows(view, shop.year, shop.month, self.days_in_month)
+            for key, view in self.views.items()
+        }
+        self.capable_24h = {
+            key: sum(1 for e in members if not _has_no24h_role(ctx.employees[e]))
+            for key, members in self.members.items()
+        }
+
+        base = {}  # (klucz, dzień komórki) -> [Shape]
+        for key, windows in self.windows_by_location.items():
+            for window in windows.values():
+                for shape in window_shapes(window):
+                    cell = self._cell_of(shape.start)
+                    if cell is not None:
+                        base.setdefault((key, cell), []).append(shape)
+
+        self.fixed = {}           # e -> [(dzień, start, end)]
+        self.manual_blocked = set()
+        manual_match = {}         # (e, d) -> Shape
+        for e in self.indices:
+            self._resolve_manual(ctx, e, base, manual_match)
+
+        # Zmiany resztkowe: część okna, której nie przykrywają ręczne stałe
+        # przedziały - inaczej do pokrycia zostawałaby tylko cała zmiana,
+        # nachodząca na ręczny wpis (dwie osoby naraz).
+        cells = {k: list(v) for k, v in base.items()}
+        for key, windows in self.windows_by_location.items():
+            fixed = [(s, en) for e in self.members[key] for _d, s, en in self.fixed.get(e, ())]
+            if not fixed:
+                continue
+            for window in windows.values():
+                pieces = _subtract(window.start, window.end, fixed)
+                if pieces == [(window.start, window.end)]:
+                    continue
+                for a, b in pieces:
+                    cell = self._cell_of(a)
+                    if cell is not None:
+                        cells.setdefault((key, cell), []).append(Shape(a, b, KIND_RESIDUAL, window.day))
+
+        self.shapes = {}  # (klucz, dzień) -> {id zmiany: Shape}
+        self.dropped_shapes = []
+        for (key, cell), shapes in cells.items():
+            assigned = {}
+            for sid, shape in zip(self.shape_ids, shapes):
+                assigned[sid] = shape
+            self.dropped_shapes.extend(shapes[len(self.shape_ids):])
+            self.shapes[(key, cell)] = assigned
+
+        self.windows = {}       # (e, d) -> {id zmiany: (start, end)}
+        self.manual_shift = {}  # (e, d) -> id zmiany (dokładnie dopasowany ręczny wpis)
+        for e in self.indices:
+            key = self.location_of[e]
             for d in self.days:
-                self.windows[(e, d)] = self._day_shapes(ctx, location, d, eff, tile_len)
-            self._resolve_manual(ctx, e, emp)
+                shapes = self.shapes.get((key, d), {})
+                self.windows[(e, d)] = {sid: (sh.start, sh.end) for sid, sh in shapes.items()}
+                target = manual_match.get((e, d))
+                if target is not None:
+                    self.manual_shift[(e, d)] = next(sid for sid, sh in shapes.items() if sh == target)
 
     # ------------------------------------------------------------------
 
-    def _day_shapes(self, ctx, location, d, eff, tile_len):
-        window = day_window(location, d)
-        if window is None:
-            return {}
-        base = (d - 1) * DAY
-        if is_full_day(window):
-            return {
-                sid: (base + i * self.spacing, base + i * self.spacing + tile_len)
-                for i, sid in enumerate(self.tile_ids)
-            }
-        start, end = window
-        shapes = {
-            ctx.shift_open: (base + start, base + start + eff),
-            ctx.shift_close: (base + end - eff, base + end),
-        }
-        for sid, offset in ctx.start_shift_map.items():
-            if start + offset + eff <= end:
-                shapes[sid] = (base + start + offset, base + start + offset + eff)
-        for sid, offset in ctx.end_shift_map.items():
-            if end - offset - eff >= start:
-                shapes[sid] = (base + end - offset - eff, base + end - offset)
-        return shapes
+    def _cell_of(self, minute):
+        cell = minute // DAY + 1
+        return cell if 1 <= cell <= self.days_in_month else None
 
-    def _resolve_manual(self, ctx, e, emp):
-        schedule = ctx.schedule
+    def _resolve_manual(self, ctx, e, base, manual_match):
+        emp = ctx.employees[e]
+        key = self.location_of[e]
         for d in self.days:
-            ds = schedule.get_day(emp, d)
+            ds = ctx.schedule.get_day(emp, d)
             if ds.is_leave or getattr(ds, "is_sick", False) or not ds.is_locked:
                 continue
             if not ds.start or not ds.end:
@@ -180,14 +360,49 @@ class OpeningHoursModel:
                 end = (d - 1) * DAY + _minutes(ds.end)
                 if end <= start:
                     end += DAY
-            match = next((sid for sid, w in self.windows[(e, d)].items() if w == (start, end)), None)
+            match = next((sh for sh in base.get((key, d), ()) if (sh.start, sh.end) == (start, end)), None)
             if match is not None:
-                self.manual_shift[(e, d)] = match
+                manual_match[(e, d)] = match
             else:
                 self.fixed.setdefault(e, []).append((d, start, end))
                 self.manual_blocked.add((e, d))
 
     # ------------------------------------------------------------------
+
+    def shape(self, e, d, sid):
+        return self.shapes.get((self.location_of[e], d), {}).get(sid)
+
+    def allowed(self, e, d):
+        """{id: Shape} zmian, które generator może przydzielić e w dniu d."""
+        if (e, d) in self.manual_blocked:
+            return {}
+        shapes = self.shapes.get((self.location_of[e], d), {})
+        forced = self.manual_shift.get((e, d))
+        if forced is not None:
+            return {forced: shapes[forced]}
+        return dict(shapes)
+
+    def items(self, e):
+        """[(start, end, dzień, id)] wszystkich dozwolonych zmian e."""
+        return sorted(
+            (sh.start, sh.end, d, sid)
+            for d in self.days
+            for sid, sh in self.allowed(e, d).items()
+        )
+
+    def required_rest_after(self, location_key, length) -> int:
+        """11 h; po zmianie 24 h - (N-1)x24 h, nie mniej niż 24 h (jak
+        rotacja 24/7, duty_rotation_rest_constraint._required_rest)."""
+        if length >= DAY:
+            return DAY * max(self.capable_24h.get(location_key, 0) - 1, 1)
+        return MIN_REST_MINUTES
+
+    def max_staff(self, location_key) -> int:
+        value = self.views[location_key].constraints.get(MAX_STAFF_CONSTRAINT_KEY, DEFAULT_MAX_STAFF)
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError):
+            return DEFAULT_MAX_STAFF
 
     def fixed_days(self, e):
         return {d for d, _s, _e in self.fixed.get(e, ())}
@@ -199,43 +414,37 @@ class OpeningHoursModel:
         return sum(end - start for _d, start, end in self.fixed.get(e, ()))
 
     def duration_overrides(self, emp):
-        """Minuty kafelków doby tego pracownika (zamiast efektywnych godzin)."""
+        """Kształty tego modelu liczone są przez minutes_expr (różna długość
+        per dzień) - w ogólnej sumie „minuty x zmiana” mają 0."""
         if self._index_of(emp) is None:
             return {}
-        tile_len = tile_length_minutes(emp, self.shop)
-        return {sid: tile_len for sid in self.tile_ids}
+        return {sid: 0 for sid in self.shape_ids}
+
+    def minutes_expr(self, x, emp):
+        """Minuty pracy e z kształtów tego modelu + ręczne stałe przedziały
+        (0 dla pracownika spoza modelu)."""
+        e = self._index_of(emp)
+        if e is None:
+            return 0
+        return sum(
+            x[e, d, sid] * (end - start)
+            for d in self.days
+            for sid, (start, end) in self.windows[(e, d)].items()
+        ) + self.fixed_minutes(emp)
+
+    def assignment_hours(self, e, d, sid):
+        """("HH:MM", "HH:MM", czy 24h) zmiany do zapisu w komórce dnia d."""
+        shape = self.shape(e, d, sid)
+        if shape is None:
+            return None
+        base = (d - 1) * DAY
+        return fmt_minutes(shape.start - base), fmt_minutes(shape.end - base), shape.length >= DAY
 
     def _index_of(self, emp):
         for e in self.indices:
             if self.employees[e] is emp or self.employees[e].id == emp.id:
                 return e
         return None
-
-
-def uncovered_minutes(window, shift_minutes, standard_daily_hours, start_offsets, end_offsets):
-    """Pierwsza minuta dnia (od północy), której ŻADEN dozwolony kształt
-    zmiany o długości `shift_minutes` nie obejmuje, albo None. Te same
-    reguły co OpeningHoursModel._day_shapes - do diagnostyki "brak
-    rozwiązania" (np. dzień 04:00-23:00 przy zmianach 8 h ma lukę w środku,
-    bo zmiany są zakotwiczone przy otwarciu/zamknięciu)."""
-    if window is None:
-        return None
-    start, end = window
-    if is_full_day(window):
-        spacing = round_clock_tile_spacing_minutes(standard_daily_hours)
-        length = min(shift_minutes, spacing)
-        n = round_clock_tile_count(standard_daily_hours)
-        shapes = [(i * spacing, i * spacing + length) for i in range(n)]
-    else:
-        shapes = [(start, start + shift_minutes), (end - shift_minutes, end)]
-        shapes += [(start + k, start + k + shift_minutes) for k in start_offsets if start + k + shift_minutes <= end]
-        shapes += [(end - k - shift_minutes, end - k) for k in end_offsets if end - k - shift_minutes >= start]
-    t = start
-    while t < end:
-        if not any(a <= t < b for a, b in shapes):
-            return t
-        t += SLOT
-    return None
 
 
 def get_model(ctx):
@@ -248,73 +457,83 @@ def setup_opening_hours_model(ctx) -> None:
         ctx.extra["opening_hours_model"] = OpeningHoursModel(ctx)
 
 
+def _segments(start, end, intervals):
+    """Kolejne odcinki [a, b) w [start, end), na których żaden z
+    `intervals` nie zaczyna się ani nie kończy."""
+    points = {start, end}
+    for a, b in intervals:
+        if start < a < end:
+            points.add(a)
+        if start < b < end:
+            points.add(b)
+    points = sorted(points)
+    return list(zip(points, points[1:]))
+
+
+def _slots(length) -> int:
+    return max(1, -(-length // SLOT))
+
+
 # ---------------------------------------------------------------------------
 # Constrainty
 # ---------------------------------------------------------------------------
 
 def add_opening_hours_shape_constraint(ctx) -> None:
     """Zawsze twarde (fakt strukturalny, jak bramy rotacji): tylko dozwolone
-    kształty zmian tego dnia + ręczne wpisy (dopasowane/stałe)."""
+    kształty zmian tego dnia + ręczne wpisy (dopasowane/stałe) + typ zmiany
+    z grafiku („W” = musi dostać zmianę, „1”/„2” = zaczynającą się przed/od
+    12:00)."""
     model = get_model(ctx)
     if model is None:
         return
     if ctx.trace is not None:
         ctx.trace.log_constraint("opening_hours_shape", "allowed shift shapes for regular locations (Ochrona)")
 
-    morning = {ctx.shift_open, *ctx.start_shift_map.keys()}
-    afternoon = {ctx.shift_close, *ctx.end_shift_map.keys()}
-
     for e in model.indices:
         emp = ctx.employees[e]
         for d in model.days:
-            allowed = model.windows[(e, d)]
+            allowed = model.allowed(e, d)
             forced = model.manual_shift.get((e, d))
-            if (e, d) in model.manual_blocked:
-                allowed_ids = set()
-            elif forced is not None:
-                allowed_ids = {forced}
+            if forced is not None and (e, d) not in model.manual_blocked:
                 ctx.model.Add(ctx.x[e, d, forced] == 1)
-            else:
-                allowed_ids = set(allowed)
+            elif allowed:
                 shift_class = getattr(ctx.schedule.get_day(emp, d), "shift_class", None)
-                if shift_class in ("1", "2") and allowed_ids:
-                    if set(model.tile_ids) & allowed_ids:
-                        wanted = {
-                            sid for sid in allowed_ids
-                            if ((allowed[sid][0] % DAY) < 12 * 60) == (shift_class == "1")
+                if shift_class in ("1", "2", "W"):
+                    wanted = allowed
+                    if shift_class in ("1", "2"):
+                        base = (d - 1) * DAY
+                        morning = {
+                            sid for sid, sh in allowed.items()
+                            if sh.start - base < AFTERNOON_START
                         }
-                    else:
-                        wanted = allowed_ids & (morning if shift_class == "1" else afternoon)
-                    if wanted:
-                        allowed_ids = wanted
-                        ctx.model.Add(sum(ctx.x[e, d, s] for s in wanted) == 1)
+                        chosen = morning if shift_class == "1" else set(allowed) - morning
+                        # Brak zmiany tego typu w tym dniu - zostaje „musi
+                        # pracować” (jak „W”), zamiast cichego pominięcia.
+                        wanted = {sid: allowed[sid] for sid in chosen} or allowed
+                    allowed = wanted
+                    ctx.model.Add(sum(ctx.x[e, d, s] for s in allowed) == 1)
             for s in ctx.all_shifts:
-                if s not in allowed_ids:
+                if s not in allowed:
                     ctx.model.Add(ctx.x[e, d, s] == 0)
 
 
-def add_opening_hours_rest_constraint(ctx, soft):
-    """Odpoczynek 11h dla par, których nie zna add_rest_11h_constraint:
-    kafelki doby (z każdą zmianą sąsiedniego dnia), ręczne stałe przedziały
-    (z każdą zmianą w ciągu 2 dni) i pamięć poprzedniego miesiąca wobec
-    kafelków dnia 1."""
+def add_opening_hours_rest_constraint(ctx, soft, schedule=None):
+    """Odpoczynek między zmianami modelu (i ręcznymi stałymi przedziałami)
+    tego samego pracownika, dokładnie na osi miesiąca, oraz względem zmiany
+    z końca poprzedniego miesiąca (gdy `schedule` - pamięć poprzedniego
+    miesiąca włączona)."""
     model = get_model(ctx)
     if model is None:
         return []
+    if ctx.trace is not None:
+        ctx.trace.log_constraint("opening_hours_rest", f"soft={soft}")
     violations = []
-    tile_set = set(model.tile_ids)
-    # Tryb "Uproszczony" (add_rest_11h_constraint_simplified) zakazuje tylko
-    # przejścia popołudnie -> rano. Przy różnych godzinach w kolejne dni
-    # (np. zamknięcie 22:00, następnego dnia "popołudnie" od 06:00) to nie
-    # gwarantuje 11 h - tutaj więc wszystkie pary liczone są dokładnie
-    # (audyt 2026-09-28: w wyniku bywało 8 h przy Wymaganym 11 h).
-    exact_regular_pairs = ctx.shop.constraints.get("rest_11h_mode", "standard") == "simplified"
 
-    def forbid_pair(e, d1, s1, d2, s2, label):
+    def forbid_pair(e, d1, s1, d2, s2):
         if not soft:
             ctx.model.Add(ctx.x[e, d1, s1] + ctx.x[e, d2, s2] <= 1)
         else:
-            v = ctx.model.NewBoolVar(label)
+            v = ctx.model.NewBoolVar(f"opening_rest_e{e}_d{d1}_{s1}_d{d2}_{s2}")
             ctx.model.Add(ctx.x[e, d1, s1] + ctx.x[e, d2, s2] <= 1 + v)
             violations.append(v)
 
@@ -327,44 +546,44 @@ def add_opening_hours_rest_constraint(ctx, soft):
             violations.append(v)
 
     for e in model.indices:
-        for d in model.days:
-            d_next = d + 1
-            if (e, d_next) not in model.windows:
-                continue
-            for s1, (_a1, end1) in model.windows[(e, d)].items():
-                for s2, (start2, _b2) in model.windows[(e, d_next)].items():
-                    if s1 not in tile_set and s2 not in tile_set and not exact_regular_pairs:
-                        continue  # zwykłe pary pilnuje add_rest_11h_constraint
-                    if start2 - end1 < MIN_REST_MINUTES:
-                        forbid_pair(e, d, s1, d_next, s2, f"opening_rest_e{e}_d{d}_{s1}_{s2}")
+        key = model.location_of[e]
+        items = model.items(e)
+        for i, (s1, e1, d1, sid1) in enumerate(items):
+            limit = e1 + model.required_rest_after(key, e1 - s1)
+            for s2, _e2, d2, sid2 in items[i + 1:]:
+                if s2 >= limit:
+                    break
+                if d2 != d1:  # ten sam dzień: najwyżej jedna zmiana (one_shift_per_day)
+                    forbid_pair(e, d1, sid1, d2, sid2)
 
         for fixed_day, f_start, f_end in model.fixed.get(e, ()):
-            for d in model.days:
-                if d == fixed_day or abs(d - fixed_day) > 2:
+            rest_after_fixed = model.required_rest_after(key, f_end - f_start)
+            for start, end, d, sid in items:
+                if d == fixed_day:
                     continue
-                for s, (w_start, w_end) in model.windows[(e, d)].items():
-                    overlaps = w_start < f_end and f_start < w_end
-                    too_close = (
-                        (w_start >= f_end and w_start - f_end < MIN_REST_MINUTES)
-                        or (w_end <= f_start and f_start - w_end < MIN_REST_MINUTES)
-                    )
-                    if overlaps or too_close:
-                        forbid_one(e, d, s, f"opening_rest_fixed_e{e}_d{d}_{s}")
+                conflict = (
+                    (start < f_end and f_start < end)
+                    or (start >= f_end and start - f_end < rest_after_fixed)
+                    or (end <= f_start and f_start - end < model.required_rest_after(key, end - start))
+                )
+                if conflict:
+                    forbid_one(e, d, sid, f"opening_rest_fixed_e{e}_d{d}_{sid}")
 
-        carry = ctx.schedule.get_previous_month_end_shift(ctx.employees[e]) if model.days else None
-        if carry is not None:
-            day1 = model.days[0]
+        carry = schedule.get_previous_month_end_shift(ctx.employees[e]) if schedule is not None else None
+        if carry is not None and carry.end:
             end_prev = _minutes(carry.end) - (0 if carry.crosses_midnight else DAY)
-            for s, (w_start, _w_end) in model.windows[(e, day1)].items():
-                if s in tile_set and w_start - end_prev < MIN_REST_MINUTES:
-                    forbid_one(e, day1, s, f"opening_rest_prevmonth_e{e}_{s}")
+            for start, _end, d, sid in items:
+                if start - end_prev >= MIN_REST_MINUTES:
+                    break
+                forbid_one(e, d, sid, f"opening_rest_prevmonth_e{e}_d{d}_{sid}")
 
     return violations
 
 
 def add_opening_hours_coverage_constraint(ctx, soft):
-    """Co najmniej 1 osoba z placówki w każdym kwadransie jej godzin
-    otwarcia (ręczne stałe przedziały też się liczą)."""
+    """Co najmniej 1 osoba z placówki w każdym kwadransie jej okien (ręczne
+    stałe przedziały też się liczą). Część okna ostatniego dnia po końcu
+    miesiąca należy już do następnego grafiku."""
     model = get_model(ctx)
     if model is None:
         return []
@@ -372,61 +591,153 @@ def add_opening_hours_coverage_constraint(ctx, soft):
         ctx.trace.log_constraint(OPENING_HOURS_COVERAGE_POLICY, f"soft={soft}")
 
     violations = []
-    by_location = {}
-    for e in model.indices:
-        by_location.setdefault(ctx.employees[e].location_key or "", []).append(e)
-
-    for location_key, indices in by_location.items():
-        location = ctx.shop.get_location(ctx.employees[indices[0]])
-        fixed = [(s, en) for e in indices for _d, s, en in model.fixed.get(e, ())]
-        for d in model.days:
-            window = day_window(location, d)
-            if window is None:
+    for key, members in model.members.items():
+        fixed = [(s, en) for e in members for _d, s, en in model.fixed.get(e, ())]
+        by_window = {}
+        for e in members:
+            for d in model.days:
+                for sid, sh in model.allowed(e, d).items():
+                    by_window.setdefault(sh.window_day, []).append((sh.start, sh.end, e, d, sid))
+        for day, window in sorted(model.windows_by_location[key].items()):
+            end = min(window.end, model.month_end)
+            if end <= window.start:
                 continue
-            base = (d - 1) * DAY
-            t = base + window[0]
-            end = base + window[1]
-            while t < end:
-                if any(s <= t < en for s, en in fixed):
-                    t += SLOT
+            shapes = by_window.get(day, [])
+            intervals = [(s, en) for s, en, *_ in shapes] + fixed
+            for a, b in _segments(window.start, end, intervals):
+                if any(fs <= a and b <= fe for fs, fe in fixed):
                     continue
-                terms = [
-                    ctx.x[e, dd, sid]
-                    for e in indices
-                    for dd in (d - 1, d)
-                    if (e, dd) in model.windows
-                    for sid, (ws, we) in model.windows[(e, dd)].items()
-                    if ws <= t < we
-                ]
-                label = f"opening_cov_{location_key}_d{d}_{_fmt(t - base)}"
+                terms = [ctx.x[e, d, sid] for s, en, e, d, sid in shapes if s <= a and b <= en]
                 if not soft:
                     if terms:
                         ctx.model.Add(sum(terms) >= 1)
                     else:
-                        # Nikt z placówki nie może tu pracować (np. wszyscy
-                        # na urlopie) - Wymagana zasada jest niespełnialna.
+                        # Nikt z placówki nie może tu pracować (np. wszyscy na
+                        # urlopie) - Wymagana zasada jest niespełnialna.
                         ctx.model.AddBoolOr([])
                 else:
-                    v = ctx.model.NewBoolVar(label)
+                    v = ctx.model.NewBoolVar(f"opening_cov_{key}_d{day}_{fmt_minutes(a)}")
                     ctx.model.Add(sum(terms) + v >= 1)
-                    violations.append(v)
-                t += SLOT
+                    violations.append(v * _slots(b - a))
     return violations
 
 
-# ---------------------------------------------------------------------------
-# Zapis wyniku
-# ---------------------------------------------------------------------------
+def add_max_staff_constraint(ctx, soft):
+    """„Maks. obsada naraz”: w każdej chwili okna najwyżej N osób z placówki
+    (N = Konfiguracja, domyślnie 1). Ręczne stałe przedziały zajmują miejsca
+    w limicie, ale nigdy same go nie łamią (ręczny wpis wygrywa)."""
+    model = get_model(ctx)
+    if model is None:
+        return []
+    if ctx.trace is not None:
+        ctx.trace.log_constraint(MAX_STAFF_POLICY, f"soft={soft}")
 
-def tile_hours_for_assignment(shop, emp, day, tile_index):
-    """(start, end) "HH:MM" kafelka doby do zapisu w grafiku albo None, gdy
-    ten dzień pracownika nie jest dobą modelu godzin otwarcia."""
-    if not uses_opening_hours_model(shop):
-        return None
-    location = shop.get_location(emp)
-    if not is_regular_location(location) or not is_full_day(day_window(location, day)):
-        return None
-    spacing = round_clock_tile_spacing_minutes(shop.standard_daily_hours)
-    start = tile_index * spacing
-    return _fmt(start), _fmt(start + tile_length_minutes(emp, shop))
+    violations = []
+    for key, members in model.members.items():
+        cap = model.max_staff(key)
+        fixed = [(s, en) for e in members for _d, s, en in model.fixed.get(e, ())]
+        by_window = {}
+        for e in members:
+            for d in model.days:
+                for sid, sh in model.allowed(e, d).items():
+                    by_window.setdefault(sh.window_day, []).append((sh.start, sh.end, e, d, sid))
+        for day, shapes in sorted(by_window.items()):
+            window = model.windows_by_location[key][day]
+            intervals = [(s, en) for s, en, *_ in shapes] + fixed
+            for a, b in _segments(window.start, window.end, intervals):
+                terms = [ctx.x[e, d, sid] for s, en, e, d, sid in shapes if s <= a and b <= en]
+                limit = max(cap - sum(1 for fs, fe in fixed if fs <= a and b <= fe), 0)
+                if len(terms) <= limit:
+                    continue
+                if not soft:
+                    ctx.model.Add(sum(terms) <= limit)
+                else:
+                    excess = ctx.model.NewIntVar(0, len(terms) - limit, f"max_staff_{key}_d{day}_{fmt_minutes(a)}")
+                    ctx.model.Add(sum(terms) - limit <= excess)
+                    violations.append(excess * (b - a))
+    return violations
 
+
+def add_opening_hours_no24h_constraint(ctx, soft):
+    """„Nie chce 24h”: bez zmiany 24 h w sobotę/niedzielę (dzień okna) -
+    ta sama zasada co add_duty_rotation_no24h_gate_constraint. Ręczny wpis
+    wygrywa."""
+    model = get_model(ctx)
+    if model is None:
+        return []
+    violations = []
+    for e in model.indices:
+        emp = ctx.employees[e]
+        if not _has_no24h_role(emp):
+            continue
+        for d in model.days:
+            if ctx.schedule.get_day(emp, d).is_locked:
+                continue
+            for sid, sh in model.allowed(e, d).items():
+                if sh.length < DAY or ctx.shop.weekday(sh.window_day) < 5:
+                    continue
+                if soft:
+                    v = ctx.model.NewBoolVar(f"opening_no24h_e{e}_d{d}_{sid}")
+                    ctx.model.Add(ctx.x[e, d, sid] <= v)
+                    violations.append(v)
+                else:
+                    ctx.model.Add(ctx.x[e, d, sid] == 0)
+    return violations
+
+
+def _forbid_shapes(ctx, soft, predicate, label):
+    model = get_model(ctx)
+    if model is None:
+        return []
+    violations = []
+    for e in model.indices:
+        emp = ctx.employees[e]
+        for d in model.days:
+            if not predicate(emp, d, None) or ctx.schedule.get_day(emp, d).is_locked:
+                continue
+            for sid, sh in model.allowed(e, d).items():
+                if not predicate(emp, d, sh):
+                    continue
+                if soft:
+                    v = ctx.model.NewBoolVar(f"{label}_e{e}_d{d}_{sid}")
+                    ctx.model.Add(ctx.x[e, d, sid] <= v)
+                    violations.append(v)
+                else:
+                    ctx.model.Add(ctx.x[e, d, sid] == 0)
+    return violations
+
+
+def add_opening_hours_no_night_constraint(ctx, soft):
+    """„Nie pracuje w godzinach nocnych”: bez zmian nachodzących na
+    22:00-06:00. Ręczny wpis wygrywa (jak night_constraint.py)."""
+    return _forbid_shapes(
+        ctx, soft,
+        lambda emp, d, sh: getattr(emp, "no_night", False) and (sh is None or _overlaps_night(sh.start, sh.end)),
+        "opening_no_night",
+    )
+
+
+def add_opening_hours_no_afternoon_constraint(ctx, soft):
+    """„Nie pracuje na popołudniu”: tylko zmiany zaczynające się przed 12:00
+    (ten sam podział rano/popołudnie co typ zmiany „1”/„2”)."""
+    return _forbid_shapes(
+        ctx, soft,
+        lambda emp, d, sh: getattr(emp, "no_afternoon", False) and (
+            sh is None or sh.start - (d - 1) * DAY >= AFTERNOON_START
+        ),
+        "opening_no_afternoon",
+    )
+
+
+def prefer_full_day_terms(ctx):
+    """Człon celu: lekka kara za każdą połówkę doby (cała doba, gdy się da)."""
+    model = get_model(ctx)
+    if model is None:
+        return []
+    return [
+        PREFER_FULL_DAY_WEIGHT * ctx.x[e, d, sid]
+        for e in model.indices
+        for d in model.days
+        for sid, sh in model.allowed(e, d).items()
+        if sh.kind in (KIND_HALF_A, KIND_HALF_B)
+    ]

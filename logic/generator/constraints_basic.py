@@ -8,11 +8,16 @@ def add_one_shift_per_day_constraint(model, x, employees, days, all_shifts, trac
                 sum(x[e, d, s] for s in all_shifts) <= 1
             )
 
-def add_non_trade_day_constraints(model, x, employees, days, shop, all_shifts, trace=None, schedule=None):
+def add_non_trade_day_constraints(model, x, employees, days, shop, all_shifts, trace=None, schedule=None,
+                                  skip_indices=None):
     if trace is not None:
         trace.log_constraint("non_trade_day", "block work on non-trade days")
 
     for e, emp in enumerate(employees):
+        # Model godzin otwarcia (opening_hours_coverage.py) sam dopuszcza
+        # zmiany tylko w oknach placówki - patrz komentarz w base_specs.py.
+        if skip_indices and e in skip_indices:
+            continue
         location = shop.get_location(emp)
         # Rotacja służby 24/7 nie korzysta z godzin otwarcia - święta ma
         # własną regułę (duty_rotation_public_holiday_constraint.py).

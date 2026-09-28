@@ -50,6 +50,9 @@ class _LocationView:
     def get_open_hours_for_day(self, day: int):
         return self._location.get_open_hours_for_day(self._year, self._month, day, self._uses_trade_calendar)
 
+    def get_weekly_open_hours_on(self, dt):
+        return self._location.get_weekly_open_hours_on(dt)
+
     def get_night_shift_hours(self):
         return self._location.get_night_shift_hours()
 
@@ -471,6 +474,14 @@ class ShopConfig:
             return None
 
         return start, end
+
+    def get_weekly_open_hours_on(self, dt):
+        """Godziny otwarcia w dowolnym dniu kalendarza wg tygodniowego wzorca
+        (bez ręcznych nadpisań dni) - patrz LocationConfig.get_weekly_open_hours_on."""
+        hours = self.open_hours.get(dt.weekday())
+        if not hours or not hours[0] or not hours[1]:
+            return None
+        return hours[0], hours[1]
 
     def get_open_hours_for_weekday(self, weekday: int) -> tuple[str, str]:
         return self.open_hours[weekday]

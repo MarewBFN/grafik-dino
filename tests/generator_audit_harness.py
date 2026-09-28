@@ -715,6 +715,118 @@ def family_ochrona_regular(seed=23, count=45):
     return cases
 
 
+WEIRD_HOURS = {
+    "gzuk": {**{wd: ("15:00", "07:00") for wd in range(5)}, 5: ("00:00", "23:45"), 6: ("00:00", "23:45")},
+    "2200-0600": ("22:00", "06:00"),
+    "1800-0600": ("18:00", "06:00"),
+    "2300-0700": ("23:00", "07:00"),
+    "1500-0700": ("15:00", "07:00"),
+    "0000-0000": ("00:00", "00:00"),
+    "0700-0700": ("07:00", "07:00"),
+    "noc_tydzien_dzien_weekend": {**{wd: ("20:00", "08:00") for wd in range(5)}, 5: ("08:00", "20:00"), 6: ("08:00", "20:00")},
+    "rano_tydzien_doba_weekend": {**{wd: ("06:00", "14:00") for wd in range(5)}, 5: ("00:00", "23:45"), 6: ("00:00", "23:45")},
+    "doba_pt_do_pn": {**{wd: ("16:00", "08:00") for wd in range(4)}, 4: ("00:00", "23:45"), 5: ("00:00", "23:45"), 6: ("00:00", "23:45")},
+    "mieszane_przez_polnoc": {0: ("22:00", "06:00"), 1: ("15:00", "07:00"), 2: (None, None), 3: ("00:00", "23:45"),
+                              4: ("18:00", "02:00"), 5: ("00:00", "23:45"), 6: ("10:00", "04:00")},
+}
+
+
+def family_weird_hours(seed=31, count=70):
+    """Placówki Ochrony z godzinami przez północ i dobą 24h obok nocek (GZUK,
+    zgłoszenie użytkownika 2026-09-28): obłożenie kwadrans po kwadransie,
+    „Maks. obsada naraz”, „Nie chce 24h”, typy zmian, ręczne wpisy, pamięć
+    poprzedniego miesiąca, święta, profil klienta (inny klucz niż
+    custom_ochrona, ta sama rola „Nie chce 24h”)."""
+    from demo.install_client_sample_data import build_profile
+    from model.business_profile import register_custom_profile
+
+    client = build_profile()
+    register_custom_profile(client)
+    rng = random.Random(seed)
+    cases = []
+    for hname, hours in WEIRD_HOURS.items():
+        for n in (4, 6):
+            cases.append({
+                "name": f"weird_{hname}_{n}",
+                "profile": "ochrona",
+                "locations": [{"key": "p", "open_hours": hours}],
+                "employees": [dict(location="p") for _ in range(n)],
+            })
+    import calendar as _cal
+    for k in range(count):
+        hname = rng.choice(list(WEIRD_HOURS))
+        year, month = rng.choice(MONTHS)
+        dim = _cal.monthrange(year, month)[1]
+        n = rng.randint(3, 8)
+        emps = []
+        for _ in range(n):
+            roles = {}
+            if rng.random() < 0.3:
+                roles["umowa"] = True
+            if rng.random() < 0.25:
+                roles["nie_chce_24h"] = True
+            emps.append(dict(location="p", roles=roles, fraction=rng.choice((1.0, 1.0, 0.5, 0.75)),
+                             no_night=rng.random() < 0.08, no_afternoon=rng.random() < 0.05))
+        cells = []
+        for _ in range(rng.randint(0, 10)):
+            idx, day = rng.randrange(n), rng.randint(1, dim)
+            kind = rng.choice(["leave", "sick", "off", "off_grid", "hours", "hours", "full_day", "W", "class1", "class2"])
+            if kind == "hours":
+                s_, e_ = rng.choice([("15:00", "23:00"), ("23:00", "07:00"), ("07:00", "19:00"), ("19:00", "07:00"),
+                                     ("15:00", "07:00"), ("22:00", "06:00"), ("08:00", "16:00")])
+                cells.append((idx, day, "hours", s_, e_))
+            elif kind == "full_day":
+                cells.append((idx, day, "full_day", rng.choice(["07:00", "00:00", "08:00"])))
+            elif kind == "W":
+                cells.append((idx, day, "class", "W"))
+            elif kind == "class1":
+                cells.append((idx, day, "class", "1"))
+            elif kind == "class2":
+                cells.append((idx, day, "class", "2"))
+            else:
+                cells.append((idx, day, kind))
+        seen, uniq = set(), []
+        for c in cells:
+            if (c[0], c[1]) not in seen:
+                seen.add((c[0], c[1]))
+                uniq.append(c)
+        overrides = {}
+        if rng.random() < 0.25:
+            overrides[str(rng.randint(1, dim))] = [None, None]
+        if rng.random() < 0.25:
+            overrides[str(rng.randint(1, dim))] = rng.choice([["00:00", "23:45"], ["18:00", "06:00"], ["09:00", "13:00"]])
+        policies = {
+            "rest_11h": rng.choice(("MANDATORY", "MANDATORY", "PREFERRED")),
+            "max_consecutive": rng.choice(POLICY_MODES),
+            "opening_hours_coverage": rng.choice(("MANDATORY", "MANDATORY", "PREFERRED", "DISABLED")),
+            "max_staff_at_once": rng.choice(POLICY_MODES),
+            "monthly_hours": rng.choice(("PREFERRED", "DISABLED", "DISABLED")),
+            "duty_rotation_no24h": rng.choice(("MANDATORY", "MANDATORY", "PREFERRED")),
+            "no_night": rng.choice(("MANDATORY", "PREFERRED")),
+        }
+        constraints = {"max_staff_at_once": rng.choice((1, 1, 1, 2))}
+        if rng.random() < 0.3:
+            constraints["rest_11h_mode"] = "simplified"
+        prev = {}
+        if rng.random() < 0.4:
+            prev[str(rng.randrange(n))] = (rng.choice(["07:00", "06:00", "23:00", "08:00"]), rng.random() < 0.6)
+        cases.append({
+            "name": f"weird_rand_{k}",
+            "profile": rng.choice(("ochrona", "ochrona", client.key)),
+            "year": year, "month": month,
+            "time_limit": 20,
+            "locations": [{"key": "p", "open_hours": WEIRD_HOURS[hname],
+                           "closed_on_public_holidays": rng.random() < 0.5,
+                           "day_overrides": overrides}],
+            "policies": policies,
+            "constraints": constraints,
+            "employees": emps,
+            "cells": uniq,
+            "prev_month": prev,
+        })
+    return cases
+
+
 def family_rest_modes():
     """Tryb liczenia odpoczynku 11h (Konfiguracja -> Zasady generatora):
     standardowy i uproszczony, dla Dino i placówki Ochrony bez rotacji."""
@@ -760,6 +872,7 @@ def family_ochrona_client(seed=77):
 
 
 FAMILIES = {
+    "weird_hours": family_weird_hours,
     "ochrona_client": family_ochrona_client,
     "ochrona_final": lambda: [dict(c, name=c["name"].replace("och_", "ochF_")) for c in family_ochrona(seed=101, count=80)],
     "ochrona_regular_final": lambda: [dict(c, name=c["name"].replace("och_", "ochF_")) for c in family_ochrona_regular(seed=202, count=60)],

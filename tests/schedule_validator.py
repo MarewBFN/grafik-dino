@@ -17,6 +17,7 @@ PREFERRED/DISABLED tej polityki.
 
 import calendar
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 import holidays as _holidays
 
@@ -24,10 +25,12 @@ DAY = 24 * 60
 SLOT = 15
 
 DINO = "dino_retail"
-# Profile, dla których placówki bez rotacji 24/7 mają zasadę "Obłożenie
-# godzin otwarcia" (model.business_profile.DEFAULT_OCHRONA_PROFILE_KEY).
-OPENING_MODEL_PROFILES = {"custom_ochrona"}
+# Profil Ochrony (model godzin otwarcia placówek bez rotacji 24/7, decyzja
+# użytkownika 2026-09-28): "custom_ochrona" albo każdy profil custom z rolą
+# "Nie chce 24h".
+OCHRONA_PROFILE_KEY = "custom_ochrona"
 NIE_CHCE_24H = "nie_chce_24h"
+MAX_STAFF_KEY = "max_staff_at_once"
 
 
 @dataclass
@@ -128,6 +131,12 @@ class ExpectedConfig:
             d.day for d in _holidays.country_holidays("PL", years=shop.year)
             if d.year == shop.year and d.month == shop.month
         }
+        self._pl_all = set(_holidays.country_holidays("PL", years=[shop.year - 1, shop.year]))
+        self.opening_model = self.custom is not None and (
+            self.custom.key == OCHRONA_PROFILE_KEY
+            or any(role.key == NIE_CHCE_24H for role in self.custom.roles)
+        )
+        self._opening_windows = {}
 
     def policy(self, name, default="DISABLED"):
         value = self.shop.constraint_policies.get(name)
@@ -184,6 +193,86 @@ class ExpectedConfig:
         if e <= s:
             e += DAY
         return s, e
+
+    # ---- model godzin otwarcia (Ochrona, placówki bez rotacji) ----
+
+    def is_regular(self, emp):
+        loc = self.location(emp)
+        if loc is None:
+            return not self.shop.duty_rotation
+        return not loc.duty_rotation and not (loc.is_24_7 and loc.round_clock_start_hour)
+
+    def uses_opening_model(self, emp):
+        return self.opening_model and self.is_regular(emp)
+
+    def _day_hours(self, loc, day):
+        """Godziny dnia bieżącego miesiąca (nadpisania, święta) albo None."""
+        if loc is None:
+            hours_map, overrides, closed_on_holidays = self.shop.open_hours, self.shop.day_overrides, False
+        else:
+            hours_map, overrides, closed_on_holidays = loc.open_hours, loc.day_overrides, loc.closed_on_public_holidays
+        if not self.is_trade_day(day, loc):
+            return None
+        if day in overrides:
+            start, end = overrides[day]
+            return (start, end) if start and end else None
+        if closed_on_holidays and day in self.pl_holidays:
+            return None
+        hours = hours_map.get(self.weekday(day))
+        return hours if hours and hours[0] and hours[1] else None
+
+    def _pattern_hours(self, loc, dt):
+        """Godziny dnia poprzedniego miesiąca wg wzorca tygodnia."""
+        hours_map = loc.open_hours if loc is not None else self.shop.open_hours
+        if loc is not None and loc.closed_on_public_holidays and dt in self._pl_all:
+            return None
+        hours = hours_map.get(dt.weekday())
+        return hours if hours and hours[0] and hours[1] else None
+
+    @staticmethod
+    def _span(hours):
+        """(start, end, doba) w minutach dnia - okno >= 23:45 to doba 24 h."""
+        start, end = hm(hours[0]), hm(hours[1])
+        length = (end - start) % DAY or DAY
+        if length >= DAY - SLOT:
+            return start, start + DAY, True
+        return start, start + length, False
+
+    def opening_windows(self, location_key):
+        """{dzień: (abs_start, abs_end, doba)} - okno dnia zaczyna się nie
+        wcześniej niż skończyło się poprzednie (doba trwa wtedy 24 h od
+        końca poprzedniego okna, np. pt 15-07 + sob 24h = sob 07-nd 07)."""
+        if location_key in self._opening_windows:
+            return self._opening_windows[location_key]
+        loc = self.shop.locations.get(location_key)
+        first = date(self.year, self.month, 1)
+        last_end = None
+        entries = [(-back, self._pattern_hours(loc, first - timedelta(days=back))) for back in range(7, 0, -1)]
+        entries += [(day - 1, self._day_hours(loc, day)) for day in range(1, self.days_in_month + 1)]
+        result = {}
+        for offset, hours in entries:
+            if not hours:
+                continue
+            s, e, doba = self._span(hours)
+            s, e = offset * DAY + s, offset * DAY + e
+            if last_end is not None and last_end > s:
+                if doba:
+                    e = last_end + DAY
+                s = last_end
+                if s >= e:
+                    continue
+            last_end = e if last_end is None else max(last_end, e)
+            if offset >= 0:
+                result[offset + 1] = (s, e, doba)
+        self._opening_windows[location_key] = result
+        return result
+
+    def max_staff(self, emp):
+        loc = self.location(emp)
+        value = (loc.constraints if loc is not None else {}).get(MAX_STAFF_KEY)
+        if value is None:
+            value = self.shop.constraints.get(MAX_STAFF_KEY, 1)
+        return max(1, int(value))
 
     # ---- rotacja służby 24/7 ----
 
@@ -322,10 +411,47 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
     # ------------------------------------------------------------------
     # 3. Dni zamknięte i godziny otwarcia (lokalizacje bez rotacji 24/7)
     # ------------------------------------------------------------------
+    loc_manual_bounds = {}
+    for emp in schedule_after.employees:
+        for start, end, _day, is_manual, _full in intervals[emp.id]:
+            if is_manual:
+                loc_manual_bounds.setdefault(emp.location_key, set()).update((start, end))
     for emp in schedule_after.employees:
         rotation = cfg.rotation(emp)
-        for start, end, day, is_manual, _full in intervals[emp.id]:
+        for start, end, day, is_manual, full in intervals[emp.id]:
             if is_manual:
+                continue
+            if cfg.uses_opening_model(emp):
+                windows = cfg.opening_windows(emp.location_key)
+                container = next(
+                    ((wd, w) for wd, w in windows.items() if w[0] <= start and end <= w[1]), None
+                )
+                if container is None:
+                    touching = any(w[0] < end and start < w[1] for w in windows.values())
+                    add(Violation(
+                        "opening_hours" if touching else "closed_day",
+                        f"zmiana {fmt_abs(start)}-{fmt_abs(end)} poza oknami placówki",
+                        emp.display_name(), day,
+                    ))
+                    continue
+                window_day, (ws, we, doba) = container
+                bounds = {ws, we} | ({ws + DAY // 2} if doba else set()) | loc_manual_bounds.get(emp.location_key, set())
+                if start not in bounds or end not in bounds:
+                    add(Violation(
+                        "opening_shape",
+                        f"zmiana {fmt_abs(start)}-{fmt_abs(end)} nie jest całym oknem {fmt_abs(ws)}-{fmt_abs(we)}"
+                        + (" ani połówką doby" if doba else ""),
+                        emp.display_name(), day,
+                    ))
+                if full and emp.custom_roles.get(NIE_CHCE_24H) and cfg.weekday(window_day) >= 5:
+                    add(Violation(
+                        "duty_rotation_no24h", f"zmiana 24h w weekend dla osoby \"nie chce 24h\" ({fmt_abs(start)})",
+                        emp.display_name(), day,
+                    ))
+                if emp.no_night and overlaps_daily_window(start, end, 22 * 60, 6 * 60):
+                    add(Violation("no_night", f"zmiana {fmt_abs(start)}-{fmt_abs(end)} w porze nocnej", emp.display_name(), day))
+                if emp.no_afternoon and start - (day - 1) * DAY >= 12 * 60:
+                    add(Violation("no_afternoon", f"zmiana {fmt_abs(start)}-{fmt_abs(end)} zaczyna się po południu", emp.display_name(), day))
                 continue
             if rotation:
                 loc = cfg.location(emp)
@@ -363,11 +489,12 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
             rows = [(end_prev - 1, end_prev, 0, True, False)] + rows
         rotation = cfg.rotation(emp)
         capable = None
-        if rotation:
+        long_rest = bool(rotation) or cfg.uses_opening_model(emp)
+        if long_rest:
             capable = sum(1 for other in loc_groups.get(emp.location_key, []) if not other.custom_roles.get(NIE_CHCE_24H))
         for (s1, e1, d1, m1, full1), (s2, e2, d2, m2, _f2) in zip(rows, rows[1:]):
             required = 11 * 60
-            if rotation and full1:
+            if long_rest and full1:
                 required = 24 * 60 * max((capable or 0) - 1, 1)
             gap = s2 - e1
             if gap < required:
@@ -435,7 +562,7 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
     # ------------------------------------------------------------------
     # 8b. Obłożenie godzin otwarcia placówek bez rotacji (profil Ochrona)
     # ------------------------------------------------------------------
-    if cfg.shop.business_type in OPENING_MODEL_PROFILES:
+    if cfg.opening_model:
         _validate_opening_coverage(cfg, schedule_after, intervals, report)
 
     # ------------------------------------------------------------------
@@ -581,7 +708,9 @@ def _validate_duty(cfg, schedule, intervals, manual, report):
                 allowed = cfg.standard_duty_windows(rotation, day)
                 if (s, e) not in allowed.values() and not has_manual_work:
                     add(Violation("duty_shape", f"zmiana {fmt_abs(s)}-{fmt_abs(e)} nie pasuje do rotacji", emp.display_name(), day))
-                if is_full and emp.custom_roles.get(NIE_CHCE_24H):
+                if is_full and emp.custom_roles.get(NIE_CHCE_24H) and (
+                    cfg.weekday(day) >= 5 if 1 <= day <= cfg.days_in_month else True
+                ):
                     add(Violation("duty_rotation_no24h", f"zmiana 24h dla osoby \"nie chce 24h\" ({fmt_abs(s)})", emp.display_name(), day))
 
         # Obłożenie minuta po minucie (w kwadransach - wszystkie godziny
@@ -636,29 +765,54 @@ def _validate_duty(cfg, schedule, intervals, manual, report):
 
 
 def _validate_opening_coverage(cfg, schedule, intervals, report):
+    """Placówki Ochrony bez rotacji: każdy kwadrans okien (do końca
+    miesiąca) ma co najmniej 1 osobę; obsada naraz nie większa niż „Maks.
+    obsada naraz” (ręczne wpisy zajmują miejsca, ale same nie łamią
+    limitu)."""
     add = report.violations.append
     metrics = {}
+    month_end = cfg.days_in_month * DAY
     for loc_key, emps in _employees_by_location(schedule).items():
-        loc = cfg.shop.locations.get(loc_key)
-        if loc is None or loc.duty_rotation or (loc.is_24_7 and loc.round_clock_start_hour):
+        if not cfg.uses_opening_model(emps[0]):
             continue
-        events = [(s, e) for emp in emps for s, e, _d, _m, _f in intervals[emp.id]]
-        gaps = []
-        for day in range(1, cfg.days_in_month + 1):
-            window = cfg.open_window(emps[0], day)
-            if window is None:
-                continue
-            t = window[0]
-            while t < window[1]:
-                if not any(s <= t < e for s, e in events):
-                    gaps.append(t)
+        cap = cfg.max_staff(emps[0])
+        events = [(s, e, m) for emp in emps for s, e, _d, m, _f in intervals[emp.id]]
+        open_slots = set()
+        for ws, we, _doba in cfg.opening_windows(loc_key).values():
+            t = ws
+            while t < min(we, month_end):
+                open_slots.add(t)
                 t += SLOT
-        metrics[loc_key] = {"gap_slots": len(gaps)}
+        gaps, doubles, manual_doubles, over_cap = [], [], 0, []
+        for t in sorted(open_slots):
+            covering = [m for s, e, m in events if s <= t < e]
+            if not covering:
+                gaps.append(t)
+            elif len(covering) >= 2:
+                if sum(covering) >= 2:
+                    manual_doubles += 1
+                else:
+                    doubles.append(t)
+            generated = sum(1 for m in covering if not m)
+            if generated > max(cap - (len(covering) - generated), 0):
+                over_cap.append(t)
+        metrics[loc_key] = {
+            "open_slots": len(open_slots), "gap_slots": len(gaps),
+            "double_slots": len(doubles), "manual_double_slots": manual_doubles,
+            "first_double": fmt_abs(doubles[0]) if doubles else None,
+            "max_staff": cap, "over_cap_slots": len(over_cap),
+        }
         if gaps:
             add(Violation(
                 "opening_hours_coverage",
                 f"[{loc_key}] {len(gaps)} kwadransów godzin otwarcia bez nikogo (np. {fmt_abs(gaps[0])})",
                 day=gaps[0] // DAY + 1,
+            ))
+        if over_cap:
+            add(Violation(
+                MAX_STAFF_KEY,
+                f"[{loc_key}] {len(over_cap)} kwadransów z obsadą ponad limit {cap} (np. {fmt_abs(over_cap[0])})",
+                day=over_cap[0] // DAY + 1,
             ))
     report.metrics["opening_coverage"] = metrics
 
@@ -714,7 +868,7 @@ def _validate_custom_rules(cfg, schedule, intervals, report):
 # Ocena względem polityk
 # ---------------------------------------------------------------------------
 
-STRUCTURAL_RULES = ("preserve_input", "closed_day", "opening_hours", "night_outside_hours", "duty_shape")
+STRUCTURAL_RULES = ("preserve_input", "closed_day", "opening_hours", "opening_shape", "night_outside_hours", "duty_shape")
 
 
 def evaluate(report, shop):

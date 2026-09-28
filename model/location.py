@@ -318,6 +318,21 @@ class LocationConfig:
             return None
         return start, end
 
+    def get_weekly_open_hours_on(self, dt):
+        """Godziny otwarcia w dowolnym dniu kalendarza (np. ostatnim dniu
+        poprzedniego miesiąca) wg tygodniowego wzorca `open_hours` i
+        zamknięcia w polskie święta - bez `day_overrides` (te dotyczą dni
+        bieżącego miesiąca). Używane przez model godzin otwarcia Ochrony do
+        ustalenia, gdzie kończy się okno sprzed dnia 1 (kotwica doby)."""
+        if self.closed_on_public_holidays:
+            from logic.utils.holidays_pl import polish_public_holiday_days
+            if dt.day in polish_public_holiday_days(dt.year, dt.month):
+                return None
+        hours = self.open_hours.get(dt.weekday())
+        if not hours or not hours[0] or not hours[1]:
+            return None
+        return hours[0], hours[1]
+
     def get_night_shift_hours(self) -> tuple[str, str] | None:
         """(start, end) zmiany nocnej tej lokalizacji, wykrywana automatycznie
         z jej godzin otwarcia - nie ma już osobnego, ręcznie ustawianego pola

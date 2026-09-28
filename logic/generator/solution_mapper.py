@@ -20,6 +20,7 @@ def save_solution(
     shift_night=None,
     duty_shifts=None,
     round_clock_shifts=None,
+    opening_model=None,
 ):
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         print("❌ BRAK ROZWIĄZANIA")
@@ -163,24 +164,23 @@ def save_solution(
                     if assigned_tile:
                         continue
 
-                # Kafelki doby modelu godzin otwarcia (Ochrona, placówki bez
-                # rotacji, dni 00:00-23:45) - opening_hours_coverage.py.
-                from logic.generator.opening_hours_coverage import tile_hours_for_assignment
-
-                assigned_tile = False
-                for tile_index, tile_shift in enumerate(round_clock_shifts):
-                    if solver.Value(x[e, d, tile_shift]) != 1:
+            # Model godzin otwarcia (Ochrona, placówki bez rotacji) - zmiana
+            # na całe okno dnia, dobę 24 h, połówkę doby albo zmiana
+            # resztkowa; własne godziny liczone w opening_hours_coverage.py
+            # (okna przez północ, doba od końca okna dnia poprzedniego).
+            if opening_model is not None and e in opening_model.index_set:
+                for shape_id in opening_model.windows.get((e, d), {}):
+                    if solver.Value(x[e, d, shape_id]) != 1:
                         continue
-                    tile_hours = tile_hours_for_assignment(shop, emp, d, tile_index)
-                    if tile_hours is None:
-                        continue
-                    schedule.set_day_hours(emp, d, *tile_hours)
+                    start, end, full_day = opening_model.assignment_hours(e, d, shape_id)
+                    if full_day:
+                        schedule.set_day_full_day_shift(emp, d, start)
+                    else:
+                        schedule.set_day_hours(emp, d, start, end)
                     if trace is not None:
-                        trace.log_assignment(e, d, tile_shift, "solver_assignment")
-                    assigned_tile = True
+                        trace.log_assignment(e, d, shape_id, "solver_assignment")
                     break
-                if assigned_tile:
-                    continue
+                continue
 
             hours = shop.get_location(emp).get_open_hours_for_day(d)
             if not hours:

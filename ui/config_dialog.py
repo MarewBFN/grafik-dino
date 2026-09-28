@@ -32,6 +32,12 @@ from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile, visible_profiles
 from model.location import normalize_duty_rotation
+from logic.generator.opening_hours_coverage import (
+    DEFAULT_MAX_STAFF,
+    MAX_STAFF_CONSTRAINT_KEY,
+    MAX_STAFF_POLICY,
+    profile_uses_opening_hours_model,
+)
 
 CONFIG_TUTORIAL_FLAG = "config_tutorial_seen.flag"
 
@@ -59,6 +65,8 @@ POLICY_MISSING_DEFAULTS = {
     # Zasada dodana po zapisaniu starszych projektów - brak wpisu generator
     # traktuje jako Wymaganą (logic/generator/opening_hours_coverage.py).
     "opening_hours_coverage": ConstraintPolicy.MANDATORY,
+    # "Maks. obsada naraz" - brak wpisu = Preferowana (jak w generatorze).
+    MAX_STAFF_POLICY: ConstraintPolicy.PREFERRED,
 }
 
 REST_11H_MODE_OPTIONS = (
@@ -583,6 +591,29 @@ class ConfigDialog(QDialog):
         self.min_close.setFixedWidth(70)
         self.min_close.setValue(self.shop_config.constraints.get("min_close_staff", 3))
 
+        # --- Sekcja: Maks. obsada naraz (profil Ochrony, placówki z
+        # godzinami otwarcia - patrz logic/generator/opening_hours_coverage.py).
+        # Tryb (Wymagana/Preferowana/Wyłączona) - w "Zasadach generatora".
+        self.max_staff = QSpinBox()
+        self.max_staff.setRange(1, 10)
+        self.max_staff.setFixedWidth(70)
+        self.max_staff.setValue(
+            int(self.shop_config.constraints.get(MAX_STAFF_CONSTRAINT_KEY, DEFAULT_MAX_STAFF))
+        )
+        self.max_staff.setToolTip(
+            "Ile osób z jednej placówki (z godzinami otwarcia, bez rotacji 24/7) "
+            "może pracować jednocześnie. Tryb zasady „Maks. obsada naraz” "
+            "ustawisz w zakładce Zasady generatora."
+        )
+        if profile_uses_opening_hours_model(self.shop_config.business_type):
+            max_staff_label = QLabel("OBSADA PLACÓWEK Z GODZINAMI OTWARCIA")
+            max_staff_label.setObjectName("groupLabel")
+            layout.addWidget(max_staff_label)
+
+            form_max_staff = QFormLayout()
+            form_max_staff.addRow("Maks. osób naraz w placówce:", self.max_staff)
+            layout.addLayout(form_max_staff)
+
         if self.shop_config.business_type == DEFAULT_BUSINESS_TYPE:
             staff_label = QLabel("MINIMALNA OBSADA PRACOWNIKÓW")
             staff_label.setObjectName("groupLabel")
@@ -843,6 +874,7 @@ class ConfigDialog(QDialog):
             self.shop_config.standard_daily_hours = self.standard_daily_hours.value()
             self.shop_config.constraints["min_open_staff"] = self.min_open.value()
             self.shop_config.constraints["min_close_staff"] = self.min_close.value()
+            self.shop_config.constraints[MAX_STAFF_CONSTRAINT_KEY] = self.max_staff.value()
             self.shop_config.constraints["enforce_11h_rest"] = True
             self.shop_config.constraints["enforce_meat_coverage"] = True
             self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()

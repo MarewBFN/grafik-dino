@@ -1861,3 +1861,62 @@ projekty Ochrony ze zmianą 8 h.
 | `ui/config_dialog.py` | Brak wpisu nowej zasady = "Wymagane" w UI | TAK |
 | `ui/main_window.py` | Nowy projekt: `apply_new_project_defaults()` | NIE (Enyo) |
 | `tests/schedule_validator.py`, `tests/generator_audit_harness.py`, `tests/test_generator_audit_regressions.py` | Walidator, harness kampanii, testy regresyjne + reproducery Dino (`xfail`) | TAK |
+
+### Placówki z godzinami przez północ i dobą 24h (GZUK, 2026-09-28)
+
+Zgłoszenie: pn-pt 15:00-07:00, sob-nd 24h. Plik klienta (`test1.myp`,
+profil „ochrona_dane_klienta_test”) szedł starą ścieżką - model godzin
+otwarcia działał tylko dla klucza „custom_ochrona”. Wynik OPTIMAL, a w GZUK
+ok. 59% kwadransów otwarcia bez nikogo i 4-6 osób naraz na sztywnej nocce
+22-06; doba weekendowa liczona 00:00-24:00 nachodziła na piątkową nockę i
+zostawiała poniedziałek 00:00-07:00 bez ochrony.
+
+Decyzje użytkownika i zmiany (`logic/generator/opening_hours_coverage.py`,
+przepisany):
+
+- **Zakres**: każdy profil Ochrony - „custom_ochrona” albo profil custom z
+  rolą „Nie chce 24h” (ochrona_enyo, ochrona_dane_klienta_test, ...).
+- **Jedna osoba na całe okno dnia**: 15:00-07:00 = jedna zmiana 16 h;
+  doba = zmiana 24 h albo dwie połówki po 12 h (lekka preferencja całej
+  doby; połówki dla „Nie chce 24h” w weekend i przy urlopach).
+- **Doba od końca poprzedniego okna**: pt 15:00-07:00 + sob/nd 24h = ciągle
+  od pt 15:00 do pn 07:00 (sob i nd 07:00-07:00). Okna dni nigdy się nie
+  nakładają; dzień 1 liczony względem wzorca tygodnia poprzedniego miesiąca
+  (`LocationConfig/ShopConfig.get_weekly_open_hours_on`). Okno ≥ 23:45 (także
+  00:00-00:00 czy 07:00-07:00 z pliku) = doba.
+- **Zmiana należy do komórki dnia, w którym się zaczyna** (np. druga
+  połówka doby od 03:00 trafia do następnego dnia - także zamkniętego;
+  `non_trade_day` pomija pracowników modelu).
+- **Nowa zasada „Maks. obsada naraz”** (`max_staff_at_once`): liczba osób
+  w Konfiguracji → Ograniczenia (domyślnie 1, tylko dla profili Ochrony) i
+  tryb w Zasadach generatora (domyślnie Preferowana, waga 20000 za
+  nadmiarową osobo-minutę - więcej niż „Umowa”). Ręczne wpisy zajmują
+  miejsca w limicie, ale same go nie łamią.
+- **Ręczny wpis częściowy** (np. 15:00-23:00 w oknie 15:00-07:00): reszta
+  okna idzie jako zmiana resztkowa innej osoby zamiast drugiej osoby na
+  całe okno.
+- **Odpoczynek**: dokładne pary na osi miesiąca; po zmianie 24 h
+  (N-1)x24 h, min. 24 h (jak rotacja 24/7); ręczne stałe przedziały i
+  zmiana z końca poprzedniego miesiąca.
+- **Godziny**: długość zmiany liczona per dzień (16/24/12 h) w bilansie,
+  godzinach miesięcznych, „Umowie”, „Nominalnym czasie bez umowy” (ten
+  ostatni wcześniej w ogóle nie znał modelu) i wyrównaniu.
+- **Typ zmiany „W”** (musi pracować) działa dla tych pracowników (wcześniej
+  pomijany); „1”/„2” = zmiana zaczynająca się przed/od 12:00.
+- **„Nie chce 24h”, „Nie pracuje w nocy”, „Nie pracuje na popołudniu”**
+  obejmują nowe kształty zmian.
+- **Diagnostyka**: nikt niedostępny w dniu okna; jedyna osoba na dobę
+  sob/nd ma „Nie chce 24h”; kolejne okna dzieli < 11 h, a dostępna jest
+  tylko 1 osoba.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/opening_hours_coverage.py` | Przepisany model (okna, kształty, kotwica doby, maks. obsada, odpoczynek, W/1/2, no_night/no_afternoon/no24h) | DO USTALENIA |
+| `logic/generator/custom_profile_wiring.py` | Zasada `max_staff_at_once` (spec/waga/etykieta/domyślna polityka), gating po roli, preferencja całej doby | DO USTALENIA |
+| `logic/generator/base_specs.py`, `constraints_basic.py` | „Nie chce 24h” także bez rotacji, odpoczynek z pamięcią poprzedniego miesiąca, `non_trade_day` pomija model | DO USTALENIA |
+| `logic/generator/hours_constraint.py`, `priority_hours_constraint.py` | Minuty zmian modelu per dzień (`minutes_expr`) | DO USTALENIA |
+| `logic/generator/solution_mapper.py`, `logic/auto_generator.py` | Zapis zmian modelu (całe okno / 24 h / połówka / resztkowa) | DO USTALENIA |
+| `logic/generator/diagnostics.py` | Nowe komunikaty, etap `max_staff_at_once` | DO USTALENIA |
+| `model/location.py`, `model/shop_config.py` | `get_weekly_open_hours_on(dt)` - godziny wg wzorca w dowolnym dniu | TAK |
+| `ui/config_dialog.py` | Pole „Maks. osób naraz w placówce”, brak wpisu zasady = Preferowana | DO USTALENIA |
+| `tests/schedule_validator.py`, `tests/generator_audit_harness.py`, `tests/test_generator_audit_regressions.py` | Walidator (okna z kotwicą, kształty, maks. obsada), rodzina kampanii `weird_hours`, testy | TAK |

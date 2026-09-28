@@ -26,10 +26,13 @@ def _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts, openin
     return overrides
 
 
-def _fixed_minutes(emp, opening_model):
-    """Ręczne wpisy niepasujące do żadnego kształtu zmiany (stałe przedziały
-    modelu godzin otwarcia) - nie mają zmiennej x, a są realną pracą."""
-    return opening_model.fixed_minutes(emp) if opening_model is not None else 0
+def _opening_minutes(x, emp, opening_model):
+    """Minuty z modelu godzin otwarcia (opening_hours_coverage.py): zmiany
+    o długości zależnej od dnia (całe okno 16 h, doba 24 h, połówka 12 h -
+    w ogólnej sumie mają 0, patrz duration_overrides) i ręczne wpisy
+    niepasujące do żadnego kształtu (stałe przedziały - bez zmiennej x, a
+    realna praca)."""
+    return opening_model.minutes_expr(x, emp) if opening_model is not None else 0
 
 
 def add_monthly_hours_constraint(
@@ -91,7 +94,7 @@ def add_monthly_hours_constraint(
                 for s in all_shifts
             )
             + planned_minutes_expr(x, e, emp, days, duty_shifts)
-            + _fixed_minutes(emp, opening_model)
+            + _opening_minutes(x, emp, opening_model)
         )
 
         all_totals.append(total_minutes)
@@ -205,7 +208,7 @@ def add_balance_constraint(
                 for d in days
             )
             + planned_minutes_expr(x, e, emp, days, duty_shifts)
-            + _fixed_minutes(emp, opening_model)
+            + _opening_minutes(x, emp, opening_model)
         )
 
         if not soft:

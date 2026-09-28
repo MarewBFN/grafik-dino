@@ -41,7 +41,11 @@ from logic.generator.duty_rotation_public_holiday_constraint import add_duty_rot
 from logic.generator.round_clock_constraint import add_round_clock_gate_constraint
 from logic.generator.round_clock_rest_constraint import add_round_clock_rest_constraint
 from logic.generator.round_clock_manual_constraint import add_round_clock_manual_shift_constraint
-from logic.generator.opening_hours_coverage import add_opening_hours_rest_constraint, get_model
+from logic.generator.opening_hours_coverage import (
+    add_opening_hours_no24h_constraint,
+    add_opening_hours_rest_constraint,
+    get_model,
+)
 from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
 
 
@@ -80,6 +84,12 @@ def _build_always_on_specs():
             lambda ctx, soft: add_non_trade_day_constraints(
                 ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts, trace=ctx.trace,
                 schedule=ctx.schedule,
+                # Model godzin otwarcia (Ochrona, placówki bez rotacji):
+                # zmiany istnieją tylko w oknach placówki (add_opening_hours_
+                # shape_constraint), a zmiana zaczynająca się po północy w
+                # dniu zamkniętym (np. druga połówka doby) należy do okna
+                # dnia poprzedniego - nie wolno jej tu zerować.
+                skip_indices=get_model(ctx).index_set if get_model(ctx) else None,
             ),
             always_on=True,
         ),
@@ -246,9 +256,10 @@ def _build_rest_11h(ctx, soft):
             ctx.shop.standard_daily_hours, schedule=prev_month_schedule, soft=soft, trace=ctx.trace,
         )
 
-    # Model godzin otwarcia (Ochrona, placówki bez rotacji): kafelki doby i
-    # ręczne stałe przedziały - tych par add_rest_11h_constraint nie zna.
-    violations = list(violations) + add_opening_hours_rest_constraint(ctx, soft)
+    # Model godzin otwarcia (Ochrona, placówki bez rotacji): zmiany na całe
+    # okno/dobę/połówkę i ręczne stałe przedziały - tych par
+    # add_rest_11h_constraint nie zna.
+    violations = list(violations) + add_opening_hours_rest_constraint(ctx, soft, schedule=prev_month_schedule)
 
     return violations
 
@@ -324,10 +335,15 @@ def _build_duty_rotation_coverage(ctx, soft):
 
 
 def _build_duty_rotation_no24h(ctx, soft):
-    return add_duty_rotation_no24h_gate_constraint(
-        ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.duty_shifts,
-        soft=soft, trace=ctx.trace,
-    )
+    violations = []
+    if ctx.duty_shifts is not None:
+        violations = add_duty_rotation_no24h_gate_constraint(
+            ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.duty_shifts,
+            soft=soft, trace=ctx.trace,
+        )
+    # "Nie chce 24h" także w placówkach Ochrony z godzinami otwarcia
+    # (doba sob/nd = zmiana 24 h albo dwie połówki).
+    return list(violations) + add_opening_hours_no24h_constraint(ctx, soft)
 
 
 def _build_generic_policy_specs():
@@ -341,10 +357,7 @@ def _build_generic_policy_specs():
             "duty_rotation_coverage",
             lambda ctx, soft: _build_duty_rotation_coverage(ctx, soft) if ctx.duty_shifts is not None else [],
         ),
-        ConstraintSpec(
-            "duty_rotation_no24h",
-            lambda ctx, soft: _build_duty_rotation_no24h(ctx, soft) if ctx.duty_shifts is not None else [],
-        ),
+        ConstraintSpec("duty_rotation_no24h", _build_duty_rotation_no24h),
     ]
 
 

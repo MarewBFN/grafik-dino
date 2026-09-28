@@ -20,7 +20,7 @@ miejsca, które trzeba trzymać w synchronizacji, gdyby któreś się zmieniło.
 """
 
 from logic.generator.duty_rotation_manual_coverage import planned_minutes_expr
-from logic.generator.hours_constraint import _duration_overrides_for_employee, _fixed_minutes, _shift_minutes_by_type
+from logic.generator.hours_constraint import _duration_overrides_for_employee, _opening_minutes, _shift_minutes_by_type
 from logic.utils.time_utils import get_effective_daily_hours
 
 UMOWA_ROLE_KEY = "umowa"
@@ -95,7 +95,7 @@ def add_priority_hours_shortfall_penalty(
             total_minutes ==
             sum(x[e, d, s] * minutes_by_shift[s] for d in days for s in all_shifts)
             + planned_minutes_expr(x, e, emp, days, duty_shifts)
-            + _fixed_minutes(emp, opening_model)
+            + _opening_minutes(x, emp, opening_model)
         )
 
         under = model.NewIntVar(0, 50000, f"priority_hours_under_e{e}")
@@ -260,7 +260,7 @@ def add_hours_equalization_penalty(
                 norm == scale * (
                     sum(x[e, d, s] * minutes_by_shift[s] for d in days for s in all_shifts)
                     + planned_minutes_expr(x, e, emp, days, duty_shifts)
-                    + _fixed_minutes(emp, opening_model)
+                    + _opening_minutes(x, emp, opening_model)
                     + unavailable * share_per_day
                 )
             )

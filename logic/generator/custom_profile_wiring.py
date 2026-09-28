@@ -30,13 +30,20 @@ from logic.generator.priority_hours_constraint import (
     nominal_hours_no_contract_weight,
 )
 from logic.generator.opening_hours_coverage import (
+    MAX_STAFF_LABEL,
+    MAX_STAFF_POLICY,
+    MAX_STAFF_WEIGHT,
     OPENING_HOURS_COVERAGE_LABEL,
     OPENING_HOURS_COVERAGE_POLICY,
     OPENING_HOURS_COVERAGE_WEIGHT,
+    add_max_staff_constraint,
     add_opening_hours_coverage_constraint,
+    add_opening_hours_no_afternoon_constraint,
+    add_opening_hours_no_night_constraint,
     add_opening_hours_shape_constraint,
+    custom_profile_uses_opening_hours_model,
     get_model,
-    profile_uses_opening_hours_model,
+    prefer_full_day_terms,
     setup_opening_hours_model,
 )
 from model.constraint_policy import ConstraintPolicy
@@ -51,19 +58,23 @@ def setup_context(ctx) -> None:
 
 
 def _build_no_night(ctx, soft):
-    return add_no_night_constraint(
+    violations = add_no_night_constraint(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.all_shifts,
         ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
         soft=soft, trace=ctx.trace, shift_night=ctx.shift_night, schedule=ctx.schedule,
     )
+    # Zmiany modelu godzin otwarcia (Ochrona, placówki bez rotacji) - tych
+    # kształtów add_no_night_constraint nie zna.
+    return list(violations) + add_opening_hours_no_night_constraint(ctx, soft)
 
 
 def _build_no_afternoon(ctx, soft):
-    return add_no_afternoon_constraint(
+    violations = add_no_afternoon_constraint(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.all_shifts,
         ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
         soft=soft, trace=ctx.trace, schedule=ctx.schedule,
     )
+    return list(violations) + add_opening_hours_no_afternoon_constraint(ctx, soft)
 
 
 def build_specs(custom: CustomBusinessProfile) -> list[ConstraintSpec]:
@@ -90,7 +101,7 @@ def build_specs(custom: CustomBusinessProfile) -> list[ConstraintSpec]:
             build=functools.partial(builder, role_key=rule.role_key, **rule.params, **extra),
         ))
 
-    if profile_uses_opening_hours_model(custom.key):
+    if custom_profile_uses_opening_hours_model(custom):
         specs.append(ConstraintSpec(
             "opening_hours_shape",
             lambda ctx, soft: add_opening_hours_shape_constraint(ctx),
@@ -100,6 +111,11 @@ def build_specs(custom: CustomBusinessProfile) -> list[ConstraintSpec]:
             OPENING_HOURS_COVERAGE_POLICY,
             add_opening_hours_coverage_constraint,
             default_policy=ConstraintPolicy.MANDATORY,
+        ))
+        specs.append(ConstraintSpec(
+            MAX_STAFF_POLICY,
+            add_max_staff_constraint,
+            default_policy=ConstraintPolicy.PREFERRED,
         ))
 
     return specs
@@ -113,8 +129,9 @@ def build_weights(custom: CustomBusinessProfile) -> dict:
     weights["no_afternoon"] = 5000
     for rule in custom.rules:
         weights[custom.rule_policy_key(rule)] = rule.weight
-    if profile_uses_opening_hours_model(custom.key):
+    if custom_profile_uses_opening_hours_model(custom):
         weights[OPENING_HOURS_COVERAGE_POLICY] = OPENING_HOURS_COVERAGE_WEIGHT
+        weights[MAX_STAFF_POLICY] = MAX_STAFF_WEIGHT
     return weights
 
 
@@ -147,10 +164,13 @@ def default_policies(custom: CustomBusinessProfile) -> dict:
             policies[custom.rule_policy_key(rule)] = ConstraintPolicy(rule.policy)
         except ValueError:
             policies[custom.rule_policy_key(rule)] = ConstraintPolicy.PREFERRED
-    if profile_uses_opening_hours_model(custom.key):
+    if custom_profile_uses_opening_hours_model(custom):
         # "Obłożenie godzin otwarcia" (decyzja użytkownika 2026-09-28) -
         # pokrycie placówki jest ważniejsze niż godziny etatu.
         policies[OPENING_HOURS_COVERAGE_POLICY] = ConstraintPolicy.MANDATORY
+        # "Maks. obsada naraz" (decyzja użytkownika 2026-09-28: nakładki
+        # dozwolone, ale edytowalne) - Preferowana z wagą wyższą niż "Umowa".
+        policies[MAX_STAFF_POLICY] = ConstraintPolicy.PREFERRED
     return policies
 
 
@@ -161,7 +181,7 @@ def apply_new_project_defaults(shop, custom: CustomBusinessProfile) -> None:
     ukryta w tej wersji opcja "Wymuś 8h 30 min"). Istniejące projekty bez
     zmian - ta funkcja jest wołana tylko przy tworzeniu projektu."""
     shop.constraint_policies.update(default_policies(custom))
-    if profile_uses_opening_hours_model(custom.key):
+    if custom_profile_uses_opening_hours_model(custom):
         shop.constraints["force_fulltime_845"] = False
 
 
@@ -171,8 +191,9 @@ def build_policy_labels(custom: CustomBusinessProfile) -> tuple:
     labels.append(("no_night", "Zakaz pracy nocnej"))
     labels.append(("no_afternoon", "Zakaz pracy popołudniami"))
     labels.append((NOMINAL_HOURS_NO_CONTRACT_POLICY, NOMINAL_HOURS_NO_CONTRACT_LABEL))
-    if profile_uses_opening_hours_model(custom.key):
+    if custom_profile_uses_opening_hours_model(custom):
         labels.append((OPENING_HOURS_COVERAGE_POLICY, OPENING_HOURS_COVERAGE_LABEL))
+        labels.append((MAX_STAFF_POLICY, MAX_STAFF_LABEL))
     for rule in custom.rules:
         labels.append((custom.rule_policy_key(rule), custom.rule_label(rule)))
     return tuple(labels)
@@ -213,7 +234,7 @@ def build_objective_terms(ctx, *_args, **_kwargs) -> list:
         terms.extend(add_priority_hours_shortfall_penalty(
             ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
             shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
-            invert=True, weight=no_contract_weight,
+            invert=True, weight=no_contract_weight, opening_model=get_model(ctx),
         ))
 
     # "Wyrównanie godzin umowa/bez" - zawsze miękkie (także "Wymagane",
@@ -232,5 +253,9 @@ def build_objective_terms(ctx, *_args, **_kwargs) -> list:
         terms.extend(add_prefer_weekend_split_over_full_penalty(
             ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.duty_shifts,
         ))
+
+    # Model godzin otwarcia: cała doba zamiast dwóch połówek, gdy się da
+    # (połówki dla "Nie chce 24h" i urlopów) - tylko rozstrzyga remisy.
+    terms.extend(prefer_full_day_terms(ctx))
 
     return terms
