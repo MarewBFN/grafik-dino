@@ -47,6 +47,9 @@ POLICY_OPTIONS = (
 # Konfiguracji po cichu włączyłoby zasadę).
 POLICY_MISSING_DEFAULTS = {
     "hours_equalization": ConstraintPolicy.DISABLED,
+    # Zasada dodana po zapisaniu starszych projektów - brak wpisu generator
+    # traktuje jako Wymaganą (logic/generator/opening_hours_coverage.py).
+    "opening_hours_coverage": ConstraintPolicy.MANDATORY,
 }
 
 REST_11H_MODE_OPTIONS = (

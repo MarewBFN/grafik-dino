@@ -36,6 +36,7 @@ POLICY_STAGES = (
     "meat_coverage",
     "max_consecutive",
     "monthly_hours",
+    "opening_hours_coverage",
 )
 
 
@@ -189,8 +190,21 @@ def _previous_month_rest_gap_hours(schedule, employee, target_time: str, fmt: st
     return (target_dt - end_dt).total_seconds() / 3600
 
 
-def build_infeasibility_summary(schedule, shop) -> list[str]:
-    """Return client-readable causes that can be proven from the input data."""
+TIMEOUT_MESSAGE = (
+    "Generator nie znalazł grafiku w limicie czasu ({limit} s) - to nie musi "
+    "oznaczać sprzecznych zasad. Zwiększ „Limit czasu generatora” "
+    "(Konfiguracja → Zasady generatora → ustawienia zaawansowane) i spróbuj ponownie."
+)
+
+
+def build_infeasibility_summary(schedule, shop, timed_out=False) -> list[str]:
+    """Return client-readable causes that can be proven from the input data.
+
+    timed_out=True (solver skończył limit czasu bez żadnego rozwiązania,
+    status UNKNOWN - a nie udowodnił sprzeczności): gdy z danych nie da się
+    dowieść żadnej konkretnej przyczyny, zamiast "Wymagane zasady są ze sobą
+    sprzeczne" (nieprawda - audyt 2026-09-28) zwracany jest komunikat o
+    limicie czasu."""
     messages: list[str] = []
     policies = shop.constraint_policies
     min_open = shop.constraints.get("min_open_staff", 3)
@@ -201,6 +215,7 @@ def build_infeasibility_summary(schedule, shop) -> list[str]:
             messages.append(message)
 
     _add_duty_rotation_supply_messages(schedule, shop, add)
+    _add_opening_hours_supply_messages(schedule, shop, add)
 
     # Obsada otwarcia/zamknięcia/mięsa to reguły wyłącznie profilu Dino
     # (dino_retail_profile.py) i wyłącznie pracowników bez rotacji służby /
@@ -316,12 +331,51 @@ def build_infeasibility_summary(schedule, shop) -> list[str]:
                         f"zablokowana przerwa wynosi tylko {hours:.2f} h (wymagane 11 h)."
                     )
 
+    if not messages and timed_out:
+        add(TIMEOUT_MESSAGE.format(limit=shop.constraints.get("solver_time_limit_seconds", 60)))
     if not messages:
         add(
             "Wymagane zasady są ze sobą sprzeczne. Sprawdź zablokowane zmiany, "
             "dostępność pracowników oraz wymagania dla danego dnia."
         )
     return messages
+
+
+def _add_opening_hours_supply_messages(schedule, shop, add) -> None:
+    """"Obłożenie godzin otwarcia" (Ochrona, placówki bez rotacji - patrz
+    logic/generator/opening_hours_coverage.py): dzień czynny, a nikt z
+    placówki nie jest dostępny."""
+    from logic.generator.opening_hours_coverage import (
+        OPENING_HOURS_COVERAGE_POLICY,
+        day_window,
+        is_regular_location,
+        uses_opening_hours_model,
+    )
+
+    if not uses_opening_hours_model(shop):
+        return
+    policy = shop.constraint_policies.get(OPENING_HOURS_COVERAGE_POLICY, ConstraintPolicy.MANDATORY)
+    if policy != ConstraintPolicy.MANDATORY:
+        return
+
+    by_location = {}
+    for employee in schedule.employees:
+        if is_regular_location(shop.get_location(employee)):
+            by_location.setdefault(employee.location_key, []).append(employee)
+
+    for location_key, employees in by_location.items():
+        location = shop.locations.get(location_key)
+        name = location.name if location is not None else location_key
+        view = shop.get_location(employees[0])
+        for day in range(1, schedule.days_in_month + 1):
+            if day_window(view, day) is None:
+                continue
+            available = [e for e in employees if not _is_unavailable(schedule.get_day(e, day))]
+            if not available:
+                add(
+                    f"{name}, dzień {day}: nikt z pracowników placówki nie jest dostępny "
+                    "(urlop/L4/wolne), a zasada „Obłożenie godzin otwarcia” jest Wymagana."
+                )
 
 
 def _is_unavailable(state) -> bool:

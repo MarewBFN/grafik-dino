@@ -14,13 +14,22 @@ def _shift_minutes_by_type(all_shifts, standard_minutes, overrides):
     return {s: overrides.get(s, standard_minutes) for s in all_shifts}
 
 
-def _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts):
+def _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts, opening_model=None):
     overrides = {}
     if shift_night is not None:
         overrides[shift_night] = night_shift_minutes_for_employee(shop, emp)
     if duty_shifts is not None:
         overrides.update(duty_rotation_minutes_for_employee(shop, emp, duty_shifts))
+    if opening_model is not None:
+        # Kafelki doby modelu godzin otwarcia (opening_hours_coverage.py).
+        overrides.update(opening_model.duration_overrides(emp))
     return overrides
+
+
+def _fixed_minutes(emp, opening_model):
+    """Ręczne wpisy niepasujące do żadnego kształtu zmiany (stałe przedziały
+    modelu godzin otwarcia) - nie mają zmiennej x, a są realną pracą."""
+    return opening_model.fixed_minutes(emp) if opening_model is not None else 0
 
 
 def add_monthly_hours_constraint(
@@ -35,6 +44,7 @@ def add_monthly_hours_constraint(
     trace=None,
     shift_night=None,
     duty_shifts=None,
+    opening_model=None,
 ):
     violations = []
 
@@ -69,7 +79,8 @@ def add_monthly_hours_constraint(
         total_minutes = model.NewIntVar(0, 50000, f"month_total_e{e}")
 
         minutes_by_shift = _shift_minutes_by_type(
-            all_shifts, shift_minutes, _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts),
+            all_shifts, shift_minutes,
+            _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts, opening_model),
         )
 
         model.Add(
@@ -80,6 +91,7 @@ def add_monthly_hours_constraint(
                 for s in all_shifts
             )
             + planned_minutes_expr(x, e, emp, days, duty_shifts)
+            + _fixed_minutes(emp, opening_model)
         )
 
         all_totals.append(total_minutes)
@@ -133,6 +145,7 @@ def add_balance_constraint(
     trace=None,
     shift_night=None,
     duty_shifts=None,
+    opening_model=None,
 ):
     if trace is not None:
         trace.log_constraint("balance", f"soft={soft}")
@@ -143,6 +156,13 @@ def add_balance_constraint(
         return []
 
     violations = []
+
+    # Górna granica sumy minut pracownika = pełna doba każdego dnia miesiąca
+    # (+1 doba na zmianę przechodzącą w następny miesiąc). Wcześniej stałe
+    # 20000 min (333 h) - za mało dla małej placówki 24/7 (2 osoby = ok.
+    # 372 h każda), więc sam zakres zmiennej robił model niewykonalnym,
+    # mimo że bilans jest tylko miękki (audyt 2026-09-28).
+    max_minutes = (len(days) + 1) * 24 * 60
 
     for e in range(len(employees)):
 
@@ -172,10 +192,11 @@ def add_balance_constraint(
         target_minutes = max(0, nominal_minutes - leave_minutes - sick_minutes)
 
         minutes_by_shift = _shift_minutes_by_type(
-            all_shifts, shift_minutes, _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts),
+            all_shifts, shift_minutes,
+            _duration_overrides_for_employee(shop, emp, shift_night, duty_shifts, opening_model),
         )
 
-        total_minutes = model.NewIntVar(0, 20000, f"total_minutes_e{e}")
+        total_minutes = model.NewIntVar(0, max_minutes, f"total_minutes_e{e}")
 
         model.Add(
             total_minutes ==
@@ -184,16 +205,19 @@ def add_balance_constraint(
                 for d in days
             )
             + planned_minutes_expr(x, e, emp, days, duty_shifts)
+            + _fixed_minutes(emp, opening_model)
         )
 
         if not soft:
             model.Add(total_minutes == target_minutes)
 
         else:
-            diff = model.NewIntVar(-20000, 20000, f"diff_e{e}")
+            # Różnica sięga od -cel (nic nie przepracowane) do max_minutes.
+            diff_bound = max(max_minutes, target_minutes)
+            diff = model.NewIntVar(-diff_bound, diff_bound, f"diff_e{e}")
             model.Add(diff == total_minutes - target_minutes)
 
-            abs_diff = model.NewIntVar(0, 20000, f"abs_diff_e{e}")
+            abs_diff = model.NewIntVar(0, diff_bound, f"abs_diff_e{e}")
             model.AddAbsEquality(abs_diff, diff)
 
             violations.append(abs_diff)

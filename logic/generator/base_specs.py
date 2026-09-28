@@ -41,6 +41,7 @@ from logic.generator.duty_rotation_public_holiday_constraint import add_duty_rot
 from logic.generator.round_clock_constraint import add_round_clock_gate_constraint
 from logic.generator.round_clock_rest_constraint import add_round_clock_rest_constraint
 from logic.generator.round_clock_manual_constraint import add_round_clock_manual_shift_constraint
+from logic.generator.opening_hours_coverage import add_opening_hours_rest_constraint, get_model
 from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
 
 
@@ -102,6 +103,9 @@ def _build_always_on_specs():
                 ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
                 ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
                 trace=ctx.trace, shift_night=ctx.shift_night,
+                # Pracownicy modelu godzin otwarcia (Ochrona, placówki bez
+                # rotacji) - ręczne wpisy obsługuje opening_hours_coverage.py.
+                skip_indices=get_model(ctx).index_set if get_model(ctx) else None,
             ),
             always_on=True,
         ),
@@ -171,6 +175,9 @@ def _build_always_on_specs():
             lambda ctx, soft: add_round_clock_gate_constraint(
                 ctx.model, ctx.x, ctx.employees, ctx.days, ctx.shop, ctx.round_clock_shifts, ctx.all_shifts,
                 ctx.shop.standard_daily_hours, trace=ctx.trace,
+                # Kafelki doby modelu godzin otwarcia bramkuje
+                # opening_hours_coverage.py::add_opening_hours_shape_constraint.
+                exempt_indices=get_model(ctx).index_set if get_model(ctx) else None,
             ) if ctx.round_clock_shifts is not None else None,
             always_on=True,
         ),
@@ -239,6 +246,10 @@ def _build_rest_11h(ctx, soft):
             ctx.shop.standard_daily_hours, schedule=prev_month_schedule, soft=soft, trace=ctx.trace,
         )
 
+    # Model godzin otwarcia (Ochrona, placówki bez rotacji): kafelki doby i
+    # ręczne stałe przedziały - tych par add_rest_11h_constraint nie zna.
+    violations = list(violations) + add_opening_hours_rest_constraint(ctx, soft)
+
     return violations
 
 
@@ -246,6 +257,7 @@ def _build_balance(ctx, soft):
     return add_balance_constraint(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
         soft=soft, trace=ctx.trace, shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
+        opening_model=get_model(ctx),
     )
 
 
@@ -279,6 +291,13 @@ def _build_max_consecutive(ctx, soft):
             fixed_days = {d for d, _start, _end in plan.fixed_intervals(emp)}
             if fixed_days:
                 fixed_work_days[e] = fixed_days
+    # To samo dla ręcznych wpisów modelu godzin otwarcia (stałe przedziały).
+    opening = get_model(ctx)
+    if opening is not None:
+        for e in opening.indices:
+            fixed_days = opening.fixed_days(e)
+            if fixed_days:
+                fixed_work_days[e] = fixed_work_days.get(e, set()) | fixed_days
 
     violations = []
     for max_consecutive, indices in groups.items():
@@ -293,6 +312,7 @@ def _build_monthly_hours(ctx, soft):
     return add_monthly_hours_constraint(
         ctx.model, ctx.x, ctx.employees, ctx.days, ctx.schedule, ctx.shop, ctx.all_shifts,
         soft=soft, trace=ctx.trace, shift_night=ctx.shift_night, duty_shifts=ctx.duty_shifts,
+        opening_model=get_model(ctx),
     )
 
 
