@@ -499,6 +499,10 @@ def _validate_dino(cfg, schedule, intervals, report):
                 add(Violation("close", f"[{loc_key}] na zamknięciu {len(closers)} os. < min {min_close}", day=day))
             if not any(e.is_meat or e.is_meat_light for e in closers):
                 add(Violation("close", f"[{loc_key}] brak mięsa na zamknięciu", day=day))
+            # Generator (constraints_staff.add_fixed_staff_shift_constraints)
+            # wymaga osoby z "otwarciem" także na zamknięciu.
+            if not any(e.is_opener for e in closers):
+                add(Violation("close", f"[{loc_key}] brak pracownika otwarcia (is_opener) na zamknięciu", day=day))
 
             # "Mięso na zmianach" (policy "meat", semantyka trybu MANDATORY w
             # generatorze): jeśli tego dnia jest choć jedna zmiana spoza

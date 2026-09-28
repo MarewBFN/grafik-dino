@@ -156,6 +156,43 @@ def test_ochrona_coverage_diagnostics_names_the_day_nobody_can_work():
     assert not outcome["report"].violations
 
 
+def test_ochrona_simplified_rest_mode_still_guarantees_11h_when_hours_differ():
+    """Tryb "Uproszczony" odpoczynku zakazuje tylko przejścia popołudnie ->
+    rano. Przy różnych godzinach w kolejne dni (np. zamknięcie 22:00, a
+    następnego dnia zmiana "popołudniowa" od 06:00) to za mało - wynik
+    łamał Wymagany odpoczynek 11 h (w Dino: 8,5 h)."""
+    hours = {wd: ("06:00", "22:00") for wd in range(7)}
+    hours.update({1: ("06:00", "14:00"), 3: ("06:00", "14:00"), 5: ("06:00", "14:00")})
+    outcome = run_case(
+        _ochrona_regular("och_simplified_rest", hours, 5, constraints={"rest_11h_mode": "simplified"}),
+        time_limit=15,
+    )
+
+    assert outcome["success"], outcome["reasons"]
+    assert not [v for v in outcome["report"].by_rule("rest_11h") if v.source == "generator"]
+
+
+def test_ochrona_too_few_people_for_opening_hours_is_explained():
+    """2 osoby (w tym 1/2 etatu) na 17 h dziennie - komunikat ma podać
+    przyczynę (za mało osób), nie "sprzeczne zasady"."""
+    spec = _ochrona_regular("och_capacity", ("06:00", "23:00"), 2)
+    spec["employees"][0]["fraction"] = 0.5
+    outcome = run_case(spec, time_limit=10)
+
+    assert not outcome["success"]
+    assert any("za mało osób" in r for r in outcome["reasons"]), outcome["reasons"]
+
+
+def test_ochrona_day_too_long_for_shift_shapes_is_explained():
+    """04:00-23:00 (19 h) przy zmianach 8 h: zmiany zakotwiczone przy
+    otwarciu/zamknięciu zostawiają lukę w środku dnia - Wymagane obłożenie
+    jest niespełnialne; komunikat ma to nazwać zamiast "sprzeczne zasady"."""
+    outcome = run_case(_ochrona_regular("och_long_day", ("04:00", "23:00"), 8), time_limit=10)
+
+    assert not outcome["success"]
+    assert any("nie da się pokryć" in r and "04:00–23:00" in r for r in outcome["reasons"]), outcome["reasons"]
+
+
 # ---------------------------------------------------------------------------
 # Komunikat przy limicie czasu (status UNKNOWN != sprzeczne zasady)
 # ---------------------------------------------------------------------------
@@ -369,3 +406,19 @@ def test_dino_max_consecutive_from_config_reaches_the_generator():
         for day in range(1, schedule.days_in_month + 1):
             streak = streak + 1 if cell_interval(schedule.get_day(emp, day), day) else 0
             assert streak <= 2, (emp.last_name, day)
+
+
+@pytest.mark.xfail(strict=True, reason=DINO_REPORT_ONLY)
+def test_dino_simplified_rest_mode_still_guarantees_11h_when_hours_differ():
+    """Tryb "Uproszczony" odpoczynku przy różnych godzinach w kolejne dni
+    (pt 06:00-22:00, sob 07:00-15:00): zamknięcie 22:00 -> "popołudnie" w
+    sobotę od 06:30 = 8,5 h przy Wymaganym 11 h."""
+    hours = {wd: ("06:00", "21:00") for wd in range(7)}
+    hours.update({4: ("06:00", "22:00"), 5: ("07:00", "15:00"), 6: (None, None)})
+    outcome = run_case({
+        "name": "dino_simplified_rest", "profile": "dino",
+        "locations": [{"key": "glowna", "open_hours": hours}],
+        "constraints": {"min_open_staff": 2, "min_close_staff": 2, "rest_11h_mode": "simplified"},
+        "employees": [dict(opener=i < 3, meat=i >= 4) for i in range(7)],
+    }, time_limit=10)
+    assert not [v for v in outcome["report"].by_rule("rest_11h") if v.source == "generator"]

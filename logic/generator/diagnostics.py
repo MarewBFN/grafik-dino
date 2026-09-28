@@ -363,18 +363,50 @@ def _add_opening_hours_supply_messages(schedule, shop, add) -> None:
         if is_regular_location(shop.get_location(employee)):
             by_location.setdefault(employee.location_key, []).append(employee)
 
+    from logic.auto_generator import AutoScheduleGenerator
+    from logic.generator.opening_hours_coverage import uncovered_minutes
+
+    shifts = AutoScheduleGenerator(schedule, shop)
+    start_offsets = tuple(shifts.START_SHIFT_MAP.values())
+    end_offsets = tuple(shifts.END_SHIFT_MAP.values())
+
     for location_key, employees in by_location.items():
         location = shop.locations.get(location_key)
         name = location.name if location is not None else location_key
         view = shop.get_location(employees[0])
+        reported_shape = False
         for day in range(1, schedule.days_in_month + 1):
-            if day_window(view, day) is None:
+            window = day_window(view, day)
+            if window is None:
                 continue
             available = [e for e in employees if not _is_unavailable(schedule.get_day(e, day))]
             if not available:
                 add(
                     f"{name}, dzień {day}: nikt z pracowników placówki nie jest dostępny "
                     "(urlop/L4/wolne), a zasada „Obłożenie godzin otwarcia” jest Wymagana."
+                )
+                continue
+            if reported_shape:
+                continue
+            capacity = sum(int(get_effective_daily_hours(e, shop) * 60) for e in available)
+            if capacity < window[1] - window[0]:
+                reported_shape = True
+                add(
+                    f"{name}, dzień {day}: dostępne osoby ({len(available)}) mogą łącznie pracować "
+                    f"{capacity / 60:g} h, a godziny otwarcia trwają {(window[1] - window[0]) / 60:g} h - "
+                    "za mało osób na zasadę „Obłożenie godzin otwarcia” (Wymagana)."
+                )
+                continue
+            longest = max(int(get_effective_daily_hours(e, shop) * 60) for e in available)
+            gap = uncovered_minutes(window, longest, shop.standard_daily_hours, start_offsets, end_offsets)
+            if gap is not None:
+                reported_shape = True
+                hours = view.get_open_hours_for_day(day)
+                add(
+                    f"{name}, dzień {day}: godzin otwarcia {hours[0]}–{hours[1]} nie da się pokryć "
+                    f"zmianami {longest / 60:g} h (zmiany zaczynają się przy otwarciu albo kończą przy "
+                    f"zamknięciu) - luka od {gap // 60 % 24:02d}:{gap % 60:02d}. Ustaw dobę "
+                    "00:00–23:45, skróć godziny albo zmień zasadę „Obłożenie godzin otwarcia”."
                 )
 
 

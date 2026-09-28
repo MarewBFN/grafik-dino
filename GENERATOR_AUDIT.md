@@ -82,6 +82,19 @@ ta sama ścieżka co "Generuj grafik") -> GRAFIK -> WALIDATOR -> PASS / NARUSZEN
 4. **Limit czasu solvera zgłaszany jako „sprzeczne zasady”.** Status
    UNKNOWN (limit minął bez rozwiązania) dawał komunikat „Wymagane zasady są
    ze sobą sprzeczne” — teraz komunikat o limicie czasu z podpowiedzią.
+   Znalezione przypadkiem: przy obciążonym CPU konfiguracja z WYŁĄCZONĄ
+   „Obsadą zamknięcia” dała „brak grafiku — sprzeczne zasady”, a była
+   wykonalna (na wolnym CPU: FEASIBLE).
+5. **Tryb „Uproszczony” odpoczynku 11 h łamał Wymagany odpoczynek**
+   (znalezione w drugim, niezależnym przebiegu). Tryb zakazuje tylko
+   przejścia popołudnie → rano; przy różnych godzinach w kolejne dni (np.
+   zamknięcie 22:00, następnego dnia zmiana od 06:00) w wyniku było 8 h
+   odpoczynku. Dla Ochrony pary zmian sąsiednich dni są teraz dodatkowo
+   liczone dokładnie; dla Dino — raport (D13).
+6. **Czytelne komunikaty dla nowej zasady obłożenia**: nikt z placówki nie
+   jest dostępny w danym dniu; za mało osób (suma możliwych godzin < długość
+   dnia otwarcia); dzień zbyt długi dla kształtów zmian (np. 04:00–23:00 przy
+   zmianach 8 h ma lukę w środku — podpowiedź: doba 00:00–23:45).
 
 ## Tylko raport — profil Dino (decyzja użytkownika)
 
@@ -103,6 +116,8 @@ zostanie naprawiony.
 | D10 | Obsada = 1 | jedyna osoba na otwarciu musi mieć jednocześnie „otwarcie” i „mięso” — inaczej brak rozwiązania z ogólnym komunikatem | `dino_min_1_*`, `dino_min_asym_1_3` |
 | D11 | Preferowane „Obsada otwarcia/zamknięcia” | przegrywa z wyrównaniem godzin (waga 200 za osobę vs 250 za minutę odchyłki godzin): solver zostawia niedobór na otwarciu, choć pełna obsada jest możliwa (tryb Wymagane znajduje ją) | `dino_pol_tight_open_PREFERRED` vs `_MANDATORY` |
 | D12 | Duży projekt wielosklepowy | kara „rano vs popołudnie” ma zmienną o zakresie ±50 osób na dzień — >50 zmian rannych w jednym dniu zrobi model niewykonalnym | analiza `objective.py` |
+| D13 | Tryb odpoczynku „Uproszczony” + różne godziny w kolejne dni | Wymagany odpoczynek 11 h złamany w wyniku (pt 22:00 → sob 06:30 = 8,5 h) | `test_dino_simplified_rest_mode_still_guarantees_11h_when_hours_differ`, `dino_rest_simplified_mixed_week` |
+| D14 | Obsada zamknięcia (Wymagane) | wymaga też osoby z „otwarciem” na zamknięciu (etykieta „Pracownik otwarcia”); gdy jedyny dostępny opener nie może być naraz na otwarciu i zamknięciu (np. pamięć poprzedniego miesiąca blokuje dwóch) — brak rozwiązania z ogólnym komunikatem | `dino_rest_*_0800-1600` (audyt: prawdziwa niewykonalność) |
 
 Decyzja „obsada otwarcia/zamknięcia = dokładnie N” (tryb Wymagane)
 została potwierdzona przez użytkownika — to nie jest błąd; w trybie

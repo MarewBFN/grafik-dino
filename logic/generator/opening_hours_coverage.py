@@ -212,6 +212,32 @@ class OpeningHoursModel:
         return None
 
 
+def uncovered_minutes(window, shift_minutes, standard_daily_hours, start_offsets, end_offsets):
+    """Pierwsza minuta dnia (od północy), której ŻADEN dozwolony kształt
+    zmiany o długości `shift_minutes` nie obejmuje, albo None. Te same
+    reguły co OpeningHoursModel._day_shapes - do diagnostyki "brak
+    rozwiązania" (np. dzień 04:00-23:00 przy zmianach 8 h ma lukę w środku,
+    bo zmiany są zakotwiczone przy otwarciu/zamknięciu)."""
+    if window is None:
+        return None
+    start, end = window
+    if is_full_day(window):
+        spacing = round_clock_tile_spacing_minutes(standard_daily_hours)
+        length = min(shift_minutes, spacing)
+        n = round_clock_tile_count(standard_daily_hours)
+        shapes = [(i * spacing, i * spacing + length) for i in range(n)]
+    else:
+        shapes = [(start, start + shift_minutes), (end - shift_minutes, end)]
+        shapes += [(start + k, start + k + shift_minutes) for k in start_offsets if start + k + shift_minutes <= end]
+        shapes += [(end - k - shift_minutes, end - k) for k in end_offsets if end - k - shift_minutes >= start]
+    t = start
+    while t < end:
+        if not any(a <= t < b for a, b in shapes):
+            return t
+        t += SLOT
+    return None
+
+
 def get_model(ctx):
     extra = getattr(ctx, "extra", None) if ctx is not None else None
     return extra.get("opening_hours_model") if extra else None
@@ -277,6 +303,12 @@ def add_opening_hours_rest_constraint(ctx, soft):
         return []
     violations = []
     tile_set = set(model.tile_ids)
+    # Tryb "Uproszczony" (add_rest_11h_constraint_simplified) zakazuje tylko
+    # przejścia popołudnie -> rano. Przy różnych godzinach w kolejne dni
+    # (np. zamknięcie 22:00, następnego dnia "popołudnie" od 06:00) to nie
+    # gwarantuje 11 h - tutaj więc wszystkie pary liczone są dokładnie
+    # (audyt 2026-09-28: w wyniku bywało 8 h przy Wymaganym 11 h).
+    exact_regular_pairs = ctx.shop.constraints.get("rest_11h_mode", "standard") == "simplified"
 
     def forbid_pair(e, d1, s1, d2, s2, label):
         if not soft:
@@ -301,7 +333,7 @@ def add_opening_hours_rest_constraint(ctx, soft):
                 continue
             for s1, (_a1, end1) in model.windows[(e, d)].items():
                 for s2, (start2, _b2) in model.windows[(e, d_next)].items():
-                    if s1 not in tile_set and s2 not in tile_set:
+                    if s1 not in tile_set and s2 not in tile_set and not exact_regular_pairs:
                         continue  # zwykłe pary pilnuje add_rest_11h_constraint
                     if start2 - end1 < MIN_REST_MINUTES:
                         forbid_pair(e, d, s1, d_next, s2, f"opening_rest_e{e}_d{d}_{s1}_{s2}")
