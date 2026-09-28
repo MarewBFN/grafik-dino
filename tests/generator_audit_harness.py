@@ -45,7 +45,42 @@ def duty_rotation_from_editor(start, split, prefer_24h=False):
     })
 
 
+def _build_from_project_file(spec):
+    """Prawdziwy projekt z pliku (np. dane klienta) jako projekt Ochrony -
+    dokładnie to, co robi wersja Enyo po zapisie okna Konfiguracja
+    (profil przełączany na jedyny widoczny: Ochrona)."""
+    from persistence.project_io import load_project
+
+    schedule, shop = load_project(ROOT / spec["project_file"])
+    if spec.get("as_ochrona", True):
+        from logic.generator.custom_profile_wiring import default_policies
+        shop.business_type = DEFAULT_OCHRONA_PROFILE_KEY
+        for key, policy in default_policies(get_custom_profile(DEFAULT_OCHRONA_PROFILE_KEY)).items():
+            shop.constraint_policies.setdefault(key, policy)
+    if "year" in spec:
+        shop.reset_for_new_month(spec["year"], spec["month"])
+        fresh = MonthSchedule(spec["year"], spec["month"])
+        for emp in schedule.employees:
+            fresh.add_employee(emp)
+        schedule = fresh
+    shop.constraints.update(spec.get("constraints", {}))
+    for name, value in spec.get("policies", {}).items():
+        shop.constraint_policies[name] = ConstraintPolicy(value)
+    employees = schedule.employees
+    for cell in spec.get("cells", []):
+        idx, day, kind = cell[0], cell[1], cell[2]
+        ds = schedule.get_day(employees[idx % len(employees)], day)
+        if kind == "leave":
+            ds.set_leave()
+        elif kind == "sick":
+            ds.set_sick()
+        ds.is_locked = True
+    return schedule, shop
+
+
 def build_case(spec):
+    if "project_file" in spec:
+        return _build_from_project_file(spec)
     year, month = spec.get("year", 2026), spec.get("month", 10)
     shop = ShopConfig(year, month)
     profile = spec.get("profile", "dino")
@@ -706,7 +741,28 @@ def family_rest_modes():
     return cases
 
 
+def family_ochrona_client(seed=77):
+    """Dane klienta (6 placówek, 25 osób) jako projekt Ochrony, kilka
+    miesięcy (święta: listopad/grudzień/styczeń), z losowymi urlopami/L4."""
+    rng = random.Random(seed)
+    cases = []
+    for year, month in ((2026, 10), (2026, 11), (2026, 12), (2027, 1), (2027, 2)):
+        for variant in ("plain", "leaves", "balance_preferred"):
+            spec = {"name": f"och_client_{year}{month:02d}_{variant}",
+                    "project_file": "test_data/dane_klienta_ochrona.json", "year": year, "month": month,
+                    "time_limit": 30}
+            if variant == "leaves":
+                spec["cells"] = [(rng.randrange(25), rng.randint(1, 28), rng.choice(("leave", "sick"))) for _ in range(12)]
+            if variant == "balance_preferred":
+                spec["policies"] = {"balance": "PREFERRED", "monthly_hours": "PREFERRED"}
+            cases.append(spec)
+    return cases
+
+
 FAMILIES = {
+    "ochrona_client": family_ochrona_client,
+    "ochrona_final": lambda: [dict(c, name=c["name"].replace("och_", "ochF_")) for c in family_ochrona(seed=101, count=80)],
+    "ochrona_regular_final": lambda: [dict(c, name=c["name"].replace("och_", "ochF_")) for c in family_ochrona_regular(seed=202, count=60)],
     "rest_modes": family_rest_modes,
     "ochrona_regular": family_ochrona_regular,
     "ochrona_legacy": family_ochrona_legacy,
@@ -845,6 +901,7 @@ def main(argv):
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--audit-infeasible", action="store_true")
     parser.add_argument("--differential", action="store_true")
+    parser.add_argument("--only-profile", default=None, help="np. ochrona - pomija przypadki innych profili")
     args = parser.parse_args(argv)
 
     if args.differential:
@@ -855,6 +912,8 @@ def main(argv):
     out.mkdir(parents=True, exist_ok=True)
     for family in args.families:
         cases = FAMILIES[family]()
+        if args.only_profile:
+            cases = [c for c in cases if c.get("profile", "ochrona" if "project_file" in c else "dino") == args.only_profile]
         if args.limit:
             cases = cases[: args.limit]
         path = out / f"{family}.jsonl"

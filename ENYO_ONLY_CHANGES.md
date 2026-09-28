@@ -1843,6 +1843,12 @@ projekty Ochrony ze zmianą 8 h.
   tworzenia projektu w `ui/main_window.py`. Istniejące projekty bez zmian.
 - **Limit czasu solvera (UNKNOWN) nie jest już zgłaszany jako "Wymagane
   zasady są ze sobą sprzeczne"** - `diagnostics.py`, `auto_generator.py`.
+- **Tryb "Uproszczony" odpoczynku 11h** zakazywał tylko popołudnie -> rano,
+  więc przy różnych godzinach w kolejne dni wynik łamał Wymagane 11 h (8 h).
+  Dla placówek Ochrony bez rotacji pary zmian sąsiednich dni są liczone
+  dokładnie (`opening_hours_coverage.py`); Dino - tylko raport.
+- **Diagnostyka nowej zasady**: nikt z placówki niedostępny, za mało osób
+  (suma godzin < długość dnia), dzień zbyt długi dla kształtów zmian.
 
 | Plik | Zmiana | Przywrócić do main? |
 |---|---|---|

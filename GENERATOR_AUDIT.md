@@ -11,6 +11,11 @@ które generator gubi, nadpisuje albo realizuje inaczej niż pokazuje GUI.
 Dla Ochrony naprawione; dla Dino zgodnie z decyzją — tylko raport z
 reproducerami.
 
+Zakres: pierwsza kampania objęła oba profile (Dino i Ochrona). Na prośbę
+użytkownika końcowy, niezależny przebieg (nowe seedy, aktualny kod) objął
+**wyłącznie profil Enyo (Ochrona)** — ustalenia Dino poniżej pochodzą z
+pierwszej kampanii i celowanych eksperymentów.
+
 ## Metoda
 
 ```
