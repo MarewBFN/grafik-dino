@@ -1888,9 +1888,10 @@ przepisany):
   połówka doby od 03:00 trafia do następnego dnia - także zamkniętego;
   `non_trade_day` pomija pracowników modelu).
 - **Nowa zasada „Maks. obsada naraz”** (`max_staff_at_once`): liczba osób
-  w Konfiguracji → Ograniczenia (domyślnie 1, tylko dla profili Ochrony) i
-  tryb w Zasadach generatora (domyślnie Preferowana, waga 20000 za
-  nadmiarową osobo-minutę - więcej niż „Umowa”). Ręczne wpisy zajmują
+  (domyślnie 1, tylko dla profili Ochrony) i tryb - oba w Konfiguracja →
+  Generator → Zasady generatora → ustawienia zaawansowane (zakładka
+  „Limity” w tej wersji nie jest pokazywana). Domyślnie Preferowana, waga
+  20000 za nadmiarową osobo-minutę - więcej niż „Umowa”. Ręczne wpisy zajmują
   miejsca w limicie, ale same go nie łamią.
 - **Ręczny wpis częściowy** (np. 15:00-23:00 w oknie 15:00-07:00): reszta
   okna idzie jako zmiana resztkowa innej osoby zamiast drugiej osoby na
@@ -1920,3 +1921,34 @@ przepisany):
 | `model/location.py`, `model/shop_config.py` | `get_weekly_open_hours_on(dt)` - godziny wg wzorca w dowolnym dniu | TAK |
 | `ui/config_dialog.py` | Pole „Maks. osób naraz w placówce”, brak wpisu zasady = Preferowana | DO USTALENIA |
 | `tests/schedule_validator.py`, `tests/generator_audit_harness.py`, `tests/test_generator_audit_regressions.py` | Walidator (okna z kotwicą, kształty, maks. obsada), rodzina kampanii `weird_hours`, testy | TAK |
+
+### GUI dla placówek z godzinami otwarcia + nowy README (2026-09-28)
+
+Znalezione przy przeglądzie programu do README - luki w GUI po przepisaniu
+modelu godzin otwarcia (placówki Ochrony bez rotacji, np. GZUK):
+
+- **Wiersz „Obłożenie” w siatce** liczył tylko rotację 24/7 - dla placówki z
+  godzinami pokazywał ❌ każdego dnia mimo pełnej obsady. Teraz sprawdza okno
+  dnia (z kotwicą doby): całe obsadzone, nie więcej osób niż „Maks. obsada
+  naraz” (gdy nie jest Wyłączona) - `logic/duty_coverage_presenter.py`.
+- **Edycja dnia** odrzucała zmianę przez północ (15:00-07:00 - nie dało się
+  nawet ponownie zapisać zmiany z generatora) i nie miała „Cała doba (24h)”;
+  kontroler (`set_day_hours`) też po cichu odrzucał taki wpis. Teraz jak przy
+  rotacji 24/7 - `ui/day_edit_dialog.py` (tryb `overnight`),
+  `ui/main_window.py::_edit_day`, `logic/schedule_controller.py`.
+- **„Nie chce pracować zmian 24h”** w oknie pracownika było widoczne tylko w
+  projektach z rotacją 24/7 - teraz także dla profili Ochrony bez rotacji.
+- **Pole „Maks. osób naraz w placówce”** trafiło wcześniej do zakładki
+  „Limity”, która w tej wersji nie jest pokazywana - przeniesione do
+  ustawień zaawansowanych „Zasad generatora” (obok trybu tej zasady); test
+  sprawdza, że jest w widocznej zakładce.
+- `README.md` przepisany od zera (po polsku) wg aktualnego działania programu.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/duty_coverage_presenter.py` | „Obłożenie” dla placówek z godzinami otwarcia | DO USTALENIA |
+| `ui/day_edit_dialog.py`, `ui/main_window.py`, `logic/schedule_controller.py` | Ręczny wpis przez północ / 24h w placówce z godzinami Ochrony | DO USTALENIA |
+| `ui/employee_dialog.py` | „Nie chce 24h” także bez rotacji (profil Ochrony) | DO USTALENIA |
+| `ui/config_dialog.py` | Pole maks. obsady w „Zasadach generatora” | DO USTALENIA |
+| `logic/generator/opening_hours_coverage.py` | `employee_uses_opening_hours_model`, `max_staff_for_view` | DO USTALENIA |
+| `README.md` | Nowy opis programu | TAK (po dopasowaniu do DinGo!) |

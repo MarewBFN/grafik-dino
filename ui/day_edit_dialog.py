@@ -21,10 +21,14 @@ def _parse_time(value: str) -> QTime:
     return QTime(int(hour), int(minute))
 
 
+def open_start_label(dialog) -> str:
+    return f"{dialog._open_start_qt.toString('HH:mm')}–{dialog._open_end_qt.toString('HH:mm')}"
+
+
 class DayEditDialog(QDialog):
     def __init__(
         self, parent=None, start=None, end=None, open_start="05:30", open_end="22:45",
-        daily_hours=8, night_hours=None, duty_rotation=None, full_day=False,
+        daily_hours=8, night_hours=None, duty_rotation=None, full_day=False, overnight=False,
     ):
         super().__init__(parent)
         self.setWindowTitle("Edycja dnia")
@@ -48,6 +52,13 @@ class DayEditDialog(QDialog):
         # logic/generator/duty_rotation_manual_coverage.py). Szybkie
         # przyciski wpisują zmiany rotacji tej placówki.
         self.duty_rotation = duty_rotation
+        # Placówka Ochrony z godzinami otwarcia (model godzin otwarcia, patrz
+        # logic/generator/opening_hours_coverage.py): generator sam układa
+        # tam zmiany na całe okno (np. 15:00-07:00) i doby 24h, więc ręcznie
+        # też wolno wpisać zmianę przez północ i "Cała doba (24h)" - tak jak
+        # przy rotacji, tylko bez jej szybkich przycisków.
+        self.overnight = overnight
+        self.allows_overnight = duty_rotation is not None or overnight
         self._initial_full_day = full_day
         self._manual_end = False
         self._updating = False
@@ -86,7 +97,7 @@ class DayEditDialog(QDialog):
 
         self.full_day_check = QCheckBox("Cała doba (24h)")
         self.full_day_check.toggled.connect(self._on_full_day_toggled)
-        self.full_day_check.setVisible(self.duty_rotation is not None)
+        self.full_day_check.setVisible(self.allows_overnight)
         root.addWidget(self.full_day_check)
 
         if self.duty_rotation is not None:
@@ -111,6 +122,15 @@ class DayEditDialog(QDialog):
                 quick_row.addWidget(btn)
             quick_row.addStretch()
             root.addLayout(quick_row)
+        elif self.overnight:
+            hint = QLabel(
+                f"Godziny placówki tego dnia: {open_start_label(self)}. Zmiana może "
+                "przechodzić przez północ (koniec wcześniej niż start); dla doby "
+                "zaznacz „Cała doba (24h)”."
+            )
+            hint.setObjectName("mutedHint")
+            hint.setWordWrap(True)
+            root.addWidget(hint)
         elif self.night_hours:
             night_start, night_end = self.night_hours
             hint = QLabel(f"Zmiana nocna tej lokalizacji: {night_start}–{night_end}.")
@@ -153,7 +173,7 @@ class DayEditDialog(QDialog):
         if end:
             self._manual_end = True
             self.end_edit.set_time_str(end)
-        if self._initial_full_day and self.duty_rotation is not None:
+        if self._initial_full_day and self.allows_overnight:
             self.full_day_check.setChecked(True)
 
     def _apply_quick_shift(self, start, end):
@@ -171,7 +191,7 @@ class DayEditDialog(QDialog):
         self._update_duration()
 
     def _is_full_day(self) -> bool:
-        return self.duty_rotation is not None and self.full_day_check.isChecked()
+        return self.allows_overnight and self.full_day_check.isChecked()
 
     def _is_configured_night_shift(self, start_str, end_str) -> bool:
         return bool(self.night_hours) and (start_str, end_str) == self.night_hours
@@ -184,6 +204,9 @@ class DayEditDialog(QDialog):
         start_qt = _parse_time(self.start_edit.get_time_str())
         if self.duty_rotation is not None:
             suggested = start_qt.addSecs(12 * 3600)
+        elif self.overnight:
+            # Jedna osoba na całe okno dnia - podpowiedź: do zamknięcia.
+            suggested = self._open_end_qt
         else:
             suggested = start_qt.addSecs(self.daily_hours * 3600)
             if suggested > self._open_end_qt:
@@ -217,7 +240,7 @@ class DayEditDialog(QDialog):
         secs = start_qt.secsTo(end_qt)
         if self._is_full_day():
             secs = 24 * 3600
-        elif secs < 0 and self.duty_rotation is not None:
+        elif secs < 0 and self.allows_overnight:
             secs += 24 * 3600
         elif secs < 0:
             # Tylko dokładnie skonfigurowana zmiana nocna tej lokalizacji
@@ -259,7 +282,7 @@ class DayEditDialog(QDialog):
             self.accept()
             return
 
-        if self.duty_rotation is not None:
+        if self.allows_overnight:
             if end_qt == start_qt:
                 QMessageBox.critical(
                     self, "Błąd",
@@ -267,7 +290,8 @@ class DayEditDialog(QDialog):
                 )
                 return
             # Dowolne godziny, także przez północ - bez ostrzeżenia o
-            # godzinach otwarcia (placówka 24/7).
+            # godzinach otwarcia (placówka 24/7 albo okno przez północ,
+            # którego nie da się porównać wprost godzinami jednej doby).
             self.result_mode = "hours"
             self.result_start = start_str
             self.result_end = end_str

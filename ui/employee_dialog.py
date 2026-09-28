@@ -218,11 +218,18 @@ class EmployeeDialog(QDialog):
         # mechanizmu (na poziomie projektu albo którejkolwiek lokalizacji) -
         # dla profili bez rotacji nic by nie robiła.
         self.no_24h_check = None
-        if self._project_uses_duty_rotation():
+        # Także profil Ochrony bez rotacji (placówki z godzinami otwarcia -
+        # doba sob/nd to tam zmiana 24h albo dwie po 12h, patrz
+        # logic/generator/opening_hours_coverage.py).
+        from logic.generator.opening_hours_coverage import profile_uses_opening_hours_model
+        if self._project_uses_duty_rotation() or (
+            self.shop_config is not None and profile_uses_opening_hours_model(self.shop_config.business_type)
+        ):
             self.no_24h_check = QCheckBox("Nie chce pracować zmian 24h")
             self.no_24h_check.setToolTip(
-                "Przy rotacji służby 24/7: ta osoba nigdy nie dostanie zmiany "
-                "24h w weekend (dostanie dwie 12h zamiast tego)."
+                "Ta osoba nie dostanie od generatora zmiany 24h w sobotę ani "
+                "niedzielę - doba jest wtedy dzielona na dwie zmiany po 12h "
+                "(rotacja 24/7 i placówki z dobą w godzinach otwarcia)."
             )
             flags_layout.addWidget(self.no_24h_check)
 

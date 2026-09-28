@@ -1299,11 +1299,17 @@ class MainWindow(QMainWindow):
 
         ds = self.controller.get_day(emp, day)
         duty_rotation = location.get_duty_rotation()
+        # Placówka Ochrony z godzinami otwarcia (np. 15:00-07:00, doba 24h) -
+        # generator sam przydziela tam zmiany przez północ i 24h (patrz
+        # logic/generator/opening_hours_coverage.py), więc ręcznie też można.
+        from logic.generator.opening_hours_coverage import employee_uses_opening_hours_model
+        overnight = employee_uses_opening_hours_model(self.shop_config, emp)
         # Pracownik rotacji służby 24/7: dowolne godziny (także przez
         # północ) i zmiana 24h - generator liczy ręczny wpis jako pokrycie.
         # Automatycznie wykryte okno nocne 22:00-06:00 nie jest tu żadną
-        # zmianą rotacji, więc nie jest podpowiadane.
-        night_hours = None if duty_rotation else location.get_night_shift_hours()
+        # zmianą rotacji (ani zmianą modelu godzin otwarcia), więc nie jest
+        # podpowiadane.
+        night_hours = None if (duty_rotation or overnight) else location.get_night_shift_hours()
         dialog = DayEditDialog(
             self,
             start=None if ds.is_leave else ds.start,
@@ -1314,6 +1320,7 @@ class MainWindow(QMainWindow):
             night_hours=night_hours,
             duty_rotation=duty_rotation,
             full_day=bool(getattr(ds, "is_full_day", False)),
+            overnight=overnight,
         )
 
         if dialog.exec() != QDialog.Accepted:
@@ -1341,7 +1348,7 @@ class MainWindow(QMainWindow):
             is_configured_night_shift = (
                 night_hours is not None and (dialog.result_start, dialog.result_end) == night_hours
             )
-            if end_dt <= start_dt and not is_configured_night_shift and not duty_rotation:
+            if end_dt <= start_dt and not is_configured_night_shift and not duty_rotation and not overnight:
                 QMessageBox.warning(self, "Błąd", "Godzina zakończenia musi być późniejsza niż rozpoczęcia.")
                 return
 

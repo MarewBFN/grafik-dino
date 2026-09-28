@@ -591,29 +591,6 @@ class ConfigDialog(QDialog):
         self.min_close.setFixedWidth(70)
         self.min_close.setValue(self.shop_config.constraints.get("min_close_staff", 3))
 
-        # --- Sekcja: Maks. obsada naraz (profil Ochrony, placówki z
-        # godzinami otwarcia - patrz logic/generator/opening_hours_coverage.py).
-        # Tryb (Wymagana/Preferowana/Wyłączona) - w "Zasadach generatora".
-        self.max_staff = QSpinBox()
-        self.max_staff.setRange(1, 10)
-        self.max_staff.setFixedWidth(70)
-        self.max_staff.setValue(
-            int(self.shop_config.constraints.get(MAX_STAFF_CONSTRAINT_KEY, DEFAULT_MAX_STAFF))
-        )
-        self.max_staff.setToolTip(
-            "Ile osób z jednej placówki (z godzinami otwarcia, bez rotacji 24/7) "
-            "może pracować jednocześnie. Tryb zasady „Maks. obsada naraz” "
-            "ustawisz w zakładce Zasady generatora."
-        )
-        if profile_uses_opening_hours_model(self.shop_config.business_type):
-            max_staff_label = QLabel("OBSADA PLACÓWEK Z GODZINAMI OTWARCIA")
-            max_staff_label.setObjectName("groupLabel")
-            layout.addWidget(max_staff_label)
-
-            form_max_staff = QFormLayout()
-            form_max_staff.addRow("Maks. osób naraz w placówce:", self.max_staff)
-            layout.addLayout(form_max_staff)
-
         if self.shop_config.business_type == DEFAULT_BUSINESS_TYPE:
             staff_label = QLabel("MINIMALNA OBSADA PRACOWNIKÓW")
             staff_label.setObjectName("groupLabel")
@@ -693,6 +670,26 @@ class ConfigDialog(QDialog):
             "generowanie — przydatne do zwiększenia na słabszym sprzęcie."
         )
         form_solver.addRow("Limit czasu generatora:", self.solver_time_limit)
+
+        # "Maks. obsada naraz" (profil Ochrony, placówki z godzinami otwarcia
+        # - patrz logic/generator/opening_hours_coverage.py): liczba osób tu,
+        # tryb (Wymagana/Preferowana/Wyłączona) w siatce zasad niżej. Tutaj,
+        # a nie w zakładce "Limity", bo ta w tej wersji nie jest pokazywana.
+        # Widżet tworzony zawsze (_save() go czyta), w formularzu tylko dla
+        # profili, które tej zasady używają.
+        self.max_staff = QSpinBox()
+        self.max_staff.setRange(1, 10)
+        self.max_staff.setFixedWidth(90)
+        self.max_staff.setValue(
+            int(self.shop_config.constraints.get(MAX_STAFF_CONSTRAINT_KEY, DEFAULT_MAX_STAFF))
+        )
+        self.max_staff.setToolTip(
+            "Ile osób z jednej placówki z godzinami otwarcia (bez rotacji 24/7) "
+            "może pracować jednocześnie. Tryb ustawiasz przy zasadzie "
+            "„Maks. obsada naraz” niżej."
+        )
+        if profile_uses_opening_hours_model(self.shop_config.business_type):
+            form_solver.addRow("Maks. osób naraz w placówce:", self.max_staff)
         advanced_layout.addLayout(form_solver)
 
         policy_grid = QGridLayout()

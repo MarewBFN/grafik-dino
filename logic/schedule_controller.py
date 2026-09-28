@@ -70,8 +70,13 @@ class ScheduleController:
             # logic/generator/duty_rotation_manual_coverage.py); end == start
             # tylko jako zmiana 24h (set_day_full_day_shift).
             crosses_for_duty = location.get_duty_rotation() and end_dt < start_dt
+            # Placówka Ochrony z godzinami otwarcia (np. 15:00-07:00) - model
+            # godzin otwarcia sam przydziela zmiany przez północ i dopasowuje
+            # ręczny wpis do okna (logic/generator/opening_hours_coverage.py).
+            from logic.generator.opening_hours_coverage import employee_uses_opening_hours_model
+            crosses_for_opening_hours = end_dt < start_dt and employee_uses_opening_hours_model(self.shop_config, emp)
             night_hours = location.get_night_shift_hours()
-            if night_hours != (start, end) and not crosses_for_duty:
+            if night_hours != (start, end) and not crosses_for_duty and not crosses_for_opening_hours:
                 return
 
         ds = self.schedule.get_day(emp, day)

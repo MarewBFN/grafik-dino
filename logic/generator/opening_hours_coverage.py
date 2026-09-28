@@ -112,6 +112,13 @@ def is_regular_location(location_view) -> bool:
     return not location_view.get_duty_rotation() and not location_view.get_round_clock_start_hour()
 
 
+def employee_uses_opening_hours_model(shop, emp) -> bool:
+    """Czy zmiany tego pracownika układa model godzin otwarcia (profil
+    Ochrony, placówka bez rotacji) - wtedy ręczny wpis może przechodzić
+    przez północ albo trwać 24 h (takie zmiany generator sam przydziela)."""
+    return uses_opening_hours_model(shop) and is_regular_location(shop.get_location(emp))
+
+
 def _has_no24h_role(emp) -> bool:
     from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 
@@ -398,7 +405,12 @@ class OpeningHoursModel:
         return MIN_REST_MINUTES
 
     def max_staff(self, location_key) -> int:
-        value = self.views[location_key].constraints.get(MAX_STAFF_CONSTRAINT_KEY, DEFAULT_MAX_STAFF)
+        return self.max_staff_for_view(self.views[location_key])
+
+    @staticmethod
+    def max_staff_for_view(view) -> int:
+        """„Maks. obsada naraz” placówki (Konfiguracja, domyślnie 1)."""
+        value = view.constraints.get(MAX_STAFF_CONSTRAINT_KEY, DEFAULT_MAX_STAFF)
         try:
             return max(1, int(value))
         except (TypeError, ValueError):

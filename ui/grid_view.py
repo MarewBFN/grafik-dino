@@ -1262,8 +1262,10 @@ class ScheduleGrid(QTableWidget):
                     item.setBackground(QBrush(QColor(theme.OK_GREEN if covered else theme.ERR_RED)))
                     if not covered:
                         item.setToolTip(
-                            "Doba nie jest obsadzona dokładnie jedną osobą "
-                            "(luka albo dwie osoby naraz)."
+                            "Luka w obsadzie albo za dużo osób naraz (rotacja 24/7: "
+                            "dokładnie jedna osoba na dobę; placówka z godzinami "
+                            "otwarcia: całe okno obsadzone, najwyżej tyle osób, "
+                            "ile pozwala „Maks. obsada naraz”)."
                         )
                     self.setItem(row, day + self._prev_col_offset, item)
                     continue

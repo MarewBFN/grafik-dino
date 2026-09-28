@@ -351,6 +351,79 @@ def test_ochrona_too_few_people_for_opening_hours_is_explained():
     assert any("za mało osób" in r for r in outcome["reasons"]), outcome["reasons"]
 
 
+def test_grid_coverage_row_checks_opening_hours_windows():
+    """Wiersz „Obłożenie” w siatce liczył tylko rotację 24/7 - dla placówki
+    z godzinami (GZUK) pokazywał ❌ każdego dnia mimo pełnej obsady."""
+    import calendar
+
+    from logic.duty_coverage_presenter import is_day_fully_covered
+
+    outcome = run_case(_ochrona_regular("gzuk_grid", GZUK_HOURS, 5), time_limit=30)
+    _assert_exact_coverage(outcome)
+    schedule, shop = outcome["schedule"], outcome["shop"]
+    employees = list(schedule.employees)
+    days = range(1, schedule.days_in_month + 1)
+    assert all(is_day_fully_covered(schedule, shop, employees, d) for d in days)
+
+    # Usunięcie jednej nocki (pn-pt) = luka tylko w tym dniu.
+    day = next(d for d in days if calendar.weekday(2026, 10, d) == 2)
+    emp = next(e for e in employees if schedule.get_day(e, day).start == "15:00")
+    schedule.get_day(emp, day).start = None
+    schedule.get_day(emp, day).end = None
+    assert not is_day_fully_covered(schedule, shop, employees, day)
+    assert is_day_fully_covered(schedule, shop, employees, day + 1)
+
+
+def test_day_edit_accepts_overnight_and_24h_for_opening_hours_location():
+    """Okno edycji dnia odrzucało 15:00-07:00 („Koniec musi być później niż
+    start”) i nie miało „Cała doba (24h)” w placówce z godzinami - nie dało
+    się nawet ponownie zapisać zmiany wygenerowanej przez generator."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from logic.schedule_controller import ScheduleController
+    from tests.generator_audit_harness import build_case
+    from ui.day_edit_dialog import DayEditDialog
+
+    QApplication.instance() or QApplication([])
+    dialog = DayEditDialog(start="15:00", end="07:00", open_start="15:00", open_end="07:00", overnight=True)
+    dialog.accept = lambda: None
+    assert dialog.duration_label.text() == "Czas pracy: 16:00"
+    assert not dialog.full_day_check.isHidden()
+    dialog._save()
+    assert (dialog.result_mode, dialog.result_start, dialog.result_end) == ("hours", "15:00", "07:00")
+
+    dialog.full_day_check.setChecked(True)
+    dialog._save()
+    assert dialog.result_mode == "full_day"
+
+    schedule, shop = build_case(_ochrona_regular("gzuk_edit", GZUK_HOURS, 2))
+    controller = ScheduleController(schedule, shop)
+    emp = schedule.employees[0]
+    controller.set_day_hours(emp, 5, "15:00", "07:00")
+    ds = schedule.get_day(emp, 5)
+    assert (ds.start, ds.end, ds.is_locked) == ("15:00", "07:00", True)
+
+
+def test_employee_dialog_shows_nie_chce_24h_for_ochrona_without_rotation():
+    """„Nie chce pracować zmian 24h” było widoczne tylko w projektach z
+    rotacją 24/7 - a doba sob/nd w placówce z godzinami też jest zmianą 24h."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from tests.generator_audit_harness import build_case
+    from ui.employee_dialog import EmployeeDialog
+
+    QApplication.instance() or QApplication([])
+    schedule, shop = build_case(_ochrona_regular("gzuk_emp", GZUK_HOURS, 1))
+    dialog = EmployeeDialog(None, employee=schedule.employees[0], shop_config=shop)
+    assert dialog.no_24h_check is not None
+
+
 def test_shift_class_conflicting_with_no_night_is_explained():
     """„W” (musi pracować) w dzień roboczy GZUK (jedyna zmiana 15:00-07:00)
     u osoby z „Nie pracuje w nocy” (Wymagane) - wcześniej tylko „Wymagane
@@ -499,6 +572,11 @@ def test_config_dialog_edits_max_staff_at_once_for_ochrona(monkeypatch):
     selector = dialog.policy_selectors["max_staff_at_once"]
     assert selector.currentData() == ConstraintPolicy.PREFERRED
     assert dialog.max_staff.value() == 1
+    # Pole i tryb muszą być w zakładce, którą użytkownik faktycznie widzi
+    # ("Limity" w tej wersji nie jest dodawana do okna).
+    rules_page = dialog.tabs.widget(dialog._tab_index_generator)
+    assert rules_page.isAncestorOf(dialog.max_staff)
+    assert rules_page.isAncestorOf(selector)
 
     selector.setCurrentIndex(selector.findData(ConstraintPolicy.MANDATORY))
     dialog.max_staff.setValue(2)
