@@ -1,1 +1,1 @@
-APP_VERSION = "1.1.2.enyo"
+APP_VERSION = "1.1.3.enyo"
