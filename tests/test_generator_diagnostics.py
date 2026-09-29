@@ -231,6 +231,24 @@ class DutyRotationInfeasibilitySummaryTests(unittest.TestCase):
 
         self.assertFalse(any("dzień 10" in m for m in messages), messages)
 
+    def test_more_can_work_than_shifts_of_the_day_names_people_and_day(self):
+        """„W” (może pracować) u 3 osób tego samego dnia - doba ma najwyżej
+        dwie zmiany (24h albo dwie połówki), więc trzecia osoba nie ma
+        czego dostać. Dwie osoby z „W” to już nie konflikt (dzielą dobę)."""
+        shop, schedule, employees = self._shop_and_schedule(n=3)
+        for emp in employees[:2]:
+            schedule.get_day(emp, 12).set_shift_class("W")
+
+        self.assertFalse(any("„W”" in m for m in build_infeasibility_summary(schedule, shop)))
+
+        schedule.get_day(employees[2], 12).set_shift_class("W")
+        messages = build_infeasibility_summary(schedule, shop)
+
+        self.assertTrue(
+            any("dzień 12" in m and "„W” ma 3 os." in m and "najwyżej 2 zmiany" in m for m in messages),
+            messages,
+        )
+
     def test_locked_24h_shift_for_employee_who_refuses_24h_names_person_and_day(self):
         """Ręcznie zablokowana zmiana 24h (od początku doby) osobie z "Nie
         chce zmian 24h" przy tej zasadzie jako Wymaganej - sprzeczność

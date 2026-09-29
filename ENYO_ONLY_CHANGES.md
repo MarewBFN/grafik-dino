@@ -1952,3 +1952,41 @@ modelu godzin otwarcia (placówki Ochrony bez rotacji, np. GZUK):
 | `ui/config_dialog.py` | Pole maks. obsady w „Zasadach generatora” | DO USTALENIA |
 | `logic/generator/opening_hours_coverage.py` | `employee_uses_opening_hours_model`, `max_staff_for_view` | DO USTALENIA |
 | `README.md` | Nowy opis programu | TAK (po dopasowaniu do DinGo!) |
+
+## „Może pracować” (W): zmiana wg „Preferuj zmiany 24h” + czytelne komunikaty (2026-09-29)
+
+Zgłoszenie użytkownika: (1) więcej niż jedno „W” dawało brak rozwiązania,
+(2) „W” przydzielało 24h mimo odznaczonego „Preferuj zmiany 24h”.
+Odtworzone na `test_data/test realny z programu.myp` (placówka Łeba,
+rotacja 24/7 only_12_24h, 3 osoby).
+
+- **Przyczyna (jeden constraint):** `duty_rotation_manual_constraint.py`
+  wymuszał dla „W” w placówce z rotacją 24/7 zmianę 24h (`weekend_full == 1`).
+  Stąd 24h niezależnie od „Preferuj zmiany 24h”, a brak rozwiązania, gdy
+  „W” miały dwie osoby tej samej doby (obłożenie: dokładnie 1 osoba na 24h)
+  albo ta sama osoba w odstępie krótszym niż odpoczynek po 24h ((N-1)x24h,
+  w Łebie 48h - np. dni 3 i 4 albo 3 i 5), albo osoba z „Nie chce 24h” w
+  weekend.
+- **Poprawka:** „W” = dokładnie jedna ze zmian rotacji tego dnia (24h albo
+  jedna z połówek; w tygodniu bez only_12_24h - jedna z dwóch ról). Którą,
+  wybiera generator wg `duty_rotation_preference.py`: odznaczone „Preferuj
+  zmiany 24h” -> połówka 12h, zaznaczone -> 24h, gdy nie psuje to
+  obłożenia/odpoczynku/bilansu godzin (wtedy połówka). Wszystkie
+  przypadki z reprodukcji generują się (OPTIMAL, walidator bez naruszeń).
+- **Placówki z godzinami otwarcia** (GZUK, MZGK, Brico) - „W” już było
+  elastyczne (dowolny dozwolony kształt tego dnia). Brak rozwiązania przy
+  kilku „W” to tam prawdziwa sprzeczność z Wymaganym odpoczynkiem 11 h
+  (np. MZGK 07:00-22:00 dzień po dniu = 9 h przerwy; obie osoby MZGK z „W”
+  tego samego dnia = nikt nie może zacząć o 07:00 następnego dnia), ale
+  komunikat był ogólny („Wymagane zasady są ze sobą sprzeczne”). Nowe,
+  dowodliwe z danych komunikaty w `diagnostics.py`: dwa dni z typem
+  zmiany tej samej osoby bez możliwego odpoczynku między nimi; fragment
+  okna, którego nikt nie może obsadzić przez typy zmian w sąsiednich
+  dniach; w rotacji 24/7 - więcej osób z „W” niż zmian doby.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `logic/generator/duty_rotation_manual_constraint.py` | „W” = dowolna zmiana rotacji tego dnia (zamiast wymuszonej 24h) | DO USTALENIA |
+| `logic/generator/diagnostics.py` | Komunikaty o konfliktach „W”/„1”/„2” (odpoczynek, obłożenie) i nadmiarze „W” w rotacji 24/7 | DO USTALENIA |
+| `model/shop_config.py` | Opis przycisku „Może pracować” | DO USTALENIA |
+| `model/day_schedule.py`, `logic/schedule_controller.py` | Komentarze | NIE |

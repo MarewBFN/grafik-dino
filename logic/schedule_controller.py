@@ -186,7 +186,8 @@ class ScheduleController:
         # dobiera dokładną godzinę. "W" (może pracować, Enyo/custom - patrz
         # ui/main_window.py "Może pracować") - ta sama mechanika: żadnej
         # konkretnej godziny, tylko sygnał "MUSI dostać jakąś zmianę tego
-        # dnia" (w placówce z rotacją 24/7: całą dobę).
+        # dnia" (w placówce z rotacją 24/7: 24h albo połowę doby, wg
+        # "Preferuj zmiany 24h").
         if code not in ("1", "2", "W"):
             return
 

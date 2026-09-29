@@ -175,8 +175,8 @@ STANDARD_QUICK_BUTTONS: tuple[dict, ...] = (
         "label": "Może pracować",
         "description": (
             "Sygnał dla generatora, że pracownik MA/MOŻE pracować tego dnia (kod "
-            "„W”) - w placówce z rotacją 24/7 dostanie całą dobę (24h), w "
-            "pozostałych placówkach generator dobierze zmianę zgodną z jej zasadami."
+            "„W”) - generator dobierze zmianę zgodną z zasadami placówki (w "
+            "placówce z rotacją 24/7: 24h albo połowę doby, wg „Preferuj zmiany 24h”)."
         ),
         "default_visible": lambda business_type: business_type != DEFAULT_BUSINESS_TYPE,
     },

@@ -29,7 +29,8 @@ class DaySchedule:
     # "1" (rano) / "2" (popołudnie) - typ zmiany zablokowany dla generatora
     # (Dino). "W" (może pracować) - bez typu, tylko "MUSI dostać jakąś
     # zmianę tego dnia" (profile custom/Enyo, patrz ui/main_window.py
-    # "Może pracować"; w placówce z rotacją 24/7 oznacza całą dobę).
+    # "Może pracować"; w placówce z rotacją 24/7 - 24h albo połowę doby, wg
+    # "Preferuj zmiany 24h").
     shift_class: str | None = None
 
     # Zmiana obejmująca całą dobę (np. służba 24h w ochronie - "plan profil

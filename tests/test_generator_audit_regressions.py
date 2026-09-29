@@ -273,6 +273,32 @@ def test_shift_class_w_forces_a_shift_for_opening_hours_employee():
     assert {6, 13, 20} <= worked
 
 
+def test_shift_class_w_on_consecutive_days_explains_the_rest_conflict():
+    """„W” tej samej osoby dzień po dniu, a jedyna zmiana placówki to
+    07:00–22:00 (9 h przerwy przy Wymaganym odpoczynku 11 h) - prawdziwa
+    sprzeczność, ale komunikat był ogólny („Wymagane zasady są ze sobą
+    sprzeczne”) i wyglądał na błąd samego „W”."""
+    cells = [(0, 6, "class", "W"), (0, 7, "class", "W")]
+    outcome = run_case(_ochrona_regular("w_rest", ("07:00", "22:00"), 2, cells=cells), time_limit=10)
+
+    assert not outcome["success"]
+    assert any("dni 6 i 7" in r and "9 h przerwy" in r for r in outcome["reasons"]), outcome["reasons"]
+
+
+def test_shift_class_w_for_the_whole_location_explains_the_uncovered_next_day():
+    """„W” obu osób placówki tego samego dnia (07:00–22:00) - obie pracują
+    do 22:00, więc następnego dnia od 07:00 nie ma kto zacząć (odpoczynek
+    11 h). Komunikat wskazuje dzień bez obsady i czyje „W” go blokuje."""
+    cells = [(0, 6, "class", "W"), (1, 6, "class", "W")]
+    outcome = run_case(_ochrona_regular("w_cover", ("07:00", "22:00"), 2, cells=cells), time_limit=10)
+
+    assert not outcome["success"]
+    assert any(
+        "dzień 7" in r and "od 07:00 nie ma kto pracować" in r and "„W” w dniu 6 - odpoczynek" in r
+        for r in outcome["reasons"]
+    ), outcome["reasons"]
+
+
 @pytest.mark.parametrize("hours", [
     ("22:00", "06:00"),
     ("18:00", "06:00"),

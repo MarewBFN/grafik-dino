@@ -64,12 +64,14 @@ def add_duty_rotation_manual_shift_constraint(
             # "W" (może pracować, patrz ui/main_window.py "Może pracować") -
             # NIE ustawia is_locked (jak "1"/"2", DaySchedule.set_shift_class),
             # więc sprawdzane PRZED is_locked poniżej. Rekomendacja, nie
-            # dokładna zmiana: w placówce z rotacją 24/7 oznacza "przydziel
-            # całą dobę" tam, gdzie faktycznie jest to możliwe dla jednej
-            # osoby (weekend_full - weekend, albo KAŻDY dzień przy
-            # only_12_24h); w zwykły dzień roboczy bez only_12_24h (doba
-            # dzielona 16h+8h między dwie różne osoby, nikt nie bierze jej
-            # solo) - jedna z dwóch ról tego dnia, generator wybiera którą.
+            # dokładna zmiana: dokładnie jedna ze zmian rotacji istniejących
+            # tego dnia (weekend albo KAŻDY dzień przy only_12_24h: 24h albo
+            # jedna z połówek; zwykły dzień roboczy: jedna z dwóch ról) -
+            # którą, wybiera generator wg "Preferuj zmiany 24h"
+            # (duty_rotation_preference.py). Wcześniej "W" wymuszało zmianę
+            # 24h: ignorowało tę preferencję, a dwa "W" tego samego dnia
+            # (dwie osoby na jedną dobę) albo tej samej osoby w odstępie
+            # krótszym niż odpoczynek po 24h robiły model niewykonalnym.
             shift_class = getattr(day_state, "shift_class", None)
             if shift_class == "W":
                 location = shop.locations.get(emp.location_key)
@@ -86,19 +88,15 @@ def add_duty_rotation_manual_shift_constraint(
                     # dnia dla nikogo w tej lokalizacji, nie ma czego wymusić.
                     continue
 
-                only_12_24h = rotation.get("only_12_24h", False)
-                if only_12_24h or shop.weekday(d) >= 5:
-                    weekend_full = duty_shifts["weekend_full"]
-                    model.Add(x[e, d, weekend_full] == 1)
-                    for s in duty_shift_ids:
-                        if s != weekend_full:
-                            model.Add(x[e, d, s] == 0)
+                if rotation.get("only_12_24h", False) or shop.weekday(d) >= 5:
+                    day_keys = ("weekend_full", "weekend_half_a", "weekend_half_b")
                 else:
-                    weekday_ids = (duty_shifts["weekday_long"], duty_shifts["weekday_short"])
-                    model.Add(sum(x[e, d, s] for s in weekday_ids) == 1)
-                    for s in duty_shift_ids:
-                        if s not in weekday_ids:
-                            model.Add(x[e, d, s] == 0)
+                    day_keys = ("weekday_long", "weekday_short")
+                day_ids = {duty_shifts[key] for key in day_keys}
+                model.Add(sum(x[e, d, s] for s in day_ids) == 1)
+                for s in duty_shift_ids:
+                    if s not in day_ids:
+                        model.Add(x[e, d, s] == 0)
                 continue
 
             if not day_state.is_locked:
