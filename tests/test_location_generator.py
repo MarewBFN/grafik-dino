@@ -17,7 +17,7 @@ from model.custom_profile import (
 )
 from logic.generator.custom_profile_wiring import default_policies
 from model.employee import Employee
-from model.location import LocationConfig
+from model.location import MAX_CONSECUTIVE_POLICY_KEY, LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from logic.auto_generator import AutoScheduleGenerator
@@ -171,6 +171,55 @@ def test_max_consecutive_days_is_resolved_per_employee_location():
 
     assert build(2) is False, "3 locked consecutive days should conflict with a 2-day location limit"
     assert build(6) is True, "3 locked consecutive days should be fine under a 6-day location limit"
+
+
+def test_max_consecutive_policy_can_be_overridden_per_location():
+    """Tryb „Dni pod rząd” tylko dla placówki (Konfiguracja -> Zasady
+    generatora -> ustawienia zaawansowane) wygrywa z trybem projektu w obie
+    strony - także gdy w projekcie zasada jest Wyłączona."""
+    profile = CustomBusinessProfile(
+        key="custom_test_maxconsec_policy",
+        display_name="Test MaxConsec Policy",
+        roles=[RoleDefinition(key="worker", label="Pracownik")],
+        rules=[],
+    )
+    register_custom_profile(profile)
+
+    def build(project_policy, location_policy):
+        shop = ShopConfig(2026, 3)
+        shop.business_type = profile.key
+        shop.constraint_policies.update(default_policies(profile))
+        shop.constraint_policies["max_consecutive"] = project_policy
+
+        constraints = {"max_consecutive_days": 2}
+        if location_policy is not None:
+            constraints[MAX_CONSECUTIVE_POLICY_KEY] = location_policy.value
+        loc = LocationConfig(
+            key="loc", name="Obiekt",
+            open_hours={i: ("08:00", "16:00") for i in range(7)},
+            constraints=constraints,
+        )
+        shop.locations = {"loc": loc}
+
+        schedule = MonthSchedule(2026, 3)
+        emp = Employee(last_name="A", first_name="A", location_key="loc", custom_roles={"worker": True})
+        schedule.add_employee(emp)
+        # 3 zablokowane dni pod rząd - sprzeczne z limitem 2 dni, gdy Wymagany.
+        for day in (2, 3, 4):
+            ds = schedule.get_day(emp, day)
+            ds.start, ds.end = "08:00", "16:00"
+            ds.is_locked = True
+
+        with redirect_stdout(io.StringIO()):
+            result = AutoScheduleGenerator(schedule, shop).generate(
+                is_fix=True, solver_time_limit_seconds=10, solver_workers=1
+            )
+        return result["success"]
+
+    assert build(ConstraintPolicy.MANDATORY, None) is False, "bez nadpisania obowiązuje tryb projektu"
+    assert build(ConstraintPolicy.DISABLED, ConstraintPolicy.MANDATORY) is False
+    assert build(ConstraintPolicy.MANDATORY, ConstraintPolicy.DISABLED) is True
+    assert build(ConstraintPolicy.MANDATORY, ConstraintPolicy.PREFERRED) is True
 
 
 def test_min_staff_with_role_rule_is_resolved_per_employee_location():

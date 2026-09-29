@@ -12,6 +12,8 @@ import calendar
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from model.constraint_policy import ConstraintPolicy
+
 DEFAULT_OPEN_HOURS = {
     0: ("05:30", "23:00"),
     1: ("05:30", "22:45"),
@@ -27,6 +29,22 @@ DEFAULT_LOCATION_CONSTRAINTS = {
     "min_close_staff": 3,
     "max_consecutive_days": 4,
 }
+
+# Tryb zasady „Dni pod rząd” tylko dla tej placówki (Konfiguracja -> Zasady
+# generatora -> ustawienia zaawansowane), np. 2-osobowa placówka z limitem 1
+# dnia jako Wymagane = zmiany na przemian. Brak wpisu = tryb zasady z całego
+# projektu (ShopConfig.constraint_policies["max_consecutive"]).
+MAX_CONSECUTIVE_POLICY_KEY = "max_consecutive_policy"
+
+
+def max_consecutive_policy(constraints: dict, project_policy):
+    """Tryb „Dni pod rząd” dla pracowników placówki o tych `constraints`:
+    jej nadpisanie (MAX_CONSECUTIVE_POLICY_KEY) albo `project_policy`."""
+    value = constraints.get(MAX_CONSECUTIVE_POLICY_KEY)
+    try:
+        return ConstraintPolicy(value) if value is not None else project_policy
+    except ValueError:
+        return project_policy
 
 # Stała, powtarzalna codziennie "pora nocna" (Kodeks pracy, art. 151(7) §1:
 # 8 godzin między 21:00 a 7:00, w praktyce ustalane przez pracodawcę - tu

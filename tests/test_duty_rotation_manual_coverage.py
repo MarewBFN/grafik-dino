@@ -194,9 +194,9 @@ class MaxConsecutiveAroundPlannedDaysTests(unittest.TestCase):
         x = {(e, d, s): model.NewBoolVar(f"x{e}_{d}_{s}") for e in range(len(employees)) for d in days for s in all_shifts}
         ctx = SimpleNamespace(
             model=model, x=x, employees=employees, days=days, shop=shop, all_shifts=all_shifts,
-            trace=None, duty_shifts=duty_shifts,
+            trace=None, duty_shifts=duty_shifts, schedule=schedule,
         )
-        _build_max_consecutive(ctx, soft=False)
+        _build_max_consecutive(ctx, ConstraintPolicy.MANDATORY)
         for d in (5, 6, 7, 8):
             model.Add(x[0, d, duty_shifts["weekend_half_a"]] == 1)
 

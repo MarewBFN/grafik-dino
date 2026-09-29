@@ -21,6 +21,8 @@ from datetime import date, timedelta
 
 import holidays as _holidays
 
+from model.location import MAX_CONSECUTIVE_POLICY_KEY
+
 DAY = 24 * 60
 SLOT = 15
 
@@ -42,6 +44,9 @@ class Violation:
     # "generator" = błąd wyniku generatora; "input" = sprzeczność wyłącznie
     # między ręcznymi wpisami użytkownika (generator nie mógł tego zmienić).
     source: str = "generator"
+    # Tryb zasady nadpisany dla placówki pracownika (np. „Dni pod rząd”,
+    # LocationConfig.constraints) - None = tryb projektu (evaluate()).
+    policy: str | None = None
 
     def as_dict(self):
         return {
@@ -534,15 +539,20 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
                 ))
 
     # ------------------------------------------------------------------
-    # 5. Dni pod rząd
+    # 5. Dni pod rząd (limit i tryb placówki; ostatni dzień poprzedniego
+    #    miesiąca z pamięci poprzedniego miesiąca to dzień 0 serii)
     # ------------------------------------------------------------------
     for emp in schedule_after.employees:
         loc = cfg.location(emp)
         limit = (loc.constraints if loc else shop.constraints).get("max_consecutive_days", shop.constraints.get("max_consecutive_days", 4))
+        policy = (loc.constraints if loc else {}).get(MAX_CONSECUTIVE_POLICY_KEY)
         worked = {d for _s, _e, d, _m, _f in intervals[emp.id]}
         manual_days = {d for _s, _e, d, m, _f in intervals[emp.id] if m}
+        if schedule_after.get_previous_month_end_shift(emp) is not None:
+            worked.add(0)
+            manual_days.add(0)
         streak = []
-        for day in range(1, cfg.days_in_month + 2):
+        for day in range(0, cfg.days_in_month + 2):
             if day in worked:
                 streak.append(day)
                 continue
@@ -552,6 +562,7 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
                     f"{len(streak)} dni pod rząd (limit {limit}): dni {streak[0]}-{streak[-1]}",
                     emp.display_name(), streak[0],
                     source="input" if all(d in manual_days for d in streak[: limit + 1]) else "generator",
+                    policy=policy,
                 ))
             streak = []
 
@@ -911,7 +922,7 @@ def evaluate(report, shop):
         if v.rule in STRUCTURAL_RULES:
             hard.append(v)
             continue
-        policy = shop.constraint_policies.get(v.rule)
+        policy = v.policy or shop.constraint_policies.get(v.rule)
         policy = getattr(policy, "value", policy)
         if policy == "MANDATORY":
             hard.append(v)

@@ -64,6 +64,11 @@ class ConstraintSpec:
     # dodana po zapisaniu projektu). None = brak wpisu wyłącza zasadę, jak
     # dotychczas.
     default_policy: object = None
+    # Tryb zasady może mieć nadpisanie per placówka (np. „Dni pod rząd”,
+    # patrz base_specs.py::_build_max_consecutive) - build dostaje wtedy
+    # zamiast `soft` tryb zasady z całego projektu i sam rozstrzyga tryb
+    # każdej grupy pracowników; zwraca naruszenia grup Preferowanych.
+    per_location_policy: bool = False
 
 
 def apply_registry(ctx: ConstraintContext, specs, weights: dict) -> list:
@@ -84,7 +89,10 @@ def apply_registry(ctx: ConstraintContext, specs, weights: dict) -> list:
         weight = weights.get(spec.name, 1)
         print(f"[POLICY] {spec.name} -> {policy}")
 
-        if policy == ConstraintPolicy.MANDATORY:
+        if spec.per_location_policy:
+            violations = spec.build(ctx, policy)
+            all_soft_terms.extend(weight * v for v in violations)
+        elif policy == ConstraintPolicy.MANDATORY:
             print(f"[HARD] {spec.name}")
             spec.build(ctx, False)
         elif policy == ConstraintPolicy.PREFERRED:

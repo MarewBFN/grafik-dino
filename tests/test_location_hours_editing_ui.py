@@ -20,7 +20,8 @@ from PySide6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 
-from model.location import LocationConfig
+from model.constraint_policy import ConstraintPolicy
+from model.location import MAX_CONSECUTIVE_POLICY_KEY, LocationConfig
 from model.shop_config import ShopConfig
 from ui.config_dialog import ConfigDialog
 from ui.locations_dialog import LocationsDialog, _LocationRow
@@ -328,3 +329,65 @@ def test_hours_equalization_rule_is_shown_for_custom_profile_and_disabled_when_m
 
     dialog._save()
     assert shop.constraint_policies.get("hours_equalization", ConstraintPolicy.DISABLED) == ConstraintPolicy.DISABLED
+
+
+def test_locations_dialog_row_shows_max_consecutive_days_and_keeps_location_policy():
+    """„Dni pod rząd” widoczne w wierszu placówki (reszta progów obsady
+    zostaje schowana), a zapis okna nie gubi trybu tej zasady ustawionego
+    dla placówki w Konfiguracji."""
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(
+        key="site1", name="Site 1",
+        constraints={"max_consecutive_days": 1, MAX_CONSECUTIVE_POLICY_KEY: "MANDATORY"},
+    )
+    shop.locations = {"site1": loc}
+
+    dialog = LocationsDialog(None, shop)
+    row = dialog._location_rows[0]
+    assert row.max_consecutive_spin.isVisibleTo(row)
+    assert not row.thresholds_container.isVisibleTo(row)
+    assert row.max_consecutive_spin.value() == 1
+
+    row.max_consecutive_spin.setValue(2)
+    dialog._save()
+
+    saved = shop.locations["site1"].constraints
+    assert saved["max_consecutive_days"] == 2
+    assert saved[MAX_CONSECUTIVE_POLICY_KEY] == "MANDATORY"
+
+
+def test_config_dialog_sets_max_consecutive_days_and_policy_for_the_selected_location():
+    """Konfiguracja -> Zasady generatora -> ustawienia zaawansowane: „Dni
+    pod rząd” (liczba dni i Preferowane/Wymagane/Wyłączone) tylko dla
+    placówki, dla której otwarto okno. Tryb równy trybowi projektu nie jest
+    zapisywany - placówka dalej idzie za projektem."""
+    shop = ShopConfig(2026, 8)
+    shop.locations = {
+        "site1": LocationConfig(key="site1", name="Site 1"),
+        "site2": LocationConfig(key="site2", name="Site 2"),
+    }
+    shop.constraint_policies["max_consecutive"] = ConstraintPolicy.PREFERRED
+
+    dialog = ConfigDialog(None, shop, location_key="site1")
+    rules_page = dialog.tabs.widget(dialog._tab_index_generator)
+    assert rules_page.isAncestorOf(dialog.location_max_consecutive)
+    assert dialog.location_max_consecutive_policy.isVisibleTo(dialog.advanced_container)
+    assert dialog.location_max_consecutive_policy.currentData() == ConstraintPolicy.PREFERRED
+
+    dialog.location_max_consecutive.setValue(1)
+    selector = dialog.location_max_consecutive_policy
+    selector.setCurrentIndex(selector.findData(ConstraintPolicy.MANDATORY))
+    dialog._save()
+
+    assert shop.locations["site1"].constraints["max_consecutive_days"] == 1
+    assert shop.locations["site1"].constraints[MAX_CONSECUTIVE_POLICY_KEY] == "MANDATORY"
+    assert MAX_CONSECUTIVE_POLICY_KEY not in shop.locations["site2"].constraints
+    assert shop.constraint_policies["max_consecutive"] == ConstraintPolicy.PREFERRED
+
+    dialog = ConfigDialog(None, shop, location_key="site1")
+    selector = dialog.location_max_consecutive_policy
+    assert selector.currentData() == ConstraintPolicy.MANDATORY
+    selector.setCurrentIndex(selector.findData(ConstraintPolicy.PREFERRED))
+    dialog._save()
+
+    assert MAX_CONSECUTIVE_POLICY_KEY not in shop.locations["site1"].constraints

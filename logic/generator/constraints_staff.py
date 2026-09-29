@@ -105,6 +105,7 @@ def add_max_consecutive_constraint(
     trace=None,
     employee_indices=None,
     fixed_work_days=None,
+    previous_month_worked=None,
 ):
     if trace is not None:
         trace.log_constraint("max_consecutive", f"max_consecutive={max_consecutive} soft={soft}")
@@ -114,6 +115,12 @@ def add_max_consecutive_constraint(
     # patrz duty_rotation_manual_coverage.py) - liczone jak przepracowany
     # dzień. Domyślnie brak, dokładnie dotychczasowe zachowanie.
     fixed_work_days = fixed_work_days or {}
+    # previous_month_worked: {e} - pracowali w ostatnim dniu poprzedniego
+    # miesiąca („Pamięć poprzedniego miesiąca”) - ten dzień (0) liczy się do
+    # serii na początku miesiąca. Znany jest tylko ostatni dzień, więc to
+    # dokładne dla limitu 1 dnia (zmiany na przemian), a dla większych
+    # limitów liczy najwyżej 1 dzień serii sprzed miesiąca.
+    previous_month_worked = previous_month_worked or set()
 
     violations = []
 
@@ -122,13 +129,15 @@ def add_max_consecutive_constraint(
     # keeping x[e,...] indices global - default is every employee, exactly
     # today's behavior.
     for e in (employee_indices if employee_indices is not None else range(len(employees))):
-        for start in range(1, len(days) - max_consecutive + 1):
+        first_start = 0 if e in previous_month_worked else 1
+        for start in range(first_start, len(days) - max_consecutive + 1):
+            window = range(max(start, 1), start + max_consecutive + 1)
 
             work_sum = sum(
                 x[e, d, s]
-                for d in range(start, start + max_consecutive + 1)
+                for d in window
                 for s in all_shifts
-            ) + sum(1 for d in range(start, start + max_consecutive + 1) if d in fixed_work_days.get(e, ()))
+            ) + sum(1 for d in window if d in fixed_work_days.get(e, ())) + (1 if start == 0 else 0)
 
             if not soft:
                 model.Add(work_sum <= max_consecutive)

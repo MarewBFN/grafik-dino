@@ -22,6 +22,7 @@ from ortools.sat.python import cp_model
 
 from logic.utils.time_utils import get_effective_daily_hours
 from model.constraint_policy import ConstraintPolicy
+from model.location import MAX_CONSECUTIVE_POLICY_KEY, max_consecutive_policy
 
 
 POLICY_STAGES = (
@@ -377,9 +378,28 @@ def _add_opening_hours_supply_messages(schedule, shop, add) -> None:
         name = location.name if location is not None else location_key
         view = shop.get_location(employees[0])
         windows = location_windows(view, shop.year, shop.month, schedule.days_in_month)
+        # „Dni pod rząd” Wymagane dla tej placówki: kolejne dni, w które
+        # dostępna jest tylko ta sama 1 osoba (np. urlop drugiej z dwóch),
+        # a jest ich więcej niż limit - ta osoba musiałaby pracować dłużej.
+        limit = view.constraints.get("max_consecutive_days", 4)
+        consecutive_mandatory = (
+            max_consecutive_policy(view.constraints, policies.get("max_consecutive")) == ConstraintPolicy.MANDATORY
+        )
+        run, run_person = [], None
         previous = None
         for day, window in sorted(windows.items()):
             available = [e for e in employees if not _is_unavailable(schedule.get_day(e, day))]
+            only = available[0] if len(available) == 1 and window.start // DAY + 1 == day else None
+            if only is not None and run and run[-1] == day - 1 and only is run_person:
+                run.append(day)
+            else:
+                run, run_person = ([day], only) if only is not None else ([], None)
+            if consecutive_mandatory and len(run) == limit + 1:
+                add(
+                    f"{name}, dni {run[0]}–{day}: dostępna jest tylko 1 osoba ({only.display_name()}), "
+                    f"a „Dni pod rząd” w tej placówce to {limit} (zasada Wymagana) - musiałaby "
+                    f"pracować {len(run)} dni pod rząd."
+                )
             base = (day - 1) * DAY
             span = f"{fmt_minutes(window.start - base)}–{fmt_minutes(window.end - base)}"
             if not available:
@@ -744,6 +764,10 @@ class GeneratorDiagnostics:
         for name in POLICY_STAGES:
             if name not in enabled:
                 shop.constraint_policies[name] = ConstraintPolicy.DISABLED
+        if "max_consecutive" not in enabled:
+            # Tryb „Dni pod rząd” nadpisany per placówka też wyłączony w tym etapie.
+            for location in shop.locations.values():
+                location.constraints.pop(MAX_CONSECUTIVE_POLICY_KEY, None)
 
         # A single worker makes stage-to-stage output reproducible for a seed.
         with redirect_stdout(io.StringIO()):

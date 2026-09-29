@@ -1990,3 +1990,46 @@ rotacja 24/7 only_12_24h, 3 osoby).
 | `logic/generator/diagnostics.py` | Komunikaty o konfliktach „W”/„1”/„2” (odpoczynek, obłożenie) i nadmiarze „W” w rotacji 24/7 | DO USTALENIA |
 | `model/shop_config.py` | Opis przycisku „Może pracować” | DO USTALENIA |
 | `model/day_schedule.py`, `logic/schedule_controller.py` | Komentarze | NIE |
+
+## „Dni pod rząd” per placówka: zmiany na przemian w placówkach 2-osobowych (2026-09-29)
+
+Prośba klienta: w placówce z 2 osobami zmiany na przemian („zygzak”).
+Sprawdzone na generatorze (MZGK z `test_data/test realny z programu.myp`
+i placówki testowe): bez zmian zygzak wychodzi tylko tam, gdzie wymusza go
+odpoczynek (przerwa między oknami < 11 h, np. 07:00-22:00) albo rotacja 24/7
+z 24h - przy innych godzinach i wokół weekendów generator układa bloki.
+Mechanizm już był: „Dni pod rząd” = 1 dla placówki (nikt nie pracuje dwa
+dni z rzędu), ale w Enyo pole było ukryte, a tryb zasady wspólny dla
+całego projektu.
+
+- **Pole „Maks. dni pracy pod rząd”** w wierszu placówki (Lokalizacje) -
+  jedyne odkryte z „Progów obsady” (reszta dalej schowana).
+- **Tryb tylko dla placówki**: Konfiguracja -> Zasady generatora ->
+  ustawienia zaawansowane -> sekcja „Placówka: …” (liczba dni +
+  Preferowane/Wymagane/Wyłączone, domyślnie tryb projektu = Preferowane).
+  Zapis w `LocationConfig.constraints["max_consecutive_policy"]` tylko gdy
+  różni się od trybu projektu. Generator: `ConstraintSpec.per_location_policy`
+  (rejestr przekazuje tryb projektu, `_build_max_consecutive` grupuje
+  pracowników wg (limit, tryb) placówki).
+- **Przełom miesięcy**: „Dni pod rząd” liczy ostatni dzień poprzedniego
+  miesiąca z pamięci poprzedniego miesiąca (dzień 0) - wcześniej seria
+  zaczynała się od nowa 1. dnia i zygzak mógł się przestawić (ta sama osoba
+  31. i 1.). Znany jest tylko ostatni dzień: dokładne dla limitu 1,
+  zachowawcze dla większych.
+- **Diagnostyka**: gdy w placówce z Wymaganym limitem przez więcej dni pod
+  rząd niż limit dostępna jest tylko 1 osoba (np. urlop drugiej z dwóch),
+  komunikat podaje dni i osobę zamiast ogólnego „sprzeczne zasady”.
+
+Wyniki (tryb Wymagane, limit 1): zygzak bez wyjątków w MZGK, 08-20, 08-16
+pn-pt i 24/7; przy Preferowanym generator może odstąpić od zygzaka, żeby
+wyrównać godziny, a przy urlopach druga osoba przejmuje dni.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/location.py` | `MAX_CONSECUTIVE_POLICY_KEY`, `max_consecutive_policy()` | DO USTALENIA |
+| `logic/generator/constraint_registry.py` | `ConstraintSpec.per_location_policy` | DO USTALENIA |
+| `logic/generator/base_specs.py`, `constraints_staff.py` | Tryb „Dni pod rząd” per placówka, dzień 0 z poprzedniego miesiąca | DO USTALENIA |
+| `logic/generator/diagnostics.py` | Komunikat o 1 dostępnej osobie przy Wymaganym limicie; etapy diagnostyki wyłączają też tryb placówki | DO USTALENIA |
+| `ui/locations_dialog.py`, `ui/config_dialog.py` | Pole „Dni pod rząd” w placówce, tryb placówki w ustawieniach zaawansowanych | DO USTALENIA |
+| `tests/schedule_validator.py` | Tryb placówki i dzień 0 w ocenie „Dni pod rząd” | NIE |
+| `README.md` | Opis pola i trybu placówki | TAK (po dopasowaniu do DinGo!) |

@@ -299,6 +299,73 @@ def test_shift_class_w_for_the_whole_location_explains_the_uncovered_next_day():
     ), outcome["reasons"]
 
 
+def _alternating_spec(name, policy="MANDATORY", **extra):
+    """2 osoby, 08:00-20:00 (12 h przerwy - sam odpoczynek nie wymusza
+    zmian na przemian), „Dni pod rząd” = 1 z trybem tylko dla placówki."""
+    spec = _ochrona_regular(name, ("08:00", "20:00"), 2, **extra)
+    spec["locations"][0]["constraints"] = {"max_consecutive_days": 1, "max_consecutive_policy": policy}
+    return spec
+
+
+def _worked_days(outcome):
+    worked = {}
+    for name, day, _iv in _shift_intervals(outcome):
+        worked.setdefault(name, set()).add(day)
+    return worked
+
+
+def test_one_day_limit_per_location_gives_alternating_shifts():
+    """Klient: w placówce z 2 osobami zmiany na przemian („zygzak”) -
+    „Dni pod rząd” = 1 tylko dla tej placówki, Wymagane."""
+    outcome = run_case(_alternating_spec("zigzag"), time_limit=20)
+
+    _assert_exact_coverage(outcome)
+    worked = _worked_days(outcome)
+    for day in range(1, outcome["schedule"].days_in_month + 1):
+        assert sum(day in days for days in worked.values()) == 1, day
+    assert not any(day + 1 in days for days in worked.values() for day in days)
+
+
+def test_one_day_limit_continues_across_the_month_boundary():
+    """Kto pracował w ostatnim dniu poprzedniego miesiąca (pamięć
+    poprzedniego miesiąca), nie dostaje dnia 1 - zygzak nie przestawia się
+    na przełomie miesięcy (wcześniej „Dni pod rząd” liczyło od dnia 1)."""
+    outcome = run_case(_alternating_spec("zigzag_carry", prev_month={0: ("20:00", False)}), time_limit=20)
+
+    _assert_exact_coverage(outcome)
+    worked = _worked_days(outcome)
+    assert 1 not in worked["P00"]
+    assert 1 in worked["P01"]
+
+
+def test_location_policy_decides_how_consecutive_days_are_judged():
+    """Tryb placówki wygrywa z trybem projektu: projekt Wymagane, placówka
+    Wyłączone - „W” dzień po dniu jest dozwolone, a walidator nie liczy tej
+    serii jako twardego naruszenia."""
+    cells = [(0, day, "class", "W") for day in (5, 6, 7)]
+    spec = _alternating_spec("zigzag_off", policy="DISABLED", cells=cells, policies={"max_consecutive": "MANDATORY"})
+    outcome = run_case(spec, time_limit=20)
+
+    assert outcome["success"], outcome["reasons"]
+    assert {5, 6, 7} <= _worked_days(outcome)["P00"]
+    assert "max_consecutive" not in _hard_rules(outcome)
+
+
+def test_one_day_limit_with_a_long_absence_is_explained():
+    """Wymagane + urlop jednej z dwóch osób dłuższy niż 1 dzień: druga
+    musiałaby pracować dzień po dniu - konkretny komunikat zamiast
+    ogólnego. Przy Preferowanym ta sama sytuacja daje grafik."""
+    cells = [(0, day, "leave") for day in (10, 11, 12)]
+
+    mandatory = run_case(_alternating_spec("zigzag_leave", cells=cells), time_limit=20)
+    assert not mandatory["success"]
+    assert any("dni 10–11" in r and "„Dni pod rząd”" in r for r in mandatory["reasons"]), mandatory["reasons"]
+
+    preferred = run_case(_alternating_spec("zigzag_leave_p", policy="PREFERRED", cells=cells), time_limit=20)
+    _assert_exact_coverage(preferred)
+    assert {10, 11, 12} <= _worked_days(preferred)["P01"]
+
+
 @pytest.mark.parametrize("hours", [
     ("22:00", "06:00"),
     ("18:00", "06:00"),

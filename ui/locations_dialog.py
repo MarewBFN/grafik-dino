@@ -25,7 +25,7 @@ from ui.slug import slugify
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.weekly_hours_editor import WeeklyHoursEditor
-from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig
+from model.location import DEFAULT_LOCATION_CONSTRAINTS, MAX_CONSECUTIVE_POLICY_KEY, LocationConfig
 
 LOCATIONS_TUTORIAL_FLAG = "locations_tutorial_seen.flag"
 
@@ -52,12 +52,13 @@ class _LocationRow(QFrame):
     pełne godziny otwarcia na każdy dzień tygodnia (WeeklyHoursEditor),
     checkbox "24/7" (zastępuje dawne ręczne pole "Zmiana nocna" - godziny
     nocne generator wykrywa teraz sam z tych godzin otwarcia, patrz
-    LocationConfig.get_night_shift_hours()) oraz progi obsady (self.thresholds_container),
-    które faktycznie nadpisują generator dla pracowników przypisanych do tej
-    lokalizacji (patrz logic/generator/base_specs.py::_build_max_consecutive
-    i logic/generator/generic_rules.py::build_min_staff_with_role) - schowane
-    na prośbę klienta (patrz thresholds_container.hide() niżej), ale wciąż w
-    pełni działające, żeby nie zgubić już zapisanych nadpisań per-lokalizacja.
+    LocationConfig.get_night_shift_hours()) oraz progi obsady, które faktycznie
+    nadpisują generator dla pracowników przypisanych do tej lokalizacji (patrz
+    logic/generator/base_specs.py::_build_max_consecutive i
+    logic/generator/generic_rules.py::build_min_staff_with_role) - widoczne
+    tylko „Dni pod rząd”, reszta (self.thresholds_container) schowana na
+    prośbę klienta, ale wciąż w pełni działająca, żeby nie zgubić już
+    zapisanych nadpisań per-lokalizacja.
     Na końcu: edytor "Rotacja służby 24/7" (patrz ui/duty_rotation_editor.py) -
     jedyne miejsce w UI, w którym da się skonfigurować LocationConfig.duty_rotation
     dla nowej albo istniejącej lokalizacji."""
@@ -115,6 +116,31 @@ class _LocationRow(QFrame):
             "zawsze wygrywa."
         )
         outer.addWidget(self.closed_on_public_holidays_check)
+
+        # „Dni pod rząd” tej placówki - jedyny widoczny z progów obsady (reszta
+        # w self.thresholds_container niżej), np. 1 dzień dla 2-osobowej
+        # placówki = zmiany na przemian. Tryb tej zasady tylko dla placówki
+        # (MAX_CONSECUTIVE_POLICY_KEY) ustawia Konfiguracja -> Zasady
+        # generatora -> ustawienia zaawansowane; tu przechodzi bez zmian.
+        self._max_consecutive_policy = rule_overrides.get(MAX_CONSECUTIVE_POLICY_KEY)
+        consecutive_row = QHBoxLayout()
+        consecutive_row.addWidget(QLabel("Maks. dni pracy pod rząd:"))
+        self.max_consecutive_spin = QSpinBox()
+        self.max_consecutive_spin.setRange(1, 14)
+        self.max_consecutive_spin.setFixedWidth(60)
+        self.max_consecutive_spin.setValue(
+            max_consecutive_days or DEFAULT_LOCATION_CONSTRAINTS["max_consecutive_days"]
+        )
+        self.max_consecutive_spin.setToolTip(
+            "Ile dni z rzędu jedna osoba może pracować w tej placówce. 1 = nikt "
+            "nie pracuje dwa dni pod rząd - przy dwóch osobach generator układa "
+            "zmiany na przemian. Tryb tej zasady dla placówki (Preferowane/"
+            "Wymagane/Wyłączone): Konfiguracja → Zasady generatora → ustawienia "
+            "zaawansowane."
+        )
+        consecutive_row.addWidget(self.max_consecutive_spin)
+        consecutive_row.addStretch()
+        outer.addLayout(consecutive_row)
 
         is_24_7_row = QHBoxLayout()
         self.is_24_7_check = QCheckBox("Działalność całodobowa (24/7)")
@@ -201,15 +227,6 @@ class _LocationRow(QFrame):
         thresholds.setContentsMargins(0, 0, 0, 0)
         thresholds.addWidget(QLabel("Progi obsady dla tej lokalizacji:"))
 
-        self.max_consecutive_spin = QSpinBox()
-        self.max_consecutive_spin.setRange(1, 14)
-        self.max_consecutive_spin.setFixedWidth(60)
-        self.max_consecutive_spin.setValue(
-            max_consecutive_days or DEFAULT_LOCATION_CONSTRAINTS["max_consecutive_days"]
-        )
-        thresholds.addWidget(QLabel("Dni pod rząd:"))
-        thresholds.addWidget(self.max_consecutive_spin)
-
         self.rule_spins: dict[str, QSpinBox] = {}
         for rule_key, label, default_value in self.rule_defs:
             spin = QSpinBox()
@@ -278,6 +295,8 @@ class _LocationRow(QFrame):
 
     def constraints_overrides(self) -> dict:
         overrides = {"max_consecutive_days": self.max_consecutive_spin.value()}
+        if self._max_consecutive_policy is not None:
+            overrides[MAX_CONSECUTIVE_POLICY_KEY] = self._max_consecutive_policy
         for rule_key, spin in self.rule_spins.items():
             if spin.value():
                 overrides[rule_key] = spin.value()

@@ -22,6 +22,7 @@ if str(ROOT) not in sys.path:
 
 _app = QApplication.instance() or QApplication([])
 
+from logic.generator.constraints_staff import add_max_consecutive_constraint
 from logic.generator.duty_rotation_rest_constraint import add_duty_rotation_rest_constraint
 from logic.generator.rest_constraint import add_rest_11h_constraint, add_rest_11h_constraint_simplified
 from logic.utils.time_utils import is_next_calendar_month
@@ -363,6 +364,33 @@ class DutyRotationCrossMonthRestTests(unittest.TestCase):
 
         status = cp_model.CpSolver().Solve(model)
         self.assertIn(status, (cp_model.OPTIMAL, cp_model.FEASIBLE))
+
+
+class MaxConsecutiveCrossMonthTests(unittest.TestCase):
+    """„Dni pod rząd” liczy ostatni dzień poprzedniego miesiąca (dzień 0)
+    osobom, które wtedy pracowały - limit 1 dnia (zmiany na przemian w
+    2-osobowej placówce) obowiązuje też na przełomie miesięcy."""
+
+    def _solve(self, previous_month_worked, forced_days, max_consecutive=1):
+        model = cp_model.CpModel()
+        days = [1, 2, 3, 4]
+        x = {(0, d, 0): model.NewBoolVar(f"x_d{d}") for d in days}
+        add_max_consecutive_constraint(
+            model, x, [Employee("Nowak", "Anna")], days, max_consecutive, (0,),
+            previous_month_worked=previous_month_worked,
+        )
+        for d in forced_days:
+            model.Add(x[0, d, 0] == 1)
+        return cp_model.CpSolver().Solve(model)
+
+    def test_day_one_is_blocked_after_working_the_last_day_of_the_previous_month(self):
+        self.assertEqual(self._solve({0}, [1]), cp_model.INFEASIBLE)
+        self.assertIn(self._solve(set(), [1]), (cp_model.OPTIMAL, cp_model.FEASIBLE))
+        self.assertIn(self._solve({0}, [2]), (cp_model.OPTIMAL, cp_model.FEASIBLE))
+
+    def test_previous_month_day_counts_toward_a_longer_limit(self):
+        self.assertEqual(self._solve({0}, [1, 2], max_consecutive=2), cp_model.INFEASIBLE)
+        self.assertIn(self._solve(set(), [1, 2], max_consecutive=2), (cp_model.OPTIMAL, cp_model.FEASIBLE))
 
 
 # ---------------------------------------------------------------------------

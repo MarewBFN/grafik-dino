@@ -30,7 +30,7 @@ from ui.profile_wizard_dialog import ProfileWizardDialog
 from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile, visible_profiles
-from model.location import normalize_duty_rotation
+from model.location import MAX_CONSECUTIVE_POLICY_KEY, max_consecutive_policy, normalize_duty_rotation
 from logic.generator.opening_hours_coverage import (
     DEFAULT_MAX_STAFF,
     MAX_STAFF_CONSTRAINT_KEY,
@@ -826,6 +826,51 @@ class ConfigDialog(QDialog):
 
         advanced_layout.addLayout(policy_form)
 
+        # „Dni pod rząd” tylko dla placówki, dla której otwarto to okno
+        # (LocationConfig.constraints, patrz model/location.py::
+        # MAX_CONSECUTIVE_POLICY_KEY) - liczba dni i tryb niezależne od
+        # zasady „Dni pod rząd” całego projektu wyżej, np. 2-osobowa
+        # placówka: 1 dzień, Wymagane = zmiany na przemian.
+        self.location_max_consecutive = None
+        self.location_max_consecutive_policy = None
+        if self.location is not None:
+            location_label = QLabel(f"PLACÓWKA: {self.location.name}")
+            location_label.setObjectName("groupLabel")
+            advanced_layout.addWidget(location_label)
+
+            self.location_max_consecutive = QSpinBox()
+            self.location_max_consecutive.setRange(1, 14)
+            self.location_max_consecutive.setFixedWidth(70)
+            self.location_max_consecutive.setValue(self.location.constraints.get("max_consecutive_days", 4))
+
+            self.location_max_consecutive_policy = QComboBox()
+            self.location_max_consecutive_policy.setMinimumWidth(125)
+            for text, value in POLICY_OPTIONS:
+                self.location_max_consecutive_policy.addItem(text, value)
+            project_policy = self.shop_config.constraint_policies.get("max_consecutive", ConstraintPolicy.PREFERRED)
+            self.location_max_consecutive_policy.setCurrentIndex(self.location_max_consecutive_policy.findData(
+                max_consecutive_policy(self.location.constraints, project_policy)
+            ))
+            _apply_policy_state_tooltips(self.location_max_consecutive_policy, "Dni pod rząd")
+
+            location_row = QHBoxLayout()
+            location_row.addWidget(self.location_max_consecutive)
+            location_row.addWidget(self.location_max_consecutive_policy)
+            location_row.addStretch()
+            location_form = QFormLayout()
+            location_form.addRow("Maks. dni pracy pod rząd:", location_row)
+            advanced_layout.addLayout(location_form)
+
+            location_hint = QLabel(
+                "Tylko dla tej placówki - zastępuje zasadę „Dni pod rząd” z listy "
+                "wyżej. 1 dzień = nikt nie pracuje dwa dni pod rząd, czyli przy "
+                "dwóch osobach zmiany na przemian. Przy „Wymagane” urlop albo L4 "
+                "jednej z dwóch osób dłuższe niż 1 dzień daje brak rozwiązania."
+            )
+            location_hint.setObjectName("mutedHint")
+            location_hint.setWordWrap(True)
+            advanced_layout.addWidget(location_hint)
+
         hint = QLabel(
             "Te reguły możesz swobodnie zmieniać i testować, jak zachowuje się "
             "generator dla różnych ustawień — dopasuj je do specyfiki własnej "
@@ -1016,6 +1061,17 @@ class ConfigDialog(QDialog):
                 # nie trzeba (ani nie wolno) jej tu nadpisywać z powrotem na
                 # PREFERRED, bo to by cofnęło taką decyzję przy każdym
                 # otwarciu i zapisaniu Konfiguracji.
+
+            # „Dni pod rząd” tej placówki - tryb zapisany tylko, gdy różni się
+            # od trybu projektu (zapisanego wyżej); ten sam = placówka dalej
+            # idzie za projektem, także po jego późniejszej zmianie.
+            if self.location_max_consecutive is not None:
+                self.location.constraints["max_consecutive_days"] = self.location_max_consecutive.value()
+                chosen = ConstraintPolicy(self.location_max_consecutive_policy.currentData())
+                if chosen == self.shop_config.constraint_policies.get("max_consecutive"):
+                    self.location.constraints.pop(MAX_CONSECUTIVE_POLICY_KEY, None)
+                else:
+                    self.location.constraints[MAX_CONSECUTIVE_POLICY_KEY] = chosen.value
         except Exception as exc:
             QMessageBox.critical(self, "Błąd konfiguracji", str(exc))
             return
