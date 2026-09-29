@@ -1,5 +1,5 @@
 {
-  "latest_version": "1.1.0.enyo",
-  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.1.0-enyo/EnyoSetup.exe",
-  "changelog": "Poprawiona obsada 24/7 (zmiana 24h liczona jako pokrycie takze w dni robocze), zachowanie konfiguracji rotacji sluzby przy wczytaniu projektu, obsluga polskich swiat (zamkniecie placowki, rekompensata za swieto w sobote), czytelniejszy edytor rotacji i okno edycji dnia, poprawiony eksport karty pracy oraz dokladniejsze komunikaty o brakach w obsadzie."
+  "latest_version": "1.1.2.enyo",
+  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.1.2-enyo/EnyoSetup.exe",
+  "changelog": "Logo Enyo w prawym gornym rogu karty pracy pracownika (eksport JPG, PDF i Excel)."
 }
