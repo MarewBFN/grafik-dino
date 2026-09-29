@@ -28,12 +28,15 @@ from datetime import datetime
 
 from PIL import Image, ImageDraw, ImageFont
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from logic.monthly_hours_status import monthly_hours_status
 from logic.utils.time_utils import MONTH_NAMES_PL
+from utils import resource_path
 
 _TITLE = "Lista obecności miesięczna pracownika"
+_LOGO_PATH = "assets/logo_enyo.png"
 _COLUMNS = ["Dzień", "Wejście", "Wyjście", "Ilość godzin", "Godziny dzienne", "Godziny nocne"]
 
 _WEEKDAY_ABBR_PL = ["Pn", "Wt", "Śr", "Cz", "Pt", "S", "N"]
@@ -250,11 +253,28 @@ class _EmployeeCardImageExporter:
 
     def _draw_header(self):
         y = self.MARGIN
+        logo_h = self._draw_logo(y)
         self.draw.text((self.MARGIN, y), _TITLE, fill=self.BLACK, font=self.font_b)
-        y += 40
+        y += max(40, logo_h + 10)
 
         self._draw_dashed_line(self.MARGIN, y, _PAGE_W - self.MARGIN, y)
         return y + 30
+
+    def _draw_logo(self, y):
+        """Logo w prawym górnym rogu karty, nad kreskowaną linią nagłówka -
+        wysokość stała, szerokość skalowana proporcjonalnie do oryginału."""
+        try:
+            logo = Image.open(resource_path(_LOGO_PATH)).convert("RGBA")
+        except Exception:
+            return 0
+
+        target_h = 80
+        target_w = int(logo.width * (target_h / logo.height))
+        logo = logo.resize((target_w, target_h), Image.LANCZOS)
+
+        x = _PAGE_W - self.MARGIN - target_w
+        self.img.paste(logo, (x, y), logo)
+        return target_h
 
     def _draw_dashed_line(self, x0, y0, x1, y1, dash=8, gap=6):
         x = x0
@@ -427,8 +447,23 @@ _ALIGN_CENTER = Alignment(horizontal="center", vertical="center")
 _FILL_TITLE = PatternFill(start_color="EDEDED", end_color="EDEDED", fill_type="solid")
 
 
+def _add_logo(ws, last_col):
+    """Logo w prawym górnym rogu arkusza - kotwiczone w ostatniej kolumnie
+    nagłówka (patrz _COLUMNS), tak jak w wersji obrazkowej/PDF karty."""
+    try:
+        img = XLImage(resource_path(_LOGO_PATH))
+    except Exception:
+        return
+
+    target_h = 60
+    img.width = int(img.width * (target_h / img.height))
+    img.height = target_h
+    ws.add_image(img, f"{ws.cell(row=1, column=last_col).coordinate}")
+
+
 def _write_employee_sheet(ws, schedule, year, month, shop, employee):
     ws.cell(row=1, column=1, value=_TITLE).font = Font(bold=True, size=14)
+    _add_logo(ws, len(_COLUMNS))
 
     last_col = len(_COLUMNS)
     ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last_col)
