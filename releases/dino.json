@@ -1,5 +1,5 @@
 {
-  "latest_version": "1.2.0",
-  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.2.0/DingoSetup.exe",
-  "changelog": ""
+  "latest_version": "1.3.0",
+  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.3.0/DingoSetup.exe",
+  "changelog": "Naprawiona automatyczna zmiana nocna (nie pojawia sie juz przy zwyklych godzinach zamkniecia po 22:00), naprawione \"Niedziele handlowe\" (rzeczywiscie daja obsade) i obsada mieso po zmianie godzin placowki. Poprawki dot. swiat ustawowych: kierowniczka ma wolne w zamkniete swieto, zachowany odpoczynek 11h wokol swieta. Poprawiony tryb \"Ulamki\" (dotyczy tylko widoku kompaktowego)."
 }
