@@ -126,6 +126,8 @@ def build_case(spec):
         loc.public_holidays = set(loc_spec.get("public_holidays", []))
         loc.day_overrides = {int(d): tuple(v) for d, v in loc_spec.get("day_overrides", {}).items()}
         loc.constraints.update(loc_spec.get("constraints", {}))
+        loc.preferred_shifts_enabled = loc_spec.get("preferred_shifts_enabled", False)
+        loc.preferred_shifts = list(loc_spec.get("preferred_shifts", []))
         locations[loc.key] = loc
     shop.locations = locations
 

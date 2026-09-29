@@ -17,8 +17,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from logic.generator.opening_hours_coverage import profile_uses_opening_hours_model
 from logic.utils.time_utils import month_scope_note
 from ui.duty_rotation_editor import DutyRotationEditor
+from ui.preferred_shifts_editor import PreferredShiftsEditor
 from ui.slug import slugify
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
@@ -64,7 +66,8 @@ class _LocationRow(QFrame):
         self, on_remove, name="", open_hours=None, is_24_7=False,
         max_consecutive_days=None, rule_defs=(), rule_overrides=None,
         original_key=None, duty_rotation=None, round_clock_start_hour=None,
-        closed_on_public_holidays=True,
+        closed_on_public_holidays=True, show_preferred_shifts=False,
+        preferred_shifts_enabled=False, preferred_shifts=None,
     ):
         super().__init__()
         self.setObjectName("configCard")
@@ -133,6 +136,15 @@ class _LocationRow(QFrame):
         self.hours_editor = WeeklyHoursEditor(open_hours)
         self.hours_editor.setEnabled(not is_24_7)
         outer.addWidget(self.hours_editor)
+
+        # "Preferowane godziny pracy" (patrz ui/preferred_shifts_editor.py) -
+        # tylko dla modelu godzin otwarcia (profil Ochrony bez rotacji 24/7,
+        # show_preferred_shifts przekazane z LocationsDialog) i tylko dla
+        # lokalizacji bez 24/7 (jak hours_editor wyżej - dla 24/7 to miejsce
+        # zajmuje rotacja służby, patrz _update_hours_visibility).
+        self._show_preferred_shifts = show_preferred_shifts
+        self.preferred_shifts_editor = PreferredShiftsEditor(preferred_shifts_enabled, preferred_shifts)
+        outer.addWidget(self.preferred_shifts_editor)
 
         # "Rotacja służby 24/7" podpięta wprost pod checkbox 24/7 wyżej,
         # zamiast osobnego przełącznika (decyzja z użytkownikiem, patrz
@@ -240,6 +252,7 @@ class _LocationRow(QFrame):
         self.hours_editor.setVisible(not is_24_7 and self._hours_expanded)
         self.toggle_hours_btn.setText("Zwiń" if self._hours_expanded else "Rozwiń")
         self.duty_rotation_editor.setVisible(is_24_7)
+        self.preferred_shifts_editor.setVisible(self._show_preferred_shifts and not is_24_7)
 
     def _update_round_clock_visibility(self):
         # Cała sekcja (checkbox + podpowiedź) istnieje tylko dla 24/7 - dla
@@ -344,6 +357,13 @@ class LocationsDialog(QDialog):
                         rule.params.get("min_count", 1),
                     ))
 
+        # "Preferowane godziny pracy" ma efekt tylko w modelu godzin otwarcia
+        # (profil Ochrony bez rotacji 24/7, patrz
+        # logic/generator/opening_hours_coverage.py) - dla pozostałych
+        # profili (Dino) ukryte, żeby nie pokazywać przełącznika bez wpływu
+        # na generator.
+        self._show_preferred_shifts = profile_uses_opening_hours_model(self.shop_config.business_type)
+
         self._location_rows: list[_LocationRow] = []
         self.locations_container = QVBoxLayout()
         outer.addLayout(self.locations_container)
@@ -357,6 +377,8 @@ class LocationsDialog(QDialog):
                 duty_rotation=loc.duty_rotation,
                 round_clock_start_hour=loc.round_clock_start_hour,
                 closed_on_public_holidays=loc.closed_on_public_holidays,
+                preferred_shifts_enabled=loc.preferred_shifts_enabled,
+                preferred_shifts=loc.preferred_shifts,
             )
 
         self.add_btn = QPushButton("Dodaj lokalizację")
@@ -390,7 +412,8 @@ class LocationsDialog(QDialog):
         self, name="", open_hours=None, is_24_7=False,
         max_consecutive_days=None, rule_overrides=None, original_key=None,
         duty_rotation=None, round_clock_start_hour=None,
-        closed_on_public_holidays=True,
+        closed_on_public_holidays=True, preferred_shifts_enabled=False,
+        preferred_shifts=None,
     ):
         row = _LocationRow(
             self._remove_location_row, name, open_hours, is_24_7=is_24_7,
@@ -401,6 +424,9 @@ class LocationsDialog(QDialog):
             duty_rotation=duty_rotation,
             round_clock_start_hour=round_clock_start_hour,
             closed_on_public_holidays=closed_on_public_holidays,
+            show_preferred_shifts=self._show_preferred_shifts,
+            preferred_shifts_enabled=preferred_shifts_enabled,
+            preferred_shifts=preferred_shifts,
         )
         self._location_rows.append(row)
         self.locations_container.addWidget(row)
@@ -532,6 +558,11 @@ class LocationsDialog(QDialog):
                     except ValueError as exc:
                         raise ValueError(f"Rotacja służby 24/7 dla lokalizacji „{name}”: {exc}") from exc
 
+                try:
+                    preferred_shifts_enabled, preferred_shifts = row.preferred_shifts_editor.get_preferred_shifts(hours)
+                except ValueError as exc:
+                    raise ValueError(f"Preferowane godziny pracy dla lokalizacji „{name}”: {exc}") from exc
+
                 loc = LocationConfig(
                     key=key, name=name,
                     open_hours=hours,
@@ -540,6 +571,8 @@ class LocationsDialog(QDialog):
                     duty_rotation=duty_rotation,
                     round_clock_start_hour=row.round_clock_start_hour_value(),
                     closed_on_public_holidays=row.closed_on_public_holidays_check.isChecked(),
+                    preferred_shifts_enabled=preferred_shifts_enabled,
+                    preferred_shifts=preferred_shifts,
                 )
                 old = self.shop_config.locations.get(row.original_key)
                 if old is not None:

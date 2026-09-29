@@ -123,6 +123,10 @@ def add_priority_hours_shortfall_penalty(
 
 NOMINAL_HOURS_NO_CONTRACT_POLICY = "nominal_hours_no_umowa"
 NOMINAL_HOURS_NO_CONTRACT_LABEL = "Nominalny czas pracowników bez umowy"
+NOMINAL_HOURS_NO_CONTRACT_DESCRIPTION = (
+    "Dąży do tego, żeby pracownicy bez roli „Umowa” też przepracowali pełny nominał godzin, "
+    "po pracownikach z tą rolą."
+)
 # Wyraźnie niższa niż PRIORITY_WEIGHT (10000, "Umowa" zawsze pierwsi w
 # kolejności), ale nadal ponad zwykłymi generycznymi wagami (rest_11h/
 # availability/duty_rotation_coverage = 5000 w base_specs.GENERIC_WEIGHTS) -
@@ -166,6 +170,9 @@ def nominal_hours_no_contract_weight(policy) -> int:
 
 HOURS_EQUALIZATION_POLICY = "hours_equalization"
 HOURS_EQUALIZATION_LABEL = "Wyrównanie godzin umowa/bez"
+HOURS_EQUALIZATION_DESCRIPTION = (
+    "Wyrównuje rozrzut godzin osobno wśród pracowników z rolą „Umowa” i osobno wśród pozostałych."
+)
 HOURS_EQUALIZATION_WEIGHT = 1
 HOURS_EQUALIZATION_MANDATORY_FACTOR = 10
 _FULL_TIME_SCALE = 10

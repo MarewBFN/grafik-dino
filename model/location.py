@@ -192,6 +192,71 @@ def normalize_duty_rotation(raw: dict | None) -> dict | None:
     return normalized
 
 
+MAX_PREFERRED_SHIFTS = 3
+
+
+def _minutes_of_day(value: str) -> int:
+    h, m = value.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _window_length(start_minutes: int, end_minutes: int) -> int:
+    return (end_minutes - start_minutes) % 1440 or 1440
+
+
+def _shift_fits_day_window(pref_start: str, pref_end: str, day_start: str, day_end: str) -> bool:
+    """True gdy przedział [pref_start, pref_end) mieści się w całości w
+    [day_start, day_end) - wszystkie cztery podane jako "HH:MM", oba
+    przedziały mogą przechodzić przez północ (koniec wcześniejszy niż
+    początek = kończy się w dniu następnym), liczone modulo 24h - ta sama
+    konwencja co logic/generator/opening_hours_coverage.py::parse_open_hours."""
+    day_len = _window_length(_minutes_of_day(day_start), _minutes_of_day(day_end))
+    pref_len = _window_length(_minutes_of_day(pref_start), _minutes_of_day(pref_end))
+    offset = (_minutes_of_day(pref_start) - _minutes_of_day(day_start)) % 1440
+    return offset + pref_len <= day_len
+
+
+def normalize_preferred_shifts(raw: list | None, open_hours: dict) -> list[dict]:
+    """Walidacja opcjonalnej listy "Preferowanych godzin pracy" tej
+    lokalizacji (model godzin otwarcia, profil Ochrony bez rotacji 24/7,
+    opcje zaawansowane - patrz ui/preferred_shifts_editor.py) - lista par
+    {"start", "end"}, patrz LocationConfig.preferred_shifts. Generator
+    (logic/generator/opening_hours_coverage.py::window_shapes) oferuje te
+    godziny jako dodatkowe, miękko preferowane kształty zmiany obok
+    domyślnej "cała zmiana na okno dnia" - tylko w dniach, w których dany
+    przedział mieści się w całości w skonfigurowanym oknie otwarcia tego
+    dnia. Odrzucane tu z góry, jeśli nie mieści się w ŻADNYM dniu tygodnia
+    z `open_hours` - to niemal zawsze literówka (taki przedział nigdy nie
+    zmieściłby się w żadnym oknie, więc generator nigdy by go nie użył), a
+    złapanie tego od razu przy zapisie jest czytelniejsze niż ciche
+    pomijanie w generatorze.
+    """
+    if not raw:
+        return []
+    if len(raw) > MAX_PREFERRED_SHIFTS:
+        raise ValueError(f"Można podać najwyżej {MAX_PREFERRED_SHIFTS} przedziałów godzin.")
+
+    valid_days = [
+        hours for hours in open_hours.values()
+        if hours and hours[0] and hours[1]
+    ]
+    normalized = []
+    for entry in raw:
+        start = entry.get("start") if entry else None
+        end = entry.get("end") if entry else None
+        if not start or not end:
+            raise ValueError("Preferowana zmiana wymaga podania obu godzin (początku i końca)")
+        if start == end:
+            raise ValueError("Godzina początku i końca preferowanej zmiany nie mogą być takie same")
+        if not any(_shift_fits_day_window(start, end, day_start, day_end) for day_start, day_end in valid_days):
+            raise ValueError(
+                f"Godziny {start}-{end} wykraczają poza godziny otwarcia tej lokalizacji - "
+                "podaj przedział mieszczący się w co najmniej jednym dniu otwarcia."
+            )
+        normalized.append({"start": start, "end": end})
+    return normalized
+
+
 @dataclass
 class LocationConfig:
     key: str
@@ -228,6 +293,19 @@ class LocationConfig:
     # "plan profil ochrona (analiza specyfikacji klienta).md", sekcja 12,
     # Etap A).
     duty_rotation: dict | None = field(default=None)
+
+    # "Preferowane godziny pracy" (opcje zaawansowane, model godzin otwarcia
+    # - profil Ochrony bez rotacji 24/7): lista par {"start", "end"}, którymi
+    # generator w miarę możliwości dzieli okno dnia zamiast domyślnej jednej
+    # zmiany na całe okno (np. 7:00-15:00 + 15:00-22:00 zamiast jednej osoby
+    # 7:00-22:00) - patrz normalize_preferred_shifts() wyżej i
+    # logic/generator/opening_hours_coverage.py::window_shapes/
+    # prefer_preferred_shifts_terms. Miękka preferencja - generator wraca do
+    # jednej zmiany, gdy trzeba (za mało ludzi, urlopy). `preferred_shifts`
+    # zostaje zapisane nawet gdy enabled=False, żeby wyłączenie przełącznika
+    # nie gubiło wpisanych godzin (ten sam wzorzec co duty_rotation wyżej).
+    preferred_shifts_enabled: bool = False
+    preferred_shifts: list = field(default_factory=list)
 
     # Czy automatycznie zamykać tę lokalizację w polskie święta ustawowo
     # wolne od pracy (patrz logic/utils/holidays_pl.py - biblioteka
@@ -391,6 +469,8 @@ class LocationConfig:
             "round_clock_start_hour": self.round_clock_start_hour,
             "duty_rotation": self.duty_rotation,
             "closed_on_public_holidays": self.closed_on_public_holidays,
+            "preferred_shifts_enabled": self.preferred_shifts_enabled,
+            "preferred_shifts": self.preferred_shifts,
         }
 
     @classmethod
@@ -412,6 +492,8 @@ class LocationConfig:
         loc.round_clock_start_hour = data.get("round_clock_start_hour")
         loc.constraints = dict(DEFAULT_LOCATION_CONSTRAINTS)
         loc.constraints.update(data.get("constraints", {}))
+        loc.preferred_shifts_enabled = bool(data.get("preferred_shifts_enabled", False))
+        loc.preferred_shifts = [dict(entry) for entry in data.get("preferred_shifts", [])]
         duty_rotation = data.get("duty_rotation")
         # duty_rotation samo w sobie w pełni definiuje obsadę tej lokalizacji
         # dla generatora (get_duty_rotation() jest CELOWO niezależne od

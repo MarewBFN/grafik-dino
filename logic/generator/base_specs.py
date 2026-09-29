@@ -76,6 +76,19 @@ GENERIC_POLICY_LABELS = (
     # programowo (ShopConfig.constraint_policies), domyślnie MANDATORY.
 )
 
+# Jednozdaniowy opis KAŻDEJ z pięciu zasad wyżej - co dana zasada robi, nie co
+# znaczy Wymagane/Preferowane/Wyłączone (to tłumaczy już ui/config_dialog.py::
+# POLICY_STATE_TOOLTIPS). Dzielone między Dino (model/business_profile.py) i
+# każdy profil custom (logic/generator/custom_profile_wiring.py::
+# build_policy_descriptions) - ten sam mechanizm dla obu, ten sam tekst.
+GENERIC_POLICY_DESCRIPTIONS = {
+    "rest_11h": "Zapewnia co najmniej 11 godzin przerwy między kolejnymi zmianami tego samego pracownika.",
+    "availability": "Nie przydziela pracownikowi zmian poza godzinami, w których zgłosił dostępność.",
+    "monthly_hours": "Dąży do tego, żeby każdy pracownik przepracował w miesiącu tyle godzin, ile wynika z jego etatu.",
+    "balance": "Stara się równo rozłożyć godziny pracy między pracowników, żeby nikt nie miał wyraźnie więcej albo mniej niż reszta.",
+    "max_consecutive": "Ogranicza liczbę dni pracy pod rząd bez dnia wolnego.",
+}
+
 
 def _build_always_on_specs():
     return [

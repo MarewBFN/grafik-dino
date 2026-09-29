@@ -267,6 +267,29 @@ class ExpectedConfig:
         self._opening_windows[location_key] = result
         return result
 
+    def preferred_shift_bounds(self, location_key, window_day, ws, we):
+        """Dodatkowe granice zmian dozwolone w oknie dnia `window_day`
+        [ws, we) z "Preferowanych godzin pracy" tej lokalizacji
+        (LocationConfig.preferred_shifts/preferred_shifts_enabled) - ten sam
+        podział na absolutną oś miesiąca (zakotwiczony w window_day, kandydat
+        odrzucony gdy wystaje poza [ws, we)) co
+        logic/generator/opening_hours_coverage.py::_preferred_shapes."""
+        loc = self.shop.locations.get(location_key)
+        if loc is None or not loc.preferred_shifts_enabled:
+            return set()
+        base = (window_day - 1) * DAY
+        bounds = set()
+        for entry in loc.preferred_shifts or ():
+            start, end = entry.get("start"), entry.get("end")
+            if not start or not end:
+                continue
+            abs_start = base + hm(start)
+            length = (hm(end) - hm(start)) % DAY or DAY
+            abs_end = abs_start + length
+            if ws <= abs_start and abs_end <= we:
+                bounds.update((abs_start, abs_end))
+        return bounds
+
     def max_staff(self, emp):
         loc = self.location(emp)
         value = (loc.constraints if loc is not None else {}).get(MAX_STAFF_KEY)
@@ -435,7 +458,12 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
                     ))
                     continue
                 window_day, (ws, we, doba) = container
-                bounds = {ws, we} | ({ws + DAY // 2} if doba else set()) | loc_manual_bounds.get(emp.location_key, set())
+                bounds = (
+                    {ws, we}
+                    | ({ws + DAY // 2} if doba else set())
+                    | loc_manual_bounds.get(emp.location_key, set())
+                    | cfg.preferred_shift_bounds(emp.location_key, window_day, ws, we)
+                )
                 if start not in bounds or end not in bounds:
                     add(Violation(
                         "opening_shape",

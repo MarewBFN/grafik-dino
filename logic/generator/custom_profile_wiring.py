@@ -20,8 +20,10 @@ from logic.generator.objective import (
     add_workload_balance_penalty,
 )
 from logic.generator.priority_hours_constraint import (
+    HOURS_EQUALIZATION_DESCRIPTION,
     HOURS_EQUALIZATION_LABEL,
     HOURS_EQUALIZATION_POLICY,
+    NOMINAL_HOURS_NO_CONTRACT_DESCRIPTION,
     NOMINAL_HOURS_NO_CONTRACT_LABEL,
     NOMINAL_HOURS_NO_CONTRACT_POLICY,
     add_hours_equalization_penalty,
@@ -30,9 +32,11 @@ from logic.generator.priority_hours_constraint import (
     nominal_hours_no_contract_weight,
 )
 from logic.generator.opening_hours_coverage import (
+    MAX_STAFF_DESCRIPTION,
     MAX_STAFF_LABEL,
     MAX_STAFF_POLICY,
     MAX_STAFF_WEIGHT,
+    OPENING_HOURS_COVERAGE_DESCRIPTION,
     OPENING_HOURS_COVERAGE_LABEL,
     OPENING_HOURS_COVERAGE_POLICY,
     OPENING_HOURS_COVERAGE_WEIGHT,
@@ -44,6 +48,7 @@ from logic.generator.opening_hours_coverage import (
     custom_profile_uses_opening_hours_model,
     get_model,
     prefer_full_day_terms,
+    prefer_preferred_shifts_terms,
     setup_opening_hours_model,
 )
 from model.constraint_policy import ConstraintPolicy
@@ -199,6 +204,27 @@ def build_policy_labels(custom: CustomBusinessProfile) -> tuple:
     return tuple(labels)
 
 
+def build_policy_descriptions(custom: CustomBusinessProfile) -> dict:
+    """policy_name -> jednozdaniowy opis (BusinessProfile.policy_descriptions,
+    patrz komentarz tam) - ten sam zestaw kluczy co build_policy_labels()
+    wyżej, budowany osobno, żeby dodanie nowej generycznej zasady w jednym
+    miejscu nie wymagało pamiętać o drugim (funkcja pusta/brakujący klucz =
+    po prostu brak ikonki "?" w UI, nic się nie wysypuje)."""
+    descriptions = dict(base_specs.GENERIC_POLICY_DESCRIPTIONS)
+    descriptions[HOURS_EQUALIZATION_POLICY] = HOURS_EQUALIZATION_DESCRIPTION
+    descriptions["no_night"] = "Pracownikom oznaczonym „Nie pracuje w godzinach nocnych” nie przydziela zmian nocnych."
+    descriptions["no_afternoon"] = "Pracownikom oznaczonym „Nie pracuje na popołudniu” przydziela wyłącznie zmiany poranne."
+    descriptions[NOMINAL_HOURS_NO_CONTRACT_POLICY] = NOMINAL_HOURS_NO_CONTRACT_DESCRIPTION
+    if custom_profile_uses_opening_hours_model(custom):
+        descriptions[OPENING_HOURS_COVERAGE_POLICY] = OPENING_HOURS_COVERAGE_DESCRIPTION
+        descriptions[MAX_STAFF_POLICY] = MAX_STAFF_DESCRIPTION
+    for rule in custom.rules:
+        description = custom.rule_description(rule)
+        if description:
+            descriptions[custom.rule_policy_key(rule)] = description
+    return descriptions
+
+
 def build_objective_terms(ctx, *_args, **_kwargs) -> list:
     """Branch-neutral schedule-quality terms only (spread work evenly) - no
     Dino-specific bonuses (edge-shift bonus, morning/afternoon balance)."""
@@ -257,5 +283,9 @@ def build_objective_terms(ctx, *_args, **_kwargs) -> list:
     # Model godzin otwarcia: cała doba zamiast dwóch połówek, gdy się da
     # (połówki dla "Nie chce 24h" i urlopów) - tylko rozstrzyga remisy.
     terms.extend(prefer_full_day_terms(ctx))
+
+    # Model godzin otwarcia: „Preferowane godziny pracy” zamiast domyślnej
+    # jednej zmiany na całe okno, gdy się da - tylko rozstrzyga remisy.
+    terms.extend(prefer_preferred_shifts_terms(ctx))
 
     return terms

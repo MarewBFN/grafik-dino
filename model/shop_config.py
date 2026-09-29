@@ -62,6 +62,14 @@ class _LocationView:
     def get_round_clock_start_hour(self) -> str | None:
         return self._location.round_clock_start_hour if self._location.is_24_7 else None
 
+    @property
+    def preferred_shifts_enabled(self) -> bool:
+        return self._location.preferred_shifts_enabled
+
+    @property
+    def preferred_shifts(self) -> list:
+        return self._location.preferred_shifts
+
     def is_closed_for_public_holiday(self, day: int) -> bool:
         return self._location.is_closed_for_public_holiday(self._year, self._month, day)
 
@@ -516,6 +524,17 @@ class ShopConfig:
         # tylko pracownika bez rozwiązywalnej lokalizacji (patrz get_location()
         # niżej), dla którego ten mechanizm i tak nigdy nie ma zastosowania.
         return None
+
+    @property
+    def preferred_shifts_enabled(self) -> bool:
+        # Ten sam wzorzec co get_round_clock_start_hour() wyżej - wyłącznie
+        # pole LocationConfig, ten fallback dotyczy tylko pracownika bez
+        # rozwiązywalnej lokalizacji.
+        return False
+
+    @property
+    def preferred_shifts(self) -> list:
+        return []
 
     def is_closed_for_public_holiday(self, day: int) -> bool:
         # Ten sam wzorzec co get_round_clock_start_hour() wyżej - wyłącznie

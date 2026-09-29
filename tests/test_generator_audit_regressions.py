@@ -136,6 +136,49 @@ def test_ochrona_full_day_after_day_window_is_24h_or_two_halves_from_midnight():
             assert (start - base, end - base) == (480, 960), (name, day)
 
 
+def test_ochrona_preferred_shifts_split_a_short_window_into_two_shifts():
+    """Zgłoszenie klienta (MZGK Krzywoustego, 2 pracowników, pon-pt
+    7:00-22:00, sob 12:00-18:00, nd 12:00-16:00): okno 15h (nie doba)
+    wcześniej dostawało zawsze jedną zmianę na całość (patrz
+    test_ochrona_short_day_is_one_whole_window_shift_even_with_8h30) - bez
+    żadnego sposobu skonfigurować podziału 7/15, 15/22 jak w realnym
+    grafiku klienta. "Preferowane godziny pracy" (LocationConfig.
+    preferred_shifts) pozwala podać te godziny wprost, a generator
+    (miękko) ich używa zamiast domyślnego kształtu."""
+    import calendar
+
+    hours = {**{wd: ("07:00", "22:00") for wd in range(5)}, 5: ("12:00", "18:00"), 6: ("12:00", "16:00")}
+    outcome = run_case({
+        "name": "och_preferred_split",
+        "profile": "ochrona",
+        "year": 2026, "month": 10,
+        "locations": [{
+            "key": "p", "open_hours": hours,
+            "preferred_shifts_enabled": True,
+            "preferred_shifts": [
+                {"start": "07:00", "end": "15:00"},
+                {"start": "15:00", "end": "22:00"},
+            ],
+        }],
+        "employees": [dict(location="p") for _ in range(2)],
+    }, time_limit=20)
+
+    _assert_exact_coverage(outcome)
+    weekday_shifts = [
+        (start - (day - 1) * 1440, end - (day - 1) * 1440)
+        for _name, day, (start, end) in _shift_intervals(outcome)
+        if calendar.weekday(2026, 10, day) < 5
+    ]
+    assert weekday_shifts
+    # Wszystkie zmiany w tygodniu to albo cała zmiana 7-22, albo jedna z
+    # dwóch podanych "Preferowanych godzin pracy" - nic spoza tych kształtów.
+    assert set(weekday_shifts) <= {(7 * 60, 22 * 60), (7 * 60, 15 * 60), (15 * 60, 22 * 60)}
+    # Podział realnie się zdarza (miękka preferencja faktycznie działa, nie
+    # tylko jest dostępna jako opcja nigdy niewybierana).
+    assert (7 * 60, 15 * 60) in weekday_shifts
+    assert (15 * 60, 22 * 60) in weekday_shifts
+
+
 GZUK_HOURS = {**{wd: ("15:00", "07:00") for wd in range(5)}, 5: ("00:00", "23:45"), 6: ("00:00", "23:45")}
 
 

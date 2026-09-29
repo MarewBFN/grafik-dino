@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
-    QGridLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -56,6 +55,75 @@ POLICY_OPTIONS_TWO_STATE = (
     ("Wyłączone", ConstraintPolicy.DISABLED),
 )
 POLICY_TWO_STATE_NAMES = {"nominal_hours_no_umowa"}
+
+# Jednozdaniowy opis każdego stanu (Wymagane/Preferowane/Wyłączone) - pokazywany
+# jako tooltip przy najechaniu na opcję w rozwiniętej liście selektora zasady
+# (patrz _apply_policy_state_tooltips niżej). {rule} podstawia nazwę zasady z
+# policy_labels (np. "Odpoczynek 11 h"), więc tekst ma sens dla KAŻDEJ zasady,
+# także tych dołożonych dynamicznie przez kreator profilu custom.
+POLICY_STATE_TOOLTIPS = {
+    ConstraintPolicy.MANDATORY: (
+        "Wymagane: generator nigdy nie złamie zasady „{rule}” - jeśli się nie da "
+        "jej spełnić, grafik się nie wygeneruje."
+    ),
+    ConstraintPolicy.PREFERRED: (
+        "Preferowane: generator stara się spełnić zasadę „{rule}”, ale może ją "
+        "naruszyć, gdy nie da się inaczej."
+    ),
+    ConstraintPolicy.DISABLED: (
+        "Wyłączone: generator całkowicie ignoruje zasadę „{rule}”, jakby jej "
+        "w ogóle nie było."
+    ),
+}
+
+
+def _apply_policy_state_tooltips(selector: QComboBox, label: str) -> None:
+    """Dopina do każdej opcji tego selektora (Wymagane/Preferowane/Wyłączone)
+    tooltip tłumaczący, co ta konkretna zasada `label` robi w tym stanie -
+    widoczny po najechaniu myszą na opcję w rozwiniętej liście. Dodatkowo
+    tooltip samego (zamkniętego) selektora pokazuje opis aktualnie wybranego
+    stanu i odświeża się przy zmianie."""
+    for i in range(selector.count()):
+        value = selector.itemData(i)
+        template = POLICY_STATE_TOOLTIPS.get(value)
+        if template:
+            selector.setItemData(i, template.format(rule=label), Qt.ToolTipRole)
+
+    def _update_widget_tooltip():
+        template = POLICY_STATE_TOOLTIPS.get(selector.currentData())
+        if template:
+            selector.setToolTip(template.format(rule=label))
+
+    selector.currentIndexChanged.connect(_update_widget_tooltip)
+    _update_widget_tooltip()
+
+
+def _rule_label_widget(label: str, description: str) -> QWidget:
+    """Etykieta wiersza reguły (policy_form.addRow()) - nazwa reguły plus,
+    gdy jest opis (BusinessProfile.policy_descriptions), ikonka "?" w kółku
+    z tym opisem jako tooltip. To osobny tooltip od _apply_policy_state_tooltips
+    wyżej: tamten tłumaczy co znaczy Wymagane/Preferowane/Wyłączone DLA tej
+    reguły, ten tłumaczy, co reguła w ogóle ROBI (np. "Dostępność
+    pracownika" -> "Nie przydziela pracownikowi zmian poza godzinami, w
+    których zgłosił dostępność."). Brak opisu (nierozpoznana dynamiczna
+    reguła profilu custom) = sama etykieta, bez ikonki."""
+    host = QWidget()
+    row = QHBoxLayout(host)
+    row.setContentsMargins(0, 0, 0, 0)
+    row.setSpacing(4)
+    row.addWidget(QLabel(label + ":"))
+    if description:
+        badge = QLabel("?")
+        badge.setFixedSize(16, 16)
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setStyleSheet(
+            "QLabel { border: 1px solid #9ca3af; border-radius: 8px; "
+            "color: #6b7280; font-size: 10px; font-weight: bold; }"
+        )
+        badge.setToolTip(description)
+        row.addWidget(badge)
+    row.addStretch()
+    return host
 
 # Zasady, których starsze projekty nie mają jeszcze zapisanych - brak wpisu
 # ma znaczyć to samo co w generatorze (inaczej samo otwarcie i zapisanie
@@ -692,16 +760,20 @@ class ConfigDialog(QDialog):
             form_solver.addRow("Maks. osób naraz w placówce:", self.max_staff)
         advanced_layout.addLayout(form_solver)
 
-        policy_grid = QGridLayout()
-        policy_grid.setHorizontalSpacing(12)
-        policy_grid.setVerticalSpacing(7)
+        # QFormLayout zamiast ręcznie łamanej na dwie kolumny QGridLayout
+        # (poprzednia wersja pakowała wiersze w dwie pary kolumn obok siebie,
+        # żeby zmieścić więcej w pionie - przy dłuższych etykietach, zwłaszcza
+        # dynamicznie generowanych regułach profili custom, kolumny się
+        # rozjeżdżały i całość wyglądała krzywo). Jedna kolumna, jak reszta
+        # tej zakładki (form_solver wyżej) - zawsze równo wyrównana, a
+        # dodatkową wysokość i tak pochłania scroll.
+        policy_form = QFormLayout()
+        policy_form.setHorizontalSpacing(12)
+        policy_form.setVerticalSpacing(7)
         self.policy_selectors = {}
         policy_labels = self.profile.policy_labels
-        split_at = (len(policy_labels) + 1) // 2
 
-        for index, (policy_name, label) in enumerate(policy_labels):
-            row = index % split_at
-            column = (index // split_at) * 2
+        for policy_name, label in policy_labels:
             selector = QComboBox()
             selector.setMinimumWidth(125)
             options = POLICY_OPTIONS_TWO_STATE if policy_name in POLICY_TWO_STATE_NAMES else POLICY_OPTIONS
@@ -724,18 +796,17 @@ class ConfigDialog(QDialog):
                 # Preferowane zamiast zostawić selector bez zaznaczenia.
                 current_policy = ConstraintPolicy.PREFERRED
             selector.setCurrentIndex(selector.findData(current_policy))
+            _apply_policy_state_tooltips(selector, label)
             if policy_name == "balance":
                 selector.setEnabled(False)
                 selector.setToolTip(
                     "Bilans godzin edytowalny tylko programowo (np. przy "
                     "definiowaniu profilu) - tu tylko podgląd."
                 )
-            policy_grid.addWidget(QLabel(label + ":"), row, column)
-            policy_grid.addWidget(selector, row, column + 1)
+            description = self.profile.policy_descriptions.get(policy_name, "")
+            policy_form.addRow(_rule_label_widget(label, description), selector)
             self.policy_selectors[policy_name] = selector
 
-        rest_row = len(policy_labels) % split_at
-        rest_column = (len(policy_labels) // split_at) * 2
         self.rest_11h_mode_selector = QComboBox()
         self.rest_11h_mode_selector.setMinimumWidth(125)
         for text, value in REST_11H_MODE_OPTIONS:
@@ -751,10 +822,9 @@ class ConfigDialog(QDialog):
             "Szybszy na słabszym sprzęcie; sensowny tylko dla obiektów z dokładnie "
             "dwoma typami zmian."
         )
-        policy_grid.addWidget(QLabel("Tryb liczenia odpoczynku 11h:"), rest_row, rest_column)
-        policy_grid.addWidget(self.rest_11h_mode_selector, rest_row, rest_column + 1)
+        policy_form.addRow("Tryb liczenia odpoczynku 11h:", self.rest_11h_mode_selector)
 
-        advanced_layout.addLayout(policy_grid)
+        advanced_layout.addLayout(policy_form)
 
         hint = QLabel(
             "Te reguły możesz swobodnie zmieniać i testować, jak zachowuje się "

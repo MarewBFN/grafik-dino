@@ -61,10 +61,12 @@ AFTERNOON_START = 12 * 60
 
 OPENING_HOURS_COVERAGE_POLICY = "opening_hours_coverage"
 OPENING_HOURS_COVERAGE_LABEL = "Obłożenie godzin otwarcia"
+OPENING_HOURS_COVERAGE_DESCRIPTION = "W każdym kwadransie godzin otwarcia placówki musi być co najmniej jedna osoba."
 OPENING_HOURS_COVERAGE_WEIGHT = 5000  # za kwadrans bez obsady
 
 MAX_STAFF_POLICY = "max_staff_at_once"
 MAX_STAFF_LABEL = "Maks. obsada naraz"
+MAX_STAFF_DESCRIPTION = "Ogranicza, ile osób z tej samej placówki może pracować w tym samym momencie (patrz limit w Konfiguracji)."
 MAX_STAFF_CONSTRAINT_KEY = "max_staff_at_once"
 DEFAULT_MAX_STAFF = 1
 # Za każdą nadmiarową osobo-minutę - więcej niż „Umowa” (10000 za minutę
@@ -75,9 +77,16 @@ MAX_STAFF_WEIGHT = 20000
 # 24h” i urlopów) - tylko rozstrzyga remisy, nie przebija żadnej zasady.
 PREFER_FULL_DAY_WEIGHT = 5
 
+# Lekka zachęta do korzystania z „Preferowanych godzin pracy” (LocationConfig.
+# preferred_shifts) zamiast domyślnej jednej zmiany na całe okno dnia, gdy
+# oba są dostępne - tylko rozstrzyga remisy, nie przebija obsady/godzin/
+# odpoczynku (patrz prefer_preferred_shifts_terms niżej).
+PREFER_PREFERRED_SHIFTS_WEIGHT = 5
+
 KIND_FULL = "full"
 KIND_HALF_A = "half_a"
 KIND_HALF_B = "half_b"
+KIND_PREFERRED = "preferred"
 KIND_RESIDUAL = "residual"
 
 
@@ -213,15 +222,40 @@ def location_windows(view, year, month, days_in_month):
     return windows
 
 
-def window_shapes(window):
-    if not window.is_full_day:
-        return [Shape(window.start, window.end, KIND_FULL, window.day)]
-    middle = window.start + HALF_DAY
-    return [
-        Shape(window.start, window.end, KIND_FULL, window.day),
-        Shape(window.start, middle, KIND_HALF_A, window.day),
-        Shape(middle, window.end, KIND_HALF_B, window.day),
-    ]
+def window_shapes(window, view=None):
+    shapes = [Shape(window.start, window.end, KIND_FULL, window.day)]
+    if window.is_full_day:
+        middle = window.start + HALF_DAY
+        shapes.append(Shape(window.start, middle, KIND_HALF_A, window.day))
+        shapes.append(Shape(middle, window.end, KIND_HALF_B, window.day))
+    shapes.extend(_preferred_shapes(window, view))
+    return shapes
+
+
+def _preferred_shapes(window, view):
+    """Dodatkowe kształty z „Preferowanych godzin pracy” tej lokalizacji
+    (LocationConfig.preferred_shifts/preferred_shifts_enabled) - tylko te
+    przedziały, które w tym konkretnym dniu mieszczą się w całości w oknie
+    (patrz komentarz przy LocationConfig.preferred_shifts - walidacja przy
+    zapisie gwarantuje tylko, że przedział mieści się w KTÓRYMŚ dniu
+    tygodnia, więc trzeba to i tak sprawdzić tu, per okno). Zakotwiczone w
+    dniu kalendarzowym `window.day`, tak jak zwykłe godziny otwarcia - gdy
+    okno zostało przesunięte w tył przez poprzednią dobę (patrz _place()),
+    przedział, który by wystawał przed window.start, jest pomijany."""
+    if view is None or not getattr(view, "preferred_shifts_enabled", False):
+        return []
+    base = (window.day - 1) * DAY
+    shapes = []
+    for entry in getattr(view, "preferred_shifts", None) or ():
+        start, end = entry.get("start"), entry.get("end")
+        if not start or not end:
+            continue
+        abs_start = base + _minutes(start)
+        length = (_minutes(end) - _minutes(start)) % DAY or DAY
+        abs_end = abs_start + length
+        if window.start <= abs_start and abs_end <= window.end:
+            shapes.append(Shape(abs_start, abs_end, KIND_PREFERRED, window.day))
+    return shapes
 
 
 def _subtract(start, end, intervals):
@@ -295,8 +329,9 @@ class OpeningHoursModel:
 
         base = {}  # (klucz, dzień komórki) -> [Shape]
         for key, windows in self.windows_by_location.items():
+            view = self.views[key]
             for window in windows.values():
-                for shape in window_shapes(window):
+                for shape in window_shapes(window, view):
                     cell = self._cell_of(shape.start)
                     if cell is not None:
                         base.setdefault((key, cell), []).append(shape)
@@ -753,3 +788,28 @@ def prefer_full_day_terms(ctx):
         for sid, sh in model.allowed(e, d).items()
         if sh.kind in (KIND_HALF_A, KIND_HALF_B)
     ]
+
+
+def prefer_preferred_shifts_terms(ctx):
+    """Człon celu: lekka kara za „cały dzień” w komórkach, w których w tym
+    dniu jest też dostępna co najmniej jedna „Preferowana godzina pracy”
+    (KIND_PREFERRED) - odwrotność prefer_full_day_terms wyżej, bo tu to
+    domyślna zmiana na całe okno jest gorszą (droższą) opcją, a podane
+    przez użytkownika godziny lepszą. Tylko rozstrzyga remisy - obsada,
+    godziny i odpoczynek zawsze wygrywają, więc generator wraca do jednej
+    zmiany, gdy podział się nie mieści (za mało ludzi, urlopy)."""
+    model = get_model(ctx)
+    if model is None:
+        return []
+    terms = []
+    for e in model.indices:
+        for d in model.days:
+            allowed = model.allowed(e, d)
+            if not any(sh.kind == KIND_PREFERRED for sh in allowed.values()):
+                continue
+            terms.extend(
+                PREFER_PREFERRED_SHIFTS_WEIGHT * ctx.x[e, d, sid]
+                for sid, sh in allowed.items()
+                if sh.kind == KIND_FULL
+            )
+    return terms

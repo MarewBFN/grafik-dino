@@ -7,7 +7,7 @@ if str(ROOT) not in sys.path:
 
 import pytest
 
-from model.location import LocationConfig, format_open_hours_summary, normalize_night_shift
+from model.location import LocationConfig, format_open_hours_summary, normalize_night_shift, normalize_preferred_shifts
 from model.shop_config import DEFAULT_LOCATION_KEY, ShopConfig
 from model.employee import Employee
 from model.month_schedule import MonthSchedule
@@ -36,6 +36,68 @@ def test_location_config_round_trips_through_dict():
     assert restored.is_24_7 is False
     # 08:00-20:00 doesn't touch 22:00-06:00 - no night shift for this location.
     assert restored.get_night_shift_hours() is None
+
+
+def test_location_config_round_trips_preferred_shifts_through_dict():
+    loc = LocationConfig(
+        key="p", name="Placówka",
+        preferred_shifts_enabled=True,
+        preferred_shifts=[{"start": "07:00", "end": "15:00"}, {"start": "15:00", "end": "22:00"}],
+    )
+
+    restored = LocationConfig.from_dict(loc.to_dict())
+
+    assert restored.preferred_shifts_enabled is True
+    assert restored.preferred_shifts == [{"start": "07:00", "end": "15:00"}, {"start": "15:00", "end": "22:00"}]
+
+
+def test_location_config_defaults_have_no_preferred_shifts():
+    loc = LocationConfig(key="p", name="Placówka")
+    assert loc.preferred_shifts_enabled is False
+    assert loc.preferred_shifts == []
+
+
+# --- "Preferowane godziny pracy" (model godzin otwarcia, opcje zaawansowane) ---
+
+
+_MZGK_HOURS = {**{wd: ("07:00", "22:00") for wd in range(5)}, 5: ("12:00", "18:00"), 6: ("12:00", "16:00")}
+
+
+def test_normalize_preferred_shifts_accepts_entries_fitting_a_weekday_window():
+    result = normalize_preferred_shifts(
+        [{"start": "07:00", "end": "15:00"}, {"start": "15:00", "end": "22:00"}], _MZGK_HOURS,
+    )
+    assert result == [{"start": "07:00", "end": "15:00"}, {"start": "15:00", "end": "22:00"}]
+
+
+def test_normalize_preferred_shifts_empty_list_is_a_noop():
+    assert normalize_preferred_shifts([], _MZGK_HOURS) == []
+    assert normalize_preferred_shifts(None, _MZGK_HOURS) == []
+
+
+def test_normalize_preferred_shifts_rejects_equal_start_and_end():
+    with pytest.raises(ValueError):
+        normalize_preferred_shifts([{"start": "09:00", "end": "09:00"}], _MZGK_HOURS)
+
+
+def test_normalize_preferred_shifts_rejects_missing_side():
+    with pytest.raises(ValueError):
+        normalize_preferred_shifts([{"start": "09:00", "end": ""}], _MZGK_HOURS)
+
+
+def test_normalize_preferred_shifts_rejects_hours_outside_every_open_window():
+    # Placówka zamknięta 22:00-07:00 w tygodniu - ten przedział nigdy się
+    # nie zmieści w żadnym dniu.
+    with pytest.raises(ValueError):
+        normalize_preferred_shifts([{"start": "23:00", "end": "01:00"}], _MZGK_HOURS)
+
+
+def test_normalize_preferred_shifts_rejects_too_many_entries():
+    from model.location import MAX_PREFERRED_SHIFTS
+
+    entries = [{"start": "07:00", "end": "08:00"} for _ in range(MAX_PREFERRED_SHIFTS + 1)]
+    with pytest.raises(ValueError):
+        normalize_preferred_shifts(entries, _MZGK_HOURS)
 
 
 # --- Auto-wykrywanie zmiany nocnej z godzin otwarcia (zastępuje ręczne pole) ---

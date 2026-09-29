@@ -152,3 +152,18 @@ class CustomBusinessProfile:
             end = rule.params.get("window_end_hour", "?")
             return f"{role_label}: zakaz pracy {start}:00–{end}:00"
         return f"{role_label}: {rule.type}"
+
+    def rule_description(self, rule: RuleInstance) -> str:
+        """Jednozdaniowy opis, co ta reguła robi - do tooltipa ikonki "?" w
+        Konfiguracji -> Zasady generatora (rule_label() wyżej już koduje
+        parametry reguły w samej nazwie, więc to tylko tłumaczy MECHANIZM,
+        nie powtarza liczb/godzin z etykiety)."""
+        role_label = self.role_label(rule.role_key)
+        if rule.type == RULE_TYPE_MIN_STAFF_WITH_ROLE:
+            return (
+                f"Wymaga minimalnej liczby pracowników z rolą „{role_label}” "
+                "jednocześnie w pracy, w podanej porze dnia."
+            )
+        if rule.type == RULE_TYPE_ROLE_TIME_RESTRICTION:
+            return f"Nie przydziela zmian dla roli „{role_label}” w podanym oknie godzinowym."
+        return ""

@@ -37,6 +37,14 @@ class BusinessProfile:
     display_name: str
     roles: tuple[RoleDef, ...] = field(default_factory=tuple)
     policy_labels: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    # policy_name -> jednozdaniowy opis, co ta zasada robi (nie co znaczy
+    # Wymagane/Preferowane/Wyłączone - to już tłumaczy ui/config_dialog.py::
+    # POLICY_STATE_TOOLTIPS - tylko SAMA zasada, np. "Dostępność pracownika"
+    # -> "Nie przydziela pracownikowi zmian poza godzinami, w których zgłosił
+    # dostępność."). Pokazywane w Konfiguracji -> Zasady generatora jako
+    # tooltip ikonki "?" przy nazwie zasady. Brak wpisu (stary profil custom
+    # sprzed tego pola, albo nierozpoznany typ reguły) = brak ikonki.
+    policy_descriptions: dict[str, str] = field(default_factory=dict)
     summary_rows: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     # "Dni handlowe" (trade Sundays / public holidays) is a Polish-retail-
     # specific concept - most businesses (a security company, say) don't
@@ -87,6 +95,24 @@ DINO_RETAIL_PROFILE = BusinessProfile(
         RoleDef("no_night", "Nie pracuje w godzinach nocnych (przed 6:00 i po 22:00)"),
         RoleDef("no_afternoon", "Nie pracuje na popołudniu (tylko zmiany poranne)"),
     ),
+    policy_descriptions={
+        # Te pięć samo w sobie generyczne (patrz
+        # logic/generator/base_specs.py::GENERIC_POLICY_DESCRIPTIONS - ten
+        # sam tekst, zduplikowany zamiast zaimportowany, żeby ten moduł nie
+        # musiał importować logic.generator na poziomie modułu - patrz lazy
+        # importy niżej w tym pliku).
+        "rest_11h": "Zapewnia co najmniej 11 godzin przerwy między kolejnymi zmianami tego samego pracownika.",
+        "availability": "Nie przydziela pracownikowi zmian poza godzinami, w których zgłosił dostępność.",
+        "monthly_hours": "Dąży do tego, żeby każdy pracownik przepracował w miesiącu tyle godzin, ile wynika z jego etatu.",
+        "balance": "Stara się równo rozłożyć godziny pracy między pracowników, żeby nikt nie miał wyraźnie więcej albo mniej niż reszta.",
+        "max_consecutive": "Ogranicza liczbę dni pracy pod rząd bez dnia wolnego.",
+        "open": "Zapewnia minimalną liczbę pracowników na zmianie otwierającej sklep.",
+        "close": "Zapewnia minimalną liczbę pracowników na zmianie zamykającej sklep.",
+        "meat": "Na zmianie otwierającej i zamykającej musi być ktoś z rolą obsługi stoiska mięsnego.",
+        "meat_coverage": "Stoisko mięsne ma obsadę przez cały czas otwarcia sklepu, nie tylko na otwarciu/zamknięciu.",
+        "no_night": "Pracownikom oznaczonym „Nie pracuje w godzinach nocnych” nie przydziela zmian nocnych.",
+        "no_afternoon": "Pracownikom oznaczonym „Nie pracuje na popołudniu” przydziela wyłącznie zmiany poranne.",
+    },
     policy_labels=(
         ("rest_11h", "Odpoczynek 11 h"),
         ("open", "Obsada otwarcia"),
@@ -156,6 +182,7 @@ def register_custom_profile(custom) -> None:
         display_name=custom.display_name,
         roles=tuple(RoleDef(role.key, role.label, icon=role.icon) for role in custom.roles),
         policy_labels=custom_profile_wiring.build_policy_labels(custom),
+        policy_descriptions=custom_profile_wiring.build_policy_descriptions(custom),
         summary_rows=tuple(summary_rows),
     ))
 
