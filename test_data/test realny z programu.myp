@@ -1,0 +1,1745 @@
+{
+  "format": "multi_month_project",
+  "format_version": 1,
+  "active_month": "2026-09",
+  "months": {
+    "2026-09": {
+      "schedule": {
+        "year": 2026,
+        "month": 9,
+        "is_generated": true,
+        "employees": [
+          {
+            "first_name": "",
+            "last_name": "Cyman",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "mzgk_krzywoustego",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "2": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "4": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "5": {
+                "start": "12:00",
+                "end": "18:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "7": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "9": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "11": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "15": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "17": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "19": {
+                "start": "12:00",
+                "end": "18:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "20": {
+                "start": "12:00",
+                "end": "16:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "21": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "23": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "25": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "27": {
+                "start": "12:00",
+                "end": "16:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "29": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Gojtowski",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "glowna",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "5": {
+                "start": "07:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "8": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "10": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "13": {
+                "start": "19:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "16": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "19": {
+                "start": "07:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "22": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "24": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "26": {
+                "start": "07:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "29": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Lipski",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "mzgk_krzywoustego",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "1": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "3": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "6": {
+                "start": "12:00",
+                "end": "16:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "8": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "10": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "12": {
+                "start": "12:00",
+                "end": "18:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "13": {
+                "start": "12:00",
+                "end": "16:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "14": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "16": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "18": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "22": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "24": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "26": {
+                "start": "12:00",
+                "end": "18:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "28": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "30": {
+                "start": "07:00",
+                "end": "22:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Mejna",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "eba_apartamenty_nadmorska_33",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "3": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "6": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "9": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "12": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "15": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "18": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "21": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "24": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "27": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "30": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Morawiak",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "eba_apartamenty_nadmorska_33",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "2": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "5": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "8": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "11": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "14": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "17": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "20": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "23": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "26": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "29": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Mrowisko",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "brico_marche_wejcherowo",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "12": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "14": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "16": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Reszke",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "glowna",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "2": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "4": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "7": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "9": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "12": {
+                "start": "07:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "15": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "17": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "20": {
+                "start": "07:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "25": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "27": {
+                "start": "07:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Szewka",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "brico_marche_wejcherowo",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "5": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "18": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "23": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "29": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Szmydtka",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "glowna",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "1": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "3": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "6": {
+                "start": "07:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "11": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "13": {
+                "start": "07:00",
+                "end": "19:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "14": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "18": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "21": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "23": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "28": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "30": {
+                "start": "15:00",
+                "end": "07:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Szumski",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "brico_marche_wejcherowo",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "1": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "3": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "7": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "17": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Szymkowiak",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": true,
+              "nie_chce_24h": false
+            },
+            "location_key": "brico_marche_wejcherowo",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "2": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "4": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "8": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "9": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "10": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "11": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "15": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "19": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "21": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "22": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "24": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "25": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "26": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "28": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              },
+              "30": {
+                "start": "08:00",
+                "end": "20:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": false
+              }
+            }
+          },
+          {
+            "first_name": "",
+            "last_name": "Witkowski",
+            "is_opener": false,
+            "is_meat": false,
+            "is_meat_light": false,
+            "is_manager": false,
+            "no_night": false,
+            "no_afternoon": false,
+            "custom_roles": {
+              "umowa": false,
+              "nie_chce_24h": false
+            },
+            "location_key": "eba_apartamenty_nadmorska_33",
+            "monthly_target_hours": 160,
+            "daily_hours": 8,
+            "employment_fraction": 1.0,
+            "availability": {},
+            "settlement_target_minutes": null,
+            "previous_month_shift_end": null,
+            "previous_month_shift_crosses_midnight": null,
+            "days": {
+              "1": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "4": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "7": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "10": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "13": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "16": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "19": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "22": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "25": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              },
+              "28": {
+                "start": "08:00",
+                "end": "08:00",
+                "is_leave": false,
+                "is_locked": false,
+                "is_sick": false,
+                "is_day_off": false,
+                "shift_class": null,
+                "is_full_day": true
+              }
+            }
+          }
+        ]
+      },
+      "shop_config": {
+        "year": 2026,
+        "month": 9,
+        "name": "",
+        "business_type": "test_duty_rotation_shapes",
+        "locations": {
+          "glowna": {
+            "key": "glowna",
+            "name": "GZUK Łęczyce",
+            "open_hours": {
+              "0": [
+                "15:00",
+                "07:00"
+              ],
+              "1": [
+                "15:00",
+                "07:00"
+              ],
+              "2": [
+                "15:00",
+                "07:00"
+              ],
+              "3": [
+                "15:00",
+                "07:00"
+              ],
+              "4": [
+                "15:00",
+                "07:00"
+              ],
+              "5": [
+                "00:00",
+                "23:45"
+              ],
+              "6": [
+                "00:00",
+                "23:45"
+              ]
+            },
+            "trade_sundays": [],
+            "public_holidays": [],
+            "day_overrides": {},
+            "constraints": {
+              "max_consecutive_days": 4
+            },
+            "is_24_7": false,
+            "round_clock_start_hour": null,
+            "duty_rotation": null,
+            "closed_on_public_holidays": true
+          },
+          "mzgk_krzywoustego": {
+            "key": "mzgk_krzywoustego",
+            "name": "MZGK Krzywoustego",
+            "open_hours": {
+              "0": [
+                "07:00",
+                "22:00"
+              ],
+              "1": [
+                "07:00",
+                "22:00"
+              ],
+              "2": [
+                "07:00",
+                "22:00"
+              ],
+              "3": [
+                "07:00",
+                "22:00"
+              ],
+              "4": [
+                "07:00",
+                "22:00"
+              ],
+              "5": [
+                "12:00",
+                "18:00"
+              ],
+              "6": [
+                "12:00",
+                "16:00"
+              ]
+            },
+            "trade_sundays": [],
+            "public_holidays": [],
+            "day_overrides": {},
+            "constraints": {
+              "max_consecutive_days": 4
+            },
+            "is_24_7": false,
+            "round_clock_start_hour": null,
+            "duty_rotation": null,
+            "closed_on_public_holidays": true
+          },
+          "brico_marche_wejcherowo": {
+            "key": "brico_marche_wejcherowo",
+            "name": "Brico Marche Wejcherowo",
+            "open_hours": {
+              "0": [
+                "08:00",
+                "20:00"
+              ],
+              "1": [
+                "08:00",
+                "20:00"
+              ],
+              "2": [
+                "08:00",
+                "20:00"
+              ],
+              "3": [
+                "08:00",
+                "20:00"
+              ],
+              "4": [
+                "08:00",
+                "20:00"
+              ],
+              "5": [
+                "08:00",
+                "20:00"
+              ],
+              "6": [
+                null,
+                null
+              ]
+            },
+            "trade_sundays": [],
+            "public_holidays": [],
+            "day_overrides": {},
+            "constraints": {
+              "max_consecutive_days": 4
+            },
+            "is_24_7": false,
+            "round_clock_start_hour": null,
+            "duty_rotation": null,
+            "closed_on_public_holidays": true
+          },
+          "eba_apartamenty_nadmorska_33": {
+            "key": "eba_apartamenty_nadmorska_33",
+            "name": "Łeba apartamenty nadmorska 33",
+            "open_hours": {
+              "0": [
+                "00:00",
+                "23:45"
+              ],
+              "1": [
+                "00:00",
+                "23:45"
+              ],
+              "2": [
+                "00:00",
+                "23:45"
+              ],
+              "3": [
+                "00:00",
+                "23:45"
+              ],
+              "4": [
+                "00:00",
+                "23:45"
+              ],
+              "5": [
+                "00:00",
+                "23:45"
+              ],
+              "6": [
+                "00:00",
+                "23:45"
+              ]
+            },
+            "trade_sundays": [],
+            "public_holidays": [],
+            "day_overrides": {},
+            "constraints": {
+              "max_consecutive_days": 4
+            },
+            "is_24_7": true,
+            "round_clock_start_hour": null,
+            "duty_rotation": {
+              "weekend_half_a": {
+                "start": "08:00",
+                "end": "20:00"
+              },
+              "weekend_half_b": {
+                "start": "20:00",
+                "end": "08:00"
+              },
+              "weekend_full": {
+                "start": "08:00"
+              },
+              "only_12_24h": true,
+              "prefer_24h": true
+            },
+            "closed_on_public_holidays": false
+          }
+        },
+        "open_hours": {
+          "0": [
+            "05:30",
+            "23:00"
+          ],
+          "1": [
+            "05:30",
+            "22:45"
+          ],
+          "2": [
+            "05:30",
+            "22:45"
+          ],
+          "3": [
+            "05:30",
+            "22:45"
+          ],
+          "4": [
+            "05:30",
+            "22:45"
+          ],
+          "5": [
+            "05:30",
+            "22:45"
+          ],
+          "6": [
+            "05:30",
+            "22:45"
+          ]
+        },
+        "night_shift": null,
+        "duty_rotation": null,
+        "quick_mode_presets": [],
+        "quick_mode_standard_buttons": {},
+        "trade_sundays": [],
+        "day_overrides": {},
+        "constraints": {
+          "max_consecutive_days": 4,
+          "min_open_staff": 3,
+          "min_close_staff": 3,
+          "force_fulltime_845": false,
+          "rest_11h_mode": "standard",
+          "solver_time_limit_seconds": 60,
+          "max_staff_at_once": 1,
+          "enforce_11h_rest": true,
+          "enforce_meat_coverage": true,
+          "highlight_max_consecutive": false
+        },
+        "cell_display_mode": "compact",
+        "hours_display_mode": "fractions",
+        "show_grid_legend": false,
+        "public_holidays": [],
+        "standard_daily_hours": 8.0,
+        "constraint_policies": {
+          "rest_11h": "MANDATORY",
+          "meat": "PREFERRED",
+          "balance": "PREFERRED",
+          "max_consecutive": "PREFERRED",
+          "open": "MANDATORY",
+          "close": "MANDATORY",
+          "monthly_hours": "PREFERRED",
+          "meat_coverage": "PREFERRED",
+          "availability": "PREFERRED",
+          "no_night": "MANDATORY",
+          "no_afternoon": "MANDATORY",
+          "duty_rotation_coverage": "MANDATORY",
+          "duty_rotation_no24h": "MANDATORY",
+          "round_clock_coverage": "MANDATORY",
+          "hours_equalization": "DISABLED",
+          "nominal_hours_no_umowa": "PREFERRED",
+          "opening_hours_coverage": "MANDATORY",
+          "max_staff_at_once": "PREFERRED"
+        }
+      }
+    }
+  }
+}
