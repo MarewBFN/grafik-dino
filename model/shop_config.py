@@ -346,6 +346,12 @@ class ShopConfig:
         # potrzebuje przypomnienia znaczenia kolorów/zakreśleń komórek.
         self.show_grid_legend = False
 
+        # Menu Wygląd -> "Kolumna Nadgodziny" (ui/grid_view.py) - domyślnie
+        # ukryta z tego samego powodu co legenda kolorów; niezależna od
+        # profilu, użytkownik włącza ją ręcznie gdy chce śledzić nadgodziny
+        # ponad miesięczny limit godzin pełnego etatu.
+        self.show_overtime_column = False
+
         # -----------------------------
         # Niedziele handlowe
         # -----------------------------
@@ -617,6 +623,7 @@ class ShopConfig:
             "cell_display_mode": self.cell_display_mode,
             "hours_display_mode": self.hours_display_mode,
             "show_grid_legend": self.show_grid_legend,
+            "show_overtime_column": self.show_overtime_column,
             "public_holidays": list(self.public_holidays),
             "standard_daily_hours": self.standard_daily_hours,
             "constraint_policies": {
@@ -677,6 +684,7 @@ class ShopConfig:
         cfg.cell_display_mode = data.get("cell_display_mode", "compact")
         cfg.hours_display_mode = data.get("hours_display_mode", "standard")
         cfg.show_grid_legend = data.get("show_grid_legend", False)
+        cfg.show_overtime_column = data.get("show_overtime_column", False)
         cfg.standard_daily_hours = data.get("standard_daily_hours", 8.0)
 
         # Project files created before this field was added retain the defaults.

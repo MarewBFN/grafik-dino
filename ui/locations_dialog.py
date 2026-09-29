@@ -25,19 +25,22 @@ from ui.slug import slugify
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.weekly_hours_editor import WeeklyHoursEditor
+from model.business_profile import DEFAULT_BUSINESS_TYPE
 from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig
 
 LOCATIONS_TUTORIAL_FLAG = "locations_tutorial_seen.flag"
 
-# "Rotacja całodobowa - godzina rozpoczęcia" (LocationConfig.round_clock_start_hour)
-# UKRYTA dla Enyo (patrz ENYO_ONLY_CHANGES.md) - specyfikację klienta (1 osoba
-# na zmianie, zmiany bez zazębiania, 16h+8h / 24h albo 12h+12h) spełnia
-# wyłącznie "Rotacja służby 24/7", podpięta pod ten sam checkbox 24/7. Obsadę
-# kafelków round-clock wymusza tylko profil Dino, a razem z rotacją służby
-# obie bramy blokowały sobie nawzajem wszystkie zmiany (generator bez
-# rozwiązania). Kod zostaje - True przywraca pole (też w
-# ui/config_dialog.py, który importuje tę stałą).
-ROUND_CLOCK_UI_ENABLED = False
+
+def round_clock_ui_enabled(business_type: str) -> bool:
+    """"Rotacja całodobowa - godzina rozpoczęcia"
+    (LocationConfig.round_clock_start_hour) ma sens WYŁĄCZNIE dla profilu
+    Dino - specyfikację klienta Ochrona (1 osoba na zmianie, zmiany bez
+    zazębiania, 16h+8h / 24h albo 12h+12h) spełnia wyłącznie "Rotacja
+    służby 24/7", podpięta pod ten sam checkbox 24/7 na tej samej
+    lokalizacji; obie bramy naraz na jednej lokalizacji blokowały sobie
+    nawzajem wszystkie zmiany (generator bez rozwiązania) - patrz
+    ENYO_ONLY_CHANGES.md."""
+    return business_type == DEFAULT_BUSINESS_TYPE
 
 
 def _parse_time(value: str) -> QTime:
@@ -69,8 +72,10 @@ class _LocationRow(QFrame):
         original_key=None, duty_rotation=None, round_clock_start_hour=None,
         closed_on_public_holidays=True, show_preferred_shifts=False,
         preferred_shifts_enabled=False, preferred_shifts=None,
+        round_clock_ui_enabled=False,
     ):
         super().__init__()
+        self._round_clock_ui_enabled = round_clock_ui_enabled
         self.setObjectName("configCard")
         self.rule_defs = list(rule_defs)
         rule_overrides = rule_overrides or {}
@@ -189,7 +194,7 @@ class _LocationRow(QFrame):
         round_clock_row = QHBoxLayout(self.round_clock_container)
         round_clock_row.setContentsMargins(0, 0, 0, 0)
         self.round_clock_check = QCheckBox("Rotacja całodobowa - godzina rozpoczęcia:")
-        self.round_clock_check.setChecked(ROUND_CLOCK_UI_ENABLED and round_clock_start_hour is not None)
+        self.round_clock_check.setChecked(self._round_clock_ui_enabled and round_clock_start_hour is not None)
         self.round_clock_check.toggled.connect(self._update_round_clock_visibility)
         round_clock_row.addWidget(self.round_clock_check)
         self.round_clock_start_input = TimeInputWidget()
@@ -273,16 +278,16 @@ class _LocationRow(QFrame):
     def _update_round_clock_visibility(self):
         # Cała sekcja (checkbox + podpowiedź) istnieje tylko dla 24/7 - dla
         # zwykłej lokalizacji ten mechanizm nie ma zastosowania (patrz
-        # LocationConfig.round_clock_start_hour) - i tylko gdy nie jest
-        # ukryta (ROUND_CLOCK_UI_ENABLED).
-        visible = ROUND_CLOCK_UI_ENABLED and self.is_24_7_check.isChecked()
+        # LocationConfig.round_clock_start_hour) - i tylko dla profilu Dino
+        # (patrz round_clock_ui_enabled() wyżej w tym module).
+        visible = self._round_clock_ui_enabled and self.is_24_7_check.isChecked()
         self.round_clock_container.setVisible(visible)
         self.round_clock_hint.setVisible(visible)
         self.round_clock_start_input.setVisible(self.round_clock_check.isChecked())
 
     def round_clock_start_hour_value(self) -> str | None:
         if (
-            not ROUND_CLOCK_UI_ENABLED
+            not self._round_clock_ui_enabled
             or not self.is_24_7_check.isChecked()
             or not self.round_clock_check.isChecked()
         ):
@@ -443,6 +448,7 @@ class LocationsDialog(QDialog):
             show_preferred_shifts=self._show_preferred_shifts,
             preferred_shifts_enabled=preferred_shifts_enabled,
             preferred_shifts=preferred_shifts,
+            round_clock_ui_enabled=round_clock_ui_enabled(self.shop_config.business_type),
         )
         self._location_rows.append(row)
         self.locations_container.addWidget(row)

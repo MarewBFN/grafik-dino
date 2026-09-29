@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 from logic.utils.time_utils import month_scope_note
 from ui.duty_rotation_editor import DutyRotationEditor
-from ui.locations_dialog import ROUND_CLOCK_UI_ENABLED
+from ui.locations_dialog import round_clock_ui_enabled
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.profile_wizard_dialog import ProfileWizardDialog
@@ -241,8 +241,6 @@ class ConfigDialog(QDialog):
         profile_row.addStretch()
         facility_header_layout.addLayout(profile_row)
 
-        self.facility_header.hide()
-
         # Domyślnie puste - _build_sundays_tab() nadpisuje tylko gdy profil
         # faktycznie ma kalendarz handlowy (patrz niżej), a _save() zawsze
         # czyta ten słownik.
@@ -254,18 +252,14 @@ class ConfigDialog(QDialog):
 
         # Indeksy zakładek śledzone jawnie (zamiast zakładanych na sztywno w
         # _build_tutorial_steps()), bo "Niedziele handlowe" dodaje się
-        # warunkowo, a "Limity" (self.limits_tab niżej) w tej wersji wcale -
-        # sztywne indeksy 0/1/2/3 rozjeżdżałyby się z rzeczywistą zawartością
-        # self.tabs i celowały by w złą zakładkę.
+        # warunkowo - sztywne indeksy 0/1/2/3 rozjeżdżałyby się z rzeczywistą
+        # zawartością self.tabs i celowały by w złą zakładkę.
         self._tab_index_hours = tabs.addTab(self._build_hours_tab(), "Godziny otwarcia")
         self._tab_index_sundays = None
         if self.profile.uses_trade_calendar:
             self._tab_index_sundays = tabs.addTab(self._build_sundays_tab(), "Niedziele handlowe")
-        # Zakładka "Limity" nieużywana przez Enyo - schowana z UI, ale
-        # _build_limits_tab() zostaje wywoływane (self.limits_tab niżej), bo
-        # _save() nadal czyta stąd wartości domyślne (max_consecutive_days,
-        # standard_daily_hours, ...) tak jak wcześniej.
         self.limits_tab = self._build_limits_tab()
+        self._tab_index_limits = tabs.addTab(self.limits_tab, "Limity")
         self._tab_index_generator = tabs.addTab(self._build_generator_rules_tab(), "Zasady generatora")
 
         buttons = QDialogButtonBox()
@@ -459,7 +453,8 @@ class ConfigDialog(QDialog):
             round_clock_row.setContentsMargins(0, 0, 0, 0)
             self.round_clock_check = QCheckBox("Rotacja całodobowa - godzina rozpoczęcia:")
             self.round_clock_check.setChecked(
-                ROUND_CLOCK_UI_ENABLED and self.location.round_clock_start_hour is not None
+                round_clock_ui_enabled(self.shop_config.business_type)
+                and self.location.round_clock_start_hour is not None
             )
             self.round_clock_check.toggled.connect(self._update_hours_tab_round_clock_visibility)
             round_clock_row.addWidget(self.round_clock_check)
@@ -511,8 +506,8 @@ class ConfigDialog(QDialog):
         self.duty_rotation_editor.setVisible(is_24_7)
 
     def _update_hours_tab_round_clock_visibility(self):
-        # Ukryte dla Enyo - patrz ui/locations_dialog.py::ROUND_CLOCK_UI_ENABLED.
-        visible = ROUND_CLOCK_UI_ENABLED and self.is_24_7_check.isChecked()
+        # Tylko dla Dino - patrz ui/locations_dialog.py::round_clock_ui_enabled().
+        visible = round_clock_ui_enabled(self.shop_config.business_type) and self.is_24_7_check.isChecked()
         self.round_clock_container.setVisible(visible)
         self.round_clock_hint.setVisible(visible)
         self.round_clock_start_input.setVisible(self.round_clock_check.isChecked())
@@ -911,6 +906,14 @@ class ConfigDialog(QDialog):
                 on_show=lambda: self.tabs.setCurrentIndex(self._tab_index_sundays),
             ))
         steps.append(TutorialStep(
+            "Limity",
+            "Maksymalna liczba dni pod rząd, standardowy wymiar zmiany dla "
+            "pełnego etatu i dodatkowe flagi (np. wymuszenie 8h 30 min) - "
+            "wartości domyślne dla całego projektu.",
+            target=self.max_consecutive,
+            on_show=lambda: self.tabs.setCurrentIndex(self._tab_index_limits),
+        ))
+        steps.append(TutorialStep(
             "Limit czasu generatora",
             "Ile czasu solver ma na znalezienie grafiku. Dłuższy limit daje "
             "lepsze wyniki, ale wydłuża generowanie.",
@@ -1057,7 +1060,11 @@ class ConfigDialog(QDialog):
                         ) from exc
                 self.location.set_duty_rotation(duty_rotation)
 
-                if ROUND_CLOCK_UI_ENABLED and self.is_24_7_check.isChecked() and self.round_clock_check.isChecked():
+                if (
+                    round_clock_ui_enabled(self.shop_config.business_type)
+                    and self.is_24_7_check.isChecked()
+                    and self.round_clock_check.isChecked()
+                ):
                     self.location.round_clock_start_hour = self.round_clock_start_input.get_time_str()
                 else:
                     self.location.round_clock_start_hour = None

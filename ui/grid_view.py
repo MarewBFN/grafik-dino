@@ -542,6 +542,7 @@ class ScheduleGrid(QTableWidget):
         self._clipboard_day = None
         self.compact_mode = False
         self.settlement_mode = False
+        self.show_overtime_column = False
         self.setIconSize(QSize(20, 20))
         self._employee_name_delegate = EmployeeNameDelegate(self)
         self.setItemDelegateForColumn(0, self._employee_name_delegate)
@@ -825,6 +826,7 @@ class ScheduleGrid(QTableWidget):
         nadgodziny_col = days + offset + 5
         if nadgodziny_col < self.columnCount():
             self.setColumnWidth(nadgodziny_col, 80)
+            self.setColumnHidden(nadgodziny_col, not self.show_overtime_column)
 
         self.verticalHeader().setVisible(False)
         self.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
@@ -1745,6 +1747,10 @@ class ScheduleGrid(QTableWidget):
 
     def set_settlement_mode(self, enabled: bool):
         self.settlement_mode = enabled
+        self.refresh()
+
+    def set_overtime_column_visible(self, enabled: bool):
+        self.show_overtime_column = enabled
         self.refresh()
 
     def clear_schedule(self):

@@ -441,11 +441,6 @@ class MainWindow(QMainWindow):
         settlement_layout.addWidget(self.btn_settlement_balance)
 
         layout.addWidget(self.settlement_section)
-        # Okres rozliczeniowy (sidebar + kolumna "Cel" w ui/grid_view.py, w
-        # pełni sterowana przez settlement_mode) - schowany na prośbę klienta,
-        # zostaje w pełni działający w kodzie (patrz też btn_work.hide() niżej
-        # dla identycznego wzorca).
-        self.settlement_section.hide()
 
         layout.addStretch(1)
 
@@ -747,6 +742,15 @@ class MainWindow(QMainWindow):
         )
         self.show_grid_legend_action.setCheckable(True)
 
+        # Pokaż/ukryj kolumnę "Nadgodziny" w siatce (ui/grid_view.py) -
+        # domyślnie ukryta (ShopConfig.show_overtime_column=False),
+        # niezależna od profilu - patrz _toggle_overtime_column/
+        # _update_overtime_column.
+        self.show_overtime_column_action = wyglad_menu.addAction(
+            "Kolumna Nadgodziny", self._toggle_overtime_column
+        )
+        self.show_overtime_column_action.setCheckable(True)
+
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
         help_menu.addAction("Sprawdź aktualizacje", lambda: self._check_updates(manual=True))
         help_menu.addAction("O programie", self._about)
@@ -903,6 +907,7 @@ class MainWindow(QMainWindow):
         self._update_location_switcher()
         self._sync_grid()
         self._update_grid_legend()
+        self._update_overtime_column()
         self._update_window_title()
         self._update_state_label()
         self._update_generate_label()
@@ -1045,6 +1050,15 @@ class MainWindow(QMainWindow):
 
         visible_count = len(self.grid.get_visible_employees()) if self.grid else 0
         self.grid_legend.set_compact_section(visible_count > 10)
+
+    def _update_overtime_column(self):
+        """Widoczność kolumny "Nadgodziny" (menu Wygląd -> "Kolumna
+        Nadgodziny", domyślnie ukryta - patrz ShopConfig.show_overtime_column).
+        Wołane z _sync_everything() i _toggle_overtime_column()."""
+        visible = bool(self.shop_config and self.shop_config.show_overtime_column)
+        self.show_overtime_column_action.setChecked(visible)
+        if self.grid:
+            self.grid.set_overtime_column_visible(visible)
 
     def _update_window_title(self):
         # Wersja programu zawsze bezpośrednio po nazwie ("Grafik pracy
@@ -1591,6 +1605,20 @@ class MainWindow(QMainWindow):
             pass
         self.statusBar().showMessage(
             "Pokazano legendę kolorów." if self.shop_config.show_grid_legend else "Ukryto legendę kolorów.",
+            2500,
+        )
+
+    def _toggle_overtime_column(self):
+        if self.shop_config is None:
+            return
+        self.shop_config.show_overtime_column = not self.shop_config.show_overtime_column
+        self._update_overtime_column()
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
+        self.statusBar().showMessage(
+            "Pokazano kolumnę Nadgodziny." if self.shop_config.show_overtime_column else "Ukryto kolumnę Nadgodziny.",
             2500,
         )
 

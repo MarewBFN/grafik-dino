@@ -553,10 +553,11 @@ class LocationConfig:
             # Rotacja służby i rotacja całodobowa (round_clock_start_hour) mają
             # wzajemnie wykluczające się bramy w generatorze - razem blokują
             # pracownikom tej lokalizacji KAŻDĄ zmianę (generator bez
-            # rozwiązania). Rotacja służby to mechanizm ze specyfikacji klienta
-            # Enyo, a pole rotacji całodobowej jest ukryte w UI (patrz
-            # ui/locations_dialog.py::ROUND_CLOCK_UI_ENABLED) - wartość zapisana
-            # wcześniej obok rotacji służby jest więc ignorowana przy wczytaniu.
+            # rozwiązania). Rotacja służby to mechanizm profilu Ochrona, a
+            # pole rotacji całodobowej w UI jest widoczne tylko dla Dino
+            # (patrz ui/locations_dialog.py::round_clock_ui_enabled) - mimo to
+            # ta wartość jest ignorowana przy wczytaniu, gdyby jednak
+            # współistniała z rotacją służby w zapisanych danych.
             loc.round_clock_start_hour = None
         return loc
 

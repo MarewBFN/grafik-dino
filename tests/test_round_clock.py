@@ -12,7 +12,6 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import unittest
-from unittest.mock import patch
 
 from ortools.sat.python import cp_model
 from PySide6.QtWidgets import QApplication
@@ -28,6 +27,7 @@ from logic.generator.round_clock_constraint import (
 )
 from logic.generator.round_clock_manual_constraint import add_round_clock_manual_shift_constraint
 from logic.generator.round_clock_rest_constraint import add_round_clock_rest_constraint
+from model.business_profile import DEFAULT_OCHRONA_PROFILE_KEY
 from model.employee import Employee
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
@@ -511,8 +511,9 @@ class LocationsDialogRoundClockUiTests(unittest.TestCase):
         self.assertFalse(row.is_24_7_check.isChecked())
         self.assertIsNone(row.round_clock_start_hour_value())
 
-    @patch("ui.locations_dialog.ROUND_CLOCK_UI_ENABLED", True)
     def test_field_shown_and_value_round_trips(self):
+        # round_clock_ui_enabled() jest True dla profilu Dino (domyślny
+        # business_type świeżego ShopConfig) - nie trzeba już patchować.
         shop = ShopConfig(2026, 3)
         shop.locations = {"glowna": _make_24_7_location(start_hour="09:30")}
         dialog = LocationsDialog(None, shop)
@@ -521,11 +522,14 @@ class LocationsDialogRoundClockUiTests(unittest.TestCase):
         self.assertTrue(row.round_clock_check.isChecked())
         self.assertEqual(row.round_clock_start_hour_value(), "09:30")
 
-    def test_field_hidden_for_enyo_even_when_24_7(self):
-        """Domyślnie (ROUND_CLOCK_UI_ENABLED=False) pole jest ukryte i nic
-        nie zapisuje - także dla lokalizacji 24/7 z wcześniej zapisaną
-        godziną rozpoczęcia."""
+    def test_field_hidden_for_non_dino_profile_even_when_24_7(self):
+        """round_clock_ui_enabled() jest True tylko dla profilu Dino - dla
+        każdego innego (tu: Ochrona) pole jest ukryte i nic nie zapisuje,
+        także dla lokalizacji 24/7 z wcześniej zapisaną godziną rozpoczęcia
+        (koliduje z rotacją służby 24/7 tego profilu, patrz
+        ui/locations_dialog.py::round_clock_ui_enabled)."""
         shop = ShopConfig(2026, 3)
+        shop.business_type = DEFAULT_OCHRONA_PROFILE_KEY
         shop.locations = {"glowna": _make_24_7_location(start_hour="09:30")}
         dialog = LocationsDialog(None, shop)
         row = dialog._location_rows[0]
@@ -536,8 +540,9 @@ class LocationsDialogRoundClockUiTests(unittest.TestCase):
         self.assertFalse(row.round_clock_check.isChecked())
         self.assertIsNone(row.round_clock_start_hour_value())
 
-    def test_saving_24_7_location_drops_round_clock_start_hour(self):
+    def test_saving_24_7_location_drops_round_clock_start_hour_for_non_dino(self):
         shop = ShopConfig(2026, 3)
+        shop.business_type = DEFAULT_OCHRONA_PROFILE_KEY
         shop.locations = {"glowna": _make_24_7_location(start_hour="09:30")}
         dialog = LocationsDialog(None, shop)
         dialog._save()
@@ -547,7 +552,16 @@ class LocationsDialogRoundClockUiTests(unittest.TestCase):
         self.assertIsNotNone(loc.duty_rotation)
         self.assertIsNone(loc.round_clock_start_hour)
 
-    @patch("ui.locations_dialog.ROUND_CLOCK_UI_ENABLED", True)
+    def test_saving_24_7_location_keeps_round_clock_start_hour_for_dino(self):
+        shop = ShopConfig(2026, 3)
+        shop.locations = {"glowna": _make_24_7_location(start_hour="09:30")}
+        dialog = LocationsDialog(None, shop)
+        dialog._save()
+
+        loc = shop.locations["glowna"]
+        self.assertTrue(loc.is_24_7)
+        self.assertEqual(loc.round_clock_start_hour, "09:30")
+
     def test_unchecking_24_7_clears_the_value(self):
         shop = ShopConfig(2026, 3)
         shop.locations = {"glowna": _make_24_7_location()}
