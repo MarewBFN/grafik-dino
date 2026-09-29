@@ -70,3 +70,13 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
+[UninstallDelete]
+; Znaczniki "widziano samouczek" (np. CONFIG_TUTORIAL_FLAG w
+; ui/config_dialog.py, LOCATIONS_TUTORIAL_FLAG itd.) - aplikacja tworzy je
+; przy pierwszym uruchomieniu w SWOIM WŁASNYM katalogu roboczym ({app}, bo
+; skróty w [Icons] nie ustawiają WorkingDir - patrz też "last_project.json").
+; Domyślny deinstalator kasuje tylko pliki wpisane w [Files], więc bez tego
+; te znaczniki zostałyby osierocone po odinstalowaniu - przy ponownej
+; instalacji samouczki "pamiętałyby" (błędnie), że użytkownik już je widział.
+Type: files; Name: "{app}\*.flag"
+

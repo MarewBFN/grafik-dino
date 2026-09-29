@@ -3,13 +3,18 @@ import tempfile
 
 import requests
 
+from release_channel import RELEASE_CHANNEL
 from version import APP_VERSION
 
 
-GITHUB_RELEASES_LATEST_URL = "https://api.github.com/repos/MarewBFN/grafik-dino/releases/latest"
+MANIFEST_BASE_URL = "https://raw.githubusercontent.com/MarewBFN/grafik-dino/main/releases"
 INSTALLER_ASSET_NAME = "DingoSetup.exe"
 
 DOWNLOAD_CHUNK_SIZE = 1024 * 256
+
+
+def _manifest_url():
+    return f"{MANIFEST_BASE_URL}/{RELEASE_CHANNEL}.json"
 
 
 def _parse_version(value: str) -> tuple:
@@ -34,7 +39,7 @@ def _is_newer(remote: str, local: str) -> bool:
 
 def check_for_updates():
     try:
-        response = requests.get(GITHUB_RELEASES_LATEST_URL, timeout=5)
+        response = requests.get(_manifest_url(), timeout=5)
 
         if response.status_code == 404:
             return {"available": False}
@@ -42,19 +47,14 @@ def check_for_updates():
         response.raise_for_status()
         data = response.json()
 
-        latest = data.get("tag_name")
+        latest = data.get("latest_version")
         if not latest:
             return {"available": False}
 
         if not _is_newer(latest, APP_VERSION):
             return {"available": False}
 
-        download_url = None
-        for asset in data.get("assets", []):
-            if asset.get("name") == INSTALLER_ASSET_NAME:
-                download_url = asset.get("browser_download_url")
-                break
-
+        download_url = data.get("download_url")
         if not download_url:
             return {"available": False}
 
@@ -62,7 +62,7 @@ def check_for_updates():
             "available": True,
             "version": latest,
             "url": download_url,
-            "notes": (data.get("body") or "").strip(),
+            "notes": (data.get("changelog") or "").strip(),
         }
 
     except Exception as e:

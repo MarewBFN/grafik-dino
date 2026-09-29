@@ -1,4 +1,5 @@
 import os
+from copy import deepcopy
 from datetime import date
 
 from PySide6.QtCore import Qt, QThread, Signal, QObject, QTimer, QUrl
@@ -19,41 +20,64 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
     QDialog,
+    QInputDialog,
 )
 
 from export.excel_exporter import export_schedule_to_excel
-from export.image_exporter import export_schedule_to_image
+from export.export_style import render_schedule_image
+from export.employee_card_exporter import (
+    export_employee_cards_to_excel,
+    render_employee_card_image,
+    save_employee_card_pages_to_pdf,
+    sanitize_filename_part,
+)
 from logic.schedule_controller import ScheduleController
-from model.month_schedule import MonthSchedule
-from model.shop_config import ShopConfig
-from persistence.project_io import load_project, save_project
+from logic.utils.time_utils import previous_calendar_month
+from ui.export_preview_dialog import show_export_preview
+from ui.previous_month_shift_dialog import PreviousMonthShiftDialog
+from ui.marquee_text import MarqueeLabel, WrappingLocationButton
+from model.location import format_open_hours_summary
+from model.month_schedule import MonthSchedule, PREVIOUS_MONTH_MEMORY_ENABLED
+from model.monthly_project import MonthlyProject
+from model.shop_config import ShopConfig, STANDARD_QUICK_BUTTONS, is_standard_button_visible
+from persistence.project_io import (
+    assign_missing_location_keys,
+    load_project_bundle,
+    save_project_bundle,
+)
 from ui.config_dialog import ConfigDialog
+from ui.locations_dialog import LocationsDialog
 from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
+from ui.grid_legend import GridLegendWidget
 from ui.grid_view import ScheduleGrid
+from ui.month_picker_dialog import MonthPickerDialog
+from ui.new_project_dialog import NewProjectDialog
+from ui.quick_mode_settings_dialog import QuickModeSettingsDialog
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.loading_overlay import LoadingOverlay
 from ui.demo_manager import DemoManager
 from ui.license_manager import get_user_id, show_license_dialog
 from version import APP_VERSION
+from release_channel import RELEASE_CHANNEL
 
 class GeneratorWorker(QObject):
     finished = Signal(object)
 
-    def __init__(self, controller, force=False):
+    def __init__(self, controller, force=False, location_key=None):
         super().__init__()
         self.controller = controller
         self.force = force
+        self.location_key = location_key
 
     def run(self):
-        result = self.controller.generate_schedule(force=self.force)
+        result = self.controller.generate_schedule(force=self.force, location_key=self.location_key)
         self.finished.emit(result)
 
 
@@ -114,7 +138,9 @@ class MainWindow(QMainWindow):
         if saved_key and validate_license(self.user_id, saved_key):
             self.demo.is_demo = False
 
-        self.setWindowTitle("Grafik Dino v2")
+        # Branch demonstracyjne (client-demo/enyo-ochrona) celowo nie
+        # pokazuje marki "Dino" w tytule okna - patrz CLIENT_DEMO_README.md.
+        self.setWindowTitle(f"Grafik pracy {APP_VERSION}")
         self.user_id = get_user_id()
         today = date.today()
         self.year = today.year
@@ -132,13 +158,32 @@ class MainWindow(QMainWindow):
 
         self.settlement_mode_active = False
 
+        # Aktualnie wybrana placówka (klucz w shop_config.locations) -
+        # patrz przełącznik pod "Grafik na:" (_build_left_panel) i pasek
+        # godzin nad tabelą (_update_grid_header_bar). Samonaprawia się do
+        # pierwszej dostępnej lokalizacji w _update_location_switcher(), więc
+        # None tu jest tylko stanem przejściowym przed pierwszym _sync_everything().
+        self.selected_location_key = None
+
         self._build_quick_panel()
         self._build_ui()
         self._init_state()
         self._sync_everything()
-        if not self._open_project_from_path(open_path):
-            self._try_load_last_project()
+        self._opened_existing_project = self._open_project_from_path(open_path)
+        if not self._opened_existing_project:
+            self._opened_existing_project = self._try_load_last_project()
         self.loading_overlay = LoadingOverlay(self)
+
+        # ID użytkownika (potrzebne do wygenerowania klucza licencji) na
+        # stałe w prawym dolnym rogu paska stanu, zamiast na dole panelu
+        # bocznego - zawsze widoczne, niezależnie od tego, co akurat pokazuje
+        # panel boczny.
+        self.user_id_label = QLabel(f"ID użytkownika: {self.user_id}")
+        self.user_id_label.setObjectName("mutedHint")
+        # Lekki odstęp od prawej krawędzi okna - bez tego tekst przylegał
+        # bezpośrednio do rogu paska stanu.
+        self.user_id_label.setContentsMargins(0, 0, 8, 0)
+        self.statusBar().addPermanentWidget(self.user_id_label)
 
         self.statusBar().showMessage("Gotowe")
         QTimer.singleShot(0, self._check_first_run)
@@ -264,39 +309,51 @@ class MainWindow(QMainWindow):
         self.btn_change_date.setObjectName("linkButton")
         self.btn_change_date.setCursor(Qt.PointingHandCursor)
         self.btn_change_date.setFixedWidth(120)
-        self.btn_change_date.clicked.connect(self._enter_edit_date_mode)
+        self.btn_change_date.clicked.connect(self._open_month_picker)
 
         hero_layout.addWidget(self.btn_change_date)
 
-        # Widget dla trybu edycji daty
-        self.date_edit_widget = QWidget()
-        self.date_edit_widget.hide()
-        date_edit_layout = QVBoxLayout(self.date_edit_widget)
-        date_edit_layout.setContentsMargins(0, 0, 0, 0)
-
-        date_row = QHBoxLayout()
-        date_row.addWidget(QLabel("Miesiąc"))
-        self.month_spin = QSpinBox()
-        self.month_spin.setRange(1, 12)
-        self.month_spin.setValue(self.month)
-        date_row.addWidget(self.month_spin)
-
-        date_row.addWidget(QLabel("Rok"))
-        self.year_spin = QSpinBox()
-        self.year_spin.setRange(2024, 2035)
-        self.year_spin.setValue(self.year)
-        date_row.addWidget(self.year_spin)
-        
-        self.btn_save_date = QPushButton("Zapisz")
-        self.btn_save_date.setObjectName("primaryButton")
-        self.btn_save_date.clicked.connect(self._save_date_clicked)
-        self.btn_save_date.setMinimumHeight(30)
-        date_row.addWidget(self.btn_save_date)
-
-        date_edit_layout.addLayout(date_row)
-        hero_layout.addWidget(self.date_edit_widget)
-
         layout.addWidget(hero)
+
+        # Przełącznik placówek - celowo NA OSOBNYM tle od karty "hero"
+        # powyżej (patrz QFrame#locationSwitcher w ui/theme.py), zawsze
+        # widoczny (nawet z jedną lokalizacją - strzałki są wtedy tylko
+        # wyszarzone), bo projekt ma zawsze co najmniej jedną lokalizację
+        # (patrz model/shop_config.py). Kliknięcie nazwy otwiera pełną listę.
+        self.location_switcher = QFrame()
+        self.location_switcher.setObjectName("locationSwitcher")
+        switcher_layout = QHBoxLayout(self.location_switcher)
+        switcher_layout.setContentsMargins(6, 4, 6, 4)
+        switcher_layout.setSpacing(4)
+
+        self.btn_location_prev = QPushButton("◀")
+        self.btn_location_prev.setObjectName("locationSwitcherArrow")
+        self.btn_location_prev.setFixedWidth(30)
+        self.btn_location_prev.setToolTip("Poprzednia placówka")
+        self.btn_location_prev.clicked.connect(lambda: self._cycle_location(-1))
+        switcher_layout.addWidget(self.btn_location_prev)
+
+        # Zawija za długą nazwę na kilka linii (rosnąc w pionie) zamiast
+        # przewijać ją w poziomie (marquee) - na życzenie użytkownika.
+        # Minimalna wysokość rośnie monotonicznie w ramach sesji, więc
+        # przełączenie na krótszą nazwę nie zmniejsza już wysokości tego
+        # wiersza (i nie "rozjeżdża" reszty panelu) - patrz
+        # WrappingLocationButton._rewrap().
+        self.btn_location_name = WrappingLocationButton("")
+        self.btn_location_name.setObjectName("locationNameButton")
+        self.btn_location_name.setCursor(Qt.PointingHandCursor)
+        self.btn_location_name.setToolTip("Wybierz placówkę")
+        self.btn_location_name.clicked.connect(self._open_location_picker)
+        switcher_layout.addWidget(self.btn_location_name, 1)
+
+        self.btn_location_next = QPushButton("▶")
+        self.btn_location_next.setObjectName("locationSwitcherArrow")
+        self.btn_location_next.setFixedWidth(30)
+        self.btn_location_next.setToolTip("Następna placówka")
+        self.btn_location_next.clicked.connect(lambda: self._cycle_location(1))
+        switcher_layout.addWidget(self.btn_location_next)
+
+        layout.addWidget(self.location_switcher)
 
         metric_hint = QLabel("Nominalny etat")
         metric_hint.setObjectName("metricHint")
@@ -384,6 +441,11 @@ class MainWindow(QMainWindow):
         settlement_layout.addWidget(self.btn_settlement_balance)
 
         layout.addWidget(self.settlement_section)
+        # Okres rozliczeniowy (sidebar + kolumna "Cel" w ui/grid_view.py, w
+        # pełni sterowana przez settlement_mode) - schowany na prośbę klienta,
+        # zostaje w pełni działający w kodzie (patrz też btn_work.hide() niżej
+        # dla identycznego wzorca).
+        self.settlement_section.hide()
 
         layout.addStretch(1)
 
@@ -397,14 +459,6 @@ class MainWindow(QMainWindow):
             self.btn_buy.setObjectName("successButton")
             self.btn_buy.clicked.connect(self._open_buy_page)
             layout.addWidget(self.btn_buy)
-
-        self.user_id_label = QLabel(f"ID użytkownika: {self.user_id}")
-        self.user_id_label.setObjectName("mutedHint")
-        layout.addWidget(self.user_id_label)
-
-        self.version_label = QLabel(f"Wersja: {APP_VERSION}")
-        self.version_label.setObjectName("mutedHint")
-        layout.addWidget(self.version_label)
 
         return outer_panel
 
@@ -425,27 +479,29 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.quick_info_label)
 
         # --- przyciski: siatka 2x3 (Praca/Rano/Popo, Wolne/Urlop/L4) ---
-        btn_grid = QGridLayout()
+        self.quick_btn_grid = QGridLayout()
+        btn_grid = self.quick_btn_grid
         btn_grid.setSpacing(6)
 
         self.btn_work = QPushButton("Praca")
         self.btn_work.setCheckable(True)
-        self.btn_work.setToolTip("Wprowadź dokładne godziny pracy dla wybranej komórki.")
         self.btn_work.clicked.connect(lambda: self._set_quick_shift("WORK"))
 
         self.btn_morning = QPushButton("Rano")
         self.btn_morning.setCheckable(True)
-        self.btn_morning.setToolTip(
-            "Blokuje zmianę na typ „rano” — dokładną godzinę dobierze później generator."
-        )
         self.btn_morning.clicked.connect(lambda: self._set_quick_shift("MORNING_CLASS"))
 
         self.btn_afternoon = QPushButton("Popo")
         self.btn_afternoon.setCheckable(True)
-        self.btn_afternoon.setToolTip(
-            "Blokuje zmianę na typ „popołudnie” — dokładną godzinę dobierze później generator."
-        )
         self.btn_afternoon.clicked.connect(lambda: self._set_quick_shift("AFTERNOON_CLASS"))
+
+        self.btn_can_work = QPushButton("Praca ✅")
+        self.btn_can_work.setCheckable(True)
+        self.btn_can_work.clicked.connect(lambda: self._set_quick_shift("CAN_WORK"))
+
+        self.btn_delete = QPushButton("Usuń")
+        self.btn_delete.setCheckable(True)
+        self.btn_delete.clicked.connect(lambda: self._set_quick_shift("DELETE"))
 
         self.btn_off = QPushButton("Wolne")
         self.btn_off.setCheckable(True)
@@ -459,21 +515,67 @@ class MainWindow(QMainWindow):
         self.btn_sick.setCheckable(True)
         self.btn_sick.clicked.connect(lambda: self._set_quick_shift("SICK"))
 
-        for btn in (
-            self.btn_work, self.btn_morning, self.btn_afternoon,
-            self.btn_off, self.btn_leave, self.btn_sick,
-        ):
+        # {klucz STANDARD_QUICK_BUTTONS: widget} - widoczność/kolejność w
+        # siatce sterowana teraz jednym mechanizmem (is_standard_button_visible,
+        # patrz _relayout_quick_btn_grid) zamiast osobnych, zaszytych w kodzie
+        # warunków per przycisk (dawne is_retail/"Praca" zawsze .hide()).
+        self._quick_standard_button_widgets = {
+            "work": self.btn_work,
+            "morning": self.btn_morning,
+            "afternoon": self.btn_afternoon,
+            "can_work": self.btn_can_work,
+            "delete": self.btn_delete,
+            "off": self.btn_off,
+            "leave": self.btn_leave,
+            "sick": self.btn_sick,
+        }
+        self._quick_standard_button_shift_type = {
+            "work": "WORK",
+            "morning": "MORNING_CLASS",
+            "afternoon": "AFTERNOON_CLASS",
+            "can_work": "CAN_WORK",
+            "delete": "DELETE",
+            "off": "OFF",
+            "leave": "LEAVE",
+            "sick": "SICK",
+        }
+        # Opis zachowania - jedno źródło prawdy (STANDARD_QUICK_BUTTONS,
+        # model/shop_config.py) współdzielone z zakładką "Tryby domyślne"
+        # w ui/quick_mode_settings_dialog.py, żeby oba miejsca nigdy się nie
+        # rozjechały.
+        for button in STANDARD_QUICK_BUTTONS:
+            self._quick_standard_button_widgets[button["key"]].setToolTip(button["description"])
+
+        for btn in self._quick_standard_button_widgets.values():
             btn.setObjectName("secondaryButton")
             btn.setMinimumHeight(36)
 
-        btn_grid.addWidget(self.btn_work, 0, 0)
-        btn_grid.addWidget(self.btn_morning, 0, 1)
-        btn_grid.addWidget(self.btn_afternoon, 0, 2)
-        btn_grid.addWidget(self.btn_off, 1, 0)
-        btn_grid.addWidget(self.btn_leave, 1, 1)
-        btn_grid.addWidget(self.btn_sick, 1, 2)
+        # Pozycje w siatce są przeliczane dynamicznie w _relayout_quick_btn_grid()
+        # (tak, żeby przyciski ukryte wg profilu/zapisanej konfiguracji -
+        # patrz _update_quick_panel_profile_visibility - nie zostawiały pustych
+        # komórek), więc tu tylko budujemy layout, bez addWidget.
+        self._relayout_quick_btn_grid()
 
         layout.addLayout(btn_grid)
+
+        # --- przyciski dla ręcznie zdefiniowanych przedziałów (Konfiguracja
+        # -> "Ustawienia trybu szybkiego") - dobudowywane dynamicznie,
+        # patrz _rebuild_quick_preset_buttons(). ---
+        self.quick_presets_label = QLabel("Własne przedziały:")
+        self.quick_presets_label.setObjectName("mutedHint")
+        self.quick_presets_label.hide()
+        layout.addWidget(self.quick_presets_label)
+
+        self.quick_presets_grid = QGridLayout()
+        self.quick_presets_grid.setSpacing(6)
+        layout.addLayout(self.quick_presets_grid)
+
+        self.quick_preset_buttons: dict[str, QPushButton] = {}
+
+        self.btn_add_quick_preset = QPushButton("+ Dodaj własne...")
+        self.btn_add_quick_preset.setObjectName("secondaryButton")
+        self.btn_add_quick_preset.clicked.connect(self._open_quick_mode_settings)
+        layout.addWidget(self.btn_add_quick_preset)
 
         # --- panel godzin (tylko dla "Praca") ---
         self.time_panel = QWidget(self)
@@ -501,6 +603,13 @@ class MainWindow(QMainWindow):
         self.quick_duration_label.setEnabled(False)
         layout.addWidget(self.quick_duration_label)
 
+        # "Od"/"Do" (tylko dla "Praca", który jest schowany - patrz wyżej) oraz
+        # licznik godzin pod nim - schowane z tego samego powodu, zostają w
+        # pełni działające w kodzie (_set_quick_shift/_quick_update_duration
+        # nadal ustawiają ich stan jak dziś).
+        self.time_panel.hide()
+        self.quick_duration_label.hide()
+
         self.quick_panel.setLayout(layout)
         self.quick_panel.hide()
 
@@ -517,9 +626,41 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 0, 12, 12)
         layout.setSpacing(10)
 
+        # Pasek nad tabelą: nazwa aktualnie wybranej placówki (lewo) i jej
+        # godziny pracy (prawo, patrz format_open_hours_summary) - odświeżany
+        # w _update_grid_header_bar(), wywoływanym z _update_location_switcher().
+        self.grid_header_bar = QWidget()
+        grid_header_layout = QHBoxLayout(self.grid_header_bar)
+        grid_header_layout.setContentsMargins(4, 4, 4, 4)
+
+        self.grid_header_location_label = MarqueeLabel("")
+        self.grid_header_location_label.setObjectName("sectionLabel")
+        self.grid_header_location_label.setMaximumWidth(260)
+        # Stretch=1 (nie 0): z 0 ta etykieta dostawała dokładnie swój
+        # sizeHint() jako szerokość, bez dostępu do reszty wolnego miejsca w
+        # tym wierszu mimo setMaximumWidth(260) - bug zgłoszony przez
+        # użytkownika (nazwa ucinała się po ~2 znakach). addStretch(1) niżej
+        # nadal spycha grid_header_hours_label w prawo, bo ta etykieta i tak
+        # nie urośnie ponad swój maximumWidth.
+        grid_header_layout.addWidget(self.grid_header_location_label, 1)
+        grid_header_layout.addStretch(1)
+
+        self.grid_header_hours_label = QLabel("")
+        self.grid_header_hours_label.setObjectName("mutedHint")
+        grid_header_layout.addWidget(self.grid_header_hours_label)
+
+        layout.addWidget(self.grid_header_bar)
+
         self.grid = ScheduleGrid()
         self.grid.compact_mode = True
         layout.addWidget(self.grid, 1)
+
+        # Legenda kolorów/zakreśleń komórek, zawsze pod siatką - stretch=0,
+        # więc nigdy nie zabiera miejsca siatce (self.grid ma jedyny
+        # stretch>0 w tym layoucie) - patrz _update_grid_legend() (stylizacja
+        # zależna od liczby widocznych pracowników, wołane z _sync_everything).
+        self.grid_legend = GridLegendWidget()
+        layout.addWidget(self.grid_legend, 0)
 
         return panel
 
@@ -527,17 +668,28 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("Plik")
         edit_menu = self.menuBar().addMenu("Edycja")
         config_menu = self.menuBar().addMenu("Konfiguracja")
+        wyglad_menu = self.menuBar().addMenu("Wygląd")
         help_menu = self.menuBar().addMenu("Pomoc")
 
         help_menu.addAction("Samouczek", self._open_tutorial)
 
+        file_menu.addAction("Nowy projekt...", self._open_new_project)
+        file_menu.addAction("Usuń konfigurację", self._reset_configuration)
+        file_menu.addSeparator()
         file_menu.addAction("Zapisz", self._save_project)
         file_menu.addAction("Wczytaj", self._load_project)
 
         export_menu = QMenu("Eksport", self)
         export_menu.addAction("Excel", self._export_excel)
         export_menu.addAction("JPG", self._export_image)
+        export_menu.addAction("PDF", self._export_pdf)
         file_menu.addMenu(export_menu)
+
+        cards_menu = QMenu("Karty pracy", self)
+        cards_menu.addAction("Excel...", self._export_employee_cards_excel)
+        cards_menu.addAction("JPG...", self._export_employee_cards_image)
+        cards_menu.addAction("PDF...", self._export_employee_cards_pdf)
+        file_menu.addMenu(cards_menu)
 
         file_menu.addSeparator()
         file_menu.addAction("Drukuj...", self._print_schedule)
@@ -555,11 +707,144 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Wyczyść grafik", self._clear_schedule)
         edit_menu.addAction("Wyczyść auto", self._clear_generated)
 
+        # Ręczny edytor "Godziny zakończenia z poprzedniego miesiąca..."
+        # (PreviousMonthShiftDialog) schowany na prośbę użytkownika - był
+        # tylko testowym rozwiązaniem (i źródłem błędu: domyślna godzina
+        # "22:00" w dialogu blokowała cały grafik bez wyjaśnienia, patrz
+        # PreviousMonthBlocksDay1DiagnosticsTests). Sama pamięć
+        # poprzedniego miesiąca zostaje w pełni aktywna - działa
+        # automatycznie przy zmianie miesiąca (patrz
+        # _carry_over_previous_month_end_shifts), tylko bez tej ręcznej
+        # furtki do wpisania jej od zera.
+
         config_menu.addAction("Generator", self._open_config)
+        config_menu.addAction("Lokalizacje", self._open_locations_dialog)
+        config_menu.addAction("Ustawienia trybu szybkiego", self._open_quick_mode_settings)
+
+        # Miejsce na ustawienia wyglądu GUI - na razie tylko jedna pozycja
+        # (jak siatka grafiku pokazuje godziny zmiany), kolejne dojdą tu w
+        # przyszłości. Wzorem "Eksport"/"Karty pracy" w menu Plik: osobny
+        # QMenu zbudowany raz w _build_menu, nie odtwarzany przy każdym
+        # kliknięciu (patrz self._update_hours_display_menu wywoływane z
+        # _sync_everything, żeby stan zaznaczenia nadążał za wczytanym
+        # projektem).
+        hours_display_menu = QMenu("Wygląd komórek kompaktowych", self)
+        self.hours_display_standard_action = hours_display_menu.addAction(
+            "Standardowy (obecny)", lambda: self._set_hours_display_mode("standard")
+        )
+        self.hours_display_standard_action.setCheckable(True)
+        self.hours_display_fractions_action = hours_display_menu.addAction(
+            "Ułamki", lambda: self._set_hours_display_mode("fractions")
+        )
+        self.hours_display_fractions_action.setCheckable(True)
+        wyglad_menu.addMenu(hours_display_menu)
+
+        # Pokaż/ukryj legendę kolorów pod siatką (ui/grid_legend.py) -
+        # domyślnie ukryta (ShopConfig.show_grid_legend=False), patrz
+        # _toggle_grid_legend/_update_grid_legend_menu.
+        self.show_grid_legend_action = wyglad_menu.addAction(
+            "Legenda kolorów", self._toggle_grid_legend
+        )
+        self.show_grid_legend_action.setCheckable(True)
 
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
         help_menu.addAction("Sprawdź aktualizacje", lambda: self._check_updates(manual=True))
         help_menu.addAction("O programie", self._about)
+
+    def _open_new_project(self):
+        if self.schedule is not None:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Nowy projekt")
+            msg_box.setText(
+                "Utworzenie nowego projektu usunie bieżący grafik, listę "
+                "pracowników i ustawienia konfiguracji. Kontynuować?"
+            )
+            btn_yes = msg_box.addButton("Tak", QMessageBox.YesRole)
+            msg_box.addButton("Anuluj", QMessageBox.RejectRole)
+            msg_box.exec()
+            if msg_box.clickedButton() != btn_yes:
+                return
+
+        dialog = NewProjectDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.year = dialog.result_year
+        self.month = dialog.result_month
+        self._set_date_controls(self.year, self.month)
+
+        # Świadomie nie dziedziczymy pracowników poprzedniego projektu -
+        # _init_state() normalnie przenosi ich (sensowne przy zwykłej zmianie
+        # miesiąca tej samej firmy), ale "Nowy projekt" może oznaczać inną
+        # branżę z innymi rolami.
+        self.schedule = None
+        self._init_state()
+        self.shop_config.business_type = dialog.result_business_type
+
+        # Codex review finding on this PR: unlike _apply_first_run_wizard_result,
+        # this path never applied a fresh custom profile's default policies -
+        # apply_registry skips a spec whose policy key is absent from
+        # shop.constraint_policies, so every rule of a custom profile
+        # selected here (including ones configured as MANDATORY in the
+        # wizard) stayed silently DISABLED until Config was opened and saved.
+        from model.business_profile import get_custom_profile
+        custom = get_custom_profile(dialog.result_business_type)
+        if custom is not None:
+            # Zasady domyślne + ustawienia nowego projektu profilu (np. 8 h
+            # zamiast "8h 30 min" dla Ochrony) - patrz apply_new_project_defaults.
+            from logic.generator.custom_profile_wiring import apply_new_project_defaults
+            apply_new_project_defaults(self.shop_config, custom)
+
+        self._update_nominal_hours_label()
+        self._sync_everything()
+        self.statusBar().showMessage("Utworzono nowy projekt.", 2500)
+
+    def _reset_configuration(self):
+        """"Usuń konfigurację" - przywraca WYŁĄCZNIE grafik/konfigurację
+        (schedule, shop_config, last_project.json) do stanu sprzed
+        pierwszego uruchomienia, tym samym mechanizmem co _open_new_project
+        (self.schedule=None przed _init_state(), żeby nie przenieść starych
+        pracowników) - tylko bez interaktywnego NewProjectDialog, od razu na
+        gołe domyślne wartości, i z jawnym dopisaniem last_project.json na
+        końcu (czego _open_new_project nie robi), żeby stan nie wrócił po
+        restarcie. Świadomie NIE dotyka first_run.flag/*_tutorial_seen.flag/
+        license.json/machine_id.json/demo.json/custom_profiles.json - to nie
+        jest "grafik", tylko odrębny stan pierwszego uruchomienia/licencji/
+        poradników, który użytkownik wprost poprosił zostawić w spokoju."""
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Usuń konfigurację")
+        msg_box.setText(
+            "To przywróci program do stanu sprzed pierwszego uruchomienia: "
+            "usunie bieżący grafik, listę pracowników, lokalizacje i całą "
+            "konfigurację generatora.\n\n"
+            "Klucz licencji, flaga pierwszego uruchomienia i zapamiętane "
+            "poradniki NIE zostaną ruszone.\n\n"
+            "Tej operacji nie da się cofnąć. Kontynuować?"
+        )
+        btn_yes = msg_box.addButton("Tak, usuń", QMessageBox.YesRole)
+        msg_box.addButton("Anuluj", QMessageBox.RejectRole)
+        msg_box.exec()
+        if msg_box.clickedButton() != btn_yes:
+            return
+
+        today = date.today()
+        self.year, self.month = today.year, today.month
+        self._set_date_controls(self.year, self.month)
+
+        self.schedule = None
+        self._init_state()  # już ustawia domyślny widoczny profil - patrz _apply_default_visible_business_type
+
+        self._update_nominal_hours_label()
+        self._sync_everything()
+
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
+
+        self.statusBar().showMessage(
+            "Usunięto konfigurację - program działa jak po pierwszym uruchomieniu.", 3000
+        )
 
     def _init_state(self):
         old_employees = []
@@ -571,12 +856,153 @@ class MainWindow(QMainWindow):
         self.shop_config = ShopConfig(self.year, self.month)
         self.controller = ScheduleController(self.schedule, self.shop_config)
 
+        # Świeży/zerowany projekt = świeży kontener "pamięci wielu miesięcy"
+        # (patrz model/monthly_project.py) - żaden inny miesiąc jeszcze nie
+        # istnieje, tylko ten właśnie utworzony.
+        self.project = MonthlyProject()
+        self.project.put(self.year, self.month, self.schedule, self.shop_config)
+
+        self._apply_default_visible_business_type()
+
+    def _apply_default_visible_business_type(self):
+        """Goły ShopConfig() domyślnie wraca do dino_retail (patrz
+        model/business_profile.py::DEFAULT_BUSINESS_TYPE) - na tym branchu
+        (Dino celowo wykluczone z visible_profiles(), patrz
+        ENYO_ONLY_CHANGES.md) to nigdy nie jest poprawny wybór dla
+        świeżo utworzonego projektu. Bez tego wiersze podsumowania
+        Otwarcie/Zamknięcie/Mięso (dino_retail) pokazywały się przy każdym
+        pierwszym uruchomieniu na chwilę (albo na stałe, gdyby ktoś zamknął
+        kreator bez dokończenia go) - zanim kreator pierwszego uruchomienia
+        (albo NewProjectDialog) zdążył nadpisać business_type poprawną
+        wartością. Wywoływana z _init_state() - każdy z jego trzech
+        wywołań, który faktycznie chce inny profil (kreator, "Nowy
+        projekt..."), i tak nadpisuje business_type zaraz potem."""
+        from model.business_profile import get_custom_profile, visible_profiles
+        profiles = visible_profiles()
+        if not profiles:
+            return
+        self.shop_config.business_type = profiles[0].key
+        custom = get_custom_profile(self.shop_config.business_type)
+        if custom is not None:
+            # Zasady domyślne + ustawienia nowego projektu profilu (np. 8 h
+            # zamiast "8h 30 min" dla Ochrony) - patrz apply_new_project_defaults.
+            from logic.generator.custom_profile_wiring import apply_new_project_defaults
+            apply_new_project_defaults(self.shop_config, custom)
+
     def _sync_everything(self):
+        # Bezpiecznik: tabela grafiku filtruje pracowników po location_key
+        # (patrz _sync_grid), więc ktoś bez poprawnego przypisania byłby
+        # trwale niewidoczny w każdej placówce - dopina go do pierwszej
+        # dostępnej. Tania, bezstanowa operacja (patrz assign_missing_location_keys),
+        # bezpieczna do wołania przy każdej synchronizacji.
+        if self.schedule and self.shop_config:
+            assign_missing_location_keys(self.schedule, self.shop_config)
+
+        # Musi wejść przed _sync_grid(): samonaprawia selected_location_key,
+        # które ten drugi przekazuje jako filtr tabeli.
+        self._update_location_switcher()
         self._sync_grid()
+        self._update_grid_legend()
         self._update_window_title()
         self._update_state_label()
         self._update_generate_label()
         self._update_settlement_section_visibility()
+        self._rebuild_quick_preset_buttons()
+        self._update_quick_panel_profile_visibility()
+        self._update_hours_display_menu()
+
+    def _update_location_switcher(self):
+        """Samonaprawia self.selected_location_key (patrz komentarz w
+        __init__) i odświeża przełącznik pod "Grafik na:" oraz pasek godzin
+        nad tabelą. Projekt ma zawsze >=1 lokalizację (model/shop_config.py),
+        więc `location` poniżej jest None tylko przejściowo, zanim
+        shop_config w ogóle istnieje."""
+        locations = self.shop_config.locations if self.shop_config else {}
+        if self.selected_location_key not in locations:
+            self.selected_location_key = next(iter(locations), None)
+
+        location = locations.get(self.selected_location_key)
+        self.btn_location_name.setFullText(location.name if location else "—")
+
+        multiple = len(locations) > 1
+        self.btn_location_prev.setEnabled(multiple)
+        self.btn_location_next.setEnabled(multiple)
+
+        self._update_grid_header_bar()
+
+    def _update_grid_header_bar(self):
+        locations = self.shop_config.locations if self.shop_config else {}
+        location = locations.get(self.selected_location_key)
+        self.grid_header_location_label.setFullText(location.name if location else "")
+        self.grid_header_hours_label.setText(
+            format_open_hours_summary(location) if location else ""
+        )
+
+    def _cycle_location(self, direction: int):
+        keys = list(self.shop_config.locations.keys())
+        if len(keys) < 2 or self.selected_location_key not in keys:
+            return
+        idx = keys.index(self.selected_location_key)
+        self._select_location(keys[(idx + direction) % len(keys)])
+
+    def _select_location(self, key: str):
+        if key == self.selected_location_key or key not in self.shop_config.locations:
+            return
+        self.selected_location_key = key
+        self._update_location_switcher()
+        self._sync_grid()
+
+    def _open_location_picker(self):
+        locations = self.shop_config.locations
+        if not locations:
+            return
+        menu = QMenu(self)
+        for key, loc in locations.items():
+            action = menu.addAction(loc.name)
+            action.setCheckable(True)
+            action.setChecked(key == self.selected_location_key)
+            action.triggered.connect(lambda checked=False, k=key: self._select_location(k))
+        menu.exec(self.btn_location_name.mapToGlobal(self.btn_location_name.rect().bottomLeft()))
+
+    # Kolejność wyświetlania wbudowanych przycisków w siatce trybu szybkiego
+    # (2x4 gdy wszystkie widoczne) - "Praca" celowo pominięta: pozostaje w
+    # pełni działająca w kodzie (_set_quick_shift("WORK"), time_panel niżej),
+    # ale nie ma sensownego miejsca w tej siatce (wymaga wpisania godzin
+    # ręcznie w osobnym panelu poniżej, w odróżnieniu od reszty - jeden
+    # klik), więc widoczność w tym gridzie steruje tylko tym, czy w ogóle da
+    # się ją włączyć w "Tryby domyślne"; do samego grida nie trafia.
+    _QUICK_BTN_GRID_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "sick")
+
+    def _relayout_quick_btn_grid(self):
+        """Przelicza pozycje przycisków trybu szybkiego tak, żeby te ukryte
+        (wg profilu/zapisanej konfiguracji - patrz model/shop_config.py::
+        is_standard_button_visible) nie zostawiały pustych komórek w
+        siatce. Celowo NIE opiera się na isHidden()/isVisible() - oba zależą
+        od tego, czy cały widget jest już faktycznie pokazany w oknie
+        (fałszywie widoczne jako "ukryte" zanim main_window.show() w ogóle
+        się wykona), tylko bezpośrednio na is_standard_button_visible()."""
+        while self.quick_btn_grid.count():
+            self.quick_btn_grid.takeAt(0)
+
+        buttons = [
+            self._quick_standard_button_widgets[key]
+            for key in self._QUICK_BTN_GRID_ORDER
+            if is_standard_button_visible(self.shop_config, key)
+        ]
+
+        cols = 3
+        for i, btn in enumerate(buttons):
+            self.quick_btn_grid.addWidget(btn, i // cols, i % cols)
+
+    def _update_quick_panel_profile_visibility(self):
+        """Widoczność każdego wbudowanego przycisku trybu szybkiego wg
+        is_standard_button_visible() (zapisane ustawienie projektu, inaczej
+        domyślne wg profilu - np. Rano/Popo tylko Dino, Może pracować tylko
+        profile custom) - wołane przy każdej zmianie profilu/lokalizacji i
+        po zapisaniu "Ustawień trybu szybkiego"."""
+        for key, btn in self._quick_standard_button_widgets.items():
+            btn.setVisible(key != "work" and is_standard_button_visible(self.shop_config, key))
+        self._relayout_quick_btn_grid()
 
     def _update_settlement_section_visibility(self):
         is_generated = bool(self.schedule and getattr(self.schedule, "is_generated", False))
@@ -600,12 +1026,33 @@ class MainWindow(QMainWindow):
             on_edit_employee=self._edit_employee,
             on_context_menu=self._open_day_context_menu,
             on_header_menu=self._open_header_menu,
+            location_filter=self.selected_location_key,
         )
         self.grid.build()
         self.grid.refresh()
 
+    def _update_grid_legend(self):
+        """Widoczność legendy (menu Wygląd -> "Legenda kolorów", domyślnie
+        ukryta - patrz ShopConfig.show_grid_legend) i jej wygląd pod siatką
+        (patrz ui/grid_legend.py::GridLegendWidget) - "wyraźnie oddzielona
+        sekcja" gdy widocznych (przefiltrowanych po lokalizacji, tak jak w
+        samej siatce) pracowników jest więcej niż 10, bo przy dużej liczbie
+        wierszy siatka i tak zajmuje większość ekranu. Wołane z
+        _sync_everything() i _toggle_grid_legend()."""
+        visible = bool(self.shop_config and self.shop_config.show_grid_legend)
+        self.grid_legend.setVisible(visible)
+        self.show_grid_legend_action.setChecked(visible)
+
+        visible_count = len(self.grid.get_visible_employees()) if self.grid else 0
+        self.grid_legend.set_compact_section(visible_count > 10)
+
     def _update_window_title(self):
-        self.setWindowTitle(f"Grafik Dino — {self.month:02d}.{self.year}")
+        # Wersja programu zawsze bezpośrednio po nazwie ("Grafik pracy
+        # {APP_VERSION}"), przed nazwą projektu i miesiącem/rokiem.
+        name = self.shop_config.name if self.shop_config else ""
+        base = f"Grafik pracy {APP_VERSION}"
+        prefix = f"{base} — {name}" if name else base
+        self.setWindowTitle(f"{prefix} — {self.month:02d}.{self.year}")
 
     def _update_nominal_hours_label(self):
         if not self.shop_config:
@@ -619,59 +1066,123 @@ class MainWindow(QMainWindow):
         pass
 
     def _set_date_controls(self, year, month):
-        self._loading = True
-        self.year_spin.blockSignals(True)
-        self.month_spin.blockSignals(True)
-        self.year_spin.setValue(year)
-        self.month_spin.setValue(month)
         if hasattr(self, 'date_display_label'):
             self.date_display_label.setText(f"{month:02d}.{year}")
-        self.year_spin.blockSignals(False)
-        self.month_spin.blockSignals(False)
-        self._loading = False
 
-    def _enter_edit_date_mode(self):
-        self.date_display_label.hide()
-        self.btn_change_date.hide()
-        self.date_edit_widget.show()
+    def _open_month_picker(self):
+        """Wpięte pod przycisk "🗓 Zmień datę" - okno-kalendarz
+        (ui/month_picker_dialog.py) pokazujące wszystkie miesiące tego
+        projektu razem z ich stanem (patrz
+        model/monthly_project.py::describe_month_state), tak żeby przełączanie
+        było świadomym wyborem, nie zgadywaniem "czy tu coś już jest"."""
+        dialog = MonthPickerDialog(self.project, self.year, self.month, self)
+        if dialog.exec() == QDialog.Accepted and dialog.result_year is not None:
+            self._switch_to_month(dialog.result_year, dialog.result_month)
 
-    def _save_date_clicked(self):
-        new_year = self.year_spin.value()
-        new_month = self.month_spin.value()
-        
+    def _switch_to_month(self, new_year: int, new_month: int) -> None:
+        """Przełącza na (new_year, new_month) w ramach TEGO SAMEGO projektu -
+        jedyna droga zmiany miesiąca (_open_month_picker). Od pamięci wielu
+        miesięcy (model/monthly_project.py) nieodwracalnie NIC się już nie
+        kasuje: miesiąc odwiedzony wcześniej wraca dokładnie taki, jaki
+        został zostawiony; naprawdę nowy miesiąc startuje pusty (ale z tymi
+        samymi pracownikami/lokalizacjami/regułami generatora), z pamięcią
+        końca poprzedniego miesiąca doliczoną automatycznie, jeśli miesiąc
+        bezpośrednio go poprzedzający już istnieje w projekcie - niezależnie
+        od tego, który miesiąc był aktualnie otwarty przed przełączeniem."""
         if new_year == self.year and new_month == self.month:
-            self.date_edit_widget.hide()
-            self.date_display_label.show()
-            self.btn_change_date.show()
             return
 
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Zmiana miesiąca")
-        msg_box.setText("Zmiana miesiąca spowoduje usunięcie wszystkich zmian wprowadzonych na grafiku. Kontynuować?")
-        btn_yes = msg_box.addButton("Tak", QMessageBox.YesRole)
-        btn_cancel = msg_box.addButton("Anuluj", QMessageBox.RejectRole)
-        msg_box.exec()
+        self._loading = True
 
-        if msg_box.clickedButton() == btn_yes:
-            self._loading = True
-            self.year = new_year
-            self.month = new_month
-            self.date_display_label.setText(f"{self.month:02d}.{self.year}")
-            
-            self._init_state()
-            self._update_nominal_hours_label()
-            self._sync_everything()
-            self.statusBar().showMessage("Utworzono nowy grafik dla wybranego miesiąca.", 2500)
-            
-            self.date_edit_widget.hide()
-            self.date_display_label.show()
-            self.btn_change_date.show()
-            self._loading = False
+        # Bieżący stan zawsze z powrotem do kontenera, zanim przełączymy -
+        # self.schedule/self.shop_config mogły być edytowane w miejscu od
+        # czasu ostatniego project.put() (te same referencje, więc to tylko
+        # zabezpieczenie, nie właściwa kopia).
+        self.project.put(self.year, self.month, self.schedule, self.shop_config)
+
+        existing = self.project.get(new_year, new_month)
+        if existing is not None:
+            self.schedule, self.shop_config = existing
         else:
-            self._set_date_controls(self.year, self.month)
-            self.date_edit_widget.hide()
-            self.date_display_label.show()
-            self.btn_change_date.show()
+            # Nowy miesiąc w tym projekcie - ten sam wzorzec co dawny
+            # _save_date_clicked: NIE zupełnie świeży ShopConfig (to gubiłoby
+            # profil działalności/lokalizacje/presety/reguły generatora),
+            # tylko kopia bieżącego, zerowana z tego co miesiąc-specyficzne
+            # (patrz ShopConfig.reset_for_new_month). Kopia (nie ten sam
+            # obiekt) - inaczej edycja "nowego" miesiąca cofałaby się też do
+            # miesięcy już zapisanych w kontenerze, które współdzieliłyby tę
+            # samą instancję.
+            new_shop_config = deepcopy(self.shop_config)
+            new_shop_config.reset_for_new_month(new_year, new_month)
+            self.shop_config = new_shop_config
+            self.schedule = MonthSchedule(new_year, new_month, employees=self.schedule.employees)
+
+            prev_year, prev_month = previous_calendar_month(new_year, new_month)
+            predecessor = self.project.get(prev_year, prev_month)
+            if PREVIOUS_MONTH_MEMORY_ENABLED and predecessor is not None:
+                predecessor_schedule, _ = predecessor
+                self._carry_over_previous_month_end_shifts(predecessor_schedule)
+
+            self.project.put(new_year, new_month, self.schedule, self.shop_config)
+
+        self.controller = ScheduleController(self.schedule, self.shop_config)
+        self.year, self.month = new_year, new_month
+        self._set_date_controls(self.year, self.month)
+
+        self._update_nominal_hours_label()
+        self._sync_everything()
+        self.statusBar().showMessage(f"Przełączono na {new_month:02d}.{new_year}.", 2500)
+        self._loading = False
+
+    def _carry_over_previous_month_end_shifts(self, old_schedule: MonthSchedule) -> None:
+        """"Pamięć poprzedniego miesiąca" (patrz PreviousMonthShiftEnd) -
+        dla każdego pracownika przejmuje z KOŃCZĄCEGO SIĘ grafiku (przekazany
+        jawnie - już niekoniecznie tożsamy z tym, co było aktualnie otwarte
+        przed przełączeniem, patrz _switch_to_month) koniec jego ostatniej
+        zmiany w ostatnim dniu tamtego miesiąca, żeby generator/rest-constraint
+        w nowym miesiącu wiedziały, kiedy naprawdę mieli ostatni odpoczynek
+        (patrz logic/generator/rest_constraint.py,
+        logic/generator/duty_rotation_rest_constraint.py). Pomija dni puste
+        (wolne/urlop/L4) - tam nie ma żadnego "końca" do przejęcia."""
+        last_day = old_schedule.days_in_month
+        for emp in old_schedule.employees:
+            ds = old_schedule.get_day(emp, last_day)
+            if ds.is_empty() or ds.end is None:
+                continue
+            self.schedule.set_previous_month_end_shift(emp, ds.end, ds.crosses_midnight())
+
+    def _previous_month_memory_note(self) -> str | None:
+        """Info do okna po udanej generacji, gdy pamięć poprzedniego
+        miesiąca (patrz PREVIOUS_MONTH_MEMORY_ENABLED,
+        _carry_over_previous_month_end_shifts) jest włączona, ale nie ma
+        DANYCH dla ŻADNEGO pracownika tego miesiąca (pierwszy miesiąc
+        projektu / skok przez miesiąc bezpośrednio poprzedzający) -
+        generator po cichu pomija wtedy sprawdzenie przerwy 11h na
+        początku miesiąca względem poprzedniego (patrz
+        logic/generator/rest_constraint.py::_add_previous_month_rest_constraint,
+        `if carry is None: continue`) - warto to zasygnalizować, zamiast
+        zostawiać niezauważone."""
+        if not PREVIOUS_MONTH_MEMORY_ENABLED or not self.schedule.employees:
+            return None
+
+        has_any_carryover = any(
+            self.schedule.get_previous_month_end_shift(emp) is not None
+            for emp in self.schedule.employees
+        )
+        if has_any_carryover:
+            return None
+
+        return (
+            "Uwaga: brak zapamiętanych godzin zakończenia poprzedniego miesiąca - "
+            "przerwa 11h na początku tego miesiąca nie została sprawdzona względem "
+            "poprzedniego miesiąca."
+        )
+
+    def _open_previous_month_shift_dialog(self):
+        dialog = PreviousMonthShiftDialog(self.schedule, self)
+        if dialog.exec() == QDialog.Accepted:
+            dialog.apply_to_schedule()
+            self._sync_everything()
 
     def _on_generate_clicked(self):
         self._generate_schedule(force=True)
@@ -684,10 +1195,29 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Generowanie", "Dodaj pracowników przed generowaniem grafiku.")
             return
 
+        # Generuj tylko dla obecnie wybranej placówki (zgłoszenie klienta
+        # 2026-09-28) - "Generuj grafik" nie powinien dotykać pozostałych
+        # placówek projektu. Brak zdefiniowanych lokalizacji (projekt
+        # jednolokalizacyjny) - self.selected_location_key jest wtedy None,
+        # więc AutoScheduleGenerator.generate() dostaje None i generuje
+        # cały projekt, dokładnie jak dotychczas.
+        location_key = self.selected_location_key
+        if self.shop_config.locations and location_key is not None:
+            location_employees = [
+                e for e in self.schedule.employees if e.location_key == location_key
+            ]
+            if not location_employees:
+                location_name = self.shop_config.locations[location_key].name
+                QMessageBox.information(
+                    self, "Generowanie",
+                    f"Dodaj pracowników do lokalizacji „{location_name}” przed generowaniem grafiku.",
+                )
+                return
+
         self._show_loading()
 
         self.thread = QThread()
-        self.worker = GeneratorWorker(self.controller, force=force)
+        self.worker = GeneratorWorker(self.controller, force=force, location_key=location_key)
 
         self.worker.moveToThread(self.thread)
 
@@ -710,10 +1240,14 @@ class MainWindow(QMainWindow):
             self.demo.register_generation()
             self._update_generate_label()
 
+            note = self._previous_month_memory_note()
             if self.demo.is_demo:
-                self.demo.show_after_generate(self)
+                self.demo.show_after_generate(self, extra_note=note)
             else:
-                QMessageBox.information(self, "Sukces", "Grafik został wygenerowany.")
+                message = "Grafik został wygenerowany."
+                if note:
+                    message += f"\n\n{note}"
+                QMessageBox.information(self, "Sukces", message)
         else:
             reasons = result.get("infeasibility_reasons", []) if result else []
             reason_text = "\n".join(f"• {reason}" for reason in reasons)
@@ -726,7 +1260,7 @@ class MainWindow(QMainWindow):
             )
 
     def _open_add_employee(self):
-        dialog = EmployeeDialog(self)
+        dialog = EmployeeDialog(self, shop_config=self.shop_config, default_location_key=self.selected_location_key)
 
         if dialog.exec() != QDialog.Accepted:
             return
@@ -737,7 +1271,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Dodano pracownika.", 2500)
 
     def _edit_employee(self, emp):
-        dialog = EmployeeDialog(self, employee=emp)
+        dialog = EmployeeDialog(self, employee=emp, shop_config=self.shop_config)
         if dialog.exec() != QDialog.Accepted:
             return
 
@@ -754,11 +1288,29 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Zapisano pracownika.", 2500)
 
     def _edit_day(self, emp, day):
-        hours = self.shop_config.get_open_hours_for_day(day)
+        # Codex review finding on this PR: this read project-wide hours even
+        # for an employee assigned to a location with its own, different
+        # hours, while night_hours just below was already resolved per
+        # location - the dialog validated/bounded a manual entry against the
+        # wrong open/close window for such an employee.
+        location = self.shop_config.get_location(emp)
+        hours = location.get_open_hours_for_day(day)
         if not hours:
             return
 
         ds = self.controller.get_day(emp, day)
+        duty_rotation = location.get_duty_rotation()
+        # Placówka Ochrony z godzinami otwarcia (np. 15:00-07:00, doba 24h) -
+        # generator sam przydziela tam zmiany przez północ i 24h (patrz
+        # logic/generator/opening_hours_coverage.py), więc ręcznie też można.
+        from logic.generator.opening_hours_coverage import employee_uses_opening_hours_model
+        overnight = employee_uses_opening_hours_model(self.shop_config, emp)
+        # Pracownik rotacji służby 24/7: dowolne godziny (także przez
+        # północ) i zmiana 24h - generator liczy ręczny wpis jako pokrycie.
+        # Automatycznie wykryte okno nocne 22:00-06:00 nie jest tu żadną
+        # zmianą rotacji (ani zmianą modelu godzin otwarcia), więc nie jest
+        # podpowiadane.
+        night_hours = None if (duty_rotation or overnight) else location.get_night_shift_hours()
         dialog = DayEditDialog(
             self,
             start=None if ds.is_leave else ds.start,
@@ -766,6 +1318,10 @@ class MainWindow(QMainWindow):
             open_start=hours[0],
             open_end=hours[1],
             daily_hours=emp.daily_hours,
+            night_hours=night_hours,
+            duty_rotation=duty_rotation,
+            full_day=bool(getattr(ds, "is_full_day", False)),
+            overnight=overnight,
         )
 
         if dialog.exec() != QDialog.Accepted:
@@ -777,6 +1333,8 @@ class MainWindow(QMainWindow):
             self.controller.set_day_leave(emp, day)
         elif dialog.result_mode == "sick":
             self.controller.set_day_sick(emp, day)
+        elif dialog.result_mode == "full_day":
+            self.controller.set_day_full_day_shift(emp, day, dialog.result_start)
         elif dialog.result_mode == "hours":
             from datetime import datetime
 
@@ -788,9 +1346,32 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Błąd", "Niepoprawny format godziny.")
                 return
 
-            if end_dt <= start_dt:
+            is_configured_night_shift = (
+                night_hours is not None and (dialog.result_start, dialog.result_end) == night_hours
+            )
+            if end_dt <= start_dt and not is_configured_night_shift and not duty_rotation and not overnight:
                 QMessageBox.warning(self, "Błąd", "Godzina zakończenia musi być późniejsza niż rozpoczęcia.")
                 return
+
+            # Generator już to wykrywa (add_no_night_constraint teraz zna
+            # SHIFT_NIGHT) i zgłosi sprzeczność przy generowaniu, jeśli
+            # polityka "Zakaz pracy nocnej" jest Wymagana - ale wtedy
+            # użytkownik dostaje ogólny komunikat o niespełnialnych
+            # regułach, bez wskazania które dnia/pracownika. Ostrzegamy
+            # od razu przy zapisie, zamiast wyłącznie po fakcie.
+            if is_configured_night_shift and getattr(emp, "no_night", False):
+                reply = QMessageBox.question(
+                    self,
+                    "Zakaz pracy nocnej",
+                    f"{emp.display_name()} ma zaznaczony zakaz pracy nocnej. "
+                    "Ręczne przypisanie zmiany nocnej może uniemożliwić wygenerowanie "
+                    "grafiku (jeśli ta reguła jest ustawiona jako Wymagana) albo zostać "
+                    "ukarane jako naruszenie preferencji. Kontynuować mimo to?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if reply != QMessageBox.Yes:
+                    return
 
             self.controller.set_day_hours(emp, day, dialog.result_start, dialog.result_end)
 
@@ -890,46 +1471,145 @@ class MainWindow(QMainWindow):
         self._sync_everything()
 
     def _open_header_menu(self, day, global_pos):
-        hours = self.shop_config.get_open_hours_for_day(day)
-        if not hours:
-            weekday = self.shop_config.weekday(day)
-            hours = self.shop_config.get_open_hours_for_weekday(weekday)
+        # Ta kolumna nagłówka jest osadzona w kontekście aktualnie
+        # przeglądanej lokalizacji (patrz _sync_grid location_filter) - dzień
+        # nadpisany tu musi trafić do JEJ day_overrides/public_holidays, bo
+        # to je czyta generator (shop.get_location(emp), patrz
+        # model/location.py), a nie projektowe ShopConfig.day_overrides.
+        from model.business_profile import get_profile
 
-        dialog = DayOverrideDialog(self, day, hours, self.shop_config)
+        location = self.shop_config.locations.get(self.selected_location_key)
+        if location is not None:
+            uses_trade_calendar = get_profile(self.shop_config.business_type).uses_trade_calendar
+            hours = location.get_open_hours_for_day(self.schedule.year, self.schedule.month, day, uses_trade_calendar)
+            weekday = location.weekday(self.schedule.year, self.schedule.month, day)
+            fallback_hours = location.open_hours.get(weekday)
+        else:
+            hours = self.shop_config.get_open_hours_for_day(day)
+            weekday = self.shop_config.weekday(day)
+            fallback_hours = self.shop_config.get_open_hours_for_weekday(weekday)
+
+        # `hours` (None gdy dzień jest faktycznie zamknięty - święto,
+        # "Nieczynne" w tygodniu, niedziela niehandlowa) NIE MOŻE tu
+        # dostawać fallbacku na zwykłe godziny tygodniowe - dialog musi
+        # zobaczyć prawdziwy stan (i sam automatycznie zaznaczyć "Nieczynne
+        # tego dnia"), inaczej użytkownik widzi zwykłe godziny, jakby dzień
+        # był otwarty. `fallback_hours` to osobna wartość - tylko do
+        # podpowiedzi pól czasu, gdyby użytkownik odznaczył "Nieczynne".
+        dialog = DayOverrideDialog(self, day, hours or (None, None), self.shop_config, fallback_hours=fallback_hours)
         result = dialog.exec()
 
         if result != QDialog.Accepted:
             return
 
+        target_overrides = location.day_overrides if location is not None else self.shop_config.day_overrides
+        target_holidays = location.public_holidays if location is not None else self.shop_config.public_holidays
+
         # Undo must restore both the schedule and this day-specific shop setup.
         self.controller.snapshot()
         if dialog.result_mode == "reset":
-            self.shop_config.day_overrides.pop(day, None)
-            self.shop_config.public_holidays.discard(day)
+            target_overrides.pop(day, None)
+            target_holidays.discard(day)
         elif dialog.result_mode == "save":
-            self.shop_config.day_overrides[day] = (dialog.result_start, dialog.result_end)
+            target_overrides[day] = (dialog.result_start, dialog.result_end)
             if dialog.result_holiday:
-                self.shop_config.public_holidays.add(day)
+                target_holidays.add(day)
             else:
-                self.shop_config.public_holidays.discard(day)
+                target_holidays.discard(day)
 
         self._update_nominal_hours_label()
         self._sync_grid()
+        # Nadpisanie godzin/święta to ustawienie (day_overrides/public_holidays),
+        # nie dana grafiku - reszta okien ustawień (Konfiguracja, Lokalizacje,
+        # tryb szybki) zapisuje się od razu po zamknięciu, więc to też powinno,
+        # zamiast czekać na osobne "Zapisz" albo monit przy zamknięciu programu.
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
         self.statusBar().showMessage("Zaktualizowano godziny dnia.", 2500)
 
     def _open_config(self):
-        dialog = ConfigDialog(self, self.shop_config)
+        dialog = ConfigDialog(self, self.shop_config, location_key=self.selected_location_key)
         if dialog.exec() != QDialog.Accepted:
             return
         self._update_nominal_hours_label()
         self._sync_grid()
+        self._update_quick_panel_profile_visibility()
         # Constraint policies are part of the local working project, so retain
         # the selected generator configuration for the next application start.
         try:
-            save_project("last_project.json", self.schedule, self.shop_config)
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano konfigurację.", 2500)
+
+    def _open_locations_dialog(self):
+        dialog = LocationsDialog(self, self.shop_config)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        # Lokalizacja usunięta/przemianowana może osierocić pracowników
+        # przypisanych do jej starego klucza - dopinamy ich do pierwszej
+        # dostępnej, tak samo jak przy wczytywaniu starego pliku.
+        assign_missing_location_keys(self.schedule, self.shop_config)
+        self._sync_everything()
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
+        self.statusBar().showMessage("Zapisano lokalizacje.", 2500)
+
+    def _set_hours_display_mode(self, mode: str):
+        if self.shop_config is None or self.shop_config.hours_display_mode == mode:
+            return
+        self.shop_config.hours_display_mode = mode
+        self._update_hours_display_menu()
+        self.grid.refresh()
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
+        self.statusBar().showMessage("Zapisano wygląd komórek kompaktowych.", 2500)
+
+    def _update_hours_display_menu(self):
+        """Zaznaczenie w menu Wygląd -> "Wygląd komórek kompaktowych" ma zawsze
+        odzwierciedlać aktualnie wczytany projekt - wołane z
+        _sync_everything(), nie tylko z _set_hours_display_mode()."""
+        mode = self.shop_config.hours_display_mode if self.shop_config else "standard"
+        self.hours_display_standard_action.setChecked(mode == "standard")
+        self.hours_display_fractions_action.setChecked(mode == "fractions")
+
+    def _toggle_grid_legend(self):
+        if self.shop_config is None:
+            return
+        self.shop_config.show_grid_legend = not self.shop_config.show_grid_legend
+        self._update_grid_legend()
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
+        self.statusBar().showMessage(
+            "Pokazano legendę kolorów." if self.shop_config.show_grid_legend else "Ukryto legendę kolorów.",
+            2500,
+        )
+
+    def _open_quick_mode_settings(self):
+        dialog = QuickModeSettingsDialog(
+            self, self.shop_config.quick_mode_presets, self.shop_config,
+        )
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.shop_config.quick_mode_presets = dialog.result_presets
+        self.shop_config.set_quick_mode_standard_buttons(dialog.result_standard_buttons)
+        self._rebuild_quick_preset_buttons()
+        self._update_quick_panel_profile_visibility()
+        try:
+            save_project_bundle("last_project.json", self.project, self.year, self.month)
+        except OSError:
+            pass
+        self.statusBar().showMessage("Zapisano ustawienia trybu szybkiego.", 2500)
 
     def _save_project(self):
 
@@ -949,8 +1629,10 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith((".myp", ".json")):
             path += ".json" if selected_filter.endswith("(*.json)") else ".myp"
 
-        save_project(path, self.schedule, self.shop_config)
-        save_project("last_project.json", self.schedule, self.shop_config)
+        # Cały projekt (patrz model/monthly_project.py) - każdy miesiąc
+        # odwiedzony w tej sesji, nie tylko aktualnie otwarty.
+        save_project_bundle(path, self.project, self.year, self.month)
+        save_project_bundle("last_project.json", self.project, self.year, self.month)
         self.statusBar().showMessage("Zapisano projekt.", 2500)
 
     def _load_project(self):
@@ -960,15 +1642,14 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        self._apply_loaded_project(*load_project(path))
+        self._apply_loaded_project(*load_project_bundle(path))
         self.statusBar().showMessage("Wczytano projekt.", 2500)
 
-    def _apply_loaded_project(self, schedule, shop_config):
-        self.schedule = schedule
-        self.shop_config = shop_config
+    def _apply_loaded_project(self, project: MonthlyProject, active_year: int, active_month: int):
+        self.project = project
+        self.year, self.month = active_year, active_month
+        self.schedule, self.shop_config = self.project.get(self.year, self.month)
         self.controller = ScheduleController(self.schedule, self.shop_config)
-        self.year = self.schedule.year
-        self.month = self.schedule.month
         self._set_date_controls(self.year, self.month)
         self._update_nominal_hours_label()
         self._sync_everything()
@@ -980,7 +1661,7 @@ class MainWindow(QMainWindow):
         if not path or not os.path.exists(path):
             return False
         try:
-            self._apply_loaded_project(*load_project(path))
+            self._apply_loaded_project(*load_project_bundle(path))
         except Exception:
             return False
         self.statusBar().showMessage("Wczytano projekt.", 2500)
@@ -993,12 +1674,26 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        export_schedule_to_excel(self.schedule, self.year, self.month, path)
+        export_schedule_to_excel(
+            self.schedule, self.year, self.month, path, shop=self.shop_config,
+            employees=self.grid.get_visible_employees(),
+        )
         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500)
+
+    def _render_visible_schedule_image(self):
+        return render_schedule_image(
+            self.schedule, self.year, self.month, shop=self.shop_config,
+            employees=self.grid.get_visible_employees(),
+        )
 
     def _export_image(self):
         if self.demo.block_export(self):
             return
+
+        image = self._render_visible_schedule_image()
+        if not show_export_preview(image, "Podgląd grafiku — JPG", parent=self):
+            return
+
         path, _ = QFileDialog.getSaveFileName(self, "Eksport JPG", "", "Obraz JPG (*.jpg)")
         if not path:
             return
@@ -1006,8 +1701,155 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith(".jpg"):
             path += ".jpg"
 
-        export_schedule_to_image(self.schedule, self.year, self.month, path)
+        image.save(path, "JPEG", quality=95)
         self.statusBar().showMessage("Wyeksportowano do JPG.", 2500)
+
+    def _export_pdf(self):
+        if self.demo.block_export(self):
+            return
+
+        image = self._render_visible_schedule_image()
+        if not show_export_preview(image, "Podgląd grafiku — PDF", parent=self):
+            return
+
+        path, _ = QFileDialog.getSaveFileName(self, "Eksport PDF", "", "PDF (*.pdf)")
+        if not path:
+            return
+
+        if not path.lower().endswith(".pdf"):
+            path += ".pdf"
+
+        image.save(path, "PDF", resolution=150.0)
+        self.statusBar().showMessage("Wyeksportowano do PDF.", 2500)
+
+    def _pick_single_employee(self, title):
+        # Ograniczone do aktualnie wybranej placówki (patrz przełącznik pod
+        # "Grafik na:"), spójnie z tym, co użytkownik widzi w tabeli.
+        employees = self.grid.get_visible_employees()
+        if not employees:
+            QMessageBox.warning(self, title, "Brak pracowników w tej placówce.")
+            return None
+        names = [emp.display_name() for emp in employees]
+        name, ok = QInputDialog.getItem(self, title, "Pracownik:", names, editable=False)
+        if not ok:
+            return None
+        return employees[names.index(name)]
+
+    def _pick_card_scope(self, title):
+        """Wybór zakresu dla "Karty pracy": wszyscy pracownicy aktualnie
+        wybranej lokalizacji, jeden konkretny pracownik, albo anulowanie
+        (None)."""
+        box = QMessageBox(self)
+        box.setWindowTitle(title)
+        box.setText("Czy wygenerować kartę dla całej lokalizacji, czy dla jednego pracownika?")
+        btn_all = box.addButton("Cała lokalizacja", QMessageBox.AcceptRole)
+        btn_single = box.addButton("Wybierz pracownika...", QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Cancel)
+        box.exec()
+
+        clicked = box.clickedButton()
+        if clicked is btn_all:
+            return "all"
+        if clicked is btn_single:
+            return "single"
+        return None
+
+    def _employee_cards_scope_list(self, title):
+        """Zwraca listę pracowników do wygenerowania kart wg wyboru
+        użytkownika (cała lokalizacja / jeden pracownik), albo None przy
+        anulowaniu/braku pracowników."""
+        scope = self._pick_card_scope(title)
+        if scope is None:
+            return None
+
+        if scope == "all":
+            employees = self.grid.get_visible_employees()
+            if not employees:
+                QMessageBox.warning(self, title, "Brak pracowników w tej placówce.")
+                return None
+            return employees
+
+        emp = self._pick_single_employee(title)
+        if emp is None:
+            return None
+        return [emp]
+
+    def _export_employee_cards_excel(self):
+        if self.demo.block_export(self):
+            return
+        employees = self._employee_cards_scope_list("Karty pracy — Excel")
+        if not employees:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(self, "Karty pracy — Excel", "", "Excel (*.xlsx)")
+        if not path:
+            return
+
+        export_employee_cards_to_excel(self.schedule, self.year, self.month, path, shop=self.shop_config, employees=employees)
+        self.statusBar().showMessage("Wyeksportowano karty pracy do Excela.", 2500)
+
+    def _render_employee_card_images(self, employees):
+        return [
+            render_employee_card_image(self.schedule, self.year, self.month, self.shop_config, emp)
+            for emp in employees
+        ]
+
+    def _export_employee_cards_image(self):
+        if self.demo.block_export(self):
+            return
+        employees = self._employee_cards_scope_list("Karty pracy — JPG")
+        if not employees:
+            return
+
+        images = self._render_employee_card_images(employees)
+        if not show_export_preview(images, "Podgląd kart pracy — JPG", parent=self):
+            return
+
+        if len(employees) == 1:
+            emp = employees[0]
+            path, _ = QFileDialog.getSaveFileName(self, "Karta pracy — JPG", "", "Obraz JPG (*.jpg)")
+            if not path:
+                return
+            if not path.lower().endswith(".jpg"):
+                path += ".jpg"
+
+            images[0].save(path, "JPEG", quality=95)
+            self.statusBar().showMessage(f"Wyeksportowano kartę pracy {emp.display_name()} do JPG.", 2500)
+            return
+
+        folder = QFileDialog.getExistingDirectory(self, "Karty pracy — folder docelowy")
+        if not folder:
+            return
+
+        for emp, image in zip(employees, images):
+            name_part = sanitize_filename_part(f"{emp.last_name}_{emp.first_name}")
+            path = os.path.join(folder, f"Karta_pracy_{name_part}_{self.month:02d}_{self.year}.jpg")
+            image.save(path, "JPEG", quality=95)
+
+        self.statusBar().showMessage(f"Wyeksportowano {len(employees)} kart pracy do JPG.", 2500)
+
+    def _export_employee_cards_pdf(self):
+        if self.demo.block_export(self):
+            return
+        employees = self._employee_cards_scope_list("Karty pracy — PDF")
+        if not employees:
+            return
+
+        images = self._render_employee_card_images(employees)
+        if not show_export_preview(images, "Podgląd kart pracy — PDF", parent=self):
+            return
+
+        # Jeden dokument PDF niezależnie od liczby pracowników - jedna
+        # strona na pracownika (patrz save_employee_card_pages_to_pdf), więc
+        # w przeciwieństwie do JPG nie ma tu potrzeby wyboru folderu.
+        path, _ = QFileDialog.getSaveFileName(self, "Karty pracy — PDF", "", "PDF (*.pdf)")
+        if not path:
+            return
+        if not path.lower().endswith(".pdf"):
+            path += ".pdf"
+
+        save_employee_card_pages_to_pdf(images, path)
+        self.statusBar().showMessage(f"Wyeksportowano {len(employees)} kart(y) pracy do PDF.", 2500)
 
     def _update_generate_label(self):
         remaining = self.demo.get_remaining_generations()
@@ -1035,7 +1877,7 @@ class MainWindow(QMainWindow):
             temp_path = temp_file.name
             temp_file.close()
 
-            export_schedule_to_image(self.schedule, self.year, self.month, temp_path)
+            self._render_visible_schedule_image().save(temp_path, "JPEG", quality=95)
 
             # 2. printer
             printer = QPrinter(QPrinter.HighResolution)
@@ -1124,14 +1966,22 @@ class MainWindow(QMainWindow):
         msg = QMessageBox(self)
         msg.setWindowTitle("O programie")
 
-        msg.setText(
-            "<b>Dingo!</b><br><br>"
-            "Nowoczesne narzędzie do tworzenia grafików pracy.<br><br>"
-            "Z dedykacją dla Mamy ❤️<br>"
-            "Dzięki za wsparcie i motywację.<br><br>"
-            f"<b>Wersja:</b> {APP_VERSION}<br><br>"
-            "Strona: madebykewin.pl"
-        )
+        if RELEASE_CHANNEL == "dino":
+            msg.setText(
+                "<b>Dingo!</b><br><br>"
+                "Nowoczesne narzędzie do tworzenia grafików pracy.<br><br>"
+                "Z dedykacją dla Mamy ❤️<br>"
+                "Dzięki za wsparcie i motywację.<br><br>"
+                f"<b>Wersja:</b> {APP_VERSION}<br><br>"
+                "Strona: madebykewin.pl"
+            )
+        else:
+            msg.setText(
+                "<b>Grafik pracy</b><br><br>"
+                "Nowoczesne narzędzie do tworzenia grafików pracy.<br><br>"
+                f"<b>Wersja:</b> {APP_VERSION}<br><br>"
+                "Strona: madebykewin.pl"
+            )
 
         msg.setTextFormat(Qt.RichText)
         msg.setTextInteractionFlags(Qt.TextBrowserInteraction)
@@ -1144,14 +1994,18 @@ class MainWindow(QMainWindow):
         if msg.clickedButton() == btn_open:
             QDesktopServices.openUrl(QUrl("https://madebykewin.pl"))
 
-    def _try_load_last_project(self):
+    def _try_load_last_project(self) -> bool:
+        """Returns whether a previously-saved project was actually loaded -
+        used at startup to tell a genuinely fresh install (see
+        _maybe_show_first_run_wizard) from a normal relaunch."""
         if not os.path.exists("last_project.json"):
-            return
+            return False
 
         try:
-            self._apply_loaded_project(*load_project("last_project.json"))
+            self._apply_loaded_project(*load_project_bundle("last_project.json"))
         except Exception:
-            pass
+            return False
+        return True
 
     def _toggle_expanded_view(self, checked):
         self.grid.set_compact_mode(not checked)
@@ -1231,12 +2085,10 @@ class MainWindow(QMainWindow):
         self.quick_selected_shift = shift_type
 
         # reset
-        self.btn_work.setChecked(False)
-        self.btn_morning.setChecked(False)
-        self.btn_afternoon.setChecked(False)
-        self.btn_off.setChecked(False)
-        self.btn_leave.setChecked(False)
-        self.btn_sick.setChecked(False)
+        for btn in self._quick_standard_button_widgets.values():
+            btn.setChecked(False)
+        for btn in self.quick_preset_buttons.values():
+            btn.setChecked(False)
 
         # Wyszarzone zamiast ukryte, żeby reszta panelu bocznego nie
         # "przeskakiwała" przy każdej zmianie typu zmiany w trybie szybkim.
@@ -1245,18 +2097,59 @@ class MainWindow(QMainWindow):
         self.quick_duration_label.setEnabled(is_work)
 
         # aktywny
-        if shift_type == "WORK":
-            self.btn_work.setChecked(True)
-        elif shift_type == "MORNING_CLASS":
-            self.btn_morning.setChecked(True)
-        elif shift_type == "AFTERNOON_CLASS":
-            self.btn_afternoon.setChecked(True)
-        elif shift_type == "OFF":
-            self.btn_off.setChecked(True)
-        elif shift_type == "LEAVE":
-            self.btn_leave.setChecked(True)
-        elif shift_type == "SICK":
-            self.btn_sick.setChecked(True)
+        key = next(
+            (k for k, st in self._quick_standard_button_shift_type.items() if st == shift_type),
+            None,
+        )
+        if key is not None:
+            self._quick_standard_button_widgets[key].setChecked(True)
+        elif shift_type.startswith("PRESET:"):
+            btn = self.quick_preset_buttons.get(shift_type.split(":", 1)[1])
+            if btn:
+                btn.setChecked(True)
+
+    def _rebuild_quick_preset_buttons(self):
+        while self.quick_presets_grid.count():
+            item = self.quick_presets_grid.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+                widget.deleteLater()
+        self.quick_preset_buttons = {}
+
+        presets = self.shop_config.quick_mode_presets if self.shop_config else []
+        # "visible" (patrz model/shop_config.py::normalize_quick_mode_presets)
+        # pozwala trzymać przygotowane przedziały bez pokazywania ich jako
+        # przycisk - odfiltrowane tu, więc nieaktywne nie zajmują miejsca
+        # w gridzie ani nie liczą się do decyzji, czy pokazać cały panel.
+        visible_presets = [p for p in presets if p.get("visible", True)]
+        self.quick_presets_label.setVisible(bool(visible_presets))
+
+        for index, preset in enumerate(visible_presets):
+            name = preset["name"]
+            btn = QPushButton(name)
+            btn.setCheckable(True)
+            btn.setObjectName("secondaryButton")
+            btn.setMinimumHeight(36)
+            if preset.get("full_day"):
+                btn.setToolTip(f"Cała doba (24h), start {preset['start']}.")
+            else:
+                btn.setToolTip(f"{preset['start']}–{preset['end']}")
+            shift_type = f"PRESET:{name}"
+            btn.clicked.connect(lambda _checked=False, st=shift_type: self._set_quick_shift(st))
+            self.quick_preset_buttons[name] = btn
+            row, col = divmod(index, 3)
+            self.quick_presets_grid.addWidget(btn, row, col)
+
+        # Wybrany wcześniej przedział mógł zostać usunięty/przemianowany w
+        # "Ustawieniach trybu szybkiego" - nie zostawiamy generatora trybu
+        # szybkiego wskazującego na już nieistniejący przycisk.
+        if (
+            isinstance(self.quick_selected_shift, str)
+            and self.quick_selected_shift.startswith("PRESET:")
+            and self.quick_selected_shift.split(":", 1)[1] not in self.quick_preset_buttons
+        ):
+            self.quick_selected_shift = None
 
     def _calc_end_from_daily(self, start_str, hours):
         from datetime import datetime, timedelta
@@ -1273,16 +2166,17 @@ class MainWindow(QMainWindow):
         return start.strftime(fmt)
 
     def _build_tutorial_steps(self):
+        welcome_title = "Witaj w Dingo!" if RELEASE_CHANNEL == "dino" else "Witaj!"
         return [
             TutorialStep(
-                "Witaj w Dingo!",
-                "Program służy do tworzenia grafików pracy dla sklepów.\n"
+                welcome_title,
+                "Program służy do tworzenia grafików pracy.\n"
                 "Możesz generować grafik automatycznie albo układać go ręcznie.",
             ),
             TutorialStep(
                 "Dodaj pracowników",
                 "Tutaj dodajesz pracowników i ustawiasz ich dane: wymiar etatu, "
-                "godziny dzienne oraz role (np. otwarcie, obsługa mięsa).",
+                "godziny dzienne oraz role.",
                 target=self.btn_add_employee,
             ),
             TutorialStep(
@@ -1298,9 +2192,25 @@ class MainWindow(QMainWindow):
                 target=self.grid,
             ),
             TutorialStep(
+                "Kopiuj / wklej dzień",
+                "Zaznacz dzień pracownika, wciśnij Ctrl+C, a potem Ctrl+V na "
+                "innym dniu, żeby skopiować cały jego stan - działa też dla "
+                "urlopu, L4, zmiany nocnej i zmiany 24h.",
+                target=self.grid,
+            ),
+            TutorialStep(
+                "Ikony przy pracowniku",
+                "Ikony obok nazwiska pracownika pokazują jego role: dokument - "
+                "priorytet „Umowa” w rozliczaniu godzin, przekreślone „24h” - "
+                "pracownik nie chce pojedynczych zmian 24h przy rotacji służby.",
+                target=self.grid,
+            ),
+            TutorialStep(
                 "Tryb szybki",
                 "Najszybszy sposób na ręczne zmiany: wybierz typ zmiany, ustaw "
-                "godziny i klikaj kolejne komórki w siatce.",
+                "godziny i klikaj kolejne komórki w siatce. Przyciskiem "
+                "„+ Dodaj własne...” zdefiniujesz własne, nazwane przedziały "
+                "czasowe.",
                 target=self.btn_quick_mode,
             ),
             TutorialStep(
@@ -1308,12 +2218,6 @@ class MainWindow(QMainWindow):
                 "Przełącza między pełnym widokiem grafiku a kompaktowym, "
                 "czytelnym jak kartka papieru.",
                 target=self.btn_expand_view,
-            ),
-            TutorialStep(
-                "Okres rozliczeniowy",
-                "Włącz, jeśli chcesz dostroić długość już przypisanych zmian do "
-                "celu godzinowego pracownika, bez ponownego generowania grafiku.",
-                target=self.btn_settlement_toggle,
             ),
             TutorialStep(
                 "Gotowe!",
@@ -1417,7 +2321,7 @@ class MainWindow(QMainWindow):
                 return
 
             try:
-                save_project("last_project.json", self.schedule, self.shop_config)
+                save_project_bundle("last_project.json", self.project, self.year, self.month)
             except:
                 pass
 
@@ -1432,16 +2336,62 @@ class MainWindow(QMainWindow):
     def _check_first_run(self):
         flag_path = "first_run.flag"
 
-        if not os.path.exists(flag_path):
+        if os.path.exists(flag_path):
+            return
 
-            def mark_seen():
-                try:
-                    with open(flag_path, "w") as f:
-                        f.write("seen")
-                except OSError:
-                    pass
+        def mark_seen():
+            try:
+                with open(flag_path, "w") as f:
+                    f.write("seen")
+            except OSError:
+                pass
 
+        # Placówkę konfigurujemy tylko gdy naprawdę nie ma jeszcze żadnego
+        # zapisanego projektu (świeży instal) - _init_state() w __init__
+        # zawsze tworzy w pamięci pusty, domyślny dino_retail, więc
+        # self.schedule tu nigdy nie jest None; prawdziwy sygnał "świeży
+        # instal" to _opened_existing_project ustawione w __init__. Poradnik
+        # zawsze zamyka tę sekwencję, po kreatorze albo od razu, jeśli
+        # kreatora nie było czego pokazywać.
+        if not self._opened_existing_project:
+            self._maybe_show_first_run_wizard(
+                on_finished=lambda: self._start_tutorial(on_finished=mark_seen)
+            )
+        else:
             self._start_tutorial(on_finished=mark_seen)
+
+    def _maybe_show_first_run_wizard(self, on_finished):
+        from ui.first_run_wizard import FirstRunWizardDialog
+
+        wizard = FirstRunWizardDialog(self)
+        wizard.exec()
+        if wizard.completed:
+            self._apply_first_run_wizard_result(wizard)
+        on_finished()
+
+    def _apply_first_run_wizard_result(self, wizard):
+        self.year = wizard.result_year
+        self.month = wizard.result_month
+        self._set_date_controls(self.year, self.month)
+
+        self.schedule = None
+        self._init_state()
+        self.shop_config.name = wizard.result_name
+        self.shop_config.business_type = wizard.result_business_type
+
+        from model.business_profile import get_custom_profile
+        custom = get_custom_profile(wizard.result_business_type)
+        if custom is not None:
+            # Zasady domyślne + ustawienia nowego projektu profilu (np. 8 h
+            # zamiast "8h 30 min" dla Ochrony) - patrz apply_new_project_defaults.
+            from logic.generator.custom_profile_wiring import apply_new_project_defaults
+            apply_new_project_defaults(self.shop_config, custom)
+        self.shop_config.constraint_policies.update(wizard.result_policy_overrides)
+
+        self._update_nominal_hours_label()
+        self._sync_everything()
+        save_project_bundle("last_project.json", self.project, self.year, self.month)
+        self.statusBar().showMessage("Utworzono placówkę.", 2500)
 
     def _clear_generated(self):
         if not self.schedule or not self.controller:
@@ -1526,7 +2476,9 @@ class MainWindow(QMainWindow):
 
     def _start_update_download(self, url):
         self.update_progress_dialog = QProgressDialog("Łączenie z serwerem aktualizacji...", "Anuluj", 0, 100, self)
-        self.update_progress_dialog.setWindowTitle("Aktualizacja DinGO")
+        self.update_progress_dialog.setWindowTitle(
+            "Aktualizacja DinGO" if RELEASE_CHANNEL == "dino" else "Aktualizacja programu"
+        )
         self.update_progress_dialog.setWindowModality(Qt.WindowModal)
         self.update_progress_dialog.setMinimumDuration(0)
         self.update_progress_dialog.setAutoClose(False)

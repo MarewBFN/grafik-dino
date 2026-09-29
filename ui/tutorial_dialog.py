@@ -16,8 +16,8 @@ class TutorialDialog(QDialog):
 
         # === TEKSTY ===
         self.steps = [
-            "Witaj w Grafik Dino v2!\n\n"
-            "Program służy do tworzenia grafików pracy dla sklepów.\n"
+            "Witaj w programie do grafików pracy!\n\n"
+            "Program służy do tworzenia grafików pracy dla Twojego zespołu.\n"
             "Możesz generować grafik automatycznie lub układać go ręcznie.",
 
             "Krok 1 — Dodaj pracowników\n\n"
@@ -25,7 +25,7 @@ class TutorialDialog(QDialog):
             "Każdy pracownik może mieć:\n"
             "- wymiar etatu\n"
             "- godziny dzienne\n"
-            "- role (np. otwarcie, mięso)",
+            "- role przypisane w Twojej branży",
 
             "Krok 2 — Generowanie grafiku\n\n"
             "Kliknij 'Generuj grafik', aby program ułożył grafik automatycznie.\n"

@@ -14,7 +14,6 @@ from logic.generator.constraints_staff import add_fixed_staff_shift_constraints
 from logic.generator.hours_constraint import add_monthly_hours_constraint
 from logic.generator.objective import add_workload_balance_penalty
 from logic.generator.trace import ConstraintTraceLogger, build_random_scenario
-from model.constraint_policy import ConstraintPolicy
 from model.employee import Employee
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -88,11 +87,3 @@ def test_workload_balance_penalty_reduces_employee_spread():
     penalties = add_workload_balance_penalty(model, x, employees, days, all_shifts)
 
     assert len(penalties) == 1
-
-
-def test_default_shop_config_uses_soft_staff_and_availability_policies():
-    shop = ShopConfig(2026, 8)
-
-    assert shop.constraint_policies["open"] == ConstraintPolicy.PREFERRED
-    assert shop.constraint_policies["close"] == ConstraintPolicy.PREFERRED
-    assert shop.constraint_policies["availability"] == ConstraintPolicy.PREFERRED

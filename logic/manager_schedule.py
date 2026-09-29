@@ -63,7 +63,14 @@ def apply_manager_schedule(schedule, shop, employee) -> None:
         if hours is None:
             continue
 
-        if not shop.is_trade_day(day):
+        # shop.is_trade_day() (poziom projektu) zna tylko ręcznie zaznaczone
+        # public_holidays/niedziele handlowe, NIE automatyczne zamykanie w
+        # polskie święta ustawowe z biblioteki holidays - to osobny
+        # mechanizm, per-placówka (LocationConfig.closed_on_public_holidays/
+        # is_closed_for_public_holiday). Bez tej drugiej sprawdzanej osobno,
+        # kierowniczka dostawała sztywną zmianę nawet w zamknięte święto
+        # (DINO_REGRESSION_AUDIT.md, punkt 4).
+        if not shop.is_trade_day(day) or shop.get_location(employee).is_closed_for_public_holiday(day):
             # Sklep zamknięty (np. święto) - nie ma czego przypisać.
             _lock_day_off(ds)
             continue

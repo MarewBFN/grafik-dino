@@ -9,6 +9,8 @@ venv/
 *.log
 dist/
 build/
+Output/
+*.flag
 project_dump.py
 wyciągarka.bat
 last_project.json

@@ -2,15 +2,26 @@ import calendar
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
+from logic.monthly_hours_status import monthly_hours_status
+from export.export_style import is_dino_style
+
+_OVERTIME_COLOR = (204, 0, 0)
+
 
 class ImageScheduleExporter:
-    def __init__(self, schedule, year, month):
+    def __init__(self, schedule, year, month, shop=None, employees=None):
+        """`shop` - opcjonalny ShopConfig, wyłącznie do podświetlenia
+        przekroczenia miesięcznego limitu godzin pełnego etatu na czerwono
+        (brak = brak podświetlenia, zachowanie sprzed tej funkcji).
+        `employees` - opcjonalna lista zamiast schedule.employees, do
+        wydruku pojedynczego pracownika."""
         self.schedule = schedule
         self.year = year
         self.month = month
+        self.shop = shop
 
         self.days = calendar.monthrange(year, month)[1]
-        self.employees = schedule.employees
+        self.employees = employees if employees is not None else schedule.employees
 
         self.NAME_W = 220
         self.LABEL_W = 40
@@ -20,7 +31,7 @@ class ImageScheduleExporter:
         self.HEADER_H = 140
         self.FOOTER_H = 100
 
-        self.width = self.NAME_W + self.LABEL_W + self.days * self.CELL_W + 4 * 80
+        self.width = self.NAME_W + self.LABEL_W + self.days * self.CELL_W + 5 * 80
         self.height = self.HEADER_H + len(self.employees) * 3 * self.CELL_H + self.FOOTER_H
 
         self.img = Image.new("RGB", (self.width, self.height), "white")
@@ -37,9 +48,16 @@ class ImageScheduleExporter:
         self.SATURDAY = (225, 225, 225)
         self.SUNDAY = (200, 200, 200)
 
-    def export(self, path):
+    def render(self):
+        """Rysuje grafik i zwraca gotowy obraz - bez zapisu, żeby ten sam
+        render mógł posłużyć zarówno JPG (`export`), jak i PDF
+        (`export/pdf_exporter.py`) bez powielania logiki rysowania."""
         self._draw_header()
         self._draw_table()
+        return self.img
+
+    def export(self, path):
+        self.render()
         self.img.save(path, "JPEG", quality=95)
 
     # ================= HEADER =================
@@ -99,7 +117,7 @@ class ImageScheduleExporter:
             )
 
         summary_x = start_x + self.days * self.CELL_W
-        headers = ["Godziny", "Urlop", "L4", "Razem"]
+        headers = ["Godziny", "Urlop", "L4", "Razem", "Nadgodziny"]
 
         for i, h in enumerate(headers):
             x = summary_x + i * 80
@@ -142,8 +160,12 @@ class ImageScheduleExporter:
                 mid_y = y + 2 * self.CELL_H
                 self.draw.line([x + 10, mid_y, x + self.CELL_W - 10, mid_y], fill=self.GRID)
 
+                # Bez znacznika "+1" dla zmian nocnych - usunięty całkiem na
+                # życzenie użytkownika.
+                end_text = self._format_hour(ds.end)
+
                 self.draw.text((x + self.CELL_W // 2, y + self.CELL_H // 2), self._format_hour(ds.start), fill=(0, 0, 0), font=self.font, anchor="mm")
-                self.draw.text((x + self.CELL_W // 2, y + self.CELL_H + self.CELL_H // 2), self._format_hour(ds.end), fill=(0, 0, 0), font=self.font, anchor="mm")
+                self.draw.text((x + self.CELL_W // 2, y + self.CELL_H + self.CELL_H // 2), end_text, fill=(0, 0, 0), font=self.font, anchor="mm")
                 self.draw.text((x + self.CELL_W // 2, y + 2 * self.CELL_H + self.CELL_H // 2), ds.total_as_str(), fill=(0, 0, 0), font=self.font, anchor="mm")
 
         summary_x = self.NAME_W + self.LABEL_W + self.days * self.CELL_W
@@ -153,12 +175,18 @@ class ImageScheduleExporter:
         sick = self.schedule.sick_hours_for_employee(emp)
         sum_all = self.schedule.total_with_leave_and_sick_for_employee(emp)
 
-        values = [total, leave, sick, sum_all]
+        hours_status = self.shop is not None and monthly_hours_status(self.schedule, self.shop, emp)
+        is_over = bool(hours_status and hours_status["is_over"])
+        over_minutes = hours_status["over_minutes"] if hours_status else 0
+        overtime_str = f"{over_minutes // 60}:{over_minutes % 60:02d}"
+
+        values = [total, leave, sick, sum_all, overtime_str]
 
         for i, val in enumerate(values):
             x = summary_x + i * 80
             self.draw.rectangle([x, y, x + 80, y + 3 * self.CELL_H], outline=self.GRID)
-            self._draw_centered_text(x + 40, y + self.CELL_H, str(val), self.font)
+            fill = _OVERTIME_COLOR if (i in (0, 4) and is_over) else (0, 0, 0)
+            self._draw_centered_text(x + 40, y + self.CELL_H, str(val), self.font, fill=fill)
 
     # ================= UTILS =================
 
@@ -169,14 +197,18 @@ class ImageScheduleExporter:
             return str(int(time_str.split(":")[0]))
         return time_str
 
-    def _draw_centered_text(self, x, y, text, font):
+    def _draw_centered_text(self, x, y, text, font, fill=(0, 0, 0)):
         bbox = self.draw.textbbox((0, 0), text, font=font)
         w = bbox[2] - bbox[0]
         h = bbox[3] - bbox[1]
-        self.draw.text((x - w // 2, y - h // 2), text, fill=(0, 0, 0), font=font)
+        self.draw.text((x - w // 2, y - h // 2), text, fill=fill, font=font)
 
 
-def export_schedule_to_image(schedule, year, month, path):
-    exporter = ImageScheduleExporter(schedule, year, month)
+def export_schedule_to_image(schedule, year, month, path, shop=None, employees=None):
+    if not is_dino_style(shop):
+        from export.security_image_exporter import export_security_schedule_to_image
+        return export_security_schedule_to_image(schedule, year, month, path, shop=shop, employees=employees)
+
+    exporter = ImageScheduleExporter(schedule, year, month, shop=shop, employees=employees)
     exporter.export(path)
     return True

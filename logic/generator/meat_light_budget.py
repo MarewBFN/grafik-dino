@@ -46,8 +46,13 @@ def build_meat_light_duty(
 
     max_slots = max(0, max_minutes // SLOT_MINUTES)
 
+    # Patrz komentarz w meat_constraint.py::add_meat_coverage_constraint -
+    # ten sam problem (godziny per-placówka a nie projektowe) i ta sama
+    # naprawa (DINO_REGRESSION_AUDIT.md, punkt 3).
+    hours_location = shop.get_location(employees[0]) if employees else shop
+
     for d in trade_days:
-        hours = shop.get_open_hours_for_day(d)
+        hours = hours_location.get_open_hours_for_day(d)
         if not hours:
             continue
         open_time, close_time = hours

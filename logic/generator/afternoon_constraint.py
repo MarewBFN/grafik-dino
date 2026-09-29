@@ -16,7 +16,8 @@ def add_no_afternoon_constraint(
     START_SHIFT_MAP,
     END_SHIFT_MAP,
     soft=False,
-    trace=None
+    trace=None,
+    schedule=None,
 ):
     if trace is not None:
         trace.log_constraint("no_afternoon", f"soft={soft}")
@@ -32,6 +33,13 @@ def add_no_afternoon_constraint(
             continue
 
         for d in days:
+            # Patrz analogiczny komentarz w night_constraint.py - ręczny
+            # wpis (is_locked) musi wygrywać, żeby wyjątkowe ręczne
+            # popołudnie dla osoby z no_afternoon nie robiło modelu
+            # sprzecznym.
+            if schedule is not None and schedule.get_day(emp, d).is_locked:
+                continue
+
             for s in afternoon_shifts:
                 if soft:
                     v = model.NewBoolVar(f"no_afternoon_violation_e{e}_d{d}_s{s}")

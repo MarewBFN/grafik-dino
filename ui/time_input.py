@@ -70,6 +70,13 @@ class TimeInputWidget(QWidget):
         else:
             formatted = digits
 
+        # "24:00" bywa wpisywane jako "koniec doby" - dla programu (i dla
+        # użytkownika) to dokładnie to samo co "00:00", więc normalizujemy
+        # od razu przy wpisywaniu zamiast zostawiać zapis, którego
+        # datetime.strptime("%H:%M") nie umie sparsować (godziny 0-23).
+        if formatted[:2] == "24":
+            formatted = "00" + formatted[2:]
+
         if formatted != text:
             self.input.blockSignals(True)
             self.input.setText(formatted)
@@ -92,6 +99,8 @@ class TimeInputWidget(QWidget):
 
         try:
             h, m = map(int, time_str.split(":"))
+            if h == 24:
+                h = 0
             formatted = f"{h:02d}:{m:02d}"
             self.input.setText(formatted)
             self._last_valid_time = formatted

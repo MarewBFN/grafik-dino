@@ -122,9 +122,20 @@ def add_meat_coverage_constraint(
     violations = []
     slot_duty_sum = slot_duty_sum or {}
 
+    # Mięso to funkcja profilu Dino, koncepcyjnie jednolokalizacyjna, ale
+    # shop.get_open_hours_for_day(d) (poziom projektu) nie widzi godzin
+    # edytowanych per-placówka w nowym oknie Konfiguracji - te trafiają
+    # wyłącznie do LocationConfig.open_hours (patrz
+    # ui/config_dialog.py::_save(), target_hours). shop.get_location(emp)
+    # to ten sam wzorzec rozwiązywania godzin co reszta generatora (np.
+    # is_location_open_for_employee) - bierzemy dowolnego pracownika, bo
+    # dla Dino wszyscy dzielą tę samą placówkę (DINO_REGRESSION_AUDIT.md,
+    # punkt 3).
+    hours_location = shop.get_location(employees[0]) if employees else shop
+
     for d in trade_days:
 
-        hours = shop.get_open_hours_for_day(d)
+        hours = hours_location.get_open_hours_for_day(d)
         if not hours:
             continue
 

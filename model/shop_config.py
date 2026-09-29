@@ -1,5 +1,250 @@
 import calendar
+import copy
 from model.constraint_policy import ConstraintPolicy
+from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
+from model.location import LOCATION_RUN_SETTING_KEYS, LocationConfig, normalize_night_shift, normalize_duty_rotation
+
+# Klucz/nazwa auto-tworzonej domyślnej lokalizacji: każdy projekt ma zawsze
+# co najmniej jedną lokalizację (patrz ShopConfig.__init__/from_dict), żeby
+# UI/generator mogły zawsze liczyć na shop_config.locations będące niepuste.
+DEFAULT_LOCATION_KEY = "glowna"
+DEFAULT_LOCATION_NAME = "Placówka główna"
+
+
+def _default_location_from_shop(shop, key: str, name: str) -> LocationConfig:
+    """Buduje nową LocationConfig zasiedloną z pól poziomu projektu (open_hours,
+    trade_sundays, itd.) - używane zarówno przy tworzeniu nowego projektu, jak
+    i przy migracji starego pliku bez zdefiniowanych lokalizacji, tak że
+    zachowanie generatora się nie zmienia (patrz ShopConfig.__init__/from_dict)."""
+    loc = LocationConfig(key=key, name=name)
+    loc.open_hours = dict(shop.open_hours)
+    loc.trade_sundays = set(shop.trade_sundays)
+    loc.public_holidays = set(shop.public_holidays)
+    loc.day_overrides = dict(shop.day_overrides)
+    loc.duty_rotation = dict(shop.duty_rotation) if shop.duty_rotation else None
+    return loc
+
+
+class _LocationView:
+    """Duck-types the day-hours subset of ShopConfig's API (weekday /
+    get_open_hours_for_day) against one LocationConfig, bound to the parent
+    project's year/month - so constraint code can call
+    shop.get_location(emp).get_open_hours_for_day(d) the same way it calls
+    shop.get_open_hours_for_day(d) today, regardless of which one it got."""
+
+    def __init__(
+        self, location: LocationConfig, year: int, month: int, fallback_constraints: dict,
+        uses_trade_calendar: bool = True,
+    ):
+        self._location = location
+        self._year = year
+        self._month = month
+        self._fallback_constraints = fallback_constraints
+        self._uses_trade_calendar = uses_trade_calendar
+
+    def weekday(self, day: int) -> int:
+        return self._location.weekday(self._year, self._month, day)
+
+    def is_trade_day(self, day: int) -> bool:
+        return self._location.is_trade_day(self._year, self._month, day, self._uses_trade_calendar)
+
+    def get_open_hours_for_day(self, day: int):
+        return self._location.get_open_hours_for_day(self._year, self._month, day, self._uses_trade_calendar)
+
+    def get_weekly_open_hours_on(self, dt):
+        return self._location.get_weekly_open_hours_on(dt)
+
+    def get_night_shift_hours(self):
+        return self._location.get_night_shift_hours()
+
+    def get_duty_rotation(self):
+        return self._location.get_duty_rotation()
+
+    def get_round_clock_start_hour(self) -> str | None:
+        return self._location.round_clock_start_hour if self._location.is_24_7 else None
+
+    @property
+    def preferred_shifts_enabled(self) -> bool:
+        return self._location.preferred_shifts_enabled
+
+    @property
+    def preferred_shifts(self) -> list:
+        return self._location.preferred_shifts
+
+    def is_closed_for_public_holiday(self, day: int) -> bool:
+        return self._location.is_closed_for_public_holiday(self._year, self._month, day)
+
+    @property
+    def constraints(self) -> dict:
+        # LocationConfig always carries all of DEFAULT_LOCATION_CONSTRAINTS
+        # today, so this merge only matters for a location saved before a
+        # future key gets added there.
+        merged = dict(self._fallback_constraints)
+        merged.update(self._location.constraints)
+        return merged
+
+
+def normalize_quick_mode_presets(raw: list[dict] | None) -> list[dict]:
+    """Waliduje i porządkuje presety trybu szybkiego (patrz
+    ShopConfig.quick_mode_presets). Rzuca ValueError przy nazwie pustej/
+    zdublowanej albo niepoprawnym zakresie godzin - to samo miejsce, z
+    którego korzysta zarówno UI (ui/quick_mode_settings_dialog.py), jak i
+    deserializacja projektu, żeby raz zapisany plik nie mógł zawierać
+    nieprawidłowych presetów.
+
+    "visible" (domyślnie True dla presetów bez tego pola - stare projekty
+    sprzed tej flagi) mówi ui/main_window.py::_rebuild_quick_preset_buttons,
+    czy dany przedział ma dostać przycisk w trybie szybkim - pozwala trzymać
+    przygotowane, ale niepotrzebne akurat teraz przedziały bez zaśmiecania
+    panelu, bez usuwania i odtwarzania ich za każdym razem."""
+    if not raw:
+        return []
+
+    presets = []
+    seen_names = set()
+    for entry in raw:
+        name = (entry.get("name") or "").strip()
+        if not name:
+            raise ValueError("Nazwa przedziału nie może być pusta.")
+        if name in seen_names:
+            raise ValueError(f'Nazwa przedziału musi być unikalna: "{name}".')
+        seen_names.add(name)
+
+        start = entry.get("start")
+        if not start:
+            raise ValueError(f'Brak godziny startu dla "{name}".')
+
+        visible = bool(entry.get("visible", True))
+
+        full_day = bool(entry.get("full_day"))
+        if full_day:
+            presets.append({"name": name, "start": start, "end": None, "full_day": True, "visible": visible})
+            continue
+
+        end = entry.get("end")
+        if not end:
+            raise ValueError(f'Brak godziny końca dla "{name}".')
+        if end == start:
+            raise ValueError(
+                f'Koniec nie może być równy początkowi dla "{name}" - '
+                'zaznacz "Cała doba (24h)", jeśli o to chodzi.'
+            )
+        presets.append({"name": name, "start": start, "end": end, "full_day": False, "visible": visible})
+
+    return presets
+
+
+# Wbudowane (nieusuwalne) przyciski trybu szybkiego - w odróżnieniu od
+# ręcznie definiowanych przedziałów (quick_mode_presets wyżej), zawsze te
+# same, ale ich widoczność jest teraz konfigurowalna (Konfiguracja ->
+# "Ustawienia trybu szybkiego" -> zakładka "Tryby domyślne", decyzja
+# użytkownika 2026-09-28) zamiast sztywno zaszytej w kodzie
+# (ui/main_window.py sprawdzało kiedyś business_type wprost). `default_visible`
+# to domyślna widoczność wg profilu, użyta TYLKO gdy projekt nie ma jeszcze
+# jawnie zapisanej wartości dla tego klucza (patrz is_standard_button_visible)
+# - stary projekt bez tej konfiguracji zachowuje się dokładnie jak dziś.
+STANDARD_QUICK_BUTTONS: tuple[dict, ...] = (
+    {
+        "key": "work",
+        "label": "Praca",
+        "description": (
+            "Ręczne wpisanie dokładnych godzin pracy dla wybranej komórki - "
+            "zamiast typu zmiany, konkretny start/koniec."
+        ),
+        "default_visible": lambda business_type: False,
+    },
+    {
+        "key": "morning",
+        "label": "Rano",
+        "description": (
+            "Blokuje typ zmiany na „rano” (kod „1”) - dokładną godzinę "
+            "dobierze generator spośród porannych wariantów danej placówki."
+        ),
+        "default_visible": lambda business_type: business_type == DEFAULT_BUSINESS_TYPE,
+    },
+    {
+        "key": "afternoon",
+        "label": "Popo",
+        "description": (
+            "Blokuje typ zmiany na „popołudnie” (kod „2”) - dokładną godzinę "
+            "dobierze generator spośród popołudniowych wariantów danej placówki."
+        ),
+        "default_visible": lambda business_type: business_type == DEFAULT_BUSINESS_TYPE,
+    },
+    {
+        "key": "can_work",
+        "label": "Praca ✅",
+        "description": (
+            "Sygnał dla generatora, że pracownik MA/MOŻE pracować tego dnia (kod "
+            "„W”) - generator dobierze zmianę zgodną z zasadami placówki (w "
+            "placówce z rotacją 24/7: 24h albo połowę doby, wg „Preferuj zmiany 24h”)."
+        ),
+        "default_visible": lambda business_type: business_type != DEFAULT_BUSINESS_TYPE,
+    },
+    {
+        "key": "delete",
+        "label": "Usuń",
+        "description": (
+            "Całkowicie usuwa informacje o zmianie w tej komórce (godziny, blokadę, "
+            "urlop/L4, zablokowany typ zmiany) - komórka wraca do stanu "
+            "nietkniętego, generator może przydzielić ją od nowa przy następnym "
+            "generowaniu."
+        ),
+        "default_visible": lambda business_type: True,
+    },
+    {
+        "key": "off",
+        "label": "Wolne",
+        "description": (
+            "Blokuje dzień jako celowo wolny - generator nigdy nie przydzieli tu "
+            "żadnej zmiany."
+        ),
+        "default_visible": lambda business_type: True,
+    },
+    {
+        "key": "leave",
+        "label": "Urlop",
+        "description": "Oznacza dzień jako urlop.",
+        "default_visible": lambda business_type: True,
+    },
+    {
+        "key": "sick",
+        "label": "L4",
+        "description": "Oznacza dzień jako zwolnienie chorobowe.",
+        "default_visible": lambda business_type: True,
+    },
+)
+
+STANDARD_QUICK_BUTTON_KEYS = tuple(b["key"] for b in STANDARD_QUICK_BUTTONS)
+
+
+def normalize_quick_mode_standard_buttons(raw: dict | None) -> dict[str, bool]:
+    """Waliduje/porządkuje nadpisania widoczności wbudowanych przycisków
+    trybu szybkiego (ShopConfig.quick_mode_standard_buttons) - tylko znane
+    klucze (patrz STANDARD_QUICK_BUTTON_KEYS), reszta cicho odrzucona (plik
+    z przyszłej/innej wersji programu)."""
+    if not raw:
+        return {}
+    return {key: bool(raw[key]) for key in STANDARD_QUICK_BUTTON_KEYS if key in raw}
+
+
+def is_standard_button_visible(shop_config, key: str) -> bool:
+    """Efektywna widoczność jednego wbudowanego przycisku: jawnie zapisane
+    ustawienie projektu (quick_mode_standard_buttons), jeśli istnieje,
+    inaczej domyślna wartość wg profilu (default_visible) - patrz komentarz
+    przy STANDARD_QUICK_BUTTONS."""
+    saved = None
+    if shop_config is not None:
+        saved = shop_config.quick_mode_standard_buttons.get(key)
+    if saved is not None:
+        return bool(saved)
+
+    button = next((b for b in STANDARD_QUICK_BUTTONS if b["key"] == key), None)
+    if button is None:
+        return False
+    business_type = shop_config.business_type if shop_config is not None else DEFAULT_BUSINESS_TYPE
+    return button["default_visible"](business_type)
+
 
 class ShopConfig:
     """
@@ -13,6 +258,24 @@ class ShopConfig:
     def __init__(self, year: int, month: int):
         self.year = year
         self.month = month
+
+        # Nazwa placówki/firmy nadawana w szybkiej konfiguracji (ui/first_run_wizard.py)
+        # albo w zakładce "Godziny otwarcia". Czysto opisowa - nie wpływa na
+        # generator. Puste domyślnie: stare projekty i te utworzone poza
+        # kreatorem po prostu nie mają nazwy.
+        self.name: str = ""
+
+        # Jaki profil działalności (role, constrainty, etykiety UI) obowiązuje
+        # dla tego projektu. Domyślnie Dino - stare projekty bez tego pola
+        # zachowują się dokładnie jak dziś.
+        self.business_type: str = DEFAULT_BUSINESS_TYPE
+
+        # Lokalizacje/obiekty w ramach tego projektu. Każdy projekt ma zawsze
+        # co najmniej jedną (patrz koniec tej metody i from_dict()) - pola
+        # bezpośrednio na tym ShopConfig (open_hours, trade_sundays, itd.
+        # poniżej) zostają tylko jako legacy fallback dla starych plików w
+        # trakcie wczytywania (patrz get_location()), UI już ich nie edytuje.
+        self.locations: dict[str, LocationConfig] = {}
 
         # Toggle dla constraintów z model.constraint_policy
         self.constraint_policies = {
@@ -28,6 +291,21 @@ class ShopConfig:
             "availability": ConstraintPolicy.PREFERRED,
             "no_night": ConstraintPolicy.PREFERRED,
             "no_afternoon": ConstraintPolicy.PREFERRED,
+            # Rotacja służby 24/7 (patrz LocationConfig.duty_rotation) - te
+            # dwa constrainty są no-opami dopóki żadna lokalizacja projektu
+            # nie ma skonfigurowanej duty_rotation (patrz
+            # logic/generator/duty_rotation_constraint.py), więc MANDATORY
+            # domyślnie dla KAŻDEGO profilu (w tym Dino) nie zmienia
+            # zachowania żadnego istniejącego projektu - liczy się dopiero,
+            # gdy klient faktycznie skonfiguruje ten mechanizm.
+            "duty_rotation_coverage": ConstraintPolicy.MANDATORY,
+            "duty_rotation_no24h": ConstraintPolicy.MANDATORY,
+            # Rotacja całodobowa "ogólna" (patrz LocationConfig.round_clock_start_hour,
+            # logic/generator/round_clock_constraint.py) - no-op dopóki żadna
+            # lokalizacja nie ma jej ustawionej, ten sam wzorzec co
+            # duty_rotation_coverage wyżej: MANDATORY domyślnie (jak "open"/
+            # "close") nie zmienia zachowania żadnego istniejącego projektu.
+            "round_clock_coverage": ConstraintPolicy.MANDATORY,
         }
         # -----------------------------
         # Override godzin dla konkretnego dnia
@@ -53,6 +331,21 @@ class ShopConfig:
         # "compact" | "detailed"
         self.cell_display_mode = "compact"
 
+        # Menu Wygląd -> "Wygląd komórek kompaktowych" - jak siatka grafiku
+        # (ui/grid_view.py, przez logic/schedule_presenter.py) wyświetla
+        # godziny zmiany w komórce. "standard" = dzisiejszy wygląd
+        # (HH:MM/HH:MM w osobnych liniach). "fractions" = zwarty zapis
+        # ułamkowy jednej linii, np. "8:00-20:00" -> "8/20" (godzina bez
+        # zera wiodącego, minuty na razie po prostu zaokrąglane do
+        # najbliższej pełnej godziny - patrz schedule_presenter.py).
+        self.hours_display_mode = "standard"
+
+        # Menu Wygląd -> "Legenda kolorów" (ui/grid_legend.py) - domyślnie
+        # ukryta (świadoma decyzja: siatka ma jak najwięcej miejsca od
+        # razu po otwarciu projektu), użytkownik włącza ją ręcznie, gdy
+        # potrzebuje przypomnienia znaczenia kolorów/zakreśleń komórek.
+        self.show_grid_legend = False
+
         # -----------------------------
         # Niedziele handlowe
         # -----------------------------
@@ -76,9 +369,68 @@ class ShopConfig:
             6: ("05:30", "22:45"),  # Nd (jeśli handlowa)
         }
 
+        # Opcjonalny, sztywny blok zmiany nocnej dla projektów bez
+        # zdefiniowanych lokalizacji (patrz LocationConfig.night_shift w
+        # model/location.py - to jest dokładnie ten sam mechanizm, tylko na
+        # poziomie całego projektu). None = brak zmiany nocnej (domyślne).
+        self.night_shift: dict | None = None
+
+        # Opcjonalna konfiguracja rotacji służby 24/7 dla projektów bez
+        # zdefiniowanych lokalizacji - patrz LocationConfig.duty_rotation /
+        # normalize_duty_rotation() w model/location.py. None = domyślne.
+        self.duty_rotation: dict | None = None
+
+        # Ręcznie zdefiniowane, nazwane przedziały czasowe do trybu szybkiego
+        # (ui/main_window.py::_build_quick_panel) - zastępują ręczne wpisywanie
+        # godzin przyciskiem "Praca" (patrz "plan profil ochrona...", prośba
+        # klienta 2026-09-17). Każdy wpis: {"name": str, "start": "HH:MM",
+        # "end": "HH:MM" | None, "full_day": bool}. `end` jest None wyłącznie
+        # gdy full_day=True (zmiana trwająca dokładnie 24h, patrz
+        # DaySchedule.set_full_day_shift) - w przeciwnym razie zawsze ustawione,
+        # ewentualnie <= start, co oznacza przejście przez północ. Pusta lista
+        # domyślnie: stare projekty i te bez tej konfiguracji zachowują się
+        # dokładnie jak dziś (przycisk "Praca" widoczny, ręczne wpisywanie).
+        self.quick_mode_presets: list[dict] = []
+
+        # Nadpisania widoczności wbudowanych przycisków trybu szybkiego
+        # (Praca/Rano/Popo/Może pracować/Usuń/Wolne/Urlop/L4 - patrz
+        # STANDARD_QUICK_BUTTONS wyżej) - {key: bool}. Puste domyślnie:
+        # brak wpisu dla danego klucza = użyj domyślnej wartości wg profilu
+        # (patrz is_standard_button_visible), więc stary projekt bez tej
+        # konfiguracji zachowuje się dokładnie jak dziś.
+        self.quick_mode_standard_buttons: dict[str, bool] = {}
+
+        # Nowy projekt startuje zawsze z jedną, domyślną lokalizacją zasiedloną
+        # z powyższych pól (patrz DEFAULT_LOCATION_KEY/_default_location_from_shop
+        # wyżej) - "projekt zawsze ma co najmniej jedną lokalizację" jest
+        # niezmiennikiem, na którym opiera się przełącznik placówek w UI.
+        self.locations[DEFAULT_LOCATION_KEY] = _default_location_from_shop(
+            self, DEFAULT_LOCATION_KEY, DEFAULT_LOCATION_NAME
+        )
+
     # ==========================================================
     # PODSTAWOWE METODY
     # ==========================================================
+
+    def reset_for_new_month(self, year: int, month: int) -> None:
+        """Zmiana miesiąca dla TEGO SAMEGO projektu ("Zmień datę" w
+        ui/main_window.py::_save_date_clicked) - zeruje tylko to, co jest
+        specyficzne dla poprzedniego miesiąca (niedziele handlowe, święta,
+        ręczne nadpisania dni - na poziomie projektu i każdej lokalizacji),
+        zachowując WSZYSTKO inne bez zmian: profil działalności, lokalizacje
+        (wraz z ich godzinami otwarcia/24-7/rotacją służby/progami obsady),
+        presety trybu szybkiego, zasady generatora, nazwę placówki itd.
+        Odwrotnie niż _init_state() w main_window.py, która przy "Nowym
+        projekcie" świadomie tworzy zupełnie nowy, pusty ShopConfig."""
+        self.year = year
+        self.month = month
+        self.trade_sundays = set()
+        self.public_holidays = set()
+        self.day_overrides = {}
+        for location in self.locations.values():
+            location.trade_sundays = set()
+            location.public_holidays = set()
+            location.day_overrides = {}
 
     def weekday(self, day: int) -> int:
         return calendar.weekday(self.year, self.month, day)
@@ -87,6 +439,11 @@ class ShopConfig:
         return self.weekday(day) == 6
 
     def is_trade_day(self, day: int) -> bool:
+        # "Dni handlowe" is a Dino/retail-specific concept - businesses
+        # whose profile doesn't use it (see BusinessProfile.uses_trade_calendar)
+        # treat every day as a normal potential working day.
+        if not get_profile(self.business_type).uses_trade_calendar:
+            return True
 
         if day in self.public_holidays:
             return False
@@ -127,11 +484,116 @@ class ShopConfig:
 
         return start, end
 
+    def get_weekly_open_hours_on(self, dt):
+        """Godziny otwarcia w dowolnym dniu kalendarza wg tygodniowego wzorca
+        (bez ręcznych nadpisań dni) - patrz LocationConfig.get_weekly_open_hours_on."""
+        hours = self.open_hours.get(dt.weekday())
+        if not hours or not hours[0] or not hours[1]:
+            return None
+        return hours[0], hours[1]
+
     def get_open_hours_for_weekday(self, weekday: int) -> tuple[str, str]:
         return self.open_hours[weekday]
 
     def set_open_hours_for_weekday(self, weekday: int, start: str, end: str):
         self.open_hours[weekday] = (start, end)
+
+    def get_night_shift_hours(self) -> tuple[str, str] | None:
+        """(start, end) zmiany nocnej projektu, albo None gdy jej nie ma."""
+        if not self.night_shift:
+            return None
+        start = self.night_shift.get("start")
+        end = self.night_shift.get("end")
+        if not start or not end:
+            return None
+        return start, end
+
+    def set_night_shift(self, start: str | None, end: str | None) -> None:
+        self.night_shift = normalize_night_shift(start, end)
+
+    def get_duty_rotation(self) -> dict | None:
+        return self.duty_rotation
+
+    def set_duty_rotation(self, raw: dict | None) -> None:
+        self.duty_rotation = normalize_duty_rotation(raw)
+
+    def get_round_clock_start_hour(self) -> str | None:
+        # "Godzina rozpoczęcia" rotacji całodobowej (round_clock_constraint.py)
+        # jest, tak jak `is_24_7`, wyłącznie polem LocationConfig - nie ma
+        # (i nigdy nie miała) odpowiednika na poziomie projektu, więc ten
+        # sam wzorzec co get_duty_rotation() wyżej, ale zawsze None: dotyczy
+        # tylko pracownika bez rozwiązywalnej lokalizacji (patrz get_location()
+        # niżej), dla którego ten mechanizm i tak nigdy nie ma zastosowania.
+        return None
+
+    @property
+    def preferred_shifts_enabled(self) -> bool:
+        # Ten sam wzorzec co get_round_clock_start_hour() wyżej - wyłącznie
+        # pole LocationConfig, ten fallback dotyczy tylko pracownika bez
+        # rozwiązywalnej lokalizacji.
+        return False
+
+    @property
+    def preferred_shifts(self) -> list:
+        return []
+
+    def is_closed_for_public_holiday(self, day: int) -> bool:
+        # Ten sam wzorzec co get_round_clock_start_hour() wyżej - wyłącznie
+        # pole LocationConfig, ten fallback dotyczy tylko pracownika bez
+        # rozwiązywalnej lokalizacji.
+        return False
+
+    # ==========================================================
+    # PRESETY TRYBU SZYBKIEGO
+    # ==========================================================
+
+    def set_quick_mode_presets(self, raw: list[dict] | None) -> None:
+        self.quick_mode_presets = normalize_quick_mode_presets(raw)
+
+    def set_quick_mode_standard_buttons(self, raw: dict | None) -> None:
+        self.quick_mode_standard_buttons = normalize_quick_mode_standard_buttons(raw)
+
+    # ==========================================================
+    # LOKALIZACJE (Etap 3b)
+    # ==========================================================
+
+    def get_location(self, employee):
+        """Godzinowy "widok" dla tego pracownika: jeśli ma przypisaną
+        lokalizację (employee.location_key) i projekt ją definiuje, zwraca
+        obiekt z tym samym API co ShopConfig (`weekday`/`get_open_hours_for_day`/
+        `constraints`) wspierający się o tę lokalizację; w przeciwnym razie
+        zwraca `self` - dokładnie dzisiejsza, jednolokalizacyjna ścieżka.
+        """
+        if self.locations and employee.location_key in self.locations:
+            return _LocationView(
+                self.locations[employee.location_key], self.year, self.month, self.constraints,
+                uses_trade_calendar=get_profile(self.business_type).uses_trade_calendar,
+            )
+        return self
+
+    def effective_constraint_policies(self, location_key) -> dict:
+        """Tryby zasad generatora placówki: projektowe nadpisane jej własnymi
+        (LocationConfig.constraint_policies - Konfiguracja -> Zasady
+        generatora -> ustawienia zaawansowane zapisują je per placówka)."""
+        location = self.locations.get(location_key) if location_key is not None else None
+        if location is None or not location.constraint_policies:
+            return dict(self.constraint_policies)
+        return {**self.constraint_policies, **location.constraint_policies}
+
+    def with_location_settings(self, location_key) -> "ShopConfig":
+        """Płytka kopia projektu z trybami zasad i ustawieniami generatora
+        placówki (LOCATION_RUN_SETTING_KEYS) - generator czyta je z
+        ShopConfig, więc dostaje taką kopię przy generowaniu jej grafiku.
+        Reszta (lokalizacje, godziny, ...) wspólna z projektem."""
+        run_shop = copy.copy(self)
+        run_shop.constraint_policies = self.effective_constraint_policies(location_key)
+        run_shop.constraints = dict(self.constraints)
+        location = self.locations.get(location_key) if location_key is not None else None
+        if location is not None:
+            for key in LOCATION_RUN_SETTING_KEYS:
+                if key in location.constraints:
+                    run_shop.constraints[key] = location.constraints[key]
+        return run_shop
 
     # ==========================================================
     # SERIALIZACJA
@@ -141,11 +603,20 @@ class ShopConfig:
         return {
             "year": self.year,
             "month": self.month,
+            "name": self.name,
+            "business_type": self.business_type,
+            "locations": {key: loc.to_dict() for key, loc in self.locations.items()},
             "open_hours": self.open_hours,
+            "night_shift": self.night_shift,
+            "duty_rotation": self.duty_rotation,
+            "quick_mode_presets": self.quick_mode_presets,
+            "quick_mode_standard_buttons": self.quick_mode_standard_buttons,
             "trade_sundays": list(self.trade_sundays),
             "day_overrides": self.day_overrides,
             "constraints": self.constraints,
             "cell_display_mode": self.cell_display_mode,
+            "hours_display_mode": self.hours_display_mode,
+            "show_grid_legend": self.show_grid_legend,
             "public_holidays": list(self.public_holidays),
             "standard_daily_hours": self.standard_daily_hours,
             "constraint_policies": {
@@ -157,6 +628,27 @@ class ShopConfig:
     @classmethod
     def from_dict(cls, data):
         cfg = cls(data["year"], data["month"])
+        cfg.name = data.get("name", "")
+        cfg.business_type = data.get("business_type", DEFAULT_BUSINESS_TYPE)
+        cfg.locations = {
+            key: LocationConfig.from_dict(loc_data)
+            for key, loc_data in data.get("locations", {}).items()
+        }
+        night_shift = data.get("night_shift")
+        cfg.night_shift = dict(night_shift) if night_shift else None
+        duty_rotation = data.get("duty_rotation")
+        cfg.duty_rotation = dict(duty_rotation) if duty_rotation else None
+
+        try:
+            cfg.quick_mode_presets = normalize_quick_mode_presets(data.get("quick_mode_presets"))
+        except ValueError:
+            # Plik z ręcznie popsutą/starszą, niepoprawną konfiguracją -
+            # traktujemy jak brak presetów zamiast blokować wczytanie projektu.
+            cfg.quick_mode_presets = []
+
+        cfg.quick_mode_standard_buttons = normalize_quick_mode_standard_buttons(
+            data.get("quick_mode_standard_buttons")
+        )
 
         # open_hours
         cfg.open_hours = {
@@ -183,6 +675,8 @@ class ShopConfig:
 
         # UI
         cfg.cell_display_mode = data.get("cell_display_mode", "compact")
+        cfg.hours_display_mode = data.get("hours_display_mode", "standard")
+        cfg.show_grid_legend = data.get("show_grid_legend", False)
         cfg.standard_daily_hours = data.get("standard_daily_hours", 8.0)
 
         # Project files created before this field was added retain the defaults.
@@ -192,32 +686,74 @@ class ShopConfig:
             except ValueError:
                 continue
 
-        # This rule is an optimization target, not a strict feasibility rule.
-        cfg.constraint_policies["balance"] = ConstraintPolicy.PREFERRED
+        # "balance" jest celem optymalizacji, nie twardym wymogiem - MANDATORY
+        # zrobiłby grafik niewykonalnym za każdym razem, gdy nie da się trafić
+        # w bilans dokładnie, więc nigdy nie wczytujemy tej wartości z pliku.
+        # DISABLED (np. profil ochrony, gdzie klient świadomie nie chce
+        # bilansu wcale - "plan profil ochrona...", sekcja 10) zostaje.
+        if cfg.constraint_policies.get("balance") == ConstraintPolicy.MANDATORY:
+            cfg.constraint_policies["balance"] = ConstraintPolicy.PREFERRED
+
+        if not cfg.locations:
+            # Stary plik sprzed lokalizacji (Etap 3b) - migrujemy na jedną
+            # domyślną lokalizację zasiedloną z pól projektu wczytanych
+            # powyżej. `_migrated_default_location` (nieserializowane) mówi
+            # persistence/project_io.py::load_project(), że trzeba jeszcze
+            # dopiąć location_key każdemu pracownikowi.
+            cfg.locations[DEFAULT_LOCATION_KEY] = _default_location_from_shop(
+                cfg, DEFAULT_LOCATION_KEY, DEFAULT_LOCATION_NAME
+            )
+            cfg._migrated_default_location = True
 
         return cfg
 
-    def get_full_time_nominal_hours(self) -> int:
+    def get_full_time_nominal_hours(self) -> float:
         """
-        Zwraca nominalny wymiar czasu pracy (pełny etat)
-        dla danego miesiąca zgodnie z kodeksem pracy.
-        """
+        Nominalny wymiar czasu pracy (pełny etat) dla danego miesiąca,
+        zgodnie z Kodeksem pracy (art. 130 §1 i §2¹): liczba dni roboczych
+        (pon-pt) w miesiącu, pomniejszona o:
 
+        - święta ustawowo wolne od pracy przypadające w dzień powszedni
+          (pon-pt) - każde obniża normę o jedną dniówkę, niezależnie od
+          tego, czy akurat ten projekt normalnie w ten dzień pracuje (np.
+          ochrona 24/7);
+        - święto ustawowe przypadające w SOBOTĘ - art. 130 §2¹ każe wtedy
+          oddać dodatkowy dzień wolny (obniża normę o dniówkę tak samo jak
+          święto w tygodniu, mimo że sobota i tak nie była liczona jako dzień
+          roboczy) - dotyczy WYŁĄCZNIE świąt ustawowych (auto-wykrytych),
+          nie ręcznie zaznaczonych dni (te nie muszą być świętem w sensie
+          ustawy o dniach wolnych od pracy, np. dzień wolny firmowy).
+
+        Święta liczone automatycznie z biblioteki `holidays` (kalendarz
+        polski - patrz logic/utils/holidays_pl.py), żeby nie trzeba było
+        pamiętać o ręcznym zaznaczaniu ich co roku w każdym projekcie -
+        zgłoszenie użytkownika (2026-09-25): program dotąd "prosto" liczył
+        wyłącznie ręcznie zaznaczone self.public_holidays (unia z
+        automatycznymi, na wypadek dnia wolnego spoza kalendarza krajowego,
+        np. lokalnego/firmowego), bez obniżenia za sobotnie święta
+        - zweryfikowane liczbowo (2026-09-25) na zestawieniu użytkownika
+        wrzesień 2026 - wrzesień 2028 (24 miesiące): identyczne wartości po
+        tej poprawce.
+        """
         import calendar
-        from datetime import date
+
+        from logic.utils.holidays_pl import polish_public_holiday_days
 
         workdays = 0
+        saturday_holidays = 0
 
         days_in_month = calendar.monthrange(self.year, self.month)[1]
+        auto_holidays = polish_public_holiday_days(self.year, self.month)
 
         for d in range(1, days_in_month + 1):
             wd = calendar.weekday(self.year, self.month, d)
+            is_holiday = d in auto_holidays or d in self.public_holidays
 
-            # pon–pt
-            if wd < 5:
-                # jeśli to święto ustawowe → nie liczymy
-                if d in self.public_holidays:
+            if wd < 5:  # pon-pt
+                if is_holiday:
                     continue
                 workdays += 1
+            elif wd == 5 and d in auto_holidays:  # sobota, święto ustawowe
+                saturday_holidays += 1
 
-        return workdays * 8
+        return (workdays - saturday_holidays) * self.standard_daily_hours

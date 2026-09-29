@@ -20,7 +20,8 @@ def get_allowed_shifts_for_day(
     END_SHIFT_MAP
 ):
     availability = getattr(emp, "availability", {})
-    weekday = shop.weekday(day)
+    location = shop.get_location(emp)
+    weekday = location.weekday(day)
 
     rules = availability.get(weekday)
 
@@ -28,7 +29,7 @@ def get_allowed_shifts_for_day(
     if not rules:
         return None
 
-    hours = shop.get_open_hours_for_day(day)
+    hours = location.get_open_hours_for_day(day)
     if not hours:
         return []
 
