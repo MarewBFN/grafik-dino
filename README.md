@@ -137,8 +137,9 @@ Konfiguracja → Generator → „Godziny otwarcia”). Każda placówka ma:
 
 - **Zamknięte w polskie święta ustawowe** (domyślnie włączone),
 - **Maks. dni pracy pod rząd** (domyślnie 4) — 1 oznacza, że nikt nie pracuje
-  dwa dni z rzędu, czyli w placówce z 2 osobami zmiany na przemian; tryb tej
-  zasady tylko dla placówki — patrz „Zasady generatora” niżej,
+  dwa dni z rzędu, czyli w placówce z 2 osobami zmiany na przemian,
+- **własne zasady generatora** — tryby zasad i ustawienia z „Zasad
+  generatora” (ustawienia zaawansowane) — patrz niżej,
 - **Działalność całodobowa (24/7)** + edytor **rotacji służby** (godzina
   rozpoczęcia doby, godzina podziału, „Preferuj zmiany 24h”) — patrz niżej,
 - albo **godziny tygodnia**: osobno na każdy dzień, z opcjami „Nieczynne” i
@@ -205,8 +206,16 @@ KONFIGURACJA → model CP-SAT → rozwiązanie → zapis do grafiku
    - **Wymagane** — twardy warunek (grafik musi go spełnić),
    - **Preferowane** — może być złamane za karę (waga w funkcji celu),
    - **Wyłączone** — pomijane.
+
+   Tryby zasad i ustawienia z tej sekcji (maks. osób naraz, maks. dni pod
+   rząd, tryb liczenia odpoczynku) są **per placówka**: okno pokazuje i
+   zapisuje ustawienia placówki wybranej w programie, a generator bierze je
+   przy generowaniu jej grafiku. Placówka bez własnych ustawień ma tryby
+   projektu (domyślne). Gdy generuje się cały projekt naraz, placówki o
+   różnych ustawieniach generują się po kolei, każda ze swoimi.
 4. Solver szuka najlepszego grafiku w **limicie czasu** (domyślnie 60 s,
-   do zmiany w tych samych ustawieniach), na maks. 8 wątkach.
+   do zmiany w tych samych ustawieniach — jeden dla całego projektu), na
+   maks. 8 wątkach.
 5. Wynik trafia do komórek; zmiana należy do dnia, w którym się zaczyna.
 
 Zawsze obowiązują (poza systemem trybów): urlop/L4/wolne, ręczne wpisy,
@@ -217,7 +226,7 @@ najwyżej jedna zmiana na dzień, brak zmian w dni zamknięte.
 | Zasada | Co robi |
 |---|---|
 | Odpoczynek 11 h | min. 11 h między zmianami (po 24 h — patrz Ochrona); tryb liczenia: standardowy (dokładny) albo uproszczony |
-| Dni pod rząd | limit kolejnych dni pracy (domyślnie 4); liczy też ostatni dzień poprzedniego miesiąca. Limit i tryb można ustawić osobno dla bieżącej placówki (ustawienia zaawansowane, sekcja „Placówka”) — np. 1 dzień + Wymagane = zmiany na przemian; przy Wymaganym urlop jednej z dwóch osób dłuższy niż 1 dzień daje brak rozwiązania |
+| Dni pod rząd | limit kolejnych dni pracy placówki (domyślnie 4); liczy też ostatni dzień poprzedniego miesiąca. Np. 1 dzień + Wymagane = zmiany na przemian; przy Wymaganym urlop jednej z dwóch osób dłuższy niż 1 dzień daje brak rozwiązania |
 | Godziny miesięczne | suma godzin = norma (z tolerancją jednej zmiany) |
 | Bilans godzin | jak najbliżej normy (tylko miękko) |
 | Zakaz pracy nocnej / popołudniami | flagi pracownika |

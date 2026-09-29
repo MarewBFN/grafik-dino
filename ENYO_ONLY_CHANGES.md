@@ -2033,3 +2033,46 @@ wyrównać godziny, a przy urlopach druga osoba przejmuje dni.
 | `ui/locations_dialog.py`, `ui/config_dialog.py` | Pole „Dni pod rząd” w placówce, tryb placówki w ustawieniach zaawansowanych | DO USTALENIA |
 | `tests/schedule_validator.py` | Tryb placówki i dzień 0 w ocenie „Dni pod rząd” | NIE |
 | `README.md` | Opis pola i trybu placówki | TAK (po dopasowaniu do DinGo!) |
+
+## Ustawienia zaawansowane „Zasad generatora” per placówka (2026-09-29)
+
+Decyzja użytkownika: wszystkie zasady z ustawień zaawansowanych mają być
+zapisywane per placówka. Wcześniej tryby wszystkich zasad, „Maks. osób
+naraz w placówce” i „Tryb liczenia odpoczynku 11h” były wspólne dla całego
+projektu (per placówka był tylko limit „Dni pod rząd”).
+
+- **Model**: `LocationConfig.constraint_policies` (nazwa zasady -> tryb;
+  brak wpisu = tryb projektu), zapisywane w projekcie. Ustawienia
+  (maks. obsada naraz, tryb odpoczynku, dni pod rząd) w
+  `LocationConfig.constraints`. `ShopConfig.effective_constraint_policies()`
+  i `with_location_settings()` (płytka kopia projektu z ustawieniami
+  placówki). Zastępuje `constraints["max_consecutive_policy"]` i
+  `ConstraintSpec.per_location_policy` z poprzedniego wpisu (stary klucz
+  migrowany przy wczytaniu pliku).
+- **Generator**: żaden constraint się nie zmienił - `AutoScheduleGenerator`
+  generuje placówkę z jej ustawieniami (UI zawsze generuje wybraną placówkę).
+  Cały projekt naraz (testy/diagnostyka): placówki o tych samych
+  ustawieniach w jednym modelu (bez różnic - jeden przebieg, dokładnie jak
+  dawniej), o różnych - osobno, po kolei; brak rozwiązania w którejś =
+  grafik bez zmian.
+- **UI**: Konfiguracja -> Zasady generatora -> ustawienia zaawansowane pod
+  nagłówkiem „PLACÓWKA: …” pokazuje i zapisuje ustawienia placówki wybranej
+  w programie; „Limit czasu generatora” zostaje wspólny (ustawienie solvera,
+  nie zasada). Okno Lokalizacje zachowuje tryby i ustawienia placówki przy
+  zapisie.
+- **Odczyty trybów wg placówki**: komunikaty o braku rozwiązania
+  (`diagnostics.py`), wiersz „Obłożenie” (`duty_coverage_presenter.py`),
+  walidator testowy (naruszenie ma placówkę). Poza zakresem (profil Dino,
+  ukryty w Enyo): odznaki/wiersze podsumowania mięsa, otwarcia i zamknięcia
+  w siatce oraz ukrywanie ról w oknie pracownika czytają dalej tryby
+  projektu.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/location.py`, `model/shop_config.py` | Tryby zasad i ustawienia generatora per placówka | DO USTALENIA |
+| `logic/auto_generator.py` | Generowanie z ustawieniami placówki, podział całego projektu | DO USTALENIA |
+| `logic/generator/constraint_registry.py`, `base_specs.py` | Wycofane `per_location_policy` (zastąpione powyższym) | DO USTALENIA |
+| `logic/generator/diagnostics.py`, `logic/duty_coverage_presenter.py` | Tryby zasad wg placówki | DO USTALENIA |
+| `ui/config_dialog.py`, `ui/locations_dialog.py` | Ustawienia zaawansowane per placówka | DO USTALENIA |
+| `tests/schedule_validator.py`, `tests/generator_audit_harness.py` | Ocena wg placówki, tryby placówki w specyfikacji | NIE |
+| `README.md` | Opis ustawień per placówka | TAK (po dopasowaniu do DinGo!) |

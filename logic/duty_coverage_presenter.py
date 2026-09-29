@@ -99,7 +99,8 @@ def _opening_hours_day_ok(schedule, shop, members, day: int) -> bool:
     start = window.start + DAY_MINUTES
     end = min(window.end, schedule.days_in_month * DAY_MINUTES) + DAY_MINUTES
     cap = None
-    if shop.constraint_policies.get(MAX_STAFF_POLICY) != ConstraintPolicy.DISABLED:
+    # Tryb „Maks. obsada naraz” tej placówki (tryby zasad są per placówka).
+    if shop.effective_constraint_policies(members[0].location_key).get(MAX_STAFF_POLICY) != ConstraintPolicy.DISABLED:
         cap = OpeningHoursModel.max_staff_for_view(view)
 
     intervals = []

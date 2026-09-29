@@ -126,6 +126,9 @@ def build_case(spec):
         loc.public_holidays = set(loc_spec.get("public_holidays", []))
         loc.day_overrides = {int(d): tuple(v) for d, v in loc_spec.get("day_overrides", {}).items()}
         loc.constraints.update(loc_spec.get("constraints", {}))
+        # Tryby zasad tej placówki (ustawienia zaawansowane są per placówka).
+        for name, value in loc_spec.get("policies", {}).items():
+            loc.constraint_policies[name] = ConstraintPolicy(value)
         loc.preferred_shifts_enabled = loc_spec.get("preferred_shifts_enabled", False)
         loc.preferred_shifts = list(loc_spec.get("preferred_shifts", []))
         locations[loc.key] = loc
@@ -233,6 +236,11 @@ def audit_infeasible(spec, time_limit=10):
         if getattr(value, "value", value) == "MANDATORY":
             policies[name] = "PREFERRED"
     relaxed["policies"] = policies
+    for loc_spec in relaxed.get("locations", []):
+        loc_spec["policies"] = {
+            name: "PREFERRED" if value == "MANDATORY" else value
+            for name, value in loc_spec.get("policies", {}).items()
+        }
     outcome = run_case(relaxed, time_limit=time_limit)
     if not outcome["success"]:
         return {"verdict": "relaxed_also_infeasible"}

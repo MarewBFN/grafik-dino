@@ -30,21 +30,12 @@ DEFAULT_LOCATION_CONSTRAINTS = {
     "max_consecutive_days": 4,
 }
 
-# Tryb zasady „Dni pod rząd” tylko dla tej placówki (Konfiguracja -> Zasady
-# generatora -> ustawienia zaawansowane), np. 2-osobowa placówka z limitem 1
-# dnia jako Wymagane = zmiany na przemian. Brak wpisu = tryb zasady z całego
-# projektu (ShopConfig.constraint_policies["max_consecutive"]).
-MAX_CONSECUTIVE_POLICY_KEY = "max_consecutive_policy"
-
-
-def max_consecutive_policy(constraints: dict, project_policy):
-    """Tryb „Dni pod rząd” dla pracowników placówki o tych `constraints`:
-    jej nadpisanie (MAX_CONSECUTIVE_POLICY_KEY) albo `project_policy`."""
-    value = constraints.get(MAX_CONSECUTIVE_POLICY_KEY)
-    try:
-        return ConstraintPolicy(value) if value is not None else project_policy
-    except ValueError:
-        return project_policy
+# Ustawienia z „Zasad generatora” (ustawienia zaawansowane) zapisywane per
+# placówka w LocationConfig.constraints, a czytane przez generator z
+# ShopConfig.constraints - patrz ShopConfig.with_location_settings. (Limit
+# dni pod rząd i maks. obsada naraz generator i tak czyta per placówka przez
+# ShopConfig.get_location().)
+LOCATION_RUN_SETTING_KEYS = ("rest_11h_mode",)
 
 # Stała, powtarzalna codziennie "pora nocna" (Kodeks pracy, art. 151(7) §1:
 # 8 godzin między 21:00 a 7:00, w praktyce ustalane przez pracodawcę - tu
@@ -336,6 +327,12 @@ class LocationConfig:
     # (`day_overrides`) zawsze wygrywa - patrz is_closed_for_public_holiday().
     closed_on_public_holidays: bool = True
 
+    # Tryby zasad generatora tej placówki (Konfiguracja -> Zasady generatora
+    # -> ustawienia zaawansowane): nazwa zasady -> ConstraintPolicy. Brak
+    # wpisu = tryb projektu (ShopConfig.constraint_policies) - patrz
+    # ShopConfig.effective_constraint_policies/with_location_settings.
+    constraint_policies: dict = field(default_factory=dict)
+
     def is_closed_for_public_holiday(self, year: int, month: int, day: int) -> bool:
         """True gdy `closed_on_public_holidays` obejmuje ten dzień (polskie
         święto ustawowe, patrz logic/utils/holidays_pl.py) - używane zarówno
@@ -489,6 +486,9 @@ class LocationConfig:
             "closed_on_public_holidays": self.closed_on_public_holidays,
             "preferred_shifts_enabled": self.preferred_shifts_enabled,
             "preferred_shifts": self.preferred_shifts,
+            "constraint_policies": {
+                name: getattr(policy, "value", policy) for name, policy in self.constraint_policies.items()
+            },
         }
 
     @classmethod
@@ -510,6 +510,17 @@ class LocationConfig:
         loc.round_clock_start_hour = data.get("round_clock_start_hour")
         loc.constraints = dict(DEFAULT_LOCATION_CONSTRAINTS)
         loc.constraints.update(data.get("constraints", {}))
+        loc.constraint_policies = {}
+        for name, value in data.get("constraint_policies", {}).items():
+            try:
+                loc.constraint_policies[name] = ConstraintPolicy(value)
+            except ValueError:
+                continue
+        # Tryb „Dni pod rząd” zapisywany chwilę (2026-09-29) osobno w
+        # constraints - teraz zwykły wpis constraint_policies.
+        legacy_max_consecutive = loc.constraints.pop("max_consecutive_policy", None)
+        if legacy_max_consecutive in {p.value for p in ConstraintPolicy}:
+            loc.constraint_policies.setdefault("max_consecutive", ConstraintPolicy(legacy_max_consecutive))
         loc.preferred_shifts_enabled = bool(data.get("preferred_shifts_enabled", False))
         loc.preferred_shifts = [dict(entry) for entry in data.get("preferred_shifts", [])]
         duty_rotation = data.get("duty_rotation")

@@ -46,8 +46,6 @@ from logic.generator.opening_hours_coverage import (
     add_opening_hours_rest_constraint,
     get_model,
 )
-from model.constraint_policy import ConstraintPolicy
-from model.location import max_consecutive_policy
 from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
 
 
@@ -296,21 +294,16 @@ def _build_availability(ctx, soft):
     )
 
 
-def _build_max_consecutive(ctx, project_policy):
+def _build_max_consecutive(ctx, soft):
     # Group employees by their resolved (project-wide, or per-location if
-    # assigned) max_consecutive_days threshold AND policy (per_location_policy
-    # spec - a location can override the project's mode, see
-    # model/location.py::MAX_CONSECUTIVE_POLICY_KEY), so each group gets its
-    # own value/mode while reusing the same shared constraint function per
-    # group - with no locations (or no overrides), this is one group with
-    # every employee, identical to before per-location support.
-    groups: dict[tuple, list[int]] = {}
+    # assigned) max_consecutive_days threshold, so each group gets its own
+    # value while reusing the same shared constraint function per group -
+    # with no locations (or all locations sharing the default), this is one
+    # group with every employee, identical to before per-location support.
+    groups: dict[int, list[int]] = {}
     for e, emp in enumerate(ctx.employees):
-        constraints = ctx.shop.get_location(emp).constraints
-        policy = max_consecutive_policy(constraints, project_policy)
-        if policy not in (ConstraintPolicy.MANDATORY, ConstraintPolicy.PREFERRED):
-            continue
-        groups.setdefault((constraints.get("max_consecutive_days", 4), policy), []).append(e)
+        value = ctx.shop.get_location(emp).constraints.get("max_consecutive_days", 4)
+        groups.setdefault(value, []).append(e)
 
     # Ręczne wpisy pracowników rotacji służby, które plan pokrycia doby
     # traktuje jako stałe przedziały (x == 0 tego dnia, patrz
@@ -341,10 +334,10 @@ def _build_max_consecutive(ctx, project_policy):
         }
 
     violations = []
-    for (max_consecutive, policy), indices in groups.items():
+    for max_consecutive, indices in groups.items():
         violations.extend(add_max_consecutive_constraint(
             ctx.model, ctx.x, ctx.employees, ctx.days, max_consecutive, ctx.all_shifts,
-            soft=policy == ConstraintPolicy.PREFERRED, trace=ctx.trace, employee_indices=indices,
+            soft=soft, trace=ctx.trace, employee_indices=indices,
             fixed_work_days=fixed_work_days, previous_month_worked=previous_month_worked,
         ))
     return violations
@@ -382,7 +375,7 @@ def _build_generic_policy_specs():
         ConstraintSpec("rest_11h", _build_rest_11h),
         ConstraintSpec("balance", _build_balance),
         ConstraintSpec("availability", _build_availability),
-        ConstraintSpec("max_consecutive", _build_max_consecutive, per_location_policy=True),
+        ConstraintSpec("max_consecutive", _build_max_consecutive),
         ConstraintSpec("monthly_hours", _build_monthly_hours),
         ConstraintSpec(
             "duty_rotation_coverage",

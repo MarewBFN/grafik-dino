@@ -25,7 +25,7 @@ from ui.slug import slugify
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.weekly_hours_editor import WeeklyHoursEditor
-from model.location import DEFAULT_LOCATION_CONSTRAINTS, MAX_CONSECUTIVE_POLICY_KEY, LocationConfig
+from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig
 
 LOCATIONS_TUTORIAL_FLAG = "locations_tutorial_seen.flag"
 
@@ -119,10 +119,9 @@ class _LocationRow(QFrame):
 
         # „Dni pod rząd” tej placówki - jedyny widoczny z progów obsady (reszta
         # w self.thresholds_container niżej), np. 1 dzień dla 2-osobowej
-        # placówki = zmiany na przemian. Tryb tej zasady tylko dla placówki
-        # (MAX_CONSECUTIVE_POLICY_KEY) ustawia Konfiguracja -> Zasady
-        # generatora -> ustawienia zaawansowane; tu przechodzi bez zmian.
-        self._max_consecutive_policy = rule_overrides.get(MAX_CONSECUTIVE_POLICY_KEY)
+        # placówki = zmiany na przemian. Tryb tej zasady (jak wszystkie tryby
+        # zasad placówki) ustawia Konfiguracja -> Zasady generatora ->
+        # ustawienia zaawansowane; _save() zachowuje je bez zmian.
         consecutive_row = QHBoxLayout()
         consecutive_row.addWidget(QLabel("Maks. dni pracy pod rząd:"))
         self.max_consecutive_spin = QSpinBox()
@@ -295,8 +294,6 @@ class _LocationRow(QFrame):
 
     def constraints_overrides(self) -> dict:
         overrides = {"max_consecutive_days": self.max_consecutive_spin.value()}
-        if self._max_consecutive_policy is not None:
-            overrides[MAX_CONSECUTIVE_POLICY_KEY] = self._max_consecutive_policy
         for rule_key, spin in self.rule_spins.items():
             if spin.value():
                 overrides[rule_key] = spin.value()
@@ -600,6 +597,14 @@ class LocationsDialog(QDialog):
                     loc.trade_sundays = old.trade_sundays
                     loc.public_holidays = old.public_holidays
                     loc.day_overrides = old.day_overrides
+                    # Tryby zasad i ustawienia generatora placówki (Konfiguracja
+                    # -> Zasady generatora -> ustawienia zaawansowane, np. tryb
+                    # odpoczynku, maks. obsada naraz) - też bez UI w tym oknie.
+                    loc.constraint_policies = old.constraint_policies
+                    managed = {"max_consecutive_days", *row.rule_spins}
+                    for name, value in old.constraints.items():
+                        if name not in managed:
+                            loc.constraints.setdefault(name, value)
                 new_locations[key] = loc
 
             self.shop_config.locations = new_locations

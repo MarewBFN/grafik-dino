@@ -303,7 +303,8 @@ def _alternating_spec(name, policy="MANDATORY", **extra):
     """2 osoby, 08:00-20:00 (12 h przerwy - sam odpoczynek nie wymusza
     zmian na przemian), „Dni pod rząd” = 1 z trybem tylko dla placówki."""
     spec = _ochrona_regular(name, ("08:00", "20:00"), 2, **extra)
-    spec["locations"][0]["constraints"] = {"max_consecutive_days": 1, "max_consecutive_policy": policy}
+    spec["locations"][0]["constraints"] = {"max_consecutive_days": 1}
+    spec["locations"][0]["policies"] = {"max_consecutive": policy}
     return spec
 
 
@@ -681,12 +682,14 @@ def test_config_dialog_shows_opening_hours_coverage_rule_for_ochrona(monkeypatch
 
     selector.setCurrentIndex(selector.findData(ConstraintPolicy.PREFERRED))
     dialog._save()
-    assert shop.constraint_policies["opening_hours_coverage"] == ConstraintPolicy.PREFERRED
+    # Ustawienia zaawansowane są per placówka - zapis w placówce „p”.
+    assert shop.locations["p"].constraint_policies["opening_hours_coverage"] == ConstraintPolicy.PREFERRED
+    assert shop.effective_constraint_policies("p")["opening_hours_coverage"] == ConstraintPolicy.PREFERRED
 
 
 def test_config_dialog_edits_max_staff_at_once_for_ochrona(monkeypatch):
     """„Maks. obsada naraz”: liczba osób (Ograniczenia) i tryb (Zasady
-    generatora) - GUI -> konfiguracja -> generator."""
+    generatora) - GUI -> konfiguracja placówki -> generator."""
     import os
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -717,8 +720,9 @@ def test_config_dialog_edits_max_staff_at_once_for_ochrona(monkeypatch):
     selector.setCurrentIndex(selector.findData(ConstraintPolicy.MANDATORY))
     dialog.max_staff.setValue(2)
     dialog._save()
-    assert shop.constraint_policies["max_staff_at_once"] == ConstraintPolicy.MANDATORY
-    assert shop.constraints["max_staff_at_once"] == 2
+    # Ustawienia zaawansowane są per placówka - zapis w placówce „p”.
+    assert shop.locations["p"].constraint_policies["max_staff_at_once"] == ConstraintPolicy.MANDATORY
+    assert shop.locations["p"].constraints["max_staff_at_once"] == 2
 
     import contextlib
     import io

@@ -21,7 +21,6 @@ from datetime import date, timedelta
 
 import holidays as _holidays
 
-from model.location import MAX_CONSECUTIVE_POLICY_KEY
 
 DAY = 24 * 60
 SLOT = 15
@@ -44,9 +43,9 @@ class Violation:
     # "generator" = błąd wyniku generatora; "input" = sprzeczność wyłącznie
     # między ręcznymi wpisami użytkownika (generator nie mógł tego zmienić).
     source: str = "generator"
-    # Tryb zasady nadpisany dla placówki pracownika (np. „Dni pod rząd”,
-    # LocationConfig.constraints) - None = tryb projektu (evaluate()).
-    policy: str | None = None
+    # Placówka, której dotyczy naruszenie - evaluate() ocenia je wg jej trybów
+    # zasad (per placówka). Dla naruszeń pracownika uzupełniane w validate().
+    location: str | None = None
 
     def as_dict(self):
         return {
@@ -545,7 +544,6 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
     for emp in schedule_after.employees:
         loc = cfg.location(emp)
         limit = (loc.constraints if loc else shop.constraints).get("max_consecutive_days", shop.constraints.get("max_consecutive_days", 4))
-        policy = (loc.constraints if loc else {}).get(MAX_CONSECUTIVE_POLICY_KEY)
         worked = {d for _s, _e, d, _m, _f in intervals[emp.id]}
         manual_days = {d for _s, _e, d, m, _f in intervals[emp.id] if m}
         if schedule_after.get_previous_month_end_shift(emp) is not None:
@@ -562,7 +560,6 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
                     f"{len(streak)} dni pod rząd (limit {limit}): dni {streak[0]}-{streak[-1]}",
                     emp.display_name(), streak[0],
                     source="input" if all(d in manual_days for d in streak[: limit + 1]) else "generator",
-                    policy=policy,
                 ))
             streak = []
 
@@ -609,6 +606,12 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
     # ------------------------------------------------------------------
     if cfg.custom is not None:
         _validate_custom_rules(cfg, schedule_after, intervals, report)
+
+    # Placówka naruszeń pracownika - tryby zasad są per placówka (evaluate()).
+    location_by_name = {emp.display_name(): emp.location_key for emp in schedule_after.employees}
+    for violation in report.violations:
+        if violation.location is None and violation.employee in location_by_name:
+            violation.location = location_by_name[violation.employee]
 
     return report
 
@@ -661,19 +664,19 @@ def _validate_dino(cfg, schedule, intervals, report):
             per_day.setdefault(day, {})[loc_key] = (len(openers), len(closers))
 
             if len(openers) < min_open:
-                add(Violation("open", f"[{loc_key}] na otwarciu {len(openers)} os. < min {min_open}", day=day))
+                add(Violation("open", f"[{loc_key}] na otwarciu {len(openers)} os. < min {min_open}", day=day, location=loc_key))
             if not any(e.is_opener for e in openers):
-                add(Violation("open", f"[{loc_key}] brak pracownika otwarcia (is_opener) na otwarciu", day=day))
+                add(Violation("open", f"[{loc_key}] brak pracownika otwarcia (is_opener) na otwarciu", day=day, location=loc_key))
             if not any(e.is_meat or e.is_meat_light for e in openers):
-                add(Violation("open", f"[{loc_key}] brak mięsa na otwarciu", day=day))
+                add(Violation("open", f"[{loc_key}] brak mięsa na otwarciu", day=day, location=loc_key))
             if len(closers) < min_close:
-                add(Violation("close", f"[{loc_key}] na zamknięciu {len(closers)} os. < min {min_close}", day=day))
+                add(Violation("close", f"[{loc_key}] na zamknięciu {len(closers)} os. < min {min_close}", day=day, location=loc_key))
             if not any(e.is_meat or e.is_meat_light for e in closers):
-                add(Violation("close", f"[{loc_key}] brak mięsa na zamknięciu", day=day))
+                add(Violation("close", f"[{loc_key}] brak mięsa na zamknięciu", day=day, location=loc_key))
             # Generator (constraints_staff.add_fixed_staff_shift_constraints)
             # wymaga osoby z "otwarciem" także na zamknięciu.
             if not any(e.is_opener for e in closers):
-                add(Violation("close", f"[{loc_key}] brak pracownika otwarcia (is_opener) na zamknięciu", day=day))
+                add(Violation("close", f"[{loc_key}] brak pracownika otwarcia (is_opener) na zamknięciu", day=day, location=loc_key))
 
             # "Mięso na zmianach" (policy "meat", semantyka trybu MANDATORY w
             # generatorze): jeśli tego dnia jest choć jedna zmiana spoza
@@ -684,7 +687,7 @@ def _validate_dino(cfg, schedule, intervals, report):
                 if d == day and s != open_t and en != close_t
             ]
             if middle and not any(e.is_meat or e.is_meat_light for e in middle):
-                add(Violation("meat", f"[{loc_key}] brak mięsa na zmianach środkowych", day=day))
+                add(Violation("meat", f"[{loc_key}] brak mięsa na zmianach środkowych", day=day, location=loc_key))
 
             # Mięso przez cały dzień (kwadrans po kwadransie): is_meat, a
             # is_meat_light maks. 60 min/dzień/osobę.
@@ -710,7 +713,7 @@ def _validate_dino(cfg, schedule, intervals, report):
                 add(Violation(
                     "meat_coverage",
                     f"[{loc_key}] brak mięsa w {len(gaps)} kwadransach (pierwszy {fmt_abs(gaps[0])})",
-                    day=day,
+                    day=day, location=loc_key,
                 ))
 
     report.metrics["open_close_per_day"] = per_day
@@ -786,19 +789,20 @@ def _validate_duty(cfg, schedule, intervals, manual, report):
             add(Violation(
                 "duty_rotation_coverage",
                 f"[{loc_key}] nakładające się ręczne wpisy: {manual_doubles} kwadransów",
-                source="input",
+                source="input", location=loc_key,
             ))
         if gaps:
             day, t, _c = first_problem if first_problem and first_problem[2] == 0 else (None, None, None)
             add(Violation(
                 "duty_rotation_coverage",
                 f"[{loc_key}] luka w obsadzie: {gaps} kwadransów bez nikogo" + (f" (np. {fmt_abs(t)})" if t is not None else ""),
-                day=day,
+                day=day, location=loc_key,
             ))
         if doubles:
             add(Violation(
                 "duty_rotation_coverage",
                 f"[{loc_key}] podwójna obsada: {doubles} kwadransów z >=2 osobami",
+                location=loc_key,
             ))
     report.metrics["duty_coverage"] = coverage_metrics
 
@@ -845,13 +849,13 @@ def _validate_opening_coverage(cfg, schedule, intervals, report):
             add(Violation(
                 "opening_hours_coverage",
                 f"[{loc_key}] {len(gaps)} kwadransów godzin otwarcia bez nikogo (np. {fmt_abs(gaps[0])})",
-                day=gaps[0] // DAY + 1,
+                day=gaps[0] // DAY + 1, location=loc_key,
             ))
         if over_cap:
             add(Violation(
                 MAX_STAFF_KEY,
                 f"[{loc_key}] {len(over_cap)} kwadransów z obsadą ponad limit {cap} (np. {fmt_abs(over_cap[0])})",
-                day=over_cap[0] // DAY + 1,
+                day=over_cap[0] // DAY + 1, location=loc_key,
             ))
     report.metrics["opening_coverage"] = metrics
 
@@ -922,7 +926,7 @@ def evaluate(report, shop):
         if v.rule in STRUCTURAL_RULES:
             hard.append(v)
             continue
-        policy = v.policy or shop.constraint_policies.get(v.rule)
+        policy = shop.effective_constraint_policies(v.location).get(v.rule)
         policy = getattr(policy, "value", policy)
         if policy == "MANDATORY":
             hard.append(v)

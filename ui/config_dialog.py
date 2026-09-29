@@ -30,7 +30,7 @@ from ui.profile_wizard_dialog import ProfileWizardDialog
 from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile, visible_profiles
-from model.location import MAX_CONSECUTIVE_POLICY_KEY, max_consecutive_policy, normalize_duty_rotation
+from model.location import normalize_duty_rotation
 from logic.generator.opening_hours_coverage import (
     DEFAULT_MAX_STAFF,
     MAX_STAFF_CONSTRAINT_KEY,
@@ -737,7 +737,32 @@ class ConfigDialog(QDialog):
             "znaleziony wynik. Dłuższy limit daje lepsze rozwiązania, ale wydłuża "
             "generowanie — przydatne do zwiększenia na słabszym sprzęcie."
         )
-        form_solver.addRow("Limit czasu generatora:", self.solver_time_limit)
+        form_solver.addRow("Limit czasu generatora (cały projekt):", self.solver_time_limit)
+        advanced_layout.addLayout(form_solver)
+
+        # Wszystko niżej - tryby zasad i ustawienia generatora - zapisywane
+        # per placówka (LocationConfig.constraint_policies/.constraints), gdy
+        # okno otwarto dla placówki: generator bierze je przy generowaniu jej
+        # grafiku (ShopConfig.with_location_settings). Bez placówki (stare
+        # wywołania/testy) - ustawienia projektu, jak dawniej.
+        if self.location is not None:
+            location_label = QLabel(f"PLACÓWKA: {self.location.name}")
+            location_label.setObjectName("groupLabel")
+            advanced_layout.addWidget(location_label)
+            location_hint = QLabel(
+                "Zasady i ustawienia poniżej obowiązują tylko w tej placówce - "
+                "każda placówka ma własne (wybierz ją w programie, żeby je zmienić)."
+            )
+            location_hint.setObjectName("mutedHint")
+            location_hint.setWordWrap(True)
+            advanced_layout.addWidget(location_hint)
+            settings = self.location.constraints
+            policies = self.shop_config.effective_constraint_policies(self.location.key)
+        else:
+            settings = self.shop_config.constraints
+            policies = self.shop_config.constraint_policies
+
+        location_form = QFormLayout()
 
         # "Maks. obsada naraz" (profil Ochrony, placówki z godzinami otwarcia
         # - patrz logic/generator/opening_hours_coverage.py): liczba osób tu,
@@ -748,17 +773,34 @@ class ConfigDialog(QDialog):
         self.max_staff = QSpinBox()
         self.max_staff.setRange(1, 10)
         self.max_staff.setFixedWidth(90)
-        self.max_staff.setValue(
-            int(self.shop_config.constraints.get(MAX_STAFF_CONSTRAINT_KEY, DEFAULT_MAX_STAFF))
-        )
+        self.max_staff.setValue(int(settings.get(
+            MAX_STAFF_CONSTRAINT_KEY, self.shop_config.constraints.get(MAX_STAFF_CONSTRAINT_KEY, DEFAULT_MAX_STAFF)
+        )))
         self.max_staff.setToolTip(
             "Ile osób z jednej placówki z godzinami otwarcia (bez rotacji 24/7) "
             "może pracować jednocześnie. Tryb ustawiasz przy zasadzie "
             "„Maks. obsada naraz” niżej."
         )
         if profile_uses_opening_hours_model(self.shop_config.business_type):
-            form_solver.addRow("Maks. osób naraz w placówce:", self.max_staff)
-        advanced_layout.addLayout(form_solver)
+            location_form.addRow("Maks. osób naraz w placówce:", self.max_staff)
+
+        # „Dni pod rząd” - limit dni placówki (ten sam co w oknie Lokalizacje),
+        # tryb przy zasadzie „Dni pod rząd” niżej; np. 2-osobowa placówka:
+        # 1 dzień + Wymagane = zmiany na przemian.
+        self.location_max_consecutive = None
+        if self.location is not None:
+            self.location_max_consecutive = QSpinBox()
+            self.location_max_consecutive.setRange(1, 14)
+            self.location_max_consecutive.setFixedWidth(90)
+            self.location_max_consecutive.setValue(self.location.constraints.get("max_consecutive_days", 4))
+            self.location_max_consecutive.setToolTip(
+                "1 dzień = nikt nie pracuje dwa dni pod rząd, czyli przy dwóch "
+                "osobach zmiany na przemian. Tryb ustawiasz przy zasadzie „Dni pod "
+                "rząd” niżej - przy „Wymagane” urlop albo L4 jednej z dwóch osób "
+                "dłuższe niż 1 dzień daje brak rozwiązania."
+            )
+            location_form.addRow("Maks. dni pracy pod rząd:", self.location_max_consecutive)
+        advanced_layout.addLayout(location_form)
 
         # QFormLayout zamiast ręcznie łamanej na dwie kolumny QGridLayout
         # (poprzednia wersja pakowała wiersze w dwie pary kolumn obok siebie,
@@ -779,7 +821,7 @@ class ConfigDialog(QDialog):
             options = POLICY_OPTIONS_TWO_STATE if policy_name in POLICY_TWO_STATE_NAMES else POLICY_OPTIONS
             for text, value in options:
                 selector.addItem(text, value)
-            current_policy = self.shop_config.constraint_policies.get(
+            current_policy = policies.get(
                 policy_name, POLICY_MISSING_DEFAULTS.get(policy_name, ConstraintPolicy.PREFERRED)
             )
             if policy_name == "balance" and current_policy == ConstraintPolicy.MANDATORY:
@@ -811,7 +853,7 @@ class ConfigDialog(QDialog):
         self.rest_11h_mode_selector.setMinimumWidth(125)
         for text, value in REST_11H_MODE_OPTIONS:
             self.rest_11h_mode_selector.addItem(text, value)
-        current_mode = self.shop_config.constraints.get("rest_11h_mode", "standard")
+        current_mode = settings.get("rest_11h_mode", self.shop_config.constraints.get("rest_11h_mode", "standard"))
         self.rest_11h_mode_selector.setCurrentIndex(
             self.rest_11h_mode_selector.findData(current_mode)
         )
@@ -825,51 +867,6 @@ class ConfigDialog(QDialog):
         policy_form.addRow("Tryb liczenia odpoczynku 11h:", self.rest_11h_mode_selector)
 
         advanced_layout.addLayout(policy_form)
-
-        # „Dni pod rząd” tylko dla placówki, dla której otwarto to okno
-        # (LocationConfig.constraints, patrz model/location.py::
-        # MAX_CONSECUTIVE_POLICY_KEY) - liczba dni i tryb niezależne od
-        # zasady „Dni pod rząd” całego projektu wyżej, np. 2-osobowa
-        # placówka: 1 dzień, Wymagane = zmiany na przemian.
-        self.location_max_consecutive = None
-        self.location_max_consecutive_policy = None
-        if self.location is not None:
-            location_label = QLabel(f"PLACÓWKA: {self.location.name}")
-            location_label.setObjectName("groupLabel")
-            advanced_layout.addWidget(location_label)
-
-            self.location_max_consecutive = QSpinBox()
-            self.location_max_consecutive.setRange(1, 14)
-            self.location_max_consecutive.setFixedWidth(70)
-            self.location_max_consecutive.setValue(self.location.constraints.get("max_consecutive_days", 4))
-
-            self.location_max_consecutive_policy = QComboBox()
-            self.location_max_consecutive_policy.setMinimumWidth(125)
-            for text, value in POLICY_OPTIONS:
-                self.location_max_consecutive_policy.addItem(text, value)
-            project_policy = self.shop_config.constraint_policies.get("max_consecutive", ConstraintPolicy.PREFERRED)
-            self.location_max_consecutive_policy.setCurrentIndex(self.location_max_consecutive_policy.findData(
-                max_consecutive_policy(self.location.constraints, project_policy)
-            ))
-            _apply_policy_state_tooltips(self.location_max_consecutive_policy, "Dni pod rząd")
-
-            location_row = QHBoxLayout()
-            location_row.addWidget(self.location_max_consecutive)
-            location_row.addWidget(self.location_max_consecutive_policy)
-            location_row.addStretch()
-            location_form = QFormLayout()
-            location_form.addRow("Maks. dni pracy pod rząd:", location_row)
-            advanced_layout.addLayout(location_form)
-
-            location_hint = QLabel(
-                "Tylko dla tej placówki - zastępuje zasadę „Dni pod rząd” z listy "
-                "wyżej. 1 dzień = nikt nie pracuje dwa dni pod rząd, czyli przy "
-                "dwóch osobach zmiany na przemian. Przy „Wymagane” urlop albo L4 "
-                "jednej z dwóch osób dłuższe niż 1 dzień daje brak rozwiązania."
-            )
-            location_hint.setObjectName("mutedHint")
-            location_hint.setWordWrap(True)
-            advanced_layout.addWidget(location_hint)
 
         hint = QLabel(
             "Te reguły możesz swobodnie zmieniać i testować, jak zachowuje się "
@@ -986,7 +983,6 @@ class ConfigDialog(QDialog):
             self.shop_config.standard_daily_hours = self.standard_daily_hours.value()
             self.shop_config.constraints["min_open_staff"] = self.min_open.value()
             self.shop_config.constraints["min_close_staff"] = self.min_close.value()
-            self.shop_config.constraints[MAX_STAFF_CONSTRAINT_KEY] = self.max_staff.value()
             self.shop_config.constraints["enforce_11h_rest"] = True
             self.shop_config.constraints["enforce_meat_coverage"] = True
             self.shop_config.constraints["force_fulltime_845"] = self.force_fulltime_845.isChecked()
@@ -1051,27 +1047,26 @@ class ConfigDialog(QDialog):
 
                 self.location.closed_on_public_holidays = self.closed_on_public_holidays_check.isChecked()
 
-            self.shop_config.constraints["rest_11h_mode"] = self.rest_11h_mode_selector.currentData()
             self.shop_config.constraints["solver_time_limit_seconds"] = self.solver_time_limit.value()
+
+            # Zasady i ustawienia generatora z ustawień zaawansowanych - per
+            # placówka, gdy okno otwarto dla placówki (patrz
+            # _build_generator_rules_tab), inaczej projektowe jak dawniej.
+            if self.location is not None:
+                policies, settings = self.location.constraint_policies, self.location.constraints
+                settings["max_consecutive_days"] = self.location_max_consecutive.value()
+            else:
+                policies, settings = self.shop_config.constraint_policies, self.shop_config.constraints
+            settings[MAX_STAFF_CONSTRAINT_KEY] = self.max_staff.value()
+            settings["rest_11h_mode"] = self.rest_11h_mode_selector.currentData()
             for policy_name, selector in self.policy_selectors.items():
-                self.shop_config.constraint_policies[policy_name] = selector.currentData()
+                policies[policy_name] = ConstraintPolicy(selector.currentData())
                 # "balance" ma disabled selector (patrz konstrukcja wyżej) -
                 # jego currentData() już poprawnie odzwierciedla wartość
                 # ustawioną programowo (np. DISABLED dla profilu ochrony) i
                 # nie trzeba (ani nie wolno) jej tu nadpisywać z powrotem na
                 # PREFERRED, bo to by cofnęło taką decyzję przy każdym
                 # otwarciu i zapisaniu Konfiguracji.
-
-            # „Dni pod rząd” tej placówki - tryb zapisany tylko, gdy różni się
-            # od trybu projektu (zapisanego wyżej); ten sam = placówka dalej
-            # idzie za projektem, także po jego późniejszej zmianie.
-            if self.location_max_consecutive is not None:
-                self.location.constraints["max_consecutive_days"] = self.location_max_consecutive.value()
-                chosen = ConstraintPolicy(self.location_max_consecutive_policy.currentData())
-                if chosen == self.shop_config.constraint_policies.get("max_consecutive"):
-                    self.location.constraints.pop(MAX_CONSECUTIVE_POLICY_KEY, None)
-                else:
-                    self.location.constraints[MAX_CONSECUTIVE_POLICY_KEY] = chosen.value
         except Exception as exc:
             QMessageBox.critical(self, "Błąd konfiguracji", str(exc))
             return

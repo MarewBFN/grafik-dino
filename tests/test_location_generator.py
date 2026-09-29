@@ -17,7 +17,7 @@ from model.custom_profile import (
 )
 from logic.generator.custom_profile_wiring import default_policies
 from model.employee import Employee
-from model.location import MAX_CONSECUTIVE_POLICY_KEY, LocationConfig
+from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from logic.auto_generator import AutoScheduleGenerator
@@ -173,53 +173,76 @@ def test_max_consecutive_days_is_resolved_per_employee_location():
     assert build(6) is True, "3 locked consecutive days should be fine under a 6-day location limit"
 
 
-def test_max_consecutive_policy_can_be_overridden_per_location():
-    """Tryb „Dni pod rząd” tylko dla placówki (Konfiguracja -> Zasady
-    generatora -> ustawienia zaawansowane) wygrywa z trybem projektu w obie
-    strony - także gdy w projekcie zasada jest Wyłączona."""
+def _consecutive_policy_project(key, location_policies):
+    """Placówki z limitem 2 dni pod rząd i jedną osobą, która ma zablokowane
+    3 dni pod rząd (2-4.03) - sprzeczne z limitem, gdy ten jest Wymagany.
+    `location_policies`: {klucz placówki: tryb „Dni pod rząd” placówki albo
+    None (= tryb projektu)}; projekt: Wymagane."""
     profile = CustomBusinessProfile(
-        key="custom_test_maxconsec_policy",
-        display_name="Test MaxConsec Policy",
-        roles=[RoleDefinition(key="worker", label="Pracownik")],
-        rules=[],
+        key=key, display_name="Test MaxConsec Policy",
+        roles=[RoleDefinition(key="worker", label="Pracownik")], rules=[],
     )
     register_custom_profile(profile)
 
-    def build(project_policy, location_policy):
-        shop = ShopConfig(2026, 3)
-        shop.business_type = profile.key
-        shop.constraint_policies.update(default_policies(profile))
-        shop.constraint_policies["max_consecutive"] = project_policy
-
-        constraints = {"max_consecutive_days": 2}
-        if location_policy is not None:
-            constraints[MAX_CONSECUTIVE_POLICY_KEY] = location_policy.value
+    shop = ShopConfig(2026, 3)
+    shop.business_type = profile.key
+    shop.constraint_policies.update(default_policies(profile))
+    shop.constraint_policies["max_consecutive"] = ConstraintPolicy.MANDATORY
+    shop.locations = {}
+    schedule = MonthSchedule(2026, 3)
+    for loc_key, policy in location_policies.items():
         loc = LocationConfig(
-            key="loc", name="Obiekt",
+            key=loc_key, name=loc_key.upper(),
             open_hours={i: ("08:00", "16:00") for i in range(7)},
-            constraints=constraints,
+            constraints={"max_consecutive_days": 2},
         )
-        shop.locations = {"loc": loc}
-
-        schedule = MonthSchedule(2026, 3)
-        emp = Employee(last_name="A", first_name="A", location_key="loc", custom_roles={"worker": True})
+        if policy is not None:
+            loc.constraint_policies["max_consecutive"] = policy
+        shop.locations[loc_key] = loc
+        emp = Employee(last_name=loc_key.upper(), first_name="A", location_key=loc_key, custom_roles={"worker": True})
         schedule.add_employee(emp)
-        # 3 zablokowane dni pod rząd - sprzeczne z limitem 2 dni, gdy Wymagany.
         for day in (2, 3, 4):
             ds = schedule.get_day(emp, day)
             ds.start, ds.end = "08:00", "16:00"
             ds.is_locked = True
+    return schedule, shop
 
-        with redirect_stdout(io.StringIO()):
-            result = AutoScheduleGenerator(schedule, shop).generate(
-                is_fix=True, solver_time_limit_seconds=10, solver_workers=1
-            )
-        return result["success"]
+
+def _generate_fix(schedule, shop, location_key=None):
+    with redirect_stdout(io.StringIO()):
+        return AutoScheduleGenerator(schedule, shop).generate(
+            is_fix=True, solver_time_limit_seconds=10, solver_workers=1, location_key=location_key,
+        )["success"]
+
+
+def test_max_consecutive_policy_can_be_overridden_per_location():
+    """Tryb „Dni pod rząd” placówki (Konfiguracja -> Zasady generatora ->
+    ustawienia zaawansowane) wygrywa z trybem projektu w obie strony - także
+    gdy w projekcie zasada jest Wyłączona."""
+    def build(project_policy, location_policy):
+        schedule, shop = _consecutive_policy_project("custom_test_maxconsec_policy", {"loc": location_policy})
+        shop.constraint_policies["max_consecutive"] = project_policy
+        return _generate_fix(schedule, shop)
 
     assert build(ConstraintPolicy.MANDATORY, None) is False, "bez nadpisania obowiązuje tryb projektu"
     assert build(ConstraintPolicy.DISABLED, ConstraintPolicy.MANDATORY) is False
     assert build(ConstraintPolicy.MANDATORY, ConstraintPolicy.DISABLED) is True
     assert build(ConstraintPolicy.MANDATORY, ConstraintPolicy.PREFERRED) is True
+
+
+def test_whole_project_generation_uses_each_locations_own_policies():
+    """Cały projekt naraz: placówki o różnych trybach zasad generują się
+    osobno, każda ze swoimi - „a” (Wyłączone) przechodzi, „b” (tryb projektu:
+    Wymagane) nie, więc cały projekt też nie; bez „b” w konflikcie - tak."""
+    schedule, shop = _consecutive_policy_project(
+        "custom_test_maxconsec_split", {"a": ConstraintPolicy.DISABLED, "b": None},
+    )
+    assert _generate_fix(schedule, shop, location_key="a") is True
+    assert _generate_fix(schedule, shop, location_key="b") is False
+    assert _generate_fix(schedule, shop) is False
+
+    shop.locations["b"].constraint_policies["max_consecutive"] = ConstraintPolicy.PREFERRED
+    assert _generate_fix(schedule, shop) is True
 
 
 def test_min_staff_with_role_rule_is_resolved_per_employee_location():
@@ -321,3 +344,23 @@ def test_shop_config_get_location_falls_back_when_employee_unassigned():
     emp = Employee(last_name="Kowalski", first_name="Jan")  # location_key == ""
 
     assert shop.get_location(emp) is shop
+
+
+def test_locations_with_different_generator_settings_are_generated_separately():
+    """Cały projekt naraz: placówki o tych samych ustawieniach generatora -
+    jeden model (jak dawniej), o różnych (tu tylko tryb odpoczynku) - osobno,
+    każda ze swoimi ustawieniami."""
+    shop = ShopConfig(2026, 3)
+    shop.locations = {key: LocationConfig(key=key, name=key.upper()) for key in ("a", "b")}
+    schedule = MonthSchedule(2026, 3)
+    for key in ("a", "b"):
+        schedule.add_employee(Employee(last_name=key.upper(), first_name="A", location_key=key))
+
+    groups = AutoScheduleGenerator(schedule, shop)._setting_groups(None)
+    assert len(groups) == 1 and groups[0][1] == schedule.employees
+
+    shop.locations["b"].constraints["rest_11h_mode"] = "simplified"
+    groups = AutoScheduleGenerator(schedule, shop)._setting_groups(None)
+    assert sorted((run_shop.constraints["rest_11h_mode"], [e.location_key for e in emps]) for run_shop, emps in groups) == [
+        ("simplified", ["b"]), ("standard", ["a"]),
+    ]

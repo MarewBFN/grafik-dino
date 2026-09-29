@@ -1,7 +1,8 @@
 import calendar
+import copy
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
-from model.location import LocationConfig, normalize_night_shift, normalize_duty_rotation
+from model.location import LOCATION_RUN_SETTING_KEYS, LocationConfig, normalize_night_shift, normalize_duty_rotation
 
 # Klucz/nazwa auto-tworzonej domyślnej lokalizacji: każdy projekt ma zawsze
 # co najmniej jedną lokalizację (patrz ShopConfig.__init__/from_dict), żeby
@@ -569,6 +570,30 @@ class ShopConfig:
                 uses_trade_calendar=get_profile(self.business_type).uses_trade_calendar,
             )
         return self
+
+    def effective_constraint_policies(self, location_key) -> dict:
+        """Tryby zasad generatora placówki: projektowe nadpisane jej własnymi
+        (LocationConfig.constraint_policies - Konfiguracja -> Zasady
+        generatora -> ustawienia zaawansowane zapisują je per placówka)."""
+        location = self.locations.get(location_key) if location_key is not None else None
+        if location is None or not location.constraint_policies:
+            return dict(self.constraint_policies)
+        return {**self.constraint_policies, **location.constraint_policies}
+
+    def with_location_settings(self, location_key) -> "ShopConfig":
+        """Płytka kopia projektu z trybami zasad i ustawieniami generatora
+        placówki (LOCATION_RUN_SETTING_KEYS) - generator czyta je z
+        ShopConfig, więc dostaje taką kopię przy generowaniu jej grafiku.
+        Reszta (lokalizacje, godziny, ...) wspólna z projektem."""
+        run_shop = copy.copy(self)
+        run_shop.constraint_policies = self.effective_constraint_policies(location_key)
+        run_shop.constraints = dict(self.constraints)
+        location = self.locations.get(location_key) if location_key is not None else None
+        if location is not None:
+            for key in LOCATION_RUN_SETTING_KEYS:
+                if key in location.constraints:
+                    run_shop.constraints[key] = location.constraints[key]
+        return run_shop
 
     # ==========================================================
     # SERIALIZACJA

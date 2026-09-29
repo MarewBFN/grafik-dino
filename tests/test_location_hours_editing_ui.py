@@ -21,7 +21,7 @@ from PySide6.QtWidgets import QApplication
 _app = QApplication.instance() or QApplication([])
 
 from model.constraint_policy import ConstraintPolicy
-from model.location import MAX_CONSECUTIVE_POLICY_KEY, LocationConfig
+from model.location import LocationConfig
 from model.shop_config import ShopConfig
 from ui.config_dialog import ConfigDialog
 from ui.locations_dialog import LocationsDialog, _LocationRow
@@ -331,15 +331,16 @@ def test_hours_equalization_rule_is_shown_for_custom_profile_and_disabled_when_m
     assert shop.constraint_policies.get("hours_equalization", ConstraintPolicy.DISABLED) == ConstraintPolicy.DISABLED
 
 
-def test_locations_dialog_row_shows_max_consecutive_days_and_keeps_location_policy():
+def test_locations_dialog_row_shows_max_consecutive_days_and_keeps_location_settings():
     """„Dni pod rząd” widoczne w wierszu placówki (reszta progów obsady
-    zostaje schowana), a zapis okna nie gubi trybu tej zasady ustawionego
-    dla placówki w Konfiguracji."""
+    zostaje schowana), a zapis okna nie gubi trybów zasad ani ustawień
+    generatora placówki ustawionych w Konfiguracji (ustawienia zaawansowane)."""
     shop = ShopConfig(2026, 8)
     loc = LocationConfig(
         key="site1", name="Site 1",
-        constraints={"max_consecutive_days": 1, MAX_CONSECUTIVE_POLICY_KEY: "MANDATORY"},
+        constraints={"max_consecutive_days": 1, "rest_11h_mode": "simplified", "max_staff_at_once": 2},
     )
+    loc.constraint_policies = {"max_consecutive": ConstraintPolicy.MANDATORY, "rest_11h": ConstraintPolicy.PREFERRED}
     shop.locations = {"site1": loc}
 
     dialog = LocationsDialog(None, shop)
@@ -351,43 +352,56 @@ def test_locations_dialog_row_shows_max_consecutive_days_and_keeps_location_poli
     row.max_consecutive_spin.setValue(2)
     dialog._save()
 
-    saved = shop.locations["site1"].constraints
-    assert saved["max_consecutive_days"] == 2
-    assert saved[MAX_CONSECUTIVE_POLICY_KEY] == "MANDATORY"
+    saved = shop.locations["site1"]
+    assert saved.constraints["max_consecutive_days"] == 2
+    assert saved.constraints["rest_11h_mode"] == "simplified"
+    assert saved.constraints["max_staff_at_once"] == 2
+    assert saved.constraint_policies == {
+        "max_consecutive": ConstraintPolicy.MANDATORY, "rest_11h": ConstraintPolicy.PREFERRED,
+    }
 
 
-def test_config_dialog_sets_max_consecutive_days_and_policy_for_the_selected_location():
-    """Konfiguracja -> Zasady generatora -> ustawienia zaawansowane: „Dni
-    pod rząd” (liczba dni i Preferowane/Wymagane/Wyłączone) tylko dla
-    placówki, dla której otwarto okno. Tryb równy trybowi projektu nie jest
-    zapisywany - placówka dalej idzie za projektem."""
+def test_config_dialog_advanced_settings_are_saved_per_location():
+    """Konfiguracja -> Zasady generatora -> ustawienia zaawansowane: tryby
+    zasad, maks. dni pod rząd i tryb odpoczynku zapisywane tylko dla
+    placówki, dla której otwarto okno - projekt i inne placówki bez zmian
+    (limit czasu generatora zostaje wspólny dla projektu)."""
     shop = ShopConfig(2026, 8)
     shop.locations = {
         "site1": LocationConfig(key="site1", name="Site 1"),
         "site2": LocationConfig(key="site2", name="Site 2"),
     }
-    shop.constraint_policies["max_consecutive"] = ConstraintPolicy.PREFERRED
+    project_policies = dict(shop.constraint_policies)
+    project_mode = shop.constraints["rest_11h_mode"]
 
     dialog = ConfigDialog(None, shop, location_key="site1")
     rules_page = dialog.tabs.widget(dialog._tab_index_generator)
     assert rules_page.isAncestorOf(dialog.location_max_consecutive)
-    assert dialog.location_max_consecutive_policy.isVisibleTo(dialog.advanced_container)
-    assert dialog.location_max_consecutive_policy.currentData() == ConstraintPolicy.PREFERRED
+    assert dialog.policy_selectors["max_consecutive"].isVisibleTo(dialog.advanced_container)
 
     dialog.location_max_consecutive.setValue(1)
-    selector = dialog.location_max_consecutive_policy
-    selector.setCurrentIndex(selector.findData(ConstraintPolicy.MANDATORY))
+    for name, policy in (("max_consecutive", ConstraintPolicy.MANDATORY), ("rest_11h", ConstraintPolicy.PREFERRED)):
+        selector = dialog.policy_selectors[name]
+        selector.setCurrentIndex(selector.findData(policy))
+    dialog.rest_11h_mode_selector.setCurrentIndex(dialog.rest_11h_mode_selector.findData("simplified"))
+    dialog.solver_time_limit.setValue(90)
     dialog._save()
 
-    assert shop.locations["site1"].constraints["max_consecutive_days"] == 1
-    assert shop.locations["site1"].constraints[MAX_CONSECUTIVE_POLICY_KEY] == "MANDATORY"
-    assert MAX_CONSECUTIVE_POLICY_KEY not in shop.locations["site2"].constraints
-    assert shop.constraint_policies["max_consecutive"] == ConstraintPolicy.PREFERRED
+    site1 = shop.locations["site1"]
+    assert site1.constraints["max_consecutive_days"] == 1
+    assert site1.constraints["rest_11h_mode"] == "simplified"
+    assert site1.constraint_policies["max_consecutive"] == ConstraintPolicy.MANDATORY
+    assert site1.constraint_policies["rest_11h"] == ConstraintPolicy.PREFERRED
+    assert shop.locations["site2"].constraint_policies == {}
+    assert shop.constraint_policies == project_policies
+    assert shop.constraints["rest_11h_mode"] == project_mode
+    assert shop.constraints["solver_time_limit_seconds"] == 90
+
+    dialog = ConfigDialog(None, shop, location_key="site2")
+    assert dialog.policy_selectors["max_consecutive"].currentData() == project_policies["max_consecutive"]
+    assert dialog.rest_11h_mode_selector.currentData() == project_mode
 
     dialog = ConfigDialog(None, shop, location_key="site1")
-    selector = dialog.location_max_consecutive_policy
-    assert selector.currentData() == ConstraintPolicy.MANDATORY
-    selector.setCurrentIndex(selector.findData(ConstraintPolicy.PREFERRED))
-    dialog._save()
-
-    assert MAX_CONSECUTIVE_POLICY_KEY not in shop.locations["site1"].constraints
+    assert dialog.policy_selectors["max_consecutive"].currentData() == ConstraintPolicy.MANDATORY
+    assert dialog.rest_11h_mode_selector.currentData() == "simplified"
+    assert dialog.location_max_consecutive.value() == 1

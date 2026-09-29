@@ -7,6 +7,7 @@ if str(ROOT) not in sys.path:
 
 import pytest
 
+from model.constraint_policy import ConstraintPolicy
 from model.location import LocationConfig, format_open_hours_summary, normalize_night_shift, normalize_preferred_shifts
 from model.shop_config import DEFAULT_LOCATION_KEY, ShopConfig
 from model.employee import Employee
@@ -532,3 +533,37 @@ def test_employee_location_key_defaults_empty_and_round_trips():
 
     restored = MonthSchedule.from_dict(schedule.to_dict())
     assert restored.employees[0].location_key == "galeria_pn"
+
+
+def test_location_constraint_policies_round_trip_and_migrate_the_old_max_consecutive_key():
+    """Tryby zasad placówki (ustawienia zaawansowane per placówka) przechodzą
+    przez zapis/odczyt; tryb „Dni pod rząd” zapisany chwilę wcześniej w
+    constraints["max_consecutive_policy"] trafia do constraint_policies."""
+    loc = LocationConfig(key="p", name="Placówka")
+    loc.constraint_policies = {"rest_11h": ConstraintPolicy.PREFERRED, "max_consecutive": ConstraintPolicy.MANDATORY}
+
+    restored = LocationConfig.from_dict(loc.to_dict())
+    assert restored.constraint_policies == loc.constraint_policies
+
+    old = LocationConfig.from_dict({"key": "q", "constraints": {"max_consecutive_policy": "MANDATORY"}})
+    assert old.constraint_policies == {"max_consecutive": ConstraintPolicy.MANDATORY}
+    assert "max_consecutive_policy" not in old.constraints
+
+
+def test_location_settings_override_the_project_only_for_that_location():
+    shop = ShopConfig(2026, 9)
+    shop.locations = {"a": LocationConfig(key="a", name="A"), "b": LocationConfig(key="b", name="B")}
+    shop.locations["a"].constraint_policies = {"rest_11h": ConstraintPolicy.PREFERRED}
+    shop.locations["a"].constraints["rest_11h_mode"] = "simplified"
+
+    assert shop.effective_constraint_policies("a")["rest_11h"] == ConstraintPolicy.PREFERRED
+    assert shop.effective_constraint_policies("b")["rest_11h"] == shop.constraint_policies["rest_11h"]
+    assert shop.effective_constraint_policies(None) == shop.constraint_policies
+
+    run_shop = shop.with_location_settings("a")
+    assert run_shop.constraint_policies["rest_11h"] == ConstraintPolicy.PREFERRED
+    assert run_shop.constraints["rest_11h_mode"] == "simplified"
+    assert run_shop.locations is shop.locations
+    # projekt bez zmian
+    assert shop.constraint_policies["rest_11h"] != ConstraintPolicy.PREFERRED
+    assert shop.constraints["rest_11h_mode"] == "standard"

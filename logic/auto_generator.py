@@ -1,6 +1,7 @@
 import os
 
 from ortools.sat.python import cp_model
+from model.location import LOCATION_RUN_SETTING_KEYS
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from logic.generator.solver import build_objective, solve_model
@@ -160,10 +161,6 @@ class AutoScheduleGenerator:
             # rdzeni niż wątków = solver wolniejszy, nie szybszy).
             solver_workers = max(1, min(8, os.cpu_count() or 4))
 
-        print("=== START CP-SAT GENERATOR ===")
-
-        schedule_before_generation = self.schedule.snapshot()
-
         if trace is None:
             trace = ConstraintTraceLogger()
 
@@ -178,10 +175,63 @@ class AutoScheduleGenerator:
         # naraz (duty_rotation/round_clock/min_staff_with_role są już
         # grupowane per lokalizacja wewnątrz), więc zwykłe przefiltrowanie
         # listy pracowników przed zbudowaniem modelu jest tu wystarczające.
+        # Tryby zasad i ustawienia generatora są per placówka (Konfiguracja
+        # -> Zasady generatora -> ustawienia zaawansowane, patrz
+        # ShopConfig.with_location_settings): cały projekt naraz = placówki o
+        # tych samych ustawieniach w jednym modelu (bez różnic - jeden,
+        # dokładnie jak dawniej), o różnych - osobno, po kolei.
+        groups = self._setting_groups(location_key)
+        run_args = (is_fix, trace, trace_output_path, solver_time_limit_seconds, solver_workers)
+        if len(groups) == 1:
+            return self._generate_run(*groups[0], *run_args)
+
+        schedule_before_generation = self.schedule.snapshot()
+        results = []
+        for run_shop, employees in groups:
+            result = self._generate_run(run_shop, employees, *run_args)
+            if not result["success"]:
+                self.schedule.restore(schedule_before_generation)
+                return result
+            results.append(result)
+        return {
+            "status": cp_model.FEASIBLE if any(r["status"] == cp_model.FEASIBLE for r in results) else cp_model.OPTIMAL,
+            "success": True,
+            "conflicts": sum(r["conflicts"] for r in results),
+            "branches": sum(r["branches"] for r in results),
+            "wall_time": sum(r["wall_time"] for r in results),
+            "infeasibility_reasons": [],
+        }
+
+    def _setting_groups(self, location_key):
+        """[(projekt z ustawieniami generatora placówki, pracownicy)] - patrz
+        generate(). Pracownicy bez placówki: ustawienia projektu."""
         if location_key is not None and self.shop.locations:
             employees = [e for e in self.schedule.employees if e.location_key == location_key]
-        else:
-            employees = self.schedule.employees
+            return [(self.shop.with_location_settings(location_key), employees)]
+
+        run_shops = {}
+        groups = {}
+        for emp in self.schedule.employees:
+            key = emp.location_key if emp.location_key in self.shop.locations else None
+            if key not in run_shops:
+                run_shops[key] = self.shop.with_location_settings(key)
+            run_shop = run_shops[key]
+            signature = (
+                tuple(sorted((name, getattr(p, "value", p)) for name, p in run_shop.constraint_policies.items())),
+                tuple(run_shop.constraints.get(k) for k in LOCATION_RUN_SETTING_KEYS),
+            )
+            groups.setdefault(signature, (run_shop, []))[1].append(emp)
+        if len(groups) <= 1:
+            run_shop = next(iter(groups.values()))[0] if groups else self.shop.with_location_settings(None)
+            return [(run_shop, self.schedule.employees)]
+        return list(groups.values())
+
+    def _generate_run(self, shop, employees, is_fix, trace, trace_output_path, solver_time_limit_seconds, solver_workers):
+        """Jedno generowanie dla `employees` z ustawieniami `shop` (projekt z
+        ustawieniami generatora placówki, patrz generate())."""
+        print("=== START CP-SAT GENERATOR ===")
+
+        schedule_before_generation = self.schedule.snapshot()
 
         if not is_fix:
             self.schedule.clear_unlocked_days(employees)
@@ -193,7 +243,7 @@ class AutoScheduleGenerator:
         # wyłącznie dni menadżerek - bezpieczne odświeżyć zawsze, niezależnie
         # od tego, dla której lokalizacji akurat generujemy).
         from logic.manager_schedule import apply_all_manager_schedules
-        apply_all_manager_schedules(self.schedule, self.shop)
+        apply_all_manager_schedules(self.schedule, shop)
 
         # Ręczne wpisy pracowników rotacji liczone jako pokrycie doby -
         # plan liczony z zablokowanych dni, więc dopiero po ich ustaleniu.
@@ -202,7 +252,7 @@ class AutoScheduleGenerator:
         # bramy rotacji niżej odpytują go wyłącznie dla pracowników obecnych
         # w modelu.
         from logic.generator.duty_rotation_manual_coverage import build_duty_coverage_plan
-        self.DUTY_SHIFTS.plan = build_duty_coverage_plan(self.schedule, self.shop, self.schedule.employees)
+        self.DUTY_SHIFTS.plan = build_duty_coverage_plan(self.schedule, shop, self.schedule.employees)
 
         for emp in self.schedule.employees:
             object.__setattr__(emp, '_orig_daily_hours', emp.daily_hours)
@@ -211,9 +261,9 @@ class AutoScheduleGenerator:
 
         days = list(range(1, self.schedule.days_in_month + 1))
 
-        min_open = self.shop.constraints.get("min_open_staff", 3)
-        min_close = self.shop.constraints.get("min_close_staff", 3)
-        max_consecutive = self.shop.constraints.get("max_consecutive_days", 4)
+        min_open = shop.constraints.get("min_open_staff", 3)
+        min_close = shop.constraints.get("min_close_staff", 3)
+        max_consecutive = shop.constraints.get("max_consecutive_days", 4)
         # Dzień, w którym lokalizacja KAŻDEGO pracownika jest zamknięta
         # ("Nieczynne", święto, ręczne zamknięcie dnia), nie jest dniem
         # obsady - add_non_trade_day_constraints blokuje w nim wszystkie
@@ -221,8 +271,8 @@ class AutoScheduleGenerator:
         # niespełnialne. Projekt bez pracowników - bez zmian.
         trade_days = [
             d for d in days
-            if self.shop.is_trade_day(d)
-            and (not employees or any(is_location_open_for_employee(self.shop, emp, d) for emp in employees))
+            if shop.is_trade_day(d)
+            and (not employees or any(is_location_open_for_employee(shop, emp, d) for emp in employees))
         ]
 
         print("Liczba pracowników:", len(employees))
@@ -257,7 +307,7 @@ class AutoScheduleGenerator:
             days=days,
             trade_days=trade_days,
             schedule=self.schedule,
-            shop=self.shop,
+            shop=shop,
             all_shifts=self.ALL_SHIFTS,
             shift_open=self.SHIFT_OPEN,
             shift_close=self.SHIFT_CLOSE,
@@ -270,7 +320,7 @@ class AutoScheduleGenerator:
         )
 
         from model.business_profile import get_custom_profile
-        custom = get_custom_profile(self.shop.business_type)
+        custom = get_custom_profile(shop.business_type)
 
         if custom is not None:
             from logic.generator import custom_profile_wiring
@@ -300,7 +350,7 @@ class AutoScheduleGenerator:
                 employees,
                 days,
                 self.schedule,
-                self.shop,
+                shop,
                 self.ALL_SHIFTS,
                 self.SHIFT_OPEN,
                 self.SHIFT_CLOSE,
@@ -319,7 +369,7 @@ class AutoScheduleGenerator:
         )
         success = save_solution(
             self.schedule,
-            self.shop,
+            shop,
             solver,
             status,
             x,
@@ -349,6 +399,8 @@ class AutoScheduleGenerator:
             from logic.generator.diagnostics import build_infeasibility_summary
             infeasibility_reasons = build_infeasibility_summary(
                 schedule_before_generation,
+                # Projekt, nie `shop` - komunikaty biorą tryby zasad każdej
+                # placówki z niej samej (ShopConfig.effective_constraint_policies).
                 self.shop,
                 # UNKNOWN = limit czasu minął bez żadnego rozwiązania - solver
                 # NIE udowodnił sprzeczności zasad (audyt 2026-09-28).
