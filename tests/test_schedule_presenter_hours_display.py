@@ -1,21 +1,25 @@
 """Menu Wygląd -> "Wygląd komórek kompaktowych" (ui/main_window.py::_build_menu) -
 `ShopConfig.hours_display_mode` ("standard" | "fractions") steruje tym, jak
-godziny zmiany są pokazywane w komórce siatki grafiku, W OBU widokach:
-- widok kompaktowy (ui/grid_view.py::ScheduleGrid.compact_mode, domyślny -
-  to jest to, co użytkownik nazywa "trybem szybkim"): dziś skróty "N"/"1"/"2",
-  "fractions" pokazuje zamiast nich realne godziny jako ułamek.
-- widok rozszerzony (logic/schedule_presenter.py::SchedulePresenter.get_cell_view,
-  przycisk "Rozszerz widok"): dziś dwie osobne linie "HH:MM"/"HH:MM",
-  "fractions" ściska je do jednej linii.
+godziny zmiany są pokazywane, ale WYŁĄCZNIE w widoku kompaktowym
+(ui/grid_view.py::ScheduleGrid.compact_mode, domyślny - to jest to, co
+użytkownik nazywa "trybem szybkim"): dziś skróty "N"/"1"/"2", "fractions"
+pokazuje zamiast nich realne godziny jako ułamek.
 
-Oba widoki współdzielą formatowanie ułamka (logic/utils/time_utils.py::
-format_hours_as_fraction/fraction_hour) - "8:00-20:00" -> "8\n20" (godzina
-początku nad godziną końca, jedna cyfra pod drugą - żeby zmieściło się w
-wąskiej komórce - bez zera wiodącego, minuty na razie tylko zaokrąglane do
-najbliższej pełnej godziny - dokładniejszy zapis to świadomie odłożone
-rozszerzenie). Zmiany przez północ NIE dostają znacznika "(+1)" - usunięty
-całkiem na życzenie użytkownika, tło komórki (SHIFT_NIGHT) już odróżnia
-zmianę nocną."""
+Widok rozszerzony (logic/schedule_presenter.py::SchedulePresenter.get_cell_view,
+przycisk "Rozszerz widok") IGNORUJE to ustawienie - zawsze dwie osobne linie
+"HH:MM"/"HH:MM", niezależnie od hours_display_mode. "Rozszerz widok" ma
+jednoznacznie przywracać normalny wygląd komórek (zgłoszenie użytkownika
+2026-09-29) - ułamki są pomyślane jako sposób na zmieszczenie realnych godzin
+w wąskiej komórce trybu kompaktowego, gdzie miejsca jest mniej niż w widoku
+rozszerzonym.
+
+Formatowanie ułamka (logic/utils/time_utils.py::format_hours_as_fraction/
+fraction_hour) - "8:00-20:00" -> "8\n20" (godzina początku nad godziną
+końca, jedna cyfra pod drugą - żeby zmieściło się w wąskiej komórce - bez
+zera wiodącego, minuty na razie tylko zaokrąglane do najbliższej pełnej
+godziny - dokładniejszy zapis to świadomie odłożone rozszerzenie). Zmiany
+przez północ NIE dostają znacznika "(+1)" - usunięty całkiem na życzenie
+użytkownika, tło komórki (SHIFT_NIGHT) już odróżnia zmianę nocną."""
 
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -114,45 +118,34 @@ class StandardModeUnchangedTests(unittest.TestCase):
         self.assertEqual(cv.text_end, "06:00")
 
 
-class FractionsModeTests(unittest.TestCase):
+class ExpandedViewIgnoresFractionsSettingTests(unittest.TestCase):
+    """Widok rozszerzony (SchedulePresenter) nie ma osobnego "trybu
+    kompaktowego" do sprawdzenia - hours_display_mode="fractions" ma go po
+    prostu nie dotyczyć, więc zawsze pokazuje standardowe "HH:MM"/"HH:MM",
+    tak jak StandardModeUnchangedTests."""
+
     def _presenter(self, schedule):
         shop = ShopConfig(2026, 3)
         shop.hours_display_mode = "fractions"
         return SchedulePresenter(schedule, shop)
 
-    def test_regular_shift_becomes_a_single_fraction_line(self):
+    def test_regular_shift_stays_two_lines(self):
         schedule, emp = _schedule_with_employee()
         schedule.get_day(emp, 3).set_hours("08:00", "20:00")
 
         cv = self._presenter(schedule).get_cell_view(emp, 3)
 
-        self.assertEqual(cv.text_start, "8\n20")
-        self.assertEqual(cv.text_end, "")
+        self.assertEqual(cv.text_start, "08:00")
+        self.assertEqual(cv.text_end, "20:00")
 
-    def test_crosses_midnight_becomes_a_single_fraction_line_without_marker(self):
+    def test_crosses_midnight_stays_two_lines_without_marker(self):
         schedule, emp = _schedule_with_employee()
         schedule.get_day(emp, 3).set_hours("22:00", "06:00")
 
         cv = self._presenter(schedule).get_cell_view(emp, 3)
 
-        self.assertEqual(cv.text_start, "22\n6")
-        self.assertEqual(cv.text_end, "")
-
-    def test_partial_hours_round_down_below_half_past(self):
-        schedule, emp = _schedule_with_employee()
-        schedule.get_day(emp, 3).set_hours("08:15", "16:00")
-
-        cv = self._presenter(schedule).get_cell_view(emp, 3)
-
-        self.assertEqual(cv.text_start, "8\n16")
-
-    def test_partial_hours_round_up_at_half_past_or_later(self):
-        schedule, emp = _schedule_with_employee()
-        schedule.get_day(emp, 3).set_hours("08:30", "16:45")
-
-        cv = self._presenter(schedule).get_cell_view(emp, 3)
-
-        self.assertEqual(cv.text_start, "9\n17")
+        self.assertEqual(cv.text_start, "22:00")
+        self.assertEqual(cv.text_end, "06:00")
 
     def test_total_hours_are_not_affected(self):
         schedule, emp = _schedule_with_employee()
@@ -162,10 +155,10 @@ class FractionsModeTests(unittest.TestCase):
 
         self.assertEqual(cv.text_total, "12:00")
 
-    def test_shift_starting_at_open_time_is_still_converted_to_a_fraction(self):
+    def test_shift_starting_at_open_time_is_not_converted(self):
         # Nie ma już osobnej etykiety "OTW" (usunięta na życzenie
         # użytkownika - zostaje tylko kolor tła komórki), więc taka zmiana
-        # podlega dokładnie tej samej konwersji co każda inna.
+        # podlega dokładnie tej samej (braku) konwersji co każda inna.
         emp = Employee(last_name="Kowalski", first_name="Jan", daily_hours=8)
         schedule = MonthSchedule(2026, 3, employees=[emp])
         shop = ShopConfig(2026, 3)
@@ -177,8 +170,8 @@ class FractionsModeTests(unittest.TestCase):
 
         cv = SchedulePresenter(schedule, shop).get_cell_view(emp, 3)
 
-        self.assertEqual(cv.text_start, format_hours_as_fraction(open_t, "13:00"))
-        self.assertEqual(cv.text_end, "")
+        self.assertEqual(cv.text_start, open_t)
+        self.assertEqual(cv.text_end, "13:00")
 
     def test_leave_day_is_not_affected(self):
         schedule, emp = _schedule_with_employee()

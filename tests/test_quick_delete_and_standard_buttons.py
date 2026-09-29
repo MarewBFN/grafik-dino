@@ -307,7 +307,7 @@ class TestQuickModeContextMenuEntries:
         labels = [label for label, _ in standard]
         assert "Rano" in labels
         assert "Popo" in labels
-        assert "Może pracować" not in labels
+        assert "Praca ✅" not in labels
         assert "Usuń" in labels  # visible by default for every profile
         assert presets == []
 
@@ -317,7 +317,7 @@ class TestQuickModeContextMenuEntries:
         standard, _presets = _quick_mode_context_menu_entries(shop)
 
         labels = [label for label, _ in standard]
-        assert "Może pracować" in labels
+        assert "Praca ✅" in labels
         assert "Rano" not in labels
 
     def test_only_visible_presets_are_included_in_order(self):

@@ -530,6 +530,20 @@ class GridPreviousMonthColumnDinoCompactFormattingTests(unittest.TestCase):
         self.assertEqual(self._cell_text(grid, schedule, emp["afternoon"]), "22:00")
         self.assertEqual(self._cell_text(grid, schedule, emp["morning"]), "12:00")
 
+    def test_dino_expanded_ignores_fractions_setting(self):
+        # "Ułamki" dotyczy wyłącznie widoku kompaktowego - "Rozszerz widok"
+        # ma przywracać normalny wygląd niezależnie od tego ustawienia
+        # (zgłoszenie użytkownika 2026-09-29).
+        shop = ShopConfig(2026, 2)
+        shop.hours_display_mode = "fractions"
+        schedule, emp = self._schedule_with_carries(shop)
+
+        with patch("ui.grid_view.PREVIOUS_MONTH_MEMORY_ENABLED", True):
+            grid = self._grid(schedule, shop, compact_mode=False)
+
+        self.assertEqual(self._cell_text(grid, schedule, emp["afternoon"]), "22:00")
+        self.assertEqual(self._cell_text(grid, schedule, emp["morning"]), "12:00")
+
     def test_non_dino_profile_compact_shows_full_time_not_1_2_n(self):
         shop = ShopConfig(2026, 2)
         shop.business_type = "some_custom_profile"

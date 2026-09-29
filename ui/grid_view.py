@@ -926,11 +926,13 @@ class ScheduleGrid(QTableWidget):
             # nocnej (patrz SchedulePresenter._shift_view), tylko odróżniają
             # ją kolorem tła (tu: ten sam pomysł, ale "ghost" - patrz
             # _ghost_brush). Tekst respektuje to samo ustawienie co zwykłe
-            # komórki (menu Wygląd -> "Wygląd komórek kompaktowych") - w
-            # trybie "Ułamki" sama godzina bez minut, tak jak fraction_hour()
-            # skraca ją wszędzie indziej.
+            # komórki (menu Wygląd -> "Wygląd komórek kompaktowych"), ale
+            # WYŁĄCZNIE w widoku kompaktowym - w trybie "Ułamki" sama godzina
+            # bez minut, tak jak fraction_hour() skraca ją wszędzie indziej.
+            # "Rozszerz widok" ma przywracać normalny wygląd niezależnie od
+            # tego ustawienia (zgłoszenie użytkownika).
             fractions = getattr(self.shop_config, "hours_display_mode", "standard") == "fractions"
-            if fractions:
+            if self.compact_mode and fractions:
                 text = fraction_hour(carry.end)
             elif self.compact_mode and self.shop_config.business_type == DEFAULT_BUSINESS_TYPE:
                 # Profil Dino w widoku kompaktowym pokazuje wszędzie indziej

@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-from logic.utils.time_utils import format_hours_as_fraction
 from ui import theme
 
 
@@ -53,24 +52,22 @@ class SchedulePresenter:
         return self._shift_view(emp, day, s, e, t, ds)
 
     def _shift_view(self, emp, day, s, e, t, ds) -> CellView:
-        fractions = getattr(self.shop_config, "hours_display_mode", "standard") == "fractions"
-
+        # Menu Wygląd -> "Wygląd komórek kompaktowych" (hours_display_mode
+        # "fractions") dotyczy WYŁĄCZNIE widoku kompaktowego
+        # (ui/grid_view.py::ScheduleGrid._fill_day_cells) - widok rozszerzony
+        # zawsze pokazuje standardowe "HH:MM", niezależnie od tego ustawienia,
+        # żeby "Rozszerz widok" jednoznacznie przywracało normalny wygląd
+        # komórek (zgłoszenie użytkownika).
         if ds.crosses_midnight():
             # Zmiana nocna (Etap C/D planu zmian nocnych) - koniec leży w
             # kolejnej dobie kalendarzowej. Rozróżnia to wyłącznie tło
             # (SHIFT_NIGHT) i tooltip - na życzenie użytkownika bez znacznika
             # "(+1)" w samym tekście komórki (mylące/zbędne, usunięte
-            # całkiem, nie tylko w widoku ułamkowym).
+            # całkiem).
             tooltip = f"{s} → {e}\nSuma: {t}"
-            if fractions:
-                text_start = format_hours_as_fraction(s, e)
-                text_end = ""
-            else:
-                text_start = s
-                text_end = e
             return CellView(
-                text_start=text_start,
-                text_end=text_end,
+                text_start=s,
+                text_end=e,
                 text_total=t,
                 bg=theme.SHIFT_NIGHT,
                 tooltip=tooltip,
@@ -87,10 +84,6 @@ class SchedulePresenter:
                 bg = theme.SHIFT_MORNING
             elif e == close_t:
                 bg = theme.SHIFT_CLOSE
-
-        if fractions:
-            text_start = format_hours_as_fraction(s, e)
-            text_end = ""
 
         tooltip = f"{s} - {e}\nSuma: {t}"
         return CellView(

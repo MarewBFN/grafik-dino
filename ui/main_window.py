@@ -494,7 +494,7 @@ class MainWindow(QMainWindow):
         self.btn_afternoon.setCheckable(True)
         self.btn_afternoon.clicked.connect(lambda: self._set_quick_shift("AFTERNOON_CLASS"))
 
-        self.btn_can_work = QPushButton("Może pracować")
+        self.btn_can_work = QPushButton("Praca ✅")
         self.btn_can_work.setCheckable(True)
         self.btn_can_work.clicked.connect(lambda: self._set_quick_shift("CAN_WORK"))
 

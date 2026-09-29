@@ -173,7 +173,7 @@ STANDARD_QUICK_BUTTONS: tuple[dict, ...] = (
     },
     {
         "key": "can_work",
-        "label": "Może pracować",
+        "label": "Praca ✅",
         "description": (
             "Sygnał dla generatora, że pracownik MA/MOŻE pracować tego dnia (kod "
             "„W”) - generator dobierze zmianę zgodną z zasadami placówki (w "
