@@ -965,7 +965,9 @@ class ConfigDialog(QDialog):
                     # się odróżnić zmiany zerowej długości od pełnej doby w
                     # tym modelu godzin HH:MM bez śledzenia daty (patrz "24h" w
                     # WeeklyHoursEditor - 00:00-23:45, nie 00:00-00:00).
-                    if end_qt == start_qt:
+                    # Dzień "24h" z własnym startem doby zapisuje START-START
+                    # (np. 07:00-07:00) - patrz WeeklyHoursEditor.get_hours().
+                    if end_qt == start_qt and not self.hours_editor.is_full_day(wd):
                         day_names = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
                         raise ValueError(
                             f"Godzina otwarcia i zamknięcia nie mogą być takie same ({day_names[wd]}). "
