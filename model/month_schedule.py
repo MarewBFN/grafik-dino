@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict
 
 from model.day_schedule import DaySchedule
-from model.employee import Employee
+from model.employee import PERSONAL_DATA_FIELDS, Employee
 
 # Odkryte z powrotem (2026-09-21) przy okazji pamięci wielu miesięcy - diagnostyka
 # INFEASIBLE (ENYO_ONLY_CHANGES.md, "Naprawiony bug: infeasible bez
@@ -283,6 +283,7 @@ class MonthSchedule:
                     "daily_hours": e.daily_hours,
                     "employment_fraction": e.employment_fraction,
                     "availability": e.availability,
+                    **e.personal_data(),
                     "settlement_target_minutes": self.settlement_targets.get(e),
                     "previous_month_shift_end": (
                         self.previous_month_end_shifts[e].end
@@ -338,6 +339,7 @@ class MonthSchedule:
                 daily_hours=ed.get("daily_hours", 8),
                 employment_fraction=ed.get("employment_fraction", 1.0),
                 availability={int(k): v for k, v in ed.get("availability", {}).items()},
+                **{name: ed.get(name) or "" for name in PERSONAL_DATA_FIELDS},
             )
             sched.add_employee(emp)
 

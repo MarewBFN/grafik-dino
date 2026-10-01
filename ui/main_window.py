@@ -54,6 +54,7 @@ from ui.locations_dialog import LocationsDialog
 from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
+from ui.employees_dialog import EmployeesDialog
 from ui.grid_legend import GridLegendWidget
 from ui.grid_view import ScheduleGrid
 from ui.month_picker_dialog import MonthPickerDialog
@@ -666,6 +667,8 @@ class MainWindow(QMainWindow):
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("Plik")
         edit_menu = self.menuBar().addMenu("Edycja")
+        # Bezpośrednia akcja w pasku (bez rozwijanego menu) - lista pracowników.
+        self.employees_action = self.menuBar().addAction("Pracownicy", self._open_employees_dialog)
         config_menu = self.menuBar().addMenu("Konfiguracja")
         wyglad_menu = self.menuBar().addMenu("Wygląd")
         help_menu = self.menuBar().addMenu("Pomoc")
@@ -1268,6 +1271,18 @@ class MainWindow(QMainWindow):
         self.schedule = self.controller.schedule
         self._sync_everything()
         self.statusBar().showMessage("Dodano pracownika.", 2500)
+
+    def _open_employees_dialog(self):
+        def on_changed(message):
+            self.schedule = self.controller.schedule
+            self._sync_everything()
+            self.statusBar().showMessage(message, 2500)
+
+        dialog = EmployeesDialog(
+            self, self.controller, self.shop_config,
+            on_changed=on_changed, default_location_key=self.selected_location_key,
+        )
+        dialog.exec()
 
     def _edit_employee(self, emp):
         dialog = EmployeeDialog(self, employee=emp, shop_config=self.shop_config)

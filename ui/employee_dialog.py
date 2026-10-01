@@ -509,6 +509,9 @@ class EmployeeDialog(QDialog):
                 employment_fraction=self.employment_fraction.currentData(),
                 custom_roles=custom_roles,
                 location_key=location_key,
+                # Dane osobowe edytuje Pracownicy -> Zaawansowane, nie to
+                # okno - przy edycji muszą przejść bez zmian.
+                **(self.employee.personal_data() if self.employee else {}),
                 **legacy_roles,
             )
             emp.validate()

@@ -1,6 +1,10 @@
 from dataclasses import dataclass, field
+import re
 import uuid
 from typing import Dict
+
+# Pola danych osobowych - patrz Employee.phone itd. niżej.
+PERSONAL_DATA_FIELDS = ("phone", "email", "street", "postal_code", "city")
 
 _ROLE_FIELDS = {
     "is_opener", "is_meat", "is_meat_light", "is_manager", "no_night", "no_afternoon",
@@ -45,10 +49,26 @@ class Employee:
     # zachowanie) - patrz ShopConfig.locations.
     location_key: str = field(default="", compare=False)
 
+    # Dane osobowe (Pracownicy -> Zaawansowane) - pod przyszłe wnioski
+    # urlopowe; generator ich nie używa. Puste = nie podano.
+    phone: str = field(default="", compare=False)
+    email: str = field(default="", compare=False)
+    street: str = field(default="", compare=False)
+    postal_code: str = field(default="", compare=False)
+    city: str = field(default="", compare=False)
+
     def display_name(self) -> str:
         # Imię jest opcjonalne (patrz validate()) - bez niego samo
         # nazwisko, bez końcowej spacji.
         return f"{self.last_name} {self.first_name}".strip()
+
+    def personal_data(self) -> dict[str, str]:
+        return {name: getattr(self, name) for name in PERSONAL_DATA_FIELDS}
+
+    def address(self) -> str:
+        """Adres zamieszkania w jednej linii (pusty, gdy nie podano)."""
+        town = " ".join(part for part in (self.postal_code, self.city) if part)
+        return ", ".join(part for part in (self.street, town) if part)
 
     def has_role(self, key: str) -> bool:
         """True if this employee carries role `key`, whether it's one of the
@@ -87,3 +107,11 @@ class Employee:
                     raise ValueError("Brak godzin w availability")
                 if rule.get("mode") not in ("hard", "soft"):
                     raise ValueError("Nieprawidłowy tryb availability")
+
+        email = self.email.strip()
+        if email and (email.count("@") != 1 or "." not in email.split("@")[1] or " " in email):
+            raise ValueError("Nieprawidłowy adres e-mail")
+        if self.phone.strip() and not re.fullmatch(r"\+?[0-9 ()-]{6,20}", self.phone.strip()):
+            raise ValueError("Nieprawidłowy numer telefonu (dozwolone cyfry, spacje, „+”, „-”)")
+        if self.postal_code.strip() and not re.fullmatch(r"\d{2}-\d{3}", self.postal_code.strip()):
+            raise ValueError("Kod pocztowy musi mieć format 00-000")
