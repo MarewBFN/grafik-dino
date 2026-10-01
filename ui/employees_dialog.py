@@ -54,11 +54,19 @@ _EXTRA_FLAG_LABELS = {
 COLUMNS = ("Pracownik", "Placówka", "Etat", "Flagi", "Telefon", "E-mail", "Adres", "")
 COL_ACTIONS = len(COLUMNS) - 1
 
-# Wysokość wiersza wymuszona po resizeRowsToContents() - sizeHint()
-# przyciskow stylowanych przez QSS (ui/theme.py#QPushButton) bywa zaniżony
-# względem realnie renderowanej wysokości, przez co dół przycisków
-# "Edytuj/Zaawansowane/Usuń" (patrz _actions_widget) wychodził poza wiersz.
-_ROW_HEIGHT = 44
+# Dwuklik na komórce telefonu/e-maila/adresu otwiera "Zaawansowane" (dane
+# osobowe), nie "Edytuj" (dane do grafiku i flagi) - patrz
+# _on_cell_double_clicked.
+PERSONAL_DATA_COLUMNS = {4, 5, 6}
+
+# Wysokość wiersza wymuszona po resizeRowsToContents(). Domyślny padding
+# przycisków z globalnego QSS (ui/theme.py#QPushButton, 9px pionowo) daje
+# wysokość bliską granicy wiersza, więc akcje w tabeli (patrz
+# _actions_widget) dostają własny, ciaśniejszy padding (_ACTION_BUTTON_STYLE)
+# zamiast polegać na zaniżonym sizeHint() - inaczej "Edytuj/Zaawansowane/
+# Usuń" wychodziły poza wiersz.
+_ROW_HEIGHT = 42
+_ACTION_BUTTON_STYLE = "padding: 3px 10px; font-size: 9pt;"
 
 
 def employee_flag_labels(emp, shop_config) -> list[str]:
@@ -260,7 +268,7 @@ class EmployeesDialog(QDialog):
             "QTableWidget#employeesTable { alternate-background-color: #f8fafc; }"
             "QTableWidget#employeesTable::item { padding: 4px 8px; }"
         )
-        self.table.cellDoubleClicked.connect(lambda row, _col: self._edit_employee(self._row_employees[row]))
+        self.table.cellDoubleClicked.connect(self._on_cell_double_clicked)
         header_view = self.table.horizontalHeader()
         header_view.setSectionResizeMode(QHeaderView.ResizeToContents)
         header_view.setSectionResizeMode(3, QHeaderView.Stretch)
@@ -285,6 +293,13 @@ class EmployeesDialog(QDialog):
     def _location_name(self, emp) -> str:
         loc = self.shop_config.locations.get(emp.location_key) if self.shop_config else None
         return loc.name if loc is not None else ""
+
+    def _on_cell_double_clicked(self, row, col):
+        emp = self._row_employees[row]
+        if col in PERSONAL_DATA_COLUMNS:
+            self._edit_personal_data(emp)
+        else:
+            self._edit_employee(emp)
 
     def refresh(self):
         employees = list(self.schedule.employees)
@@ -347,7 +362,7 @@ class EmployeesDialog(QDialog):
             btn.setObjectName(name)
             btn.setToolTip(tooltip)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setMinimumHeight(30)
+            btn.setStyleSheet(_ACTION_BUTTON_STYLE)
             btn.clicked.connect(lambda _checked=False, e=emp, h=handler: h(e))
             layout.addWidget(btn)
         return widget
