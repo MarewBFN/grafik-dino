@@ -31,6 +31,7 @@ from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.utils.time_utils import month_scope_note
 from model.business_profile import get_profile
 from ui.employee_dialog import EmployeeDialog
+from ui.theme import ACCENT, ACCENT_SOFT
 
 EMPLOYMENT_FRACTION_LABELS = {
     1.01: "1/1 (max 8:00)",
@@ -52,6 +53,12 @@ _EXTRA_FLAG_LABELS = {
 
 COLUMNS = ("Pracownik", "Placówka", "Etat", "Flagi", "Telefon", "E-mail", "Adres", "")
 COL_ACTIONS = len(COLUMNS) - 1
+
+# Wysokość wiersza wymuszona po resizeRowsToContents() - sizeHint()
+# przyciskow stylowanych przez QSS (ui/theme.py#QPushButton) bywa zaniżony
+# względem realnie renderowanej wysokości, przez co dół przycisków
+# "Edytuj/Zaawansowane/Usuń" (patrz _actions_widget) wychodził poza wiersz.
+_ROW_HEIGHT = 44
 
 
 def employee_flag_labels(emp, shop_config) -> list[str]:
@@ -76,6 +83,44 @@ def short_flag_label(label: str) -> str:
 
 def employment_fraction_label(fraction: float) -> str:
     return EMPLOYMENT_FRACTION_LABELS.get(fraction, f"{fraction:g}")
+
+
+def _etat_cell_widget(label: str) -> QWidget:
+    chip = QLabel(label)
+    chip.setAlignment(Qt.AlignCenter)
+    chip.setStyleSheet(
+        f"background: {ACCENT_SOFT}; color: {ACCENT}; border-radius: 9px; "
+        "padding: 2px 10px; font-size: 10px; font-weight: 700;"
+    )
+    widget = QWidget()
+    layout = QHBoxLayout(widget)
+    layout.setContentsMargins(6, 4, 6, 4)
+    layout.addStretch()
+    layout.addWidget(chip)
+    layout.addStretch()
+    return widget
+
+
+def _flags_cell_widget(flags: list[str]) -> QWidget:
+    widget = QWidget()
+    layout = QHBoxLayout(widget)
+    layout.setContentsMargins(6, 4, 6, 4)
+    layout.setSpacing(4)
+    if flags:
+        for label in flags:
+            chip = QLabel(short_flag_label(label))
+            chip.setStyleSheet(
+                "background: #eef2f7; color: #334155; border-radius: 9px; "
+                "padding: 2px 9px; font-size: 10px; font-weight: 600;"
+            )
+            layout.addWidget(chip)
+        widget.setToolTip("\n".join(flags))
+    else:
+        empty = QLabel("—")
+        empty.setObjectName("mutedHint")
+        layout.addWidget(empty)
+    layout.addStretch()
+    return widget
 
 
 class PersonalDataDialog(QDialog):
@@ -188,6 +233,14 @@ class EmployeesDialog(QDialog):
         header.addWidget(self.add_btn)
         root.addLayout(header)
 
+        hint = QLabel(
+            "Wszyscy pracownicy tego projektu - dane do grafiku, role i dane "
+            "kontaktowe w jednym miejscu."
+        )
+        hint.setObjectName("mutedHint")
+        hint.setWordWrap(True)
+        root.addWidget(hint)
+
         if shop_config is not None:
             scope_note = QLabel(month_scope_note(shop_config.year, shop_config.month))
             scope_note.setObjectName("quickInfoHint")
@@ -195,12 +248,18 @@ class EmployeesDialog(QDialog):
             root.addWidget(scope_note)
 
         self.table = QTableWidget(0, len(COLUMNS))
+        self.table.setObjectName("employeesTable")
         self.table.setHorizontalHeaderLabels(COLUMNS)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setWordWrap(True)
+        self.table.setAlternatingRowColors(True)
+        self.table.setStyleSheet(
+            "QTableWidget#employeesTable { alternate-background-color: #f8fafc; }"
+            "QTableWidget#employeesTable::item { padding: 4px 8px; }"
+        )
         self.table.cellDoubleClicked.connect(lambda row, _col: self._edit_employee(self._row_employees[row]))
         header_view = self.table.horizontalHeader()
         header_view.setSectionResizeMode(QHeaderView.ResizeToContents)
@@ -241,22 +300,37 @@ class EmployeesDialog(QDialog):
         self.table.setRowCount(len(employees))
         for row, emp in enumerate(employees):
             flags = employee_flag_labels(emp, self.shop_config)
-            values = (
-                emp.display_name(),
-                self._location_name(emp),
-                employment_fraction_label(emp.employment_fraction),
-                ", ".join(short_flag_label(f) for f in flags) or "—",
-                emp.phone,
-                emp.email,
-                emp.address(),
-            )
-            for col, text in enumerate(values):
+            # Kolumny 1/4/5/6 zostają zwykłymi QTableWidgetItem (tekst do
+            # testów/wyszukiwania); 2/3 dostają dodatkowo widget rysowany NAD
+            # itemem - "chip" etatu, "chipy" flag (patrz
+            # _etat_cell_widget/_flags_cell_widget).
+            text_columns = {
+                0: emp.display_name(),
+                1: self._location_name(emp),
+                4: emp.phone,
+                5: emp.email,
+                6: emp.address(),
+            }
+            for col, text in text_columns.items():
                 item = QTableWidgetItem(text)
-                if col == 3 and flags:
-                    item.setToolTip("\n".join(flags))
+                if col == 0:
+                    font = item.font()
+                    font.setBold(True)
+                    item.setFont(font)
                 self.table.setItem(row, col, item)
+            self.table.setCellWidget(
+                row, 2, _etat_cell_widget(employment_fraction_label(emp.employment_fraction))
+            )
+            self.table.setCellWidget(row, 3, _flags_cell_widget(flags))
             self.table.setCellWidget(row, COL_ACTIONS, self._actions_widget(emp))
         self.table.resizeRowsToContents()
+        # resizeRowsToContents() liczy po sizeHint() przycisków, który bywa
+        # zaniżony względem realnie renderowanej wysokości - stąd twarde
+        # dociśnięcie do _ROW_HEIGHT, żeby "Edytuj/Zaawansowane/Usuń" zawsze
+        # mieściły się w całości w wierszu.
+        for row in range(self.table.rowCount()):
+            if self.table.rowHeight(row) < _ROW_HEIGHT:
+                self.table.setRowHeight(row, _ROW_HEIGHT)
 
     def _actions_widget(self, emp) -> QWidget:
         widget = QWidget()
@@ -273,6 +347,7 @@ class EmployeesDialog(QDialog):
             btn.setObjectName(name)
             btn.setToolTip(tooltip)
             btn.setCursor(Qt.PointingHandCursor)
+            btn.setMinimumHeight(30)
             btn.clicked.connect(lambda _checked=False, e=emp, h=handler: h(e))
             layout.addWidget(btn)
         return widget
