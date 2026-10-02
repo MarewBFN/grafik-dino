@@ -1011,7 +1011,7 @@ class ScheduleGrid(QTableWidget):
 
         # Pula urlopu i pasek wniosków urlopowych (ui/main_window.py) - przed
         # build(), żeby kolumna z nazwiskami pokazała już zaktualizowaną pulę.
-        on_data_changed = getattr(self.main_window, "_on_schedule_data_changed", None)
+        on_data_changed = getattr(getattr(self, "main_window", None), "_on_schedule_data_changed", None)
         if callable(on_data_changed):
             on_data_changed()
 
