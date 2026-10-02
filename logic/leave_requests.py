@@ -163,6 +163,13 @@ def format_days(days: float) -> str:
     return f"{days:.1f}".replace(".", ",")
 
 
+def days_noun(days: float) -> str:
+    """"1 dzień", "2,5 dnia", "5 dni" (także dla wartości ujemnych)."""
+    if not float(days).is_integer():
+        return "dnia"
+    return "dzień" if abs(days) == 1 else "dni"
+
+
 def _plural_form(count: int) -> int:
     """Polska odmiana liczebnika: 0 = "1 wniosek", 1 = "2-4 wnioski",
     2 = "5+ wniosków" (także 12-14, 22-24 -> "wnioski")."""

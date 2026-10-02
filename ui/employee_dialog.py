@@ -26,7 +26,7 @@ from model.employee import Employee
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
 from model.constraint_policy import ConstraintPolicy
 from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
-from logic.leave_requests import format_days
+from logic.leave_requests import days_noun, format_days
 from logic.utils.time_utils import month_scope_note
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 
@@ -428,7 +428,9 @@ class EmployeeDialog(QDialog):
         self.contact_card.setVisible(self._contact_expanded)
 
     def _update_vacation_label(self):
-        self.vacation_label.setText(f"{format_days(self.vacation_days_left)} dni")
+        self.vacation_label.setText(f"{format_days(self.vacation_days_left)} {days_noun(self.vacation_days_left)}")
+        # Ujemna pula = zaznaczono w grafiku więcej urlopu, niż zostało.
+        self.vacation_label.setStyleSheet("color: #c62828;" if self.vacation_days_left < 0 else "")
 
     def _change_vacation_days(self):
         # Krok 0,5 dnia - urlop zaznaczany w grafiku odejmuje się z tą

@@ -273,7 +273,7 @@ def test_employee_dialog_vacation_change_button_updates_saved_value(monkeypatch)
     )
     dialog._change_vacation_days()
 
-    assert dialog.vacation_label.text() == "20,5 dni"
+    assert dialog.vacation_label.text() == "20,5 dnia"
     dialog._save()
     assert dialog.employee_result.vacation_days_left == 20.5
 

@@ -5,12 +5,14 @@ placówki (logic/leave_requests.py::build_leave_requests) z podglądem
 zaznaczonego wniosku i wyborem, które zapisać do PDF.
 
 Wnioski zapisane wcześniej zostają na liście (z dopiskiem "zapisany"), ale
-nie są domyślnie zaznaczone do zapisu."""
+nie są domyślnie zaznaczone do zapisu. Zapis jest dozwolony także wtedy,
+gdy zaznaczony urlop przekracza pulę pracownika (pula ujemna) - po
+potwierdzeniu."""
 
 from datetime import date
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -29,7 +31,12 @@ from PySide6.QtWidgets import (
 from export.leave_request_exporter import export_leave_requests_to_pdf, format_date, render_leave_request_image
 from logic.leave_requests import format_days, requests_noun
 
-_COLUMNS = ("Pracownik", "Okres urlopu", "Dni", "Status")
+_COLUMNS = ("Pracownik", "Okres urlopu", "Dni", "Pozostało urlopu", "Status")
+_NEGATIVE_COLOR = "#c62828"
+
+INSUFFICIENT_VACATION_MESSAGE = (
+    "Potrzeba więcej dni urlopu niż jest podane w danych pracownika. Kontynuować?"
+)
 
 
 class LeaveRequestsDialog(QDialog):
@@ -121,7 +128,13 @@ class LeaveRequestsDialog(QDialog):
                 period = f"{format_date(request.start_date)} – {format_date(request.end_date)}"
             self.table.setItem(row, 1, QTableWidgetItem(period))
             self.table.setItem(row, 2, QTableWidgetItem(format_days(request.days)))
-            self.table.setItem(row, 3, QTableWidgetItem("zapisany" if request.printed else "oczekuje"))
+            balance = request.employee.vacation_days_left
+            balance_item = QTableWidgetItem(format_days(balance))
+            if balance < 0:
+                balance_item.setForeground(QColor(_NEGATIVE_COLOR))
+                balance_item.setToolTip("Zaznaczono więcej urlopu, niż zostało w danych pracownika.")
+            self.table.setItem(row, 3, balance_item)
+            self.table.setItem(row, 4, QTableWidgetItem("zapisany" if request.printed else "oczekuje"))
         self.table.blockSignals(False)
 
         self.empty_label.setVisible(not self.requests)
@@ -159,6 +172,16 @@ class LeaveRequestsDialog(QDialog):
         requests = self.checked_requests()
         if not requests:
             return
+
+        # Pula jest już pomniejszona o zaznaczony urlop - ujemna oznacza, że
+        # urlopu zaznaczono więcej, niż pracownik ma w danych.
+        if any(request.employee.vacation_days_left < 0 for request in requests):
+            reply = QMessageBox.question(
+                self, "Za mało dni urlopu", INSUFFICIENT_VACATION_MESSAGE,
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
 
         path, _ = QFileDialog.getSaveFileName(
             self, "Zapisz wnioski urlopowe", self._default_file_name, "PDF (*.pdf)",

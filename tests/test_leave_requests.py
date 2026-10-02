@@ -292,6 +292,14 @@ class TextTests(unittest.TestCase):
         self.assertEqual(format_days(2.5), "2,5")
         self.assertEqual(format_days(-0.5), "-0,5")
 
+    def test_days_noun(self):
+        from logic.leave_requests import days_noun
+
+        self.assertEqual(days_noun(1), "dzień")
+        self.assertEqual(days_noun(-1), "dzień")
+        self.assertEqual(days_noun(2.5), "dnia")
+        self.assertEqual(days_noun(5), "dni")
+
     def test_pending_text_plural_forms(self):
         self.assertEqual(pending_requests_text(1), "Istnieje 1 wniosek oczekujący na wydruk")
         self.assertEqual(pending_requests_text(3), "Istnieją 3 wnioski oczekujące na wydruk")
@@ -386,6 +394,78 @@ class LeaveRequestsDialogTests(unittest.TestCase):
         self.assertEqual(dialog.table.rowCount(), 1)
         self.assertEqual(dialog.table.item(0, 0).checkState(), Qt.Unchecked)
         self.assertFalse(dialog.save_btn.isEnabled())
+
+
+class InsufficientVacationTests(unittest.TestCase):
+    def _dialog(self, vacation):
+        from ui.leave_requests_dialog import LeaveRequestsDialog
+
+        schedule, shop = _setup(vacation=vacation)
+        _set_leave(schedule, 5, 6)
+        sync_vacation_balances(schedule, shop)
+        saved = []
+        dialog = LeaveRequestsDialog(
+            None, lambda: build_leave_requests(schedule, shop), saved.extend, "x.pdf",
+        )
+        return dialog, saved
+
+    def _save(self, dialog, answer):
+        from PySide6.QtWidgets import QMessageBox
+        from ui import leave_requests_dialog as module
+
+        asked = []
+        path = os.path.join(tempfile.mkdtemp(), "wnioski.pdf")
+        patches = {
+            (module.QMessageBox, "question"): staticmethod(lambda *a, **k: asked.append(a[2]) or answer),
+            (module.QMessageBox, "information"): staticmethod(lambda *a, **k: None),
+            (module.QFileDialog, "getSaveFileName"): staticmethod(lambda *a, **k: (path, "")),
+        }
+        originals = {key: getattr(*key) for key in patches}
+        for (owner, name), value in patches.items():
+            setattr(owner, name, value)
+        try:
+            dialog._save_checked()
+        finally:
+            for (owner, name), value in originals.items():
+                setattr(owner, name, value)
+        return asked
+
+    def test_negative_balance_shown_in_red(self):
+        dialog, _ = self._dialog(vacation=1)
+
+        item = dialog.table.item(0, 3)
+        self.assertEqual(item.text(), "-1")
+        self.assertEqual(item.foreground().color().name(), "#c62828")
+
+    def test_insufficient_balance_asks_and_saves_on_yes(self):
+        from PySide6.QtWidgets import QMessageBox
+        from ui.leave_requests_dialog import INSUFFICIENT_VACATION_MESSAGE
+
+        dialog, saved = self._dialog(vacation=1)
+
+        asked = self._save(dialog, QMessageBox.Yes)
+
+        self.assertEqual(asked, [INSUFFICIENT_VACATION_MESSAGE])
+        self.assertEqual(len(saved), 1)
+
+    def test_insufficient_balance_cancelled_on_no(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        dialog, saved = self._dialog(vacation=1)
+
+        self._save(dialog, QMessageBox.No)
+
+        self.assertEqual(saved, [])
+
+    def test_enough_balance_does_not_ask(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        dialog, saved = self._dialog(vacation=2)
+
+        asked = self._save(dialog, QMessageBox.No)
+
+        self.assertEqual(asked, [])
+        self.assertEqual(len(saved), 1)
 
 
 class MainWindowIntegrationTests(unittest.TestCase):
