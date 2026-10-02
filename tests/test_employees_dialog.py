@@ -269,13 +269,13 @@ def test_employee_dialog_vacation_change_button_updates_saved_value(monkeypatch)
     assert dialog.vacation_label.text() == "5 dni"
 
     monkeypatch.setattr(
-        emp_dialog_module.QInputDialog, "getInt", staticmethod(lambda *a, **k: (20, True))
+        emp_dialog_module.QInputDialog, "getDouble", staticmethod(lambda *a, **k: (20.5, True))
     )
     dialog._change_vacation_days()
 
-    assert dialog.vacation_label.text() == "20 dni"
+    assert dialog.vacation_label.text() == "20,5 dni"
     dialog._save()
-    assert dialog.employee_result.vacation_days_left == 20
+    assert dialog.employee_result.vacation_days_left == 20.5
 
 
 def test_employee_dialog_vacation_change_cancelled_keeps_value(monkeypatch):
@@ -287,7 +287,7 @@ def test_employee_dialog_vacation_change_cancelled_keeps_value(monkeypatch):
     dialog = EmployeeDialog(None, employee=emp, shop_config=shop)
 
     monkeypatch.setattr(
-        emp_dialog_module.QInputDialog, "getInt", staticmethod(lambda *a, **k: (20, False))
+        emp_dialog_module.QInputDialog, "getDouble", staticmethod(lambda *a, **k: (20, False))
     )
     dialog._change_vacation_days()
 

@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 from logic.constraint_presenter import ConstraintPresenter
 from logic.duty_coverage_presenter import is_day_fully_covered, project_uses_duty_rotation
+from logic.leave_requests import format_days
 from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.monthly_hours_status import monthly_hours_status
 from logic.schedule_presenter import SchedulePresenter
@@ -398,13 +399,14 @@ class EmployeeNameDelegate(QStyledItemDelegate):
         # EmployeeDialog "Pozostało urlopu") - do prawej krawędzi komórki,
         # niezależnie od tego, ile miejsca po lewej zajęły odznaki/imię/
         # ikony ograniczeń powyżej.
-        vacation_text = f"Urlop: {employee.vacation_days_left}"
+        vacation_text = f"Urlop: {format_days(employee.vacation_days_left)}"
         vacation_font = QFont(fraction_font)
         vacation_metrics = QFontMetrics(vacation_font)
         vacation_width = vacation_metrics.horizontalAdvance(vacation_text)
         vacation_rect = text_rect.adjusted(text_rect.width() - vacation_width, 0, 0, 0)
         painter.setFont(vacation_font)
-        painter.setPen(QColor("#8a8a8a"))
+        # Na czerwono, gdy zaznaczono więcej urlopu niż zostało w puli.
+        painter.setPen(QColor("#c62828" if employee.vacation_days_left < 0 else "#8a8a8a"))
         painter.drawText(vacation_rect, Qt.AlignVCenter | Qt.AlignRight, vacation_text)
 
         painter.restore()
@@ -1006,6 +1008,12 @@ class ScheduleGrid(QTableWidget):
     def refresh(self):
         if not self.schedule or not self.shop_config:
             return
+
+        # Pula urlopu i pasek wniosków urlopowych (ui/main_window.py) - przed
+        # build(), żeby kolumna z nazwiskami pokazała już zaktualizowaną pulę.
+        on_data_changed = getattr(self.main_window, "_on_schedule_data_changed", None)
+        if callable(on_data_changed):
+            on_data_changed()
 
         # build() robi clear() i od nowa ustawia liczbę wierszy/kolumn, co
         # resetuje przewinięcie do (0, 0) — bez tego przełączenie np. trybu

@@ -26,6 +26,7 @@ from model.employee import Employee
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
 from model.constraint_policy import ConstraintPolicy
 from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
+from logic.leave_requests import format_days
 from logic.utils.time_utils import month_scope_note
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 
@@ -427,15 +428,19 @@ class EmployeeDialog(QDialog):
         self.contact_card.setVisible(self._contact_expanded)
 
     def _update_vacation_label(self):
-        self.vacation_label.setText(f"{self.vacation_days_left} dni")
+        self.vacation_label.setText(f"{format_days(self.vacation_days_left)} dni")
 
     def _change_vacation_days(self):
-        value, ok = QInputDialog.getInt(
+        # Krok 0,5 dnia - urlop zaznaczany w grafiku odejmuje się z tą
+        # dokładnością (logic/leave_requests.py::leave_day_value). Dolna
+        # granica poniżej zera tylko wtedy, gdy pula już jest ujemna (więcej
+        # urlopu zaznaczonego niż zostało) - inaczej okno obcięłoby ją po cichu.
+        value, ok = QInputDialog.getDouble(
             self, "Pozostało urlopu", "Liczba dni urlopu:",
-            self.vacation_days_left, 0, 365,
+            self.vacation_days_left, min(0, self.vacation_days_left), 365, 1, step=0.5,
         )
         if ok:
-            self.vacation_days_left = value
+            self.vacation_days_left = round(value * 2) / 2
             self._update_vacation_label()
 
     def _update_no_night_afternoon_visibility(self):

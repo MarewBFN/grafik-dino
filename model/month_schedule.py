@@ -1,6 +1,6 @@
 import calendar
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict
 
 from model.day_schedule import DaySchedule
@@ -59,6 +59,19 @@ class MonthSchedule:
         # żadnego dodatkowego ograniczenia na dzień 1 dla tego pracownika.
         self.previous_month_end_shifts: Dict[Employee, PreviousMonthShiftEnd] = {}
 
+        # Wnioski urlopowe (logic/leave_requests.py):
+        # - leave_days_charged: ile dni urlopu z tego miesiąca jest już
+        #   odjęte od Employee.vacation_days_left - różnica względem urlopu
+        #   faktycznie zaznaczonego w grafiku to kwota do odjęcia/oddania przy
+        #   następnej synchronizacji (sync_vacation_balances). Brak wpisu =
+        #   jeszcze nie liczone (np. projekt sprzed tej funkcji) - pierwsza
+        #   synchronizacja przyjmuje wtedy bieżący urlop za już rozliczony.
+        # - printed_leave_requests: zakresy dni (start, koniec) wniosków już
+        #   zapisanych do PDF - okno "Wnioski urlopowe" domyślnie ich nie
+        #   zaznacza, a pasek pod grafikiem ich nie liczy.
+        self.leave_days_charged: Dict[Employee, float] = {}
+        self.printed_leave_requests: Dict[Employee, set[tuple[int, int]]] = {}
+
         if employees:
             for emp in employees:
                 self.add_employee(emp)
@@ -82,6 +95,30 @@ class MonthSchedule:
         del self._data[employee]
         self.settlement_targets.pop(employee, None)
         self.previous_month_end_shifts.pop(employee, None)
+        self.leave_days_charged.pop(employee, None)
+        self.printed_leave_requests.pop(employee, None)
+
+    def _per_employee_dicts(self) -> list[dict]:
+        return [
+            self._data,
+            self.settlement_targets,
+            self.previous_month_end_shifts,
+            self.leave_days_charged,
+            self.printed_leave_requests,
+        ]
+
+    def set_employee_vacation_days(self, employee: Employee, days: float) -> Employee:
+        """Zmienia Employee.vacation_days_left w miejscu (Employee jest
+        frozen, więc podmienia obiekt na kopię z nową wartością, zachowując
+        wszystkie dane z nim związane). Zwraca nowy obiekt pracownika."""
+        new = replace(employee, vacation_days_left=days)
+        self.employees[self.employees.index(employee)] = new
+        # dict[new] = dict.pop(old): samo przypisanie zostawiłoby stary obiekt
+        # jako klucz (new == old, bo równość/hash liczy się tylko z nazwiska).
+        for mapping in self._per_employee_dicts():
+            if employee in mapping:
+                mapping[new] = mapping.pop(employee)
+        return new
 
     def get_settlement_target(self, employee: Employee) -> int | None:
         return self.settlement_targets.get(employee)
@@ -257,6 +294,8 @@ class MonthSchedule:
         self._data = snapshot._data
         self.settlement_targets = snapshot.settlement_targets
         self.previous_month_end_shifts = snapshot.previous_month_end_shifts
+        self.leave_days_charged = snapshot.leave_days_charged
+        self.printed_leave_requests = snapshot.printed_leave_requests
 
     def _validate_day(self, day: int) -> None:
         if day < 1 or day > self.days_in_month:
@@ -284,6 +323,10 @@ class MonthSchedule:
                     "employment_fraction": e.employment_fraction,
                     "availability": e.availability,
                     "vacation_days_left": e.vacation_days_left,
+                    "leave_days_charged": self.leave_days_charged.get(e),
+                    "printed_leave_requests": sorted(
+                        [start, end] for start, end in self.printed_leave_requests.get(e, ())
+                    ),
                     **e.personal_data(),
                     "settlement_target_minutes": self.settlement_targets.get(e),
                     "previous_month_shift_end": (
@@ -349,6 +392,13 @@ class MonthSchedule:
             if target_minutes is not None:
                 sched.set_settlement_target(emp, target_minutes)
 
+            charged = ed.get("leave_days_charged")
+            if charged is not None:
+                sched.leave_days_charged[emp] = charged
+            printed = ed.get("printed_leave_requests") or []
+            if printed:
+                sched.printed_leave_requests[emp] = {(int(start), int(end)) for start, end in printed}
+
             prev_end = ed.get("previous_month_shift_end")
             if prev_end is not None:
                 sched.set_previous_month_end_shift(
@@ -384,10 +434,16 @@ class MonthSchedule:
     def replace_employee(self, old, new):
         if old not in self._data:
             return
-        days_data = self._data[old]
+        # Wszystko, co jest przypisane do pracownika (dni, cel okresu
+        # rozliczeniowego, pamięć poprzedniego miesiąca, rozliczony urlop,
+        # zapisane wnioski) przechodzi na nowy obiekt - także przy zmianie
+        # nazwiska, po którym liczy się klucz słowników.
+        carried = [mapping.get(old) for mapping in self._per_employee_dicts()]
         self.remove_employee(old)
         self.add_employee(new)
-        self._data[new] = days_data
+        for mapping, value in zip(self._per_employee_dicts(), carried):
+            if value is not None:
+                mapping[new] = value
 
     def clear_unlocked_days(self, employees=None):
         """Domyślnie czyści WSZYSTKICH pracowników - `employees` (podzbiór

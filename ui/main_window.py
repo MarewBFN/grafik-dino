@@ -35,6 +35,14 @@ from export.employee_card_exporter import (
     save_employee_card_pages_to_pdf,
     sanitize_filename_part,
 )
+from logic.leave_requests import (
+    build_leave_requests,
+    format_days,
+    generate_button_text,
+    mark_leave_requests_printed,
+    pending_requests_text,
+    sync_vacation_balances,
+)
 from logic.schedule_controller import ScheduleController
 from logic.utils.time_utils import previous_calendar_month
 from ui.export_preview_dialog import show_export_preview
@@ -56,7 +64,9 @@ from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
 from ui.employees_dialog import EmployeesDialog
 from ui.grid_legend import GridLegendWidget
+from ui import theme
 from ui.grid_view import ScheduleGrid
+from ui.leave_requests_dialog import LeaveRequestsDialog
 from ui.month_picker_dialog import MonthPickerDialog
 from ui.new_project_dialog import NewProjectDialog
 from ui.quick_mode_settings_dialog import QuickModeSettingsDialog
@@ -662,6 +672,30 @@ class MainWindow(QMainWindow):
         self.grid_legend = GridLegendWidget()
         layout.addWidget(self.grid_legend, 0)
 
+        # Pasek "Istnieje X wniosków oczekujących na wydruk" - widoczny tylko,
+        # gdy w bieżącej placówce są wnioski urlopowe jeszcze niezapisane do
+        # PDF (patrz _update_leave_requests_bar). Przycisk otwiera to samo
+        # okno co Plik -> "Wnioski urlopowe...".
+        self.leave_requests_bar = QFrame()
+        self.leave_requests_bar.setObjectName("leaveRequestsBar")
+        self.leave_requests_bar.setStyleSheet(
+            "QFrame#leaveRequestsBar {"
+            f"  background: {theme.WARN_YELLOW};"
+            f"  border: 1px solid {theme.SOFT_BORDER};"
+            "  border-radius: 8px;"
+            "}"
+        )
+        leave_bar_layout = QHBoxLayout(self.leave_requests_bar)
+        leave_bar_layout.setContentsMargins(10, 6, 10, 6)
+        self.leave_requests_label = QLabel("")
+        leave_bar_layout.addWidget(self.leave_requests_label, 0, Qt.AlignLeft | Qt.AlignVCenter)
+        leave_bar_layout.addStretch(1)
+        self.leave_requests_button = QPushButton("")
+        self.leave_requests_button.clicked.connect(self._open_leave_requests_dialog)
+        leave_bar_layout.addWidget(self.leave_requests_button, 0, Qt.AlignRight | Qt.AlignVCenter)
+        self.leave_requests_bar.setVisible(False)
+        layout.addWidget(self.leave_requests_bar, 0)
+
         return panel
 
     def _build_menu(self):
@@ -692,6 +726,8 @@ class MainWindow(QMainWindow):
         cards_menu.addAction("JPG...", self._export_employee_cards_image)
         cards_menu.addAction("PDF...", self._export_employee_cards_pdf)
         file_menu.addMenu(cards_menu)
+
+        file_menu.addAction("Wnioski urlopowe...", self._open_leave_requests_dialog)
 
         file_menu.addSeparator()
         file_menu.addAction("Drukuj...", self._print_schedule)
@@ -1047,6 +1083,52 @@ class MainWindow(QMainWindow):
 
         visible_count = len(self.grid.get_visible_employees()) if self.grid else 0
         self.grid_legend.set_compact_section(visible_count > 10)
+
+    def _on_schedule_data_changed(self):
+        """Wołane przy każdym odświeżeniu siatki (ScheduleGrid.refresh), czyli
+        po każdej zmianie grafiku - niezależnie od tego, którą drogą przyszła
+        (menu kontekstowe, tryb szybki, okno dnia, cofnij/ponów). Odejmuje od
+        puli urlopu świeżo zaznaczony urlop / oddaje usunięty
+        (logic/leave_requests.py::sync_vacation_balances) i odświeża pasek
+        wniosków oczekujących na wydruk."""
+        if not self.schedule or not self.shop_config:
+            return
+
+        changes = sync_vacation_balances(self.schedule, self.shop_config)
+        if changes:
+            message = ", ".join(
+                f"{emp.display_name()} {'+' if delta > 0 else '−'}{format_days(abs(delta))} "
+                f"(zostało {format_days(emp.vacation_days_left)})"
+                for emp, delta in changes
+            )
+            self.statusBar().showMessage(f"Urlop: {message}", 4000)
+        self._update_leave_requests_bar()
+
+    def _current_leave_requests(self) -> list:
+        return build_leave_requests(self.schedule, self.shop_config, self.selected_location_key)
+
+    def _update_leave_requests_bar(self):
+        pending = sum(1 for request in self._current_leave_requests() if not request.printed)
+        self.leave_requests_bar.setVisible(pending > 0)
+        if pending:
+            self.leave_requests_label.setText(pending_requests_text(pending))
+            self.leave_requests_button.setText(generate_button_text(pending))
+
+    def _open_leave_requests_dialog(self):
+        if not self.schedule or not self.shop_config:
+            return
+
+        def on_saved(requests):
+            mark_leave_requests_printed(self.schedule, requests)
+            self._update_leave_requests_bar()
+
+        dialog = LeaveRequestsDialog(
+            self,
+            load_requests=self._current_leave_requests,
+            on_saved=on_saved,
+            default_file_name=f"Wnioski urlopowe {self.month:02d}.{self.year}.pdf",
+        )
+        dialog.exec()
 
     def _update_window_title(self):
         # Wersja programu zawsze bezpośrednio po nazwie ("Grafik pracy
@@ -1929,13 +2011,19 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Błąd drukowania", str(e))
 
     def _undo(self):
+        # Zapisanie wniosku do PDF to fakt "na zewnątrz" programu - cofnięcie
+        # zmiany w grafiku nie może go odwracać.
+        printed = self.schedule.printed_leave_requests
         self.schedule = self.controller.undo()
+        self.schedule.printed_leave_requests = printed
         self.shop_config = self.controller.shop_config
         self._sync_everything()
         self.statusBar().showMessage("Cofnięto ostatnią zmianę.", 2500)
 
     def _redo(self):
+        printed = self.schedule.printed_leave_requests
         self.schedule = self.controller.redo()
+        self.schedule.printed_leave_requests = printed
         self.shop_config = self.controller.shop_config
         self._sync_everything()
         self.statusBar().showMessage("Ponowiono zmianę.", 2500)

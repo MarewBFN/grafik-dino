@@ -58,11 +58,14 @@ class Employee:
     postal_code: str = field(default="", compare=False)
     city: str = field(default="", compare=False)
 
-    # Dni urlopu pozostałe do wykorzystania - wpisywane ręcznie w
-    # EmployeeDialog ("Pozostało urlopu" + przycisk "Zmień"), pokazywane przy
-    # nazwisku w grid_view (ui/grid_view.py::EmployeeNameDelegate). Generator
+    # Dni urlopu pozostałe do wykorzystania (z dokładnością do 0,5 dnia) -
+    # wpisywane ręcznie w EmployeeDialog ("Pozostało urlopu" + przycisk
+    # "Zmień") i pomniejszane automatycznie o urlop zaznaczony w grafiku
+    # (logic/leave_requests.py::sync_vacation_balances), pokazywane przy
+    # nazwisku w grid_view (ui/grid_view.py::EmployeeNameDelegate). Może zejść
+    # poniżej zera, gdy zaznaczono więcej urlopu niż zostało. Generator
     # grafiku go nie używa - czysto informacyjne, jak dane osobowe wyżej.
-    vacation_days_left: int = field(default=0, compare=False)
+    vacation_days_left: float = field(default=0, compare=False)
 
     def display_name(self) -> str:
         # Imię jest opcjonalne (patrz validate()) - bez niego samo
@@ -123,5 +126,3 @@ class Employee:
         if self.postal_code.strip() and not re.fullmatch(r"\d{2}-\d{3}", self.postal_code.strip()):
             raise ValueError("Kod pocztowy musi mieć format 00-000")
 
-        if self.vacation_days_left < 0:
-            raise ValueError("Pozostały urlop nie może być ujemny")
