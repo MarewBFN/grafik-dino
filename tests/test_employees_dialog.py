@@ -110,7 +110,12 @@ def test_flags_column_lists_set_roles():
 
 
 def test_edit_can_update_contact_data_inline_and_keeps_schedule(monkeypatch):
-    emp = Employee(last_name="Kowalski", first_name="Jan", is_opener=True)
+    # location_key="glowna" (klucz domyślnej lokalizacji ShopConfig) -
+    # bez niego EmployeeDialog sam przypisuje pracownika do pierwszej
+    # lokalizacji przy KAŻDYM zapisie (patrz komentarz przy
+    # self.location_combo w ui/employee_dialog.py::_build_ui), co fałszywie
+    # wyglądałoby jak zmiana poza danymi kontaktowymi.
+    emp = Employee(last_name="Kowalski", first_name="Jan", is_opener=True, location_key="glowna")
     shop, controller = _setup(emp)
     controller.schedule.set_day_hours(emp, 3, "08:00", "16:00")
     changes = []
@@ -132,6 +137,32 @@ def test_edit_can_update_contact_data_inline_and_keeps_schedule(monkeypatch):
     assert controller.schedule.get_day(saved, 3).start == "08:00"
     assert changes == ["Zapisano pracownika."]
     assert dialog.table.item(0, 6).text() == "Gdańsk"
+    # Tylko dane kontaktowe się zmieniły (is_opener/dni zostały bez zmian) -
+    # "Cofnij" nie powinno tego widzieć, patrz
+    # logic/schedule_controller.py::_employee_changed_beyond_contact_data.
+    assert controller.history == []
+
+
+def test_role_change_alongside_contact_edit_still_creates_undo_entry(monkeypatch):
+    emp = Employee(last_name="Kowalski", first_name="Jan", is_opener=False)
+    shop, controller = _setup(emp)
+    dialog = EmployeesDialog(None, controller, shop)
+
+    def fake_exec(self):
+        self.phone.setText("600 123 456")
+        self.role_checkboxes["is_opener"].setChecked(True)
+        self._save()
+        return QDialog.Accepted
+
+    monkeypatch.setattr(module.EmployeeDialog, "exec", fake_exec)
+    dialog._edit_employee(emp)
+
+    saved = controller.schedule.employees[0]
+    assert saved.is_opener is True
+    assert saved.phone == "600 123 456"
+    # Tym razem zmieniła się też rola (nie tylko dane kontaktowe) - to
+    # normalna, cofalna akcja.
+    assert len(controller.history) == 1
 
 
 def test_double_click_on_contact_column_opens_dialog_with_contact_expanded(monkeypatch):

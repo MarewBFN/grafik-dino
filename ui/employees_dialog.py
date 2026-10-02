@@ -186,9 +186,16 @@ class EmployeesDialog(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setWordWrap(True)
         self.table.setAlternatingRowColors(True)
+        # Bez ::item { padding: ... } - Qt liczy dostępny obszar widgetu
+        # komórki (chip Etatu/Flagi, przyciski akcji, patrz
+        # _etat_cell_widget/_flags_cell_widget/_actions_widget) na bazie TEGO
+        # SAMEGO paddingu co dla zwykłych QTableWidgetItem, ale
+        # ResizeToContents dobiera szerokość kolumny z sizeHint() widgetu BEZ
+        # uwzględnienia go - przez to każdy taki padding ucinał realną
+        # szerokość widgetu poniżej jego sizeHint, przycinając treść (chip/
+        # przyciski "Edytuj"/"Usuń").
         self.table.setStyleSheet(
             "QTableWidget#employeesTable { alternate-background-color: #f8fafc; }"
-            "QTableWidget#employeesTable::item { padding: 4px 8px; }"
         )
         self.table.cellDoubleClicked.connect(self._on_cell_double_clicked)
         header_view = self.table.horizontalHeader()
