@@ -1,20 +1,19 @@
 """Pracownicy (pasek menu) - lista wszystkich pracowników projektu w jednym
-miejscu: podgląd danych i flag, dodawanie, edycja, usuwanie oraz dane
-osobowe („Zaawansowane”: imię, nazwisko, telefon, e-mail, adres) pod
-przyszłe wnioski urlopowe.
+miejscu: podgląd danych i flag, dodawanie, edycja, usuwanie. Dane kontaktowe
+(telefon/e-mail/adres) edytuje się w EmployeeDialog (ui/employee_dialog.py,
+sekcja "Zaawansowane" -> "Dane kontaktowe") - dwuklik na odpowiedniej komórce
+tej tabeli otwiera ją od razu rozwiniętą (patrz _on_cell_double_clicked).
 
 Wszystkie zmiany idą przez ScheduleController (cofnij/ponów jak przy
 edycji z tabeli grafiku); po każdej woła `on_changed`, żeby główne okno
 odświeżyło grafik."""
 
-import dataclasses
 import re
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
-    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -54,17 +53,19 @@ _EXTRA_FLAG_LABELS = {
 COLUMNS = ("Pracownik", "Placówka", "Etat", "Flagi", "Telefon", "E-mail", "Adres", "")
 COL_ACTIONS = len(COLUMNS) - 1
 
-# Dwuklik na komórce telefonu/e-maila/adresu otwiera "Zaawansowane" (dane
-# osobowe), nie "Edytuj" (dane do grafiku i flagi) - patrz
-# _on_cell_double_clicked.
-PERSONAL_DATA_COLUMNS = {4, 5, 6}
+# Dwuklik na komórce telefonu/e-maila/adresu otwiera EmployeeDialog z
+# sekcją "Dane kontaktowe" (patrz ui/employee_dialog.py) od razu rozwiniętą
+# i kursorem w tym polu, zamiast zwykłego "Edytuj" - patrz
+# _on_cell_double_clicked. "Adres" w tabeli to w EmployeeDialog trzy osobne
+# pola (ulica/kod/miasto) - dwuklik fokusuje pierwsze z nich.
+CONTACT_FOCUS_FIELDS = {4: "phone", 5: "email", 6: "street"}
 
 # Wysokość wiersza wymuszona po resizeRowsToContents(). Domyślny padding
 # przycisków z globalnego QSS (ui/theme.py#QPushButton, 9px pionowo) daje
 # wysokość bliską granicy wiersza, więc akcje w tabeli (patrz
 # _actions_widget) dostają własny, ciaśniejszy padding (_ACTION_BUTTON_STYLE)
-# zamiast polegać na zaniżonym sizeHint() - inaczej "Edytuj/Zaawansowane/
-# Usuń" wychodziły poza wiersz.
+# zamiast polegać na zaniżonym sizeHint() - inaczej "Edytuj/Usuń" wychodziły
+# poza wiersz.
 _ROW_HEIGHT = 42
 _ACTION_BUTTON_STYLE = "padding: 3px 10px; font-size: 9pt;"
 
@@ -129,85 +130,6 @@ def _flags_cell_widget(flags: list[str]) -> QWidget:
         layout.addWidget(empty)
     layout.addStretch()
     return widget
-
-
-class PersonalDataDialog(QDialog):
-    """Zaawansowane: dane osobowe jednego pracownika. `employee_result` to
-    kopia pracownika z nowymi danymi (pozostałe pola bez zmian)."""
-
-    def __init__(self, parent, employee):
-        super().__init__(parent)
-        self.employee = employee
-        self.employee_result = None
-        self.setWindowTitle(f"Dane osobowe — {employee.display_name()}")
-        self.setModal(True)
-        self.setMinimumWidth(420)
-
-        root = QVBoxLayout(self)
-        root.setSpacing(12)
-
-        title = QLabel("Dane osobowe")
-        title.setObjectName("sectionLabel")
-        root.addWidget(title)
-        hint = QLabel("Potrzebne do wniosków urlopowych. Generator grafiku ich nie używa.")
-        hint.setObjectName("mutedHint")
-        hint.setWordWrap(True)
-        root.addWidget(hint)
-
-        form = QFormLayout()
-        form.setSpacing(10)
-        self.first_name = QLineEdit(employee.first_name)
-        self.last_name = QLineEdit(employee.last_name)
-        self.phone = QLineEdit(employee.phone)
-        self.phone.setPlaceholderText("np. 600 123 456")
-        self.email = QLineEdit(employee.email)
-        self.email.setPlaceholderText("np. jan.kowalski@firma.pl")
-        self.street = QLineEdit(employee.street)
-        self.street.setPlaceholderText("ulica, nr domu / mieszkania")
-        self.postal_code = QLineEdit(employee.postal_code)
-        self.postal_code.setPlaceholderText("00-000")
-        self.postal_code.setMaxLength(6)
-        self.city = QLineEdit(employee.city)
-        form.addRow("Imię:", self.first_name)
-        form.addRow("Nazwisko:", self.last_name)
-        form.addRow("Telefon:", self.phone)
-        form.addRow("E-mail:", self.email)
-        form.addRow("Adres:", self.street)
-        form.addRow("Kod pocztowy:", self.postal_code)
-        form.addRow("Miejscowość:", self.city)
-        root.addLayout(form)
-
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-        cancel_btn = QPushButton("Anuluj")
-        cancel_btn.setObjectName("secondaryButton")
-        cancel_btn.clicked.connect(self.reject)
-        save_btn = QPushButton("Zapisz")
-        save_btn.setObjectName("primaryButton")
-        save_btn.setDefault(True)
-        save_btn.clicked.connect(self._save)
-        buttons.addWidget(cancel_btn)
-        buttons.addWidget(save_btn)
-        root.addLayout(buttons)
-
-    def _save(self):
-        try:
-            emp = dataclasses.replace(
-                self.employee,
-                first_name=self.first_name.text().strip(),
-                last_name=self.last_name.text().strip(),
-                phone=self.phone.text().strip(),
-                email=self.email.text().strip(),
-                street=self.street.text().strip(),
-                postal_code=self.postal_code.text().strip(),
-                city=self.city.text().strip(),
-            )
-            emp.validate()
-        except ValueError as exc:
-            QMessageBox.critical(self, "Błąd", str(exc))
-            return
-        self.employee_result = emp
-        self.accept()
 
 
 class EmployeesDialog(QDialog):
@@ -296,10 +218,8 @@ class EmployeesDialog(QDialog):
 
     def _on_cell_double_clicked(self, row, col):
         emp = self._row_employees[row]
-        if col in PERSONAL_DATA_COLUMNS:
-            self._edit_personal_data(emp)
-        else:
-            self._edit_employee(emp)
+        focus_field = CONTACT_FOCUS_FIELDS.get(col)
+        self._edit_employee(emp, expand_contact=focus_field is not None, focus_field=focus_field)
 
     def refresh(self):
         employees = list(self.schedule.employees)
@@ -341,8 +261,8 @@ class EmployeesDialog(QDialog):
         self.table.resizeRowsToContents()
         # resizeRowsToContents() liczy po sizeHint() przycisków, który bywa
         # zaniżony względem realnie renderowanej wysokości - stąd twarde
-        # dociśnięcie do _ROW_HEIGHT, żeby "Edytuj/Zaawansowane/Usuń" zawsze
-        # mieściły się w całości w wierszu.
+        # dociśnięcie do _ROW_HEIGHT, żeby "Edytuj"/"Usuń" zawsze mieściły
+        # się w całości w wierszu.
         for row in range(self.table.rowCount()):
             if self.table.rowHeight(row) < _ROW_HEIGHT:
                 self.table.setRowHeight(row, _ROW_HEIGHT)
@@ -353,9 +273,8 @@ class EmployeesDialog(QDialog):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(6)
         for text, name, handler, tooltip in (
-            ("Edytuj", "secondaryButton", self._edit_employee, "Dane do grafiku i flagi pracownika"),
-            ("Zaawansowane", "secondaryButton", self._edit_personal_data,
-             "Dane osobowe: imię, nazwisko, telefon, e-mail, adres"),
+            ("Edytuj", "secondaryButton", self._edit_employee,
+             "Dane do grafiku, flagi i dane kontaktowe pracownika"),
             ("Usuń", "dangerButton", self._delete_employee, "Usuń pracownika z grafiku"),
         ):
             btn = QPushButton(text)
@@ -386,8 +305,11 @@ class EmployeesDialog(QDialog):
             return
         self._changed("Dodano pracownika.")
 
-    def _edit_employee(self, emp):
-        dialog = EmployeeDialog(self, employee=emp, shop_config=self.shop_config)
+    def _edit_employee(self, emp, expand_contact=False, focus_field=None):
+        dialog = EmployeeDialog(
+            self, employee=emp, shop_config=self.shop_config,
+            expand_contact=expand_contact, focus_field=focus_field,
+        )
         if dialog.exec() != QDialog.Accepted:
             return
         if dialog.employee_result is None:  # „Usuń pracownika” w tym oknie
@@ -395,12 +317,6 @@ class EmployeesDialog(QDialog):
             self._changed("Usunięto pracownika.")
             return
         self._replace(emp, dialog.employee_result, "Zapisano pracownika.")
-
-    def _edit_personal_data(self, emp):
-        dialog = PersonalDataDialog(self, emp)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        self._replace(emp, dialog.employee_result, "Zapisano dane osobowe.")
 
     def _replace(self, old, new, message):
         # replace_employee usuwa starego przed dodaniem nowego - kolizja

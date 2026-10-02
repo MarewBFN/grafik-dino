@@ -283,6 +283,7 @@ class MonthSchedule:
                     "daily_hours": e.daily_hours,
                     "employment_fraction": e.employment_fraction,
                     "availability": e.availability,
+                    "vacation_days_left": e.vacation_days_left,
                     **e.personal_data(),
                     "settlement_target_minutes": self.settlement_targets.get(e),
                     "previous_month_shift_end": (
@@ -339,6 +340,7 @@ class MonthSchedule:
                 daily_hours=ed.get("daily_hours", 8),
                 employment_fraction=ed.get("employment_fraction", 1.0),
                 availability={int(k): v for k, v in ed.get("availability", {}).items()},
+                vacation_days_left=ed.get("vacation_days_left", 0),
                 **{name: ed.get(name) or "" for name in PERSONAL_DATA_FIELDS},
             )
             sched.add_employee(emp)

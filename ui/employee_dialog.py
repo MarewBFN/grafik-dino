@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -37,7 +38,10 @@ _EMPLOYEE_FIELDS = {f.name for f in dataclasses.fields(Employee)}
 
 
 class EmployeeDialog(QDialog):
-    def __init__(self, parent=None, employee=None, shop_config=None, default_location_key=None):
+    def __init__(
+        self, parent=None, employee=None, shop_config=None, default_location_key=None,
+        expand_contact=False, focus_field=None,
+    ):
         super().__init__(parent)
         self.employee = employee
         self.shop_config = shop_config
@@ -51,6 +55,8 @@ class EmployeeDialog(QDialog):
         self.default_location_key = default_location_key
         self.role_checkboxes: dict[str, QCheckBox] = {}
         self.location_combo: QComboBox | None = None
+        self.vacation_days_left = 0
+        self._contact_expanded = False
         self.setWindowTitle("Edytuj pracownika" if employee else "Dodaj pracownika")
         self.setModal(True)
         self.setMinimumWidth(460)
@@ -58,6 +64,19 @@ class EmployeeDialog(QDialog):
         # Wygląd pochodzi ze wspólnego arkusza stylów aplikacji (ui/theme.py).
         self._build_ui()
         self._fill_from_employee()
+
+        # Dwuklik na komórce telefonu/e-maila/adresu w Pracownicy (patrz
+        # ui/employees_dialog.py::_on_cell_double_clicked) otwiera od razu tę
+        # sekcję rozwiniętą, z kursorem w odpowiednim polu - zamiast kazać
+        # jeszcze raz kliknąć "Zaawansowane".
+        if expand_contact:
+            self._contact_expanded = True
+            self.contact_card.setVisible(True)
+        if focus_field is not None:
+            field_widget = getattr(self, focus_field, None)
+            if field_widget is not None:
+                QTimer.singleShot(0, field_widget.setFocus)
+
         QTimer.singleShot(0, self._maybe_show_tutorial)
 
     def _role_is_hidden(self, role) -> bool:
@@ -151,6 +170,25 @@ class EmployeeDialog(QDialog):
 
         form.addRow("Nazwisko:", self.last_name)
         form.addRow("Imię (opcjonalnie):", self.first_name)
+
+        # Pole tylko do odczytu + "Zmień" (zamiast zwykłego spinboxa), żeby
+        # nie dało się go przypadkiem przekręcić scrollem/strzałką przy
+        # przewijaniu formularza - liczba dni urlopu zmienia się rzadko i
+        # świadomie. Wartość trzymana w self.vacation_days_left, czytana w
+        # _save() - ten sam wzorzec co reszta pól tego okna (zapis dopiero
+        # przyciskiem "Zapisz" na dole, nie od razu).
+        vacation_row = QWidget()
+        vacation_row_layout = QHBoxLayout(vacation_row)
+        vacation_row_layout.setContentsMargins(0, 0, 0, 0)
+        vacation_row_layout.setSpacing(8)
+        self.vacation_label = QLabel()
+        vacation_row_layout.addWidget(self.vacation_label, 1)
+        vacation_change_btn = QPushButton("Zmień")
+        vacation_change_btn.setObjectName("secondaryButton")
+        vacation_change_btn.clicked.connect(self._change_vacation_days)
+        vacation_row_layout.addWidget(vacation_change_btn)
+        form.addRow("Pozostało urlopu:", vacation_row)
+        self._update_vacation_label()
 
         # Przywrócone dla wszystkich profili (decyzja użytkownika
         # 2026-09-28) - wpływa WYŁĄCZNIE na przeliczenie nominalnego czasu
@@ -268,6 +306,60 @@ class EmployeeDialog(QDialog):
                 )
 
         content_layout.addWidget(self.flags_card)
+
+        # --- Zaawansowane: dane kontaktowe (zwijane, domyślnie schowane) ---
+        # Pod wszystkimi polami powyżej, ale NIE w dolnym pasku przycisków
+        # (Usuń/Pomoc/Zapisz) - to osobna, opcjonalna sekcja tego okna, nie
+        # akcja całego dialogu. Dawniej osobne okno "Pracownicy -> Zaawansowane"
+        # (PersonalDataDialog, ui/employees_dialog.py) - scalone tutaj, bo
+        # dane kontaktowe dotyczą tego samego pracownika co reszta karty.
+        toggle_row = QHBoxLayout()
+        self.contact_toggle_btn = QPushButton("Zaawansowane")
+        self.contact_toggle_btn.setObjectName("secondaryButton")
+        self.contact_toggle_btn.setToolTip(
+            "Dane kontaktowe: telefon, e-mail, adres - pod przyszłe wnioski urlopowe."
+        )
+        self.contact_toggle_btn.clicked.connect(self._toggle_contact_card)
+        toggle_row.addWidget(self.contact_toggle_btn)
+        toggle_row.addStretch()
+        content_layout.addLayout(toggle_row)
+
+        self.contact_card = QFrame()
+        self.contact_card.setObjectName("configCard")
+        contact_layout = QVBoxLayout(self.contact_card)
+        contact_layout.setSpacing(10)
+
+        contact_title = QLabel("Dane kontaktowe")
+        contact_title.setObjectName("groupLabel")
+        contact_layout.addWidget(contact_title)
+
+        contact_hint = QLabel("Potrzebne do wniosków urlopowych. Generator grafiku ich nie używa.")
+        contact_hint.setObjectName("mutedHint")
+        contact_hint.setWordWrap(True)
+        contact_layout.addWidget(contact_hint)
+
+        contact_form = QFormLayout()
+        contact_form.setSpacing(10)
+        self.phone = QLineEdit()
+        self.phone.setPlaceholderText("np. 600 123 456")
+        self.email = QLineEdit()
+        self.email.setPlaceholderText("np. jan.kowalski@firma.pl")
+        self.street = QLineEdit()
+        self.street.setPlaceholderText("ulica, nr domu / mieszkania")
+        self.postal_code = QLineEdit()
+        self.postal_code.setPlaceholderText("00-000")
+        self.postal_code.setMaxLength(6)
+        self.city = QLineEdit()
+        contact_form.addRow("Telefon:", self.phone)
+        contact_form.addRow("E-mail:", self.email)
+        contact_form.addRow("Adres:", self.street)
+        contact_form.addRow("Kod pocztowy:", self.postal_code)
+        contact_form.addRow("Miejscowość:", self.city)
+        contact_layout.addLayout(contact_form)
+
+        self.contact_card.setVisible(False)
+        content_layout.addWidget(self.contact_card)
+
         content_layout.addStretch()
 
         # --- Dolny pasek przycisków ---
@@ -326,6 +418,26 @@ class EmployeeDialog(QDialog):
             if idx >= 0:
                 self.employment_fraction.setCurrentIndex(idx)
 
+    def _toggle_contact_card(self):
+        # Nie self.contact_card.isVisible() - poza pokazanym oknem to zawsze
+        # False (zależy od całego łańcucha rodziców), więc drugie kliknięcie
+        # nie cofałoby widoczności. Ten sam wzorzec co
+        # _LocationRow._toggle_hours_expanded (ui/locations_dialog.py).
+        self._contact_expanded = not self._contact_expanded
+        self.contact_card.setVisible(self._contact_expanded)
+
+    def _update_vacation_label(self):
+        self.vacation_label.setText(f"{self.vacation_days_left} dni")
+
+    def _change_vacation_days(self):
+        value, ok = QInputDialog.getInt(
+            self, "Pozostało urlopu", "Liczba dni urlopu:",
+            self.vacation_days_left, 0, 365,
+        )
+        if ok:
+            self.vacation_days_left = value
+            self._update_vacation_label()
+
     def _update_no_night_afternoon_visibility(self):
         if self.no_night_check is None:
             return
@@ -368,6 +480,13 @@ class EmployeeDialog(QDialog):
         if self.location_combo is not None:
             idx = self.location_combo.findData(self.employee.location_key)
             self.location_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.phone.setText(self.employee.phone)
+        self.email.setText(self.employee.email)
+        self.street.setText(self.employee.street)
+        self.postal_code.setText(self.employee.postal_code)
+        self.city.setText(self.employee.city)
+        self.vacation_days_left = self.employee.vacation_days_left
+        self._update_vacation_label()
         # Patrz komentarz przy analogicznym wywołaniu wyżej (ścieżka nowego
         # pracownika) - jawne wywołanie zamiast polegać wyłącznie na sygnale.
         self._update_no_night_afternoon_visibility()
@@ -509,9 +628,12 @@ class EmployeeDialog(QDialog):
                 employment_fraction=self.employment_fraction.currentData(),
                 custom_roles=custom_roles,
                 location_key=location_key,
-                # Dane osobowe edytuje Pracownicy -> Zaawansowane, nie to
-                # okno - przy edycji muszą przejść bez zmian.
-                **(self.employee.personal_data() if self.employee else {}),
+                phone=self.phone.text().strip(),
+                email=self.email.text().strip(),
+                street=self.street.text().strip(),
+                postal_code=self.postal_code.text().strip(),
+                city=self.city.text().strip(),
+                vacation_days_left=self.vacation_days_left,
                 **legacy_roles,
             )
             emp.validate()

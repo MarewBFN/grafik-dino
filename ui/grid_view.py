@@ -394,6 +394,19 @@ class EmployeeNameDelegate(QStyledItemDelegate):
             icon.paint(painter, icon_x, icon_y, self.RESTRICTION_ICON_SIZE, self.RESTRICTION_ICON_SIZE)
             icon_x += self.RESTRICTION_ICON_SIZE + self.RESTRICTION_ICON_GAP
 
+        # --- Pozostały urlop (Employee.vacation_days_left, patrz
+        # EmployeeDialog "Pozostało urlopu") - do prawej krawędzi komórki,
+        # niezależnie od tego, ile miejsca po lewej zajęły odznaki/imię/
+        # ikony ograniczeń powyżej.
+        vacation_text = f"Urlop: {employee.vacation_days_left}"
+        vacation_font = QFont(fraction_font)
+        vacation_metrics = QFontMetrics(vacation_font)
+        vacation_width = vacation_metrics.horizontalAdvance(vacation_text)
+        vacation_rect = text_rect.adjusted(text_rect.width() - vacation_width, 0, 0, 0)
+        painter.setFont(vacation_font)
+        painter.setPen(QColor("#8a8a8a"))
+        painter.drawText(vacation_rect, Qt.AlignVCenter | Qt.AlignRight, vacation_text)
+
         painter.restore()
 
 class LockedCellDelegate(QStyledItemDelegate):

@@ -1,5 +1,6 @@
-"""Pracownicy (pasek menu) - lista pracowników, dane osobowe
-(„Zaawansowane”), dodawanie/usuwanie - patrz ui/employees_dialog.py."""
+"""Pracownicy (pasek menu) - lista pracowników, dane kontaktowe edytowane
+przez EmployeeDialog ("Zaawansowane" -> "Dane kontaktowe"), dodawanie/
+usuwanie - patrz ui/employees_dialog.py."""
 
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -21,7 +22,7 @@ from model.employee import Employee
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from ui import employees_dialog as module
-from ui.employees_dialog import EmployeesDialog, PersonalDataDialog, employee_flag_labels
+from ui.employees_dialog import EmployeesDialog, employee_flag_labels
 
 
 def _setup(*employees):
@@ -41,6 +42,15 @@ def test_personal_data_round_trips_through_project_file():
 
     assert loaded.personal_data() == emp.personal_data()
     assert loaded.address() == "Polna 1/2, 00-950 Warszawa"
+
+
+def test_vacation_days_left_round_trips_through_project_file():
+    emp = Employee(last_name="Kowalski", first_name="Jan", vacation_days_left=12)
+    schedule = MonthSchedule(2026, 10, employees=[emp])
+
+    loaded = MonthSchedule.from_dict(schedule.to_dict()).employees[0]
+
+    assert loaded.vacation_days_left == 12
 
 
 def test_old_project_file_without_personal_data_loads_empty():
@@ -99,8 +109,8 @@ def test_flags_column_lists_set_roles():
     assert len(labels) == 1 and "nocn" in labels[0]
 
 
-def test_advanced_saves_personal_data_and_keeps_schedule(monkeypatch):
-    emp = Employee(last_name="Kowalski", first_name="Jan", custom_roles={"x": True})
+def test_edit_can_update_contact_data_inline_and_keeps_schedule(monkeypatch):
+    emp = Employee(last_name="Kowalski", first_name="Jan", is_opener=True)
     shop, controller = _setup(emp)
     controller.schedule.set_day_hours(emp, 3, "08:00", "16:00")
     changes = []
@@ -113,15 +123,51 @@ def test_advanced_saves_personal_data_and_keeps_schedule(monkeypatch):
         self._save()
         return QDialog.Accepted
 
-    monkeypatch.setattr(PersonalDataDialog, "exec", fake_exec)
-    dialog._edit_personal_data(emp)
+    monkeypatch.setattr(module.EmployeeDialog, "exec", fake_exec)
+    dialog._edit_employee(emp)
 
     saved = controller.schedule.employees[0]
     assert (saved.phone, saved.email, saved.city) == ("600 123 456", "jan@firma.pl", "Gdańsk")
-    assert saved.custom_roles == {"x": True}
+    assert saved.is_opener is True
     assert controller.schedule.get_day(saved, 3).start == "08:00"
-    assert changes == ["Zapisano dane osobowe."]
+    assert changes == ["Zapisano pracownika."]
     assert dialog.table.item(0, 6).text() == "Gdańsk"
+
+
+def test_double_click_on_contact_column_opens_dialog_with_contact_expanded(monkeypatch):
+    emp = Employee(last_name="Kowalski", first_name="Jan", phone="600123456")
+    shop, controller = _setup(emp)
+    dialog = EmployeesDialog(None, controller, shop)
+
+    seen = {}
+
+    def fake_exec(self):
+        seen["expanded"] = not self.contact_card.isHidden()
+        self.employee_result = self.employee
+        return QDialog.Accepted
+
+    monkeypatch.setattr(module.EmployeeDialog, "exec", fake_exec)
+    dialog._on_cell_double_clicked(0, 4)  # kolumna "Telefon"
+
+    assert seen["expanded"] is True
+
+
+def test_double_click_on_name_column_opens_dialog_without_expanding_contact(monkeypatch):
+    emp = Employee(last_name="Kowalski", first_name="Jan")
+    shop, controller = _setup(emp)
+    dialog = EmployeesDialog(None, controller, shop)
+
+    seen = {}
+
+    def fake_exec(self):
+        seen["expanded"] = not self.contact_card.isHidden()
+        self.employee_result = self.employee
+        return QDialog.Accepted
+
+    monkeypatch.setattr(module.EmployeeDialog, "exec", fake_exec)
+    dialog._on_cell_double_clicked(0, 0)  # kolumna "Pracownik"
+
+    assert seen["expanded"] is False
 
 
 def test_advanced_rename_to_existing_employee_is_refused(monkeypatch):
@@ -187,3 +233,62 @@ def test_employee_dialog_edit_keeps_personal_data():
 
     assert dialog.employee_result.phone == "600123456"
     assert dialog.employee_result.city == "Gdańsk"
+
+
+def test_employee_dialog_contact_card_starts_collapsed_and_toggles():
+    from ui.employee_dialog import EmployeeDialog
+
+    shop = ShopConfig(2026, 10)
+    dialog = EmployeeDialog(None, shop_config=shop)
+
+    assert dialog.contact_card.isHidden() is True
+    dialog._toggle_contact_card()
+    assert dialog.contact_card.isHidden() is False
+    dialog._toggle_contact_card()
+    assert dialog.contact_card.isHidden() is True
+
+
+def test_employee_dialog_opens_with_contact_expanded_and_field_focused():
+    from ui.employee_dialog import EmployeeDialog
+
+    shop = ShopConfig(2026, 10)
+    emp = Employee(last_name="Kowalski", first_name="Jan")
+    dialog = EmployeeDialog(None, employee=emp, shop_config=shop, expand_contact=True, focus_field="email")
+
+    assert dialog.contact_card.isHidden() is False
+
+
+def test_employee_dialog_vacation_change_button_updates_saved_value(monkeypatch):
+    from ui import employee_dialog as emp_dialog_module
+    from ui.employee_dialog import EmployeeDialog
+
+    shop = ShopConfig(2026, 10)
+    emp = Employee(last_name="Kowalski", first_name="Jan", vacation_days_left=5)
+    dialog = EmployeeDialog(None, employee=emp, shop_config=shop)
+
+    assert dialog.vacation_label.text() == "5 dni"
+
+    monkeypatch.setattr(
+        emp_dialog_module.QInputDialog, "getInt", staticmethod(lambda *a, **k: (20, True))
+    )
+    dialog._change_vacation_days()
+
+    assert dialog.vacation_label.text() == "20 dni"
+    dialog._save()
+    assert dialog.employee_result.vacation_days_left == 20
+
+
+def test_employee_dialog_vacation_change_cancelled_keeps_value(monkeypatch):
+    from ui import employee_dialog as emp_dialog_module
+    from ui.employee_dialog import EmployeeDialog
+
+    shop = ShopConfig(2026, 10)
+    emp = Employee(last_name="Kowalski", first_name="Jan", vacation_days_left=5)
+    dialog = EmployeeDialog(None, employee=emp, shop_config=shop)
+
+    monkeypatch.setattr(
+        emp_dialog_module.QInputDialog, "getInt", staticmethod(lambda *a, **k: (20, False))
+    )
+    dialog._change_vacation_days()
+
+    assert dialog.vacation_label.text() == "5 dni"

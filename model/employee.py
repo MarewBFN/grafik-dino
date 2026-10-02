@@ -49,13 +49,20 @@ class Employee:
     # zachowanie) - patrz ShopConfig.locations.
     location_key: str = field(default="", compare=False)
 
-    # Dane osobowe (Pracownicy -> Zaawansowane) - pod przyszłe wnioski
-    # urlopowe; generator ich nie używa. Puste = nie podano.
+    # Dane osobowe (EmployeeDialog -> "Zaawansowane" -> "Dane kontaktowe")
+    # - pod przyszłe wnioski urlopowe; generator ich nie używa. Puste = nie
+    # podano.
     phone: str = field(default="", compare=False)
     email: str = field(default="", compare=False)
     street: str = field(default="", compare=False)
     postal_code: str = field(default="", compare=False)
     city: str = field(default="", compare=False)
+
+    # Dni urlopu pozostałe do wykorzystania - wpisywane ręcznie w
+    # EmployeeDialog ("Pozostało urlopu" + przycisk "Zmień"), pokazywane przy
+    # nazwisku w grid_view (ui/grid_view.py::EmployeeNameDelegate). Generator
+    # grafiku go nie używa - czysto informacyjne, jak dane osobowe wyżej.
+    vacation_days_left: int = field(default=0, compare=False)
 
     def display_name(self) -> str:
         # Imię jest opcjonalne (patrz validate()) - bez niego samo
@@ -115,3 +122,6 @@ class Employee:
             raise ValueError("Nieprawidłowy numer telefonu (dozwolone cyfry, spacje, „+”, „-”)")
         if self.postal_code.strip() and not re.fullmatch(r"\d{2}-\d{3}", self.postal_code.strip()):
             raise ValueError("Kod pocztowy musi mieć format 00-000")
+
+        if self.vacation_days_left < 0:
+            raise ValueError("Pozostały urlop nie może być ujemny")

@@ -32,6 +32,11 @@ class ValidateTests(unittest.TestCase):
         emp = Employee(last_name="Kowalski", first_name="Jan")
         emp.validate()  # nie powinno rzucić
 
+    def test_negative_vacation_days_left_raises(self):
+        emp = Employee(last_name="Kowalski", first_name="Jan", vacation_days_left=-1)
+        with self.assertRaises(ValueError):
+            emp.validate()
+
 
 class DisplayNameTests(unittest.TestCase):
     def test_both_names_present(self):
