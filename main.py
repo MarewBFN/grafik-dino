@@ -3,6 +3,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from PySide6.QtWidgets import QApplication
 
 from ui.main_window import MainWindow
+from ui.no_scroll_widgets import install_wheel_guard
 from ui.theme import APP_STYLESHEET
 
 
@@ -10,6 +11,7 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet(APP_STYLESHEET)
+    install_wheel_guard(app)
 
     # Double-clicking a .myp file (registered by the installer, see
     # "dla inno.iss") launches us with its path as an argument.

@@ -44,13 +44,14 @@ class LeaveRequestsDialog(QDialog):
     zapamiętuje zapisane wnioski - po zapisie lista jest wczytywana od nowa,
     więc właśnie zapisane wnioski od razu tracą zaznaczenie."""
 
-    def __init__(self, parent, load_requests, on_saved, default_file_name: str):
+    def __init__(self, parent, load_requests, on_saved, default_file_name: str, companies=None):
         super().__init__(parent)
         self.setWindowTitle("Wnioski urlopowe")
         self.resize(1180, 760)
 
         self._load_requests = load_requests
         self._on_saved = on_saved
+        self._companies = companies or {}
         self._default_file_name = default_file_name
         self._generated_on = date.today()
         self.requests = []
@@ -165,7 +166,7 @@ class LeaveRequestsDialog(QDialog):
         if row < 0 or row >= len(self.requests):
             self.preview_label.setPixmap(QPixmap())
             return
-        image = render_leave_request_image(self.requests[row], self._generated_on)
+        image = render_leave_request_image(self.requests[row], self._generated_on, companies=self._companies)
         self.preview_label.setPixmap(QPixmap.fromImage(image))
 
     def _save_checked(self):
@@ -192,7 +193,7 @@ class LeaveRequestsDialog(QDialog):
             path += ".pdf"
 
         try:
-            saved = export_leave_requests_to_pdf(requests, path, self._generated_on)
+            saved = export_leave_requests_to_pdf(requests, path, self._generated_on, companies=self._companies)
         except Exception as error:
             QMessageBox.critical(self, "Błąd zapisu", str(error))
             return

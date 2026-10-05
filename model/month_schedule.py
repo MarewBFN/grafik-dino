@@ -318,6 +318,7 @@ class MonthSchedule:
                     "no_afternoon": e.no_afternoon,
                     "custom_roles": e.custom_roles,
                     "location_key": e.location_key,
+                    "company_key": e.company_key,
                     "monthly_target_hours": e.monthly_target_hours,
                     "daily_hours": e.daily_hours,
                     "employment_fraction": e.employment_fraction,
@@ -349,13 +350,9 @@ class MonthSchedule:
                             "is_full_day": ds.is_full_day,
                         }
                         for day in range(1, self.days_in_month + 1)
-                        if (
-                            not (ds := self.get_day(e, day)).is_empty()
-                            or ds.is_leave
-                            or getattr(ds, "is_sick", False)
-                            or getattr(ds, "is_locked", False)
-                            or getattr(ds, "shift_class", None)
-                        )
+                        # Każdy dzień z jakąkolwiek informacją (też samo "wolne"
+                        # bez blokady) - pomijamy tylko całkiem nietknięte.
+                        if not (ds := self.get_day(e, day)).is_blank()
                     },
                 }
                 for e in self.employees
@@ -379,6 +376,7 @@ class MonthSchedule:
                 no_afternoon=ed.get("no_afternoon", False),
                 custom_roles=dict(ed.get("custom_roles", {})),
                 location_key=ed.get("location_key", ""),
+                company_key=ed.get("company_key", ""),
                 monthly_target_hours=ed.get("monthly_target_hours", 160),
                 daily_hours=ed.get("daily_hours", 8),
                 employment_fraction=ed.get("employment_fraction", 1.0),

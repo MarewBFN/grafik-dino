@@ -67,6 +67,11 @@ class Employee:
     # grafiku go nie używa - czysto informacyjne, jak dane osobowe wyżej.
     vacation_days_left: float = field(default=0, compare=False)
 
+    # Klucz firmy (model.company.Company, MonthlyProject.companies), do której
+    # należy pracownik - EmployeeDialog -> "Zaawansowane". Używane tylko w
+    # nagłówku wniosków urlopowych. Puste = nie wybrano.
+    company_key: str = field(default="", compare=False)
+
     def display_name(self) -> str:
         # Imię jest opcjonalne (patrz validate()) - bez niego samo
         # nazwisko, bez końcowej spacji.

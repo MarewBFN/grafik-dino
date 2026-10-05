@@ -45,7 +45,7 @@ from logic.leave_requests import (
 )
 from logic.schedule_controller import ScheduleController
 from logic.utils.time_utils import previous_calendar_month
-from ui.export_preview_dialog import show_export_preview
+from ui.export_preview_dialog import show_export_preview, show_schedule_export_preview
 from ui.previous_month_shift_dialog import PreviousMonthShiftDialog
 from ui.marquee_text import MarqueeLabel, WrappingLocationButton
 from model.location import format_open_hours_summary
@@ -67,6 +67,7 @@ from ui.grid_legend import GridLegendWidget
 from ui import theme
 from ui.grid_view import ScheduleGrid
 from ui.leave_requests_dialog import LeaveRequestsDialog
+from ui.companies_dialog import CompaniesDialog
 from ui.month_picker_dialog import MonthPickerDialog
 from ui.new_project_dialog import NewProjectDialog
 from ui.quick_mode_settings_dialog import QuickModeSettingsDialog
@@ -727,6 +728,7 @@ class MainWindow(QMainWindow):
         cards_menu.addAction("PDF...", self._export_employee_cards_pdf)
         file_menu.addMenu(cards_menu)
 
+        file_menu.addAction("Dane firmy...", self._open_companies_dialog)
         file_menu.addAction("Wnioski urlopowe...", self._open_leave_requests_dialog)
 
         file_menu.addSeparator()
@@ -876,7 +878,7 @@ class MainWindow(QMainWindow):
         self._sync_everything()
 
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
 
@@ -886,9 +888,13 @@ class MainWindow(QMainWindow):
 
     def _init_state(self):
         old_employees = []
+        old_companies = {}
 
         if self.schedule:
             old_employees = self.schedule.employees
+            # Zachowani pracownicy wskazują firmy przez company_key - bez
+            # przeniesienia firm straciliby przypisanie.
+            old_companies = self.project.companies if hasattr(self, "project") else {}
 
         self.schedule = MonthSchedule(self.year, self.month, employees=old_employees)
         self.shop_config = ShopConfig(self.year, self.month)
@@ -898,6 +904,7 @@ class MainWindow(QMainWindow):
         # (patrz model/monthly_project.py) - żaden inny miesiąc jeszcze nie
         # istnieje, tylko ten właśnie utworzony.
         self.project = MonthlyProject()
+        self.project.companies = old_companies
         self.project.put(self.year, self.month, self.schedule, self.shop_config)
 
         self._apply_default_visible_business_type()
@@ -927,7 +934,21 @@ class MainWindow(QMainWindow):
             from logic.generator.custom_profile_wiring import apply_new_project_defaults
             apply_new_project_defaults(self.shop_config, custom)
 
+    def _commit_current_month(self):
+        """Wkłada bieżący grafik/konfigurację z powrotem do projektu.
+        Cofnij/Ponów (i część operacji kontrolera) podmieniają self.schedule
+        na NOWY obiekt - bez tego projekt dalej trzymałby stary i zapis
+        gubiłby wszystko od ostatniej zmiany miesiąca."""
+        schedule, shop_config = getattr(self, "schedule", None), getattr(self, "shop_config", None)
+        if schedule is not None and shop_config is not None and getattr(self, "project", None) is not None:
+            self.project.put(schedule.year, schedule.month, schedule, shop_config)
+
+    def _save_bundle(self, path):
+        self._commit_current_month()
+        save_project_bundle(path, self.project, self.year, self.month)
+
     def _sync_everything(self):
+        self._commit_current_month()
         # Bezpiecznik: tabela grafiku filtruje pracowników po location_key
         # (patrz _sync_grid), więc ktoś bez poprawnego przypisania byłby
         # trwale niewidoczny w każdej placówce - dopina go do pierwszej
@@ -1126,9 +1147,26 @@ class MainWindow(QMainWindow):
             self,
             load_requests=self._current_leave_requests,
             on_saved=on_saved,
+            companies=self.project.companies,
             default_file_name=f"Wnioski urlopowe {self.month:02d}.{self.year}.pdf",
         )
         dialog.exec()
+
+    def _open_companies_dialog(self):
+        employee_counts = {}
+        for emp in (self.schedule.employees if self.schedule else []):
+            if emp.company_key:
+                employee_counts[emp.company_key] = employee_counts.get(emp.company_key, 0) + 1
+
+        dialog = CompaniesDialog(self, self.project.companies, employee_counts)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        self.project.companies = dialog.companies
+        try:
+            self._save_bundle("last_project.json")
+        except OSError:
+            pass
+        self.statusBar().showMessage("Zapisano dane firmy.", 2500)
 
     def _update_window_title(self):
         # Wersja programu zawsze bezpośrednio po nazwie ("Grafik pracy
@@ -1344,7 +1382,10 @@ class MainWindow(QMainWindow):
             )
 
     def _open_add_employee(self):
-        dialog = EmployeeDialog(self, shop_config=self.shop_config, default_location_key=self.selected_location_key)
+        dialog = EmployeeDialog(
+            self, shop_config=self.shop_config, default_location_key=self.selected_location_key,
+            companies=self.project.companies,
+        )
 
         if dialog.exec() != QDialog.Accepted:
             return
@@ -1363,11 +1404,12 @@ class MainWindow(QMainWindow):
         dialog = EmployeesDialog(
             self, self.controller, self.shop_config,
             on_changed=on_changed, default_location_key=self.selected_location_key,
+            companies=self.project.companies,
         )
         dialog.exec()
 
     def _edit_employee(self, emp):
-        dialog = EmployeeDialog(self, employee=emp, shop_config=self.shop_config)
+        dialog = EmployeeDialog(self, employee=emp, shop_config=self.shop_config, companies=self.project.companies)
         if dialog.exec() != QDialog.Accepted:
             return
 
@@ -1620,7 +1662,7 @@ class MainWindow(QMainWindow):
         # tryb szybki) zapisuje się od razu po zamknięciu, więc to też powinno,
         # zamiast czekać na osobne "Zapisz" albo monit przy zamknięciu programu.
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage("Zaktualizowano godziny dnia.", 2500)
@@ -1635,7 +1677,7 @@ class MainWindow(QMainWindow):
         # Constraint policies are part of the local working project, so retain
         # the selected generator configuration for the next application start.
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano konfigurację.", 2500)
@@ -1651,7 +1693,7 @@ class MainWindow(QMainWindow):
         assign_missing_location_keys(self.schedule, self.shop_config)
         self._sync_everything()
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano lokalizacje.", 2500)
@@ -1663,7 +1705,7 @@ class MainWindow(QMainWindow):
         self._update_hours_display_menu()
         self.grid.refresh()
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano wygląd komórek kompaktowych.", 2500)
@@ -1682,7 +1724,7 @@ class MainWindow(QMainWindow):
         self.shop_config.show_grid_legend = not self.shop_config.show_grid_legend
         self._update_grid_legend()
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage(
@@ -1702,7 +1744,7 @@ class MainWindow(QMainWindow):
         self._rebuild_quick_preset_buttons()
         self._update_quick_panel_profile_visibility()
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano ustawienia trybu szybkiego.", 2500)
@@ -1727,8 +1769,8 @@ class MainWindow(QMainWindow):
 
         # Cały projekt (patrz model/monthly_project.py) - każdy miesiąc
         # odwiedzony w tej sesji, nie tylko aktualnie otwarty.
-        save_project_bundle(path, self.project, self.year, self.month)
-        save_project_bundle("last_project.json", self.project, self.year, self.month)
+        self._save_bundle(path)
+        self._save_bundle("last_project.json")
         self.statusBar().showMessage("Zapisano projekt.", 2500)
 
     def _load_project(self):
@@ -1773,21 +1815,39 @@ class MainWindow(QMainWindow):
         export_schedule_to_excel(
             self.schedule, self.year, self.month, path, shop=self.shop_config,
             employees=self.grid.get_visible_employees(),
+            location_name=self._selected_location_name(),
         )
         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500)
 
-    def _render_visible_schedule_image(self):
+    def _selected_location_name(self):
+        locations = self.shop_config.locations if self.shop_config else {}
+        location = locations.get(self.selected_location_key)
+        return location.name if location else None
+
+    def _render_schedule_image_for(self, employees):
         return render_schedule_image(
             self.schedule, self.year, self.month, shop=self.shop_config,
-            employees=self.grid.get_visible_employees(),
+            employees=employees, location_name=self._selected_location_name(),
         )
+
+    def _render_visible_schedule_image(self):
+        return self._render_schedule_image_for(self.grid.get_visible_employees())
+
+    def _preview_schedule_export(self, title):
+        """Podgląd grafiku wybranej placówki z opcją "Jeden pracownik" -
+        zwraca obraz do zapisania albo None przy anulowaniu."""
+        pages = show_schedule_export_preview(
+            self.grid.get_visible_employees(), self._render_schedule_image_for,
+            title, parent=self,
+        )
+        return pages[0] if pages else None
 
     def _export_image(self):
         if self.demo.block_export(self):
             return
 
-        image = self._render_visible_schedule_image()
-        if not show_export_preview(image, "Podgląd grafiku — JPG", parent=self):
+        image = self._preview_schedule_export("Podgląd grafiku — JPG")
+        if image is None:
             return
 
         path, _ = QFileDialog.getSaveFileName(self, "Eksport JPG", "", "Obraz JPG (*.jpg)")
@@ -1804,8 +1864,8 @@ class MainWindow(QMainWindow):
         if self.demo.block_export(self):
             return
 
-        image = self._render_visible_schedule_image()
-        if not show_export_preview(image, "Podgląd grafiku — PDF", parent=self):
+        image = self._preview_schedule_export("Podgląd grafiku — PDF")
+        if image is None:
             return
 
         path, _ = QFileDialog.getSaveFileName(self, "Eksport PDF", "", "PDF (*.pdf)")
@@ -2412,7 +2472,7 @@ class MainWindow(QMainWindow):
                 return
 
             try:
-                save_project_bundle("last_project.json", self.project, self.year, self.month)
+                self._save_bundle("last_project.json")
             except:
                 pass
 
@@ -2481,7 +2541,7 @@ class MainWindow(QMainWindow):
 
         self._update_nominal_hours_label()
         self._sync_everything()
-        save_project_bundle("last_project.json", self.project, self.year, self.month)
+        self._save_bundle("last_project.json")
         self.statusBar().showMessage("Utworzono placówkę.", 2500)
 
     def _clear_generated(self):

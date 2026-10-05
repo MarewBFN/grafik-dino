@@ -41,10 +41,13 @@ _EMPLOYEE_FIELDS = {f.name for f in dataclasses.fields(Employee)}
 class EmployeeDialog(QDialog):
     def __init__(
         self, parent=None, employee=None, shop_config=None, default_location_key=None,
-        expand_contact=False, focus_field=None,
+        expand_contact=False, focus_field=None, companies=None,
     ):
         super().__init__(parent)
         self.employee = employee
+        # Firmy z Plik -> "Dane firmy" (MonthlyProject.companies) do kombo
+        # "Firma" w sekcji Zaawansowane.
+        self.companies = companies or {}
         self.shop_config = shop_config
         self.profile = get_profile(shop_config.business_type if shop_config else None)
         self.locations = shop_config.locations if shop_config else {}
@@ -318,7 +321,7 @@ class EmployeeDialog(QDialog):
         self.contact_toggle_btn = QPushButton("Zaawansowane")
         self.contact_toggle_btn.setObjectName("secondaryButton")
         self.contact_toggle_btn.setToolTip(
-            "Dane kontaktowe: telefon, e-mail, adres - pod przyszłe wnioski urlopowe."
+            "Firma oraz dane kontaktowe: telefon, e-mail, adres - do wniosków urlopowych."
         )
         self.contact_toggle_btn.clicked.connect(self._toggle_contact_card)
         toggle_row.addWidget(self.contact_toggle_btn)
@@ -341,6 +344,12 @@ class EmployeeDialog(QDialog):
 
         contact_form = QFormLayout()
         contact_form.setSpacing(10)
+        self.company_combo = QComboBox()
+        self.company_combo.addItem("(brak)", "")
+        for company in self.companies.values():
+            self.company_combo.addItem(company.name, company.key)
+        self.company_combo.setToolTip("Firmy dodasz w menu Plik -> Dane firmy.")
+        contact_form.addRow("Firma:", self.company_combo)
         self.phone = QLineEdit()
         self.phone.setPlaceholderText("np. 600 123 456")
         self.email = QLineEdit()
@@ -492,6 +501,8 @@ class EmployeeDialog(QDialog):
         self.street.setText(self.employee.street)
         self.postal_code.setText(self.employee.postal_code)
         self.city.setText(self.employee.city)
+        idx = self.company_combo.findData(self.employee.company_key)
+        self.company_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self.vacation_days_left = self.employee.vacation_days_left
         self._update_vacation_label()
         # Patrz komentarz przy analogicznym wywołaniu wyżej (ścieżka nowego
@@ -635,6 +646,7 @@ class EmployeeDialog(QDialog):
                 employment_fraction=self.employment_fraction.currentData(),
                 custom_roles=custom_roles,
                 location_key=location_key,
+                company_key=self.company_combo.currentData() or "",
                 phone=self.phone.text().strip(),
                 email=self.email.text().strip(),
                 street=self.street.text().strip(),

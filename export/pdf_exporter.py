@@ -12,7 +12,7 @@ wygląd PDF.
 from export.export_style import render_schedule_image
 
 
-def export_schedule_to_pdf(schedule, year, month, path, shop=None, employees=None):
-    image = render_schedule_image(schedule, year, month, shop=shop, employees=employees)
+def export_schedule_to_pdf(schedule, year, month, path, shop=None, employees=None, location_name=None):
+    image = render_schedule_image(schedule, year, month, shop=shop, employees=employees, location_name=location_name)
     image.save(path, "PDF", resolution=150.0)
     return True

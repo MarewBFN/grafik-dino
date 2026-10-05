@@ -4,11 +4,13 @@ ten sam rysunek dla podglądu w oknie "Wnioski urlopowe"
 PDF (export_leave_requests_to_pdf, jeden wniosek na stronę).
 
 Układ strony:
-- prawy górny róg: "<miejscowość>, dnia <data wygenerowania>",
+- prawy górny róg: "<miejscowość>, dnia <data wygenerowania>" (miejscowość
+  firmy pracownika, a bez niej - kropkowana linia),
 - lewa strona, niżej: dane pracownika (imię i nazwisko, adres) z danych
   osobowych pracownika - brakujące pola jako kropkowana linia do wpisania
   ręcznie,
-- prawa strona, niżej: dane firmy (na razie placeholder, COMPANY_LINES),
+- prawa strona, niżej: dane firmy pracownika (Plik -> "Dane firmy",
+  Employee.company_key) - bez przypisanej firmy kropkowane linie,
 - treść wniosku z wcięciem na początku akapitu,
 - prawa strona, na dole: kropkowana linia na podpis z podpisem
   "podpis pracownika" pod spodem."""
@@ -18,9 +20,10 @@ from datetime import date
 from PySide6.QtCore import QMarginsF, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPageLayout, QPageSize, QPainter, QPdfWriter, QPen
 
-# Dane firmy - do uzupełnienia, gdy będą znane.
-PLACE_PLACEHOLDER = "Miejscowość"
-COMPANY_LINES = ("[Nazwa firmy]", "[Adres firmy]", "[Kod pocztowy, miejscowość]")
+# Liczba kropkowanych linii zamiast danych firmy, gdy pracownik nie ma
+# przypisanej firmy (nazwa, adres, kod pocztowy i miejscowość).
+_EMPTY_COMPANY_LINES = 3
+_PLACE_DOTS = "." * 24
 
 PAGE_WIDTH_MM = 210.0
 PAGE_HEIGHT_MM = 297.0
@@ -50,6 +53,27 @@ def _employee_lines(employee) -> list[str | None]:
     return [full_name or None, employee.street or None, town or None]
 
 
+def company_for(request, companies):
+    """Firma pracownika z wniosku albo None (brak przypisania/usunięta)."""
+    if not companies:
+        return None
+    return companies.get(request.employee.company_key)
+
+
+def _company_lines(company) -> list[str | None]:
+    """Linie bloku firmy; None = kropkowana linia do wpisania ręcznie."""
+    if company is None:
+        return [None] * _EMPTY_COMPANY_LINES
+    lines = [company.name, company.street or None, company.town() or None]
+    if company.nip:
+        lines.append(f"NIP: {company.nip}")
+    if company.phone:
+        lines.append(f"tel. {company.phone}")
+    if company.email:
+        lines.append(company.email)
+    return lines
+
+
 def _font(painter, point_size: float, bold: bool = False) -> QFont:
     font = QFont(painter.font())
     font.setPointSizeF(point_size)
@@ -72,8 +96,9 @@ def _wrap(text: str, metrics: QFontMetricsF, first_width: float, width: float) -
     return lines
 
 
-def draw_leave_request(painter: QPainter, request, generated_on: date, unit: float) -> None:
-    """Rysuje cały wniosek; `unit` = liczba jednostek urządzenia na 1 mm."""
+def draw_leave_request(painter: QPainter, request, generated_on: date, unit: float, company=None) -> None:
+    """Rysuje cały wniosek; `unit` = liczba jednostek urządzenia na 1 mm,
+    `company` - firma pracownika (model.company.Company) albo None."""
 
     def mm(value: float) -> float:
         return value * unit
@@ -100,7 +125,7 @@ def draw_leave_request(painter: QPainter, request, generated_on: date, unit: flo
     painter.drawText(
         QRectF(left, top, right - left, line_height),
         Qt.AlignRight | Qt.AlignVCenter,
-        f"{PLACE_PLACEHOLDER}, dnia {format_date(generated_on)}",
+        f"{(company.city if company is not None else '') or _PLACE_DOTS}, dnia {format_date(generated_on)}",
     )
 
     # Dane pracownika - lewa strona, poniżej daty.
@@ -114,9 +139,15 @@ def draw_leave_request(painter: QPainter, request, generated_on: date, unit: flo
 
     # Dane firmy - prawa strona, niżej.
     y += line_height * 1.5
-    for line in COMPANY_LINES:
-        painter.drawText(QRectF(right_column, y, right - right_column, line_height), Qt.AlignLeft | Qt.AlignVCenter, line)
-        y += line_height
+    for line in _company_lines(company):
+        if line is None:
+            dotted_line(right_column, right, y + line_height * 0.8)
+            y += line_height
+            continue
+        # Długa nazwa/adres firmy nie mieści się w prawej kolumnie - zawijamy.
+        for part in _wrap(line, metrics, right - right_column, right - right_column):
+            painter.drawText(QRectF(right_column, y, right - right_column, line_height), Qt.AlignLeft | Qt.AlignVCenter, part)
+            y += line_height
 
     # Treść wniosku, z wcięciem pierwszego wiersza.
     y += line_height * 3
@@ -139,7 +170,7 @@ def draw_leave_request(painter: QPainter, request, generated_on: date, unit: flo
     )
 
 
-def render_leave_request_image(request, generated_on: date, width_px: int = 620) -> QImage:
+def render_leave_request_image(request, generated_on: date, width_px: int = 620, companies=None) -> QImage:
     """Podgląd wniosku jako obraz strony A4 o szerokości `width_px`."""
     height_px = round(width_px * PAGE_HEIGHT_MM / PAGE_WIDTH_MM)
     image = QImage(width_px, height_px, QImage.Format_RGB32)
@@ -153,12 +184,12 @@ def render_leave_request_image(request, generated_on: date, width_px: int = 620)
     painter = QPainter(image)
     painter.setRenderHint(QPainter.Antialiasing)
     painter.setRenderHint(QPainter.TextAntialiasing)
-    draw_leave_request(painter, request, generated_on, width_px / PAGE_WIDTH_MM)
+    draw_leave_request(painter, request, generated_on, width_px / PAGE_WIDTH_MM, company_for(request, companies))
     painter.end()
     return image
 
 
-def export_leave_requests_to_pdf(requests, path: str, generated_on: date) -> bool:
+def export_leave_requests_to_pdf(requests, path: str, generated_on: date, companies=None) -> bool:
     """Zapisuje wnioski do jednego pliku PDF, każdy na osobnej stronie A4."""
     if not requests:
         return False
@@ -177,6 +208,6 @@ def export_leave_requests_to_pdf(requests, path: str, generated_on: date) -> boo
     for index, request in enumerate(requests):
         if index:
             writer.newPage()
-        draw_leave_request(painter, request, generated_on, unit)
+        draw_leave_request(painter, request, generated_on, unit, company_for(request, companies))
     painter.end()
     return True

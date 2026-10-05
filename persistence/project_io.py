@@ -1,5 +1,6 @@
 import dataclasses
 import json
+from model.company import Company
 from model.month_schedule import MonthSchedule
 from model.monthly_project import MonthlyProject
 from model.shop_config import ShopConfig
@@ -94,6 +95,7 @@ def save_project_bundle(path, project: MonthlyProject, active_year: int, active_
             }
             for (year, month), (schedule, shop_config) in project.months.items()
         },
+        "companies": [company.to_dict() for company in project.companies.values()],
     }
 
     with open(path, "w", encoding="utf-8") as f:
@@ -118,6 +120,10 @@ def load_project_bundle(path) -> tuple[MonthlyProject, int, int]:
         assign_missing_location_keys(schedule, shop_config)
         project.put(schedule.year, schedule.month, schedule, shop_config)
         return project, schedule.year, schedule.month
+
+    for company_data in data.get("companies", []):
+        company = Company.from_dict(company_data)
+        project.companies[company.key] = company
 
     for key, month_data in data["months"].items():
         schedule = MonthSchedule.from_dict(month_data["schedule"])
