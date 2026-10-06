@@ -1,0 +1,102 @@
+﻿POLITYKA PRYWATNOŚCI PROGRAMU DinGo! / Enyo – Grafik Pracy
+
+Obowiązuje od: [DATA, np. 1 listopada 2026 r.]
+
+Ta polityka opisuje, jakie dane przetwarza program do układania grafików pracy DinGo! (oraz jego wersja Enyo – Grafik Pracy), zwany dalej „Programem”, i w jakim celu. Informacje podajemy zgodnie z art. 13 Rozporządzenia Parlamentu Europejskiego i Rady (UE) 2016/679 z dnia 27 kwietnia 2016 r. (RODO).
+
+W skrócie: dane pracowników, grafiki i ustawienia, które wprowadzasz do Programu, zostają na Twoim komputerze. Program łączy się z internetem tylko po to, żeby sprawdzić licencję i dostępność aktualizacji. Wysyła wtedy krótki identyfikator komputera, wersję Programu i informację, czy wpisano klucz produktu. Nie wysyła żadnych danych pracowników, grafików, nazwy firmy, nazwy komputera ani nazwy użytkownika.
+
+
+1. ADMINISTRATOR DANYCH
+
+Administratorem danych przetwarzanych w związku ze sprawdzaniem licencji i aktualizacji jest Kewin Madej, [ADRES DO KORESPONDENCJI – opcjonalnie], zwany dalej „Autorem”.
+
+Kontakt we wszystkich sprawach dotyczących danych osobowych: [ADRES E-MAIL], strona: https://www.madebykewin.pl
+
+
+2. DANE, KTÓRE WPROWADZASZ DO PROGRAMU
+
+Program służy do układania grafików pracy. Możesz w nim zapisać m.in. imiona i nazwiska pracowników, ich dane kontaktowe i adresowe, wymiar etatu, dostępność, godziny pracy, urlopy, nieobecności (w tym zwolnienia lekarskie), saldo urlopu oraz dane firmy.
+
+Wszystkie te dane są zapisywane wyłącznie na Twoim komputerze: w plikach projektów, które zapisujesz, w plikach eksportu (PDF, Excel), na wydrukach oraz w plikach roboczych w katalogu instalacji Programu. Program nie wysyła ich do Autora ani nikomu innemu. Autor nie ma do nich dostępu.
+
+Administratorem danych pracowników wprowadzonych do Programu jest podmiot, który z niego korzysta, najczęściej pracodawca. Autor nie jest administratorem tych danych ani podmiotem przetwarzającym je w jego imieniu. Za ich zgodne z prawem przetwarzanie, poinformowanie pracowników i zabezpieczenie komputera odpowiada użytkownik Programu. Informacja o zwolnieniu lekarskim może stanowić dane dotyczące zdrowia (art. 9 RODO), dlatego zalecamy chronić komputer i pliki projektów hasłem oraz regularnie robić kopie zapasowe.
+
+
+3. SPRAWDZANIE LICENCJI
+
+Przy każdym uruchomieniu, a następnie co godzinę (oraz po wybraniu „Pomoc → Sprawdź licencję”) Program łączy się z serwerem licencji Autora i przesyła:
+- identyfikator użytkownika – 6-znakowy kod (np. 3FA9C1), widoczny w prawym dolnym rogu okna Programu,
+- numer wersji Programu i jego odmianę (DinGo! albo Enyo),
+- informację tak/nie, czy na komputerze wpisano poprawny klucz produktu (sam klucz nie jest wysyłany).
+
+Identyfikator jest wyliczany na komputerze jednokierunkową funkcją skrótu (SHA-256) z danych systemu: wersji Windows, nazwy komputera, nazwy konta Windows i sprzętowego adresu karty sieciowej (albo losowego numeru zapisanego przez Program, jeśli adresu nie da się odczytać). Te dane nie opuszczają komputera i nie da się ich odczytać z identyfikatora. Identyfikator nie zawiera imienia, nazwiska ani nazwy firmy.
+
+Na serwerze licencji zapisywane są: identyfikator, status licencji (wersja demonstracyjna, testowa, pełna lub wyłączona), data ważności wersji testowej, wersja i odmiana Programu, informacja o kluczu produktu, data pierwszego i ostatniego połączenia oraz liczba połączeń. Jeśli kupisz licencję albo poprosisz o wersję testową, Autor może dopisać do identyfikatora notatkę (np. nazwę Twojej firmy), żeby wiedzieć, której umowy dotyczy licencja. Serwer licencji nie zapisuje adresu IP.
+
+Odpowiedź serwera (status licencji) Program zapisuje na komputerze w pliku license_status.json, żeby działać także bez internetu.
+
+Cel i podstawa prawna: wykonanie umowy licencyjnej, czyli włączenie wersji pełnej lub testowej, którą kupiłeś lub o którą poprosiłeś (art. 6 ust. 1 lit. b RODO). Drugą podstawą jest prawnie uzasadniony interes Autora (art. 6 ust. 1 lit. f RODO): ochrona Programu przed korzystaniem bez licencji, zakończenie wersji testowej w ustalonym terminie, wyłączenie licencji w razie braku zapłaty lub naruszenia warunków licencji oraz wiedza o liczbie instalacji i używanych wersjach.
+
+
+4. SPRAWDZANIE AKTUALIZACJI
+
+Przy uruchomieniu (oraz po wybraniu „Pomoc → Sprawdź aktualizacje”) Program pobiera z serwisu GitHub plik z numerem najnowszej wersji. Jeśli zgodzisz się na aktualizację, pobiera z GitHub także instalator nowej wersji. Program nie wysyła przy tym żadnych danych poza zwykłym zapytaniem o plik. GitHub, Inc. widzi jednak adres IP komputera i przetwarza go na zasadach własnej polityki prywatności (https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement).
+
+Podstawa prawna: prawnie uzasadniony interes Autora i użytkownika polegający na dostarczaniu poprawek i bezpiecznej, aktualnej wersji Programu (art. 6 ust. 1 lit. f RODO).
+
+
+5. INNE POŁĄCZENIA
+
+Przycisk „Zakup pełną wersję” i odnośniki w oknie „O programie” otwierają stronę https://www.madebykewin.pl w Twojej przeglądarce. Dzieje się to tylko po kliknięciu, a dalej obowiązują zasady tej strony.
+
+Program nie zawiera reklam ani narzędzi analitycznych firm trzecich i nie wysyła raportów o błędach.
+
+Jeśli napiszesz do Autora (np. e-mailem), Autor przetwarza Twój adres e-mail i treść wiadomości, żeby odpowiedzieć i obsłużyć sprawę (art. 6 ust. 1 lit. b lub f RODO).
+
+
+6. ODBIORCY DANYCH I PRZEKAZYWANIE POZA EOG
+
+Serwer licencji i jego baza danych działają w infrastrukturze Cloudflare, Inc. (USA), która przetwarza dane w imieniu Autora jako dostawca usług hostingowych. Cloudflare technicznie obsługuje połączenie, więc widzi adres IP komputera, ale nie przekazuje go do bazy licencji.
+
+Pliki aktualizacji są udostępniane przez GitHub, Inc. (USA) – zob. pkt 4.
+
+Dane mogą być przetwarzane poza Europejskim Obszarem Gospodarczym, w tym w USA. Przekazanie odbywa się na podstawie decyzji Komisji Europejskiej stwierdzającej odpowiedni stopień ochrony (EU-US Data Privacy Framework), w którym uczestniczą ci dostawcy, albo na podstawie standardowych klauzul umownych zatwierdzonych przez Komisję Europejską.
+
+Autor nie sprzedaje danych i nie udostępnia ich innym podmiotom, chyba że wymaga tego prawo (np. na żądanie uprawnionego organu).
+
+
+7. JAK DŁUGO PRZECHOWUJEMY DANE
+
+- Wpisy w wersji demonstracyjnej są automatycznie usuwane z serwera licencji po 24 miesiącach bez połączenia z Programem.
+- Wpisy z licencją testową, pełną lub wyłączoną są przechowywane przez czas obowiązywania licencji, a po jej zakończeniu do upływu okresu przedawnienia roszczeń wynikających z umowy licencyjnej.
+- Korespondencja jest przechowywana do zakończenia sprawy, a następnie do upływu okresu przedawnienia ewentualnych roszczeń.
+- Pliki zapisane przez Program na Twoim komputerze pozostają tam, dopóki ich nie usuniesz. Odinstalowanie Programu nie usuwa projektów zapisanych w wybranych przez Ciebie folderach ani plików roboczych w katalogu instalacji (m.in. last_project.json – kopia ostatnio otwartego projektu z danymi pracowników, license.json, license_status.json). Możesz je usunąć ręcznie.
+
+
+8. TWOJE PRAWA
+
+Masz prawo:
+- dostępu do swoich danych i otrzymania ich kopii,
+- sprostowania danych,
+- usunięcia danych,
+- ograniczenia przetwarzania,
+- przenoszenia danych przetwarzanych w celu wykonania umowy,
+- wniesienia sprzeciwu wobec przetwarzania opartego na prawnie uzasadnionym interesie Autora,
+- wniesienia skargi do Prezesa Urzędu Ochrony Danych Osobowych (ul. Stawki 2, 00-193 Warszawa, https://uodo.gov.pl), jeśli uważasz, że przetwarzanie narusza RODO.
+
+Żeby skorzystać z tych praw, napisz na adres podany w pkt 1. Na serwerze licencji dane są przypisane wyłącznie do identyfikatora użytkownika, dlatego podaj go w wiadomości – bez niego Autor może nie być w stanie ustalić, które dane Cię dotyczą (art. 11 RODO).
+
+Usunięcie wpisu na serwerze licencji nie blokuje Programu. Przy kolejnym połączeniu Program zgłosi się ponownie jako wersja demonstracyjna. Jeśli usuniesz wpis z aktywną licencją, wersję testową lub pełną trzeba będzie włączyć ponownie.
+
+
+9. CZY MUSISZ PODAWAĆ DANE
+
+Połączenie z serwerem licencji jest potrzebne do włączenia wersji testowej lub pełnej przydzielonej przez Autora. Jeśli zablokujesz Programowi dostęp do internetu, Program dalej działa według ostatniego zapamiętanego statusu licencji. Wyjątkiem jest wersja testowa, która wymaga połączenia z serwerem przynajmniej raz na 7 dni, inaczej Program przechodzi w wersję demonstracyjną. Sprawdzanie aktualizacji nie jest konieczne do działania Programu.
+
+Dane nie służą do profilowania ani marketingu. Wersja testowa kończy się automatycznie w dniu ustalonym przy jej przyznaniu. Licencję wyłącza Autor, a nie automatyczny mechanizm oceniający Twoje zachowanie.
+
+
+10. ZMIANY POLITYKI
+
+Autor może zmienić tę politykę, np. gdy zmieni się sposób działania Programu. Aktualna wersja jest dołączana do instalatora każdej wersji Programu, zapisywana w katalogu instalacji (plik polityka_prywatnosci.txt) i dostępna w Programie w menu „Pomoc → Polityka prywatności”.

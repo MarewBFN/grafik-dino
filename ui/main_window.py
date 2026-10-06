@@ -80,6 +80,8 @@ from licensing import online as online_license
 from release_channel import RELEASE_CHANNEL
 from version import APP_VERSION
 
+PRIVACY_POLICY_FILE = "polityka_prywatnosci.txt"
+
 class GeneratorWorker(QObject):
     finished = Signal(object)
 
@@ -903,7 +905,21 @@ class MainWindow(QMainWindow):
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
         help_menu.addAction("Sprawdź licencję", lambda: self._start_license_check(manual=True))
         help_menu.addAction("Sprawdź aktualizacje", lambda: self._check_updates(manual=True))
+        help_menu.addAction("Polityka prywatności", self._open_privacy_policy)
         help_menu.addAction("O programie", self._about)
+
+    def _open_privacy_policy(self):
+        # Instalator kopiuje plik do {app}, który jest katalogiem roboczym
+        # programu (patrz "InfoBeforeFile" w enyo.iss / "dla inno.iss").
+        path = os.path.abspath(PRIVACY_POLICY_FILE)
+        if os.path.exists(path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        else:
+            QMessageBox.information(
+                self,
+                "Polityka prywatności",
+                f"Nie znaleziono pliku {PRIVACY_POLICY_FILE} w katalogu programu.",
+            )
 
     def _open_new_project(self):
         if self.schedule is not None:

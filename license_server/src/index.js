@@ -6,6 +6,8 @@
 // GET  /api/admin/licenses   - lista ID (dla panelu).
 // POST /api/admin/licenses/X - zmiana statusu/terminu/notatki ID X.
 // DELETE /api/admin/licenses/X
+// cron (wrangler.toml)      - usuwa wpisy "demo" bez połączenia od
+//                              DEMO_RETENTION_MONTHS miesięcy.
 //
 // Odpowiedź /api/check jest podpisana kluczem Ed25519 (sekret
 // LICENSE_PRIVATE_KEY). Program ma wbudowany tylko klucz publiczny, więc
@@ -17,6 +19,8 @@ const USER_ID_RE = /^[0-9A-F]{6}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const STATUSES = ["demo", "trial", "full", "blocked"];
 const PAYLOAD_VERSION = 1;
+// Okres przechowywania z polityki prywatności (polityka_prywatnosci.txt).
+const DEMO_RETENTION_MONTHS = 24;
 
 export default {
   async fetch(request, env) {
@@ -48,7 +52,22 @@ export default {
       return json({ error: "server_error" }, 500);
     }
   },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(deleteStaleDemoEntries(env));
+  },
 };
+
+async function deleteStaleDemoEntries(env, now = new Date()) {
+  const cutoff = new Date(now);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - DEMO_RETENTION_MONTHS);
+  const result = await env.DB.prepare(
+    "DELETE FROM licenses WHERE status = 'demo' AND COALESCE(last_seen, first_seen) < ?1"
+  )
+    .bind(cutoff.toISOString())
+    .run();
+  console.log(`Usunięto ${result.meta.changes} nieaktywnych wpisów demo`);
+}
 
 // --- /api/check -------------------------------------------------------------
 

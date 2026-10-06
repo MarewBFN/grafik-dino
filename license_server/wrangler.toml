@@ -10,6 +10,11 @@ database_name = "dingo-licencje"
 # Wpisz tu database_id wypisane przez `npx wrangler d1 create dingo-licencje`.
 database_id = "WPISZ-DATABASE-ID"
 
+# Codziennie usuwa wpisy demo bez połączenia od 24 miesięcy (polityka
+# prywatności, polityka_prywatnosci.txt - okres przechowywania).
+[triggers]
+crons = ["17 3 * * *"]
+
 [[rules]]
 type = "Text"
 globs = ["**/*.html"]

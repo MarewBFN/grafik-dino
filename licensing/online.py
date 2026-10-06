@@ -87,7 +87,10 @@ def verify_record(record, user_id, public_key=None):
 
 def fetch_record(user_id, legacy_key, app_version, channel):
     """Zgłasza ID na serwer. Zwraca podpisany rekord albo None (brak
-    internetu, błąd serwera, zły podpis). Wołane w wątku roboczym."""
+    internetu, błąd serwera, zły podpis). Wołane w wątku roboczym.
+
+    Wysyłane pola są opisane w polityka_prywatnosci.txt (pkt 3) - zmiana
+    tutaj wymaga zmiany polityki."""
     if not is_configured():
         return None
 

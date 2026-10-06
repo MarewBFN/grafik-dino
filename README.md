@@ -360,6 +360,12 @@ W wersji demo eksport i zapis są zablokowane.
   zapamiętywana w `license_status.json`. Test bez internetu działa
   maks. 7 dni, pełna licencja bez limitu. Pomoc → Sprawdź licencję
   odświeża stan od razu. Wdrożenie: `license_server/README.md`.
+- **Polityka prywatności** (`polityka_prywatnosci.txt`, UTF-8 z BOM)
+  opisuje, co program wysyła (licencja, aktualizacje) i co zostaje na
+  komputerze. Instalatory pokazują ją przed instalacją (`InfoBeforeFile`)
+  i kopiują do katalogu programu; w programie: Pomoc → Polityka
+  prywatności. Przy każdej zmianie wysyłanych danych trzeba ją
+  zaktualizować.
 - **Stary klucz produktu** (Pomoc → Klucz produktu, 8 cyfr powiązanych z
   ID) dalej daje pełną wersję, chyba że ID jest zablokowane w panelu.
 - **Aktualizacje**: przy starcie (i z menu Pomoc) program pobiera manifest
