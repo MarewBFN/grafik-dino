@@ -125,18 +125,18 @@ def show_license_dialog(parent):
 
     if validate_license(user_id, text):
         save_license(text)
-        parent.demo.is_demo = False
 
-        # 🔥 odświeżenie UI bez restartu
-        if hasattr(parent, "_update_generate_label"):
-            parent._update_generate_label()
-
-        if hasattr(parent, "demo_label"):
-            parent.demo_label.hide()
-
-        if hasattr(parent, "btn_buy"):
-            parent.btn_buy.hide()
-
-        QMessageBox.information(parent, "Sukces", "Program aktywowany!")
+        # Odświeża UI bez restartu; licencja online może mimo poprawnego
+        # klucza trzymać to ID w demo (status "blocked" na serwerze).
+        state = parent._on_license_key_saved()
+        if state.is_full:
+            QMessageBox.information(parent, "Sukces", "Program aktywowany!")
+        else:
+            QMessageBox.warning(
+                parent,
+                "Licencja wyłączona",
+                "Klucz jest poprawny, ale licencja na tym komputerze została "
+                "wyłączona. Skontaktuj się ze sprzedawcą programu.",
+            )
     else:
         QMessageBox.warning(parent, "Błąd", "Niepoprawny klucz.")

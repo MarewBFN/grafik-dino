@@ -76,6 +76,8 @@ from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.loading_overlay import LoadingOverlay
 from ui.demo_manager import DemoManager
 from ui.license_manager import get_user_id, show_license_dialog
+from licensing import online as online_license
+from release_channel import RELEASE_CHANNEL
 from version import APP_VERSION
 
 class GeneratorWorker(QObject):
@@ -90,6 +92,13 @@ class GeneratorWorker(QObject):
     def run(self):
         result = self.controller.generate_schedule(force=self.force, location_key=self.location_key)
         self.finished.emit(result)
+
+
+class LicenseCheckBridge(QObject):
+    # Wynik sprawdzenia licencji z wątku tła (threading, daemon - nie
+    # blokuje zamknięcia programu) do wątku GUI: emit z obcego wątku do
+    # QObject z wątku głównego idzie automatycznie jako queued connection.
+    finished = Signal(object, bool)  # (podpisany rekord albo None, manual)
 
 
 class UpdateCancelled(Exception):
@@ -146,8 +155,16 @@ class MainWindow(QMainWindow):
         self.demo = DemoManager()
 
         saved_key = load_license()
-        if saved_key and validate_license(self.user_id, saved_key):
-            self.demo.is_demo = False
+        self.legacy_license_valid = bool(saved_key and validate_license(self.user_id, saved_key))
+        # Licencja online (licensing/online.py): start z zapamiętanej,
+        # podpisanej odpowiedzi serwera, odświeżenie w tle poniżej.
+        self.online_license = online_license.OnlineLicense(self.user_id)
+        self.license_state, license_lost = self.online_license.evaluate(self.legacy_license_valid)
+        self.demo.is_demo = not self.license_state.is_full
+        self._license_check_running = False
+        self._license_manual_pending = False
+        self.license_bridge = LicenseCheckBridge(self)
+        self.license_bridge.finished.connect(self._on_license_check_finished)
 
         # Branch demonstracyjne (client-demo/enyo-ochrona) celowo nie
         # pokazuje marki "Dino" w tytule okna - patrz CLIENT_DEMO_README.md.
@@ -197,11 +214,105 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.user_id_label)
 
         self.statusBar().showMessage("Gotowe")
+        self._apply_license_ui()
         QTimer.singleShot(0, self._check_first_run)
         QTimer.singleShot(0, self.showMaximized)
+        if license_lost:
+            QTimer.singleShot(0, lambda state=self.license_state: self._show_license_lost(state))
+
+        if online_license.is_configured():
+            QTimer.singleShot(1500, self._start_license_check)
+            self.license_timer = QTimer(self)
+            self.license_timer.setInterval(60 * 60 * 1000)
+            self.license_timer.timeout.connect(self._start_license_check)
+            self.license_timer.start()
 
     def _open_license_dialog(self):
         show_license_dialog(self)
+
+    def _on_license_key_saved(self):
+        """Wołane przez show_license_dialog po wpisaniu poprawnego starego
+        klucza. Zwraca nowy LicenseState (klucz nie pomoże, jeśli ID jest
+        zablokowane na serwerze)."""
+        self.legacy_license_valid = True
+        state, _ = self.online_license.evaluate(self.legacy_license_valid)
+        self._set_license_state(state, lost_full=False)
+        self._start_license_check()
+        return state
+
+    def _start_license_check(self, manual=False):
+        if not online_license.is_configured():
+            if manual:
+                self._show_license_info(reached_server=False)
+            return
+        if self._license_check_running:
+            # Wynik trwającego sprawdzenia pokaże też okienko.
+            self._license_manual_pending = self._license_manual_pending or manual
+            return
+        self._license_check_running = True
+
+        import threading
+
+        user_id = self.user_id
+        legacy = self.legacy_license_valid
+        bridge = self.license_bridge
+
+        def run():
+            record = online_license.fetch_record(user_id, legacy, APP_VERSION, RELEASE_CHANNEL)
+            try:
+                bridge.finished.emit(record, manual)
+            except RuntimeError:
+                pass  # okno już zamknięte
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_license_check_finished(self, record, manual):
+        self._license_check_running = False
+        manual = manual or self._license_manual_pending
+        self._license_manual_pending = False
+        if record is not None:
+            self.online_license.store_record(record)
+        state, lost_full = self.online_license.evaluate(self.legacy_license_valid)
+        self._set_license_state(state, lost_full)
+        if manual:
+            self._show_license_info(reached_server=record is not None)
+
+    def _set_license_state(self, state, lost_full):
+        was_demo = self.demo.is_demo
+        self.license_state = state
+        self.demo.is_demo = not state.is_full
+        self._apply_license_ui()
+
+        if lost_full:
+            self._show_license_lost(state)
+        elif was_demo and state.is_full:
+            self.statusBar().showMessage(online_license.describe_state(state), 5000)
+
+    def _apply_license_ui(self):
+        is_demo = self.demo.is_demo
+        for name in ("demo_divider", "demo_label", "btn_buy"):
+            widget = getattr(self, name, None)
+            if widget is not None:
+                widget.setVisible(is_demo)
+        if hasattr(self, "generate_limit_label"):
+            self._update_generate_label()
+
+    def _show_license_lost(self, state):
+        QMessageBox.information(
+            self,
+            "Wersja demonstracyjna",
+            online_license.describe_state(state)
+            + "\n\nProgram działa teraz w wersji demonstracyjnej. Twoje "
+            "projekty nie zostały usunięte - po aktywacji pełnej wersji "
+            "wszystko będzie dostępne jak wcześniej.",
+        )
+
+    def _show_license_info(self, reached_server):
+        text = online_license.describe_state(self.license_state)
+        text += f"\n\nID użytkownika: {self.user_id}"
+        if online_license.is_configured() and not reached_server:
+            text += "\n\nNie udało się połączyć z serwerem licencji - pokazany jest ostatni znany stan."
+        QMessageBox.information(self, "Licencja", text)
 
     def _build_ui(self):
         self._build_menu()
@@ -262,6 +373,7 @@ class MainWindow(QMainWindow):
         divider.setObjectName("sectionDivider")
         divider.setFrameShape(QFrame.HLine)
         layout.addWidget(divider)
+        return divider
 
     def _build_left_panel(self):
         outer_panel = QFrame()
@@ -460,16 +572,17 @@ class MainWindow(QMainWindow):
 
         layout.addStretch(1)
 
-        if self.demo.is_demo:
-            self._add_section_divider(layout)
-            self.demo_label = QLabel("Wersja demonstracyjna")
-            self.demo_label.setObjectName("dangerHint")
-            layout.addWidget(self.demo_label)
+        # Zawsze budowane - licencja online może zmienić się w trakcie
+        # działania programu, widoczność ustawia _apply_license_ui().
+        self.demo_divider = self._add_section_divider(layout)
+        self.demo_label = QLabel("Wersja demonstracyjna")
+        self.demo_label.setObjectName("dangerHint")
+        layout.addWidget(self.demo_label)
 
-            self.btn_buy = QPushButton("Zakup pełną wersję")
-            self.btn_buy.setObjectName("successButton")
-            self.btn_buy.clicked.connect(self._open_buy_page)
-            layout.addWidget(self.btn_buy)
+        self.btn_buy = QPushButton("Zakup pełną wersję")
+        self.btn_buy.setObjectName("successButton")
+        self.btn_buy.clicked.connect(self._open_buy_page)
+        layout.addWidget(self.btn_buy)
 
         return outer_panel
 
@@ -788,6 +901,7 @@ class MainWindow(QMainWindow):
         self.show_grid_legend_action.setCheckable(True)
 
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
+        help_menu.addAction("Sprawdź licencję", lambda: self._start_license_check(manual=True))
         help_menu.addAction("Sprawdź aktualizacje", lambda: self._check_updates(manual=True))
         help_menu.addAction("O programie", self._about)
 
@@ -848,8 +962,9 @@ class MainWindow(QMainWindow):
         gołe domyślne wartości, i z jawnym dopisaniem last_project.json na
         końcu (czego _open_new_project nie robi), żeby stan nie wrócił po
         restarcie. Świadomie NIE dotyka first_run.flag/*_tutorial_seen.flag/
-        license.json/machine_id.json/demo.json/custom_profiles.json - to nie
-        jest "grafik", tylko odrębny stan pierwszego uruchomienia/licencji/
+        license.json/license_status.json/machine_id.json/demo.json/
+        custom_profiles.json - to nie jest "grafik", tylko odrębny stan
+        pierwszego uruchomienia/licencji/
         poradników, który użytkownik wprost poprosił zostawić w spokoju."""
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("Usuń konfigurację")
