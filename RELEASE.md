@@ -39,8 +39,8 @@ bezpośrednio na `main`.
 `licensing/online.py` musi mieć wpisane `LICENSE_SERVER_URL` i
 `LICENSE_PUBLIC_KEY` (patrz `license_server/README.md`). Puste wartości
 dają build bez sprawdzania online, w którym działa tylko stary klucz
-produktu. Branch Enyo (`integration/enyo-only`) dostaje licencję online po
-zmergowaniu `main`.
+produktu. Licencja online jest na branchu Enyo (`integration/enyo-only`).
+Dino (`main`) dostanie ją dopiero po przeniesieniu tych zmian na `main`.
 
 ## Wydanie Dino (na `main`)
 
