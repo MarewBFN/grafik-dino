@@ -31,10 +31,10 @@ from licensing import ed25519
 # Adres serwera po `npx wrangler deploy` (bez "/" na końcu), np.
 # "https://dingo-licencje.twoja-nazwa.workers.dev". Pusty = sprawdzanie
 # online wyłączone i działa tylko stary klucz produktu.
-LICENSE_SERVER_URL = ""
+LICENSE_SERVER_URL = "https://dingo-licencje.kewin19961.workers.dev"
 
 # Klucz publiczny wypisany przez `npm run keys` w license_server/.
-LICENSE_PUBLIC_KEY = ""
+LICENSE_PUBLIC_KEY = "xWhsVhxyGFsEPhX9JA1wmMiHG0AYrS1gv6JWe41kUPc="
 
 CACHE_FILE = "license_status.json"
 OFFLINE_GRACE = timedelta(days=7)

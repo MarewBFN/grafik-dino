@@ -8,7 +8,7 @@ compatibility_date = "2026-09-01"
 binding = "DB"
 database_name = "dingo-licencje"
 # Wpisz tu database_id wypisane przez `npx wrangler d1 create dingo-licencje`.
-database_id = "WPISZ-DATABASE-ID"
+database_id = "513aff92-5bd0-4bfb-bc47-e6105801ccbb"
 
 # Codziennie usuwa wpisy demo bez połączenia od 24 miesięcy (polityka
 # prywatności, polityka_prywatnosci.txt - okres przechowywania).

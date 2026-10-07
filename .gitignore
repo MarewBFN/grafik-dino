@@ -19,4 +19,8 @@ last_project.json
 last_project1.json
 *.jpg
 *.jpeg
-plan Dingo Online.mdlicense_status.json
+plan Dingo Online.md
+license_status.json
+Cloudflare klucze.txt
+license_server/node_modules/
+license_server/.dev.vars
