@@ -1,5 +1,5 @@
 {
-  "latest_version": "1.3.1",
-  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.3.1/DingoSetup.exe",
-  "changelog": "Przywrocone ustawienia sprzed 1.2.0: sekcja Konfiguracja obiektu (nazwa placowki + wybor profilu dzialalnosci z mozliwoscia edycji), sekcja Okres rozliczeniowy w pasku bocznym, zakladka Limity (max dni pod rzad, standardowy wymiar zmiany, wymuszenie 8h30, minimalna obsada), pole Rotacja calodobowa - godzina rozpoczecia w oknie Lokalizacje. Nowosc: przelacznik widocznosci kolumny Nadgodziny w menu Wyglad (domyslnie ukryta)."
+  "latest_version": "1.4.0",
+  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.4.0/DingoSetup.exe",
+  "changelog": "Wnioski urlopowe (Plik -> Wnioski urlopowe) z automatycznym odejmowaniem urlopu z puli pracownika. Dane firmy (Plik -> Dane firmy) do wnioskow urlopowych. Dane kontaktowe i pozostaly urlop w karcie pracownika. Eksport grafiku: nazwa placowki w naglowku i opcja Jeden pracownik w podgladzie. Kolko myszy nie zmienia juz przypadkiem opcji na listach. Licencja sprawdzana online, Pomoc -> Sprawdz licencje, Pomoc -> Polityka prywatnosci. Naprawiono: zapis po Cofnij/Ponow, pierwsze uruchomienie po instalacji lub aktualizacji nie zapisywalo projektu, licencja nie przepada po wiekszej aktualizacji Windows, zmiana szerokosci kolumny pracownikow zostawiala pusta przerwe."
 }

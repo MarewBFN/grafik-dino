@@ -3,7 +3,7 @@
 ; Non-commercial use only
 
 #define MyAppName "Dingo! - narzędzie do grafików pracy"
-#define MyAppVersion "1.3.1"
+#define MyAppVersion "1.4.0"
 #define MyAppPublisher "Kewin Madej"
 #define MyAppURL "https://www.madebykewin.pl"
 #define MyAppExeName "Dingo! - narzędzie do grafików pracy.exe"
