@@ -36,7 +36,7 @@ Na serwerze licencji zapisywane są: identyfikator, status licencji (wersja demo
 
 Odpowiedź serwera (status licencji) Program zapisuje na komputerze w pliku license_status.json, żeby działać także bez internetu.
 
-Cel i podstawa prawna: wykonanie umowy licencyjnej, czyli włączenie wersji pełnej lub testowej, którą kupiłeś lub o którą poprosiłeś (art. 6 ust. 1 lit. b RODO). Drugą podstawą jest prawnie uzasadniony interes Autora (art. 6 ust. 1 lit. f RODO): ochrona Programu przed korzystaniem bez licencji, zakończenie wersji testowej w ustalonym terminie, wyłączenie licencji w razie braku zapłaty lub naruszenia warunków licencji oraz wiedza o liczbie instalacji i używanych wersjach.
+Cel i podstawa prawna: wykonanie umowy licencyjnej, czyli włączenie wersji pełnej lub testowej, którą kupiłeś lub o którą poprosiłeś, oraz 7-dniowej wersji testowej przyznawanej automatycznie nowej instalacji (art. 6 ust. 1 lit. b RODO). Drugą podstawą jest prawnie uzasadniony interes Autora (art. 6 ust. 1 lit. f RODO): ochrona Programu przed korzystaniem bez licencji, zakończenie wersji testowej w ustalonym terminie, wyłączenie licencji w razie braku zapłaty lub naruszenia warunków licencji oraz wiedza o liczbie instalacji i używanych wersjach.
 
 
 4. SPRAWDZANIE AKTUALIZACJI
@@ -68,7 +68,7 @@ Autor nie sprzedaje danych i nie udostępnia ich innym podmiotom, chyba że wyma
 
 7. JAK DŁUGO PRZECHOWUJEMY DANE
 
-- Wpisy w wersji demonstracyjnej są automatycznie usuwane z serwera licencji po 24 miesiącach bez połączenia z Programem.
+- Wpisy w wersji demonstracyjnej oraz z automatyczną 7-dniową wersją testową są automatycznie usuwane z serwera licencji po 24 miesiącach bez połączenia z Programem.
 - Wpisy z licencją testową, pełną lub wyłączoną są przechowywane przez czas obowiązywania licencji, a po jej zakończeniu do upływu okresu przedawnienia roszczeń wynikających z umowy licencyjnej.
 - Korespondencja jest przechowywana do zakończenia sprawy, a następnie do upływu okresu przedawnienia ewentualnych roszczeń.
 - Pliki zapisane przez Program na Twoim komputerze pozostają tam, dopóki ich nie usuniesz. Odinstalowanie Programu nie usuwa projektów zapisanych w wybranych przez Ciebie folderach ani plików roboczych w katalogu instalacji (m.in. last_project.json – kopia ostatnio otwartego projektu z danymi pracowników, license.json, license_status.json). Możesz je usunąć ręcznie.
@@ -87,12 +87,12 @@ Masz prawo:
 
 Żeby skorzystać z tych praw, napisz na adres podany w pkt 1. Na serwerze licencji dane są przypisane wyłącznie do identyfikatora użytkownika, dlatego podaj go w wiadomości – bez niego Autor może nie być w stanie ustalić, które dane Cię dotyczą (art. 11 RODO).
 
-Usunięcie wpisu na serwerze licencji nie blokuje Programu. Przy kolejnym połączeniu Program zgłosi się ponownie jako wersja demonstracyjna. Jeśli usuniesz wpis z aktywną licencją, wersję testową lub pełną trzeba będzie włączyć ponownie.
+Usunięcie wpisu na serwerze licencji nie blokuje Programu. Przy kolejnym połączeniu Program zgłosi się ponownie jak nowa instalacja. Jeśli usuniesz wpis z aktywną licencją, wersję testową lub pełną trzeba będzie włączyć ponownie.
 
 
 9. CZY MUSISZ PODAWAĆ DANE
 
-Połączenie z serwerem licencji jest potrzebne do włączenia wersji testowej lub pełnej przydzielonej przez Autora. Jeśli zablokujesz Programowi dostęp do internetu, Program dalej działa według ostatniego zapamiętanego statusu licencji. Wyjątkiem jest wersja testowa, która wymaga połączenia z serwerem przynajmniej raz na 7 dni, inaczej Program przechodzi w wersję demonstracyjną. Sprawdzanie aktualizacji nie jest konieczne do działania Programu.
+Połączenie z serwerem licencji jest potrzebne do włączenia wersji testowej lub pełnej przydzielonej przez Autora, a także 7-dniowej wersji testowej, którą nowa instalacja otrzymuje automatycznie przy pierwszym połączeniu. Jeśli zablokujesz Programowi dostęp do internetu, Program dalej działa według ostatniego zapamiętanego statusu licencji. Wyjątkiem jest wersja testowa, która wymaga połączenia z serwerem przynajmniej raz na 7 dni, inaczej Program przechodzi w wersję demonstracyjną. Sprawdzanie aktualizacji nie jest konieczne do działania Programu.
 
 Dane nie służą do profilowania ani marketingu. Wersja testowa kończy się automatycznie w dniu ustalonym przy jej przyznaniu. Licencję wyłącza Autor, a nie automatyczny mechanizm oceniający Twoje zachowanie.
 

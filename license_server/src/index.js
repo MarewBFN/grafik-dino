@@ -6,8 +6,8 @@
 // GET  /api/admin/licenses   - lista ID (dla panelu).
 // POST /api/admin/licenses/X - zmiana statusu/terminu/notatki ID X.
 // DELETE /api/admin/licenses/X
-// cron (wrangler.toml)      - usuwa wpisy "demo" bez połączenia od
-//                              DEMO_RETENTION_MONTHS miesięcy.
+// cron (wrangler.toml)      - usuwa wpisy "demo" i automatyczne testy bez
+//                              połączenia od DEMO_RETENTION_MONTHS miesięcy.
 //
 // Odpowiedź /api/check jest podpisana kluczem Ed25519 (sekret
 // LICENSE_PRIVATE_KEY). Program ma wbudowany tylko klucz publiczny, więc
@@ -21,6 +21,10 @@ const STATUSES = ["demo", "trial", "full", "blocked"];
 const PAYLOAD_VERSION = 1;
 // Okres przechowywania z polityki prywatności (polityka_prywatnosci.txt).
 const DEMO_RETENTION_MONTHS = 24;
+// Nowe ID (bez starego klucza) dostaje automatycznie pełną wersję testową na
+// tyle dni, licząc dzień pierwszego połączenia (termin jest włącznie).
+const AUTO_TRIAL_DAYS = 7;
+const AUTO_TRIAL_NOTE = "auto: 7 dni testu";
 
 export default {
   async fetch(request, env) {
@@ -62,11 +66,13 @@ async function deleteStaleDemoEntries(env, now = new Date()) {
   const cutoff = new Date(now);
   cutoff.setUTCMonth(cutoff.getUTCMonth() - DEMO_RETENTION_MONTHS);
   const result = await env.DB.prepare(
-    "DELETE FROM licenses WHERE status = 'demo' AND COALESCE(last_seen, first_seen) < ?1"
+    `DELETE FROM licenses
+     WHERE (status = 'demo' OR (status = 'trial' AND note = ?2))
+       AND COALESCE(last_seen, first_seen) < ?1`
   )
-    .bind(cutoff.toISOString())
+    .bind(cutoff.toISOString(), AUTO_TRIAL_NOTE)
     .run();
-  console.log(`Usunięto ${result.meta.changes} nieaktywnych wpisów demo`);
+  console.log(`Usunięto ${result.meta.changes} nieaktywnych wpisów demo/testów automatycznych`);
 }
 
 // --- /api/check -------------------------------------------------------------
@@ -88,12 +94,16 @@ async function handleCheck(request, env) {
   const legacy = body.legacy_key === true ? 1 : 0;
   const now = new Date().toISOString();
 
-  // Nowe ID dostaje "demo", chyba że program ma ważny stary klucz - wtedy
-  // "full" (stare klucze dalej działają). Stary klucz podniesie też
-  // istniejące "demo" do "full"; żeby go wyłączyć, ustaw w panelu "blocked".
+  // Nowe ID dostaje automatyczny test na AUTO_TRIAL_DAYS dni, chyba że
+  // program ma ważny stary klucz - wtedy "full" (stare klucze dalej
+  // działają). Istniejący wpis (też dodany z wyprzedzeniem w panelu) zachowuje
+  // swój status. Stary klucz podniesie istniejące "demo" do "full"; żeby go
+  // wyłączyć, ustaw w panelu "blocked".
+  const autoTrialEnd = new Date(now);
+  autoTrialEnd.setUTCDate(autoTrialEnd.getUTCDate() + AUTO_TRIAL_DAYS - 1);
   const row = await env.DB.prepare(
-    `INSERT INTO licenses (user_id, status, channel, app_version, legacy_key, first_seen, last_seen, checks)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1)
+    `INSERT INTO licenses (user_id, status, expires_at, note, channel, app_version, legacy_key, first_seen, last_seen, checks)
+     VALUES (?1, ?2, ?7, ?8, ?3, ?4, ?5, ?6, ?6, 1)
      ON CONFLICT(user_id) DO UPDATE SET
        channel = excluded.channel,
        app_version = excluded.app_version,
@@ -107,7 +117,16 @@ async function handleCheck(request, env) {
        END
      RETURNING status, expires_at`
   )
-    .bind(userId, legacy ? "full" : "demo", channel, appVersion, legacy, now)
+    .bind(
+      userId,
+      legacy ? "full" : "trial",
+      channel,
+      appVersion,
+      legacy,
+      now,
+      legacy ? null : autoTrialEnd.toISOString().slice(0, 10),
+      legacy ? "" : AUTO_TRIAL_NOTE
+    )
     .first();
 
   const payload = {

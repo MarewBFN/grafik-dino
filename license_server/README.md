@@ -5,10 +5,14 @@ swoje ID użytkownika, wersję i kanał (dino/enyo). Odsyła podpisany status:
 
 | Status w panelu | Co dzieje się w programie |
 |---|---|
-| **Demo** (domyślny dla nowego ID) | wersja demonstracyjna |
-| **Test do dnia** | pełna wersja do podanej daty (włącznie), potem sama wraca do demo. Bez internetu działa maks. 7 dni od ostatniego kontaktu z serwerem. |
+| **Demo** | wersja demonstracyjna |
+| **Test do dnia** (domyślny dla nowego ID: 7 dni) | pełna wersja do podanej daty (włącznie), potem sama wraca do demo. Bez internetu działa maks. 7 dni od ostatniego kontaktu z serwerem. |
 | **Pełna** | pełna wersja bez terminu, działa też bez internetu |
 | **Zablokowana** | demo, także gdy komputer ma stary 8-cyfrowy klucz |
+
+Nowe ID (bez starego klucza) przy pierwszym połączeniu dostaje automatycznie
+**Test do dnia** na 7 dni, licząc dzień instalacji, z notatką „auto: 7 dni
+testu”. ID dodane wcześniej ręcznie w panelu zachowuje ustawiony status.
 
 Stare 8-cyfrowe klucze dalej działają. Takie ID pojawia się w panelu
 z etykietą „stary klucz” i statusem „Pełna”. Żeby je wyłączyć, ustaw
@@ -108,10 +112,10 @@ które go używają.
 ## Typowy scenariusz: klient chce przetestować pełną wersję
 
 1. Klient instaluje i uruchamia program. Jego ID pojawia się w panelu z
-   etykietą „nowy”. ID jest też w prawym dolnym rogu okna programu, więc
+   etykietą „nowy” i automatycznym testem na 7 dni. ID jest też w prawym dolnym rogu okna programu, więc
    może Ci je podać.
-2. W panelu: status **Test do dnia**, wybierz datę, dopisz notatkę
-   (np. „Firma X”), kliknij **Zapisz**.
+2. Chcesz dać dłuższy test: w panelu zmień datę **Test do dnia**, dopisz
+   notatkę (np. „Firma X”), kliknij **Zapisz**.
 3. Klient restartuje program albo klika **Pomoc → Sprawdź licencję**. Nie
    musi nic wpisywać.
 4. Zapłacił, to ustawiasz **Pełna**. Nie zapłacił, to nic nie robisz:

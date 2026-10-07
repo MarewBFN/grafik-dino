@@ -1,8 +1,9 @@
 -- Jedna linijka na komputer (ID użytkownika z paska stanu programu).
 --
 -- status:
---   demo     - domyślny dla nowych ID: wersja demonstracyjna
---   trial    - pełna wersja do dnia expires_at (włącznie)
+--   demo     - wersja demonstracyjna
+--   trial    - pełna wersja do dnia expires_at (włącznie); nowe ID bez
+--              starego klucza dostaje go automatycznie na 7 dni
 --   full     - pełna wersja bez terminu
 --   blocked  - wyłączona; wyłącza też stary 8-cyfrowy klucz produktu
 CREATE TABLE IF NOT EXISTS licenses (
