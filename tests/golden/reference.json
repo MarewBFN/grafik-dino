@@ -1,0 +1,552 @@
+{
+  "dino_01_basic_2026_10": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "18193470db824bcf"
+    ],
+    "schedule": "46b3111e75ba0983",
+    "optimal": false,
+    "objective": -1906216.0,
+    "bound": -1875162.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "max_consecutive": 7,
+      "meat": 17,
+      "meat_coverage": 19
+    },
+    "input_conflicts": 0,
+    "elapsed": 49.5
+  },
+  "dino_02_december_trade_sundays": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "d7b5a6bc2d2f03d0"
+    ],
+    "schedule": "03bc6abb71fe18f3",
+    "optimal": false,
+    "objective": -1997209.0,
+    "bound": -1125158.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "max_consecutive": 7,
+      "meat": 17,
+      "meat_coverage": 21,
+      "monthly_hours": 1,
+      "no_night": 14
+    },
+    "input_conflicts": 0,
+    "elapsed": 38.0
+  },
+  "dino_03_november_leaves_sick": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "5d611def862d4a70"
+    ],
+    "schedule": "ecf41f0e1998de94",
+    "optimal": false,
+    "objective": -2937885.0,
+    "bound": -1513647.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "max_consecutive": 4,
+      "meat": 12,
+      "meat_coverage": 15,
+      "monthly_hours": 1
+    },
+    "input_conflicts": 0,
+    "elapsed": 43.2
+  },
+  "dino_04_manager": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "1c86ea769dcac947"
+    ],
+    "schedule": "3fc15d81650783d0",
+    "optimal": false,
+    "objective": -11514965.0,
+    "bound": -9577940.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "max_consecutive": 9,
+      "meat": 14,
+      "meat_coverage": 15,
+      "monthly_hours": 3
+    },
+    "input_conflicts": 3,
+    "elapsed": 56.6
+  },
+  "dino_05_meat_light": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "ab8f0b8ef173a9ad"
+    ],
+    "schedule": "8846f135efa173c1",
+    "optimal": false,
+    "objective": -10581146.0,
+    "bound": -9916716.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "max_consecutive": 10,
+      "meat": 5,
+      "meat_coverage": 16,
+      "monthly_hours": 2
+    },
+    "input_conflicts": 0,
+    "elapsed": 54.4
+  },
+  "dino_06_no_night_no_afternoon": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "80b49f95d6fb2fd7"
+    ],
+    "schedule": "d06042e572e7dcde",
+    "optimal": false,
+    "objective": -4784822.0,
+    "bound": -1875157.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "max_consecutive": 6,
+      "meat": 11,
+      "meat_coverage": 14,
+      "monthly_hours": 4,
+      "no_afternoon": 1,
+      "no_night": 41
+    },
+    "input_conflicts": 0,
+    "elapsed": 42.4
+  },
+  "dino_07_part_time": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "8a9432bd40fc8b9a"
+    ],
+    "schedule": "d175ac34f6f42d08",
+    "optimal": false,
+    "objective": -3479142.0,
+    "bound": -2482609.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "max_consecutive": 3,
+      "meat": 16,
+      "meat_coverage": 11,
+      "monthly_hours": 1
+    },
+    "input_conflicts": 0,
+    "elapsed": 54.1
+  },
+  "dino_08_feb_leap_manual_classes": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "139732692ca64736"
+    ],
+    "schedule": "4f28bae7aed62435",
+    "optimal": false,
+    "objective": -1200119.0,
+    "bound": -1200100.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "meat": 15
+    },
+    "input_conflicts": 0,
+    "elapsed": 50.4
+  },
+  "dino_09_prev_month_memory": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "dae1c3b03b8af21f"
+    ],
+    "schedule": "c6d1470950e0a0ab",
+    "optimal": false,
+    "objective": -3083391.0,
+    "bound": -1012644.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "max_consecutive": 6,
+      "meat": 9,
+      "meat_coverage": 17,
+      "monthly_hours": 3
+    },
+    "input_conflicts": 0,
+    "elapsed": 40.1
+  },
+  "dino_10_policies_strict": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "baee86a3790c424d"
+    ],
+    "schedule": "74cfaefa6205902a",
+    "optimal": false,
+    "objective": -1687673.0,
+    "bound": -1687650.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {},
+    "input_conflicts": 0,
+    "elapsed": 54.3
+  },
+  "dino_11_rest_simplified": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "d0c738f9ce869a9c"
+    ],
+    "schedule": "f57db13361916dd0",
+    "optimal": false,
+    "objective": -1916682.0,
+    "bound": -1125144.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "max_consecutive": 7,
+      "meat": 12,
+      "meat_coverage": 14,
+      "monthly_hours": 1
+    },
+    "input_conflicts": 0,
+    "elapsed": 45.8
+  },
+  "dino_12_small_team": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "694a1bb4aeda8a97"
+    ],
+    "schedule": "0fa4b14904faf5e3",
+    "optimal": false,
+    "objective": -14289615.0,
+    "bound": -14289605.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "max_consecutive": 12,
+      "meat": 20,
+      "monthly_hours": 4
+    },
+    "input_conflicts": 0,
+    "elapsed": 41.0
+  },
+  "dino_13_multiloc": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "29f2db9163645a18"
+    ],
+    "schedule": "c3d97543c723de27",
+    "optimal": false,
+    "objective": -2250135.0,
+    "bound": -2250108.0,
+    "hard_count": 190,
+    "hard_rules": [
+      "close",
+      "open"
+    ],
+    "soft_by_rule": {
+      "meat": 26,
+      "meat_coverage": 43
+    },
+    "input_conflicts": 0,
+    "elapsed": 62.9
+  },
+  "dino_14_availability_overrides": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "219eb6a90e60d061"
+    ],
+    "schedule": "db49d09d3bc4875c",
+    "optimal": false,
+    "objective": -1012636.0,
+    "bound": -1012600.0,
+    "hard_count": 13,
+    "hard_rules": [
+      "close",
+      "open",
+      "opening_hours"
+    ],
+    "soft_by_rule": {
+      "meat": 18,
+      "meat_coverage": 1
+    },
+    "input_conflicts": 0,
+    "elapsed": 49.4
+  },
+  "och_01_duty_24h": {
+    "success": true,
+    "statuses": [
+      "OPTIMAL"
+    ],
+    "models": [
+      "1ed91ceeed0746d5"
+    ],
+    "schedule": "bc263d086db0fad4",
+    "optimal": true,
+    "objective": -3180010.0,
+    "bound": -3180010.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "monthly_hours": 2
+    },
+    "input_conflicts": 0,
+    "elapsed": 1.0
+  },
+  "och_02_duty_split_no24h": {
+    "success": true,
+    "statuses": [
+      "OPTIMAL"
+    ],
+    "models": [
+      "4f7a07eb0389d481"
+    ],
+    "schedule": "a6e2ba43978c2765",
+    "optimal": true,
+    "objective": -49440004.0,
+    "bound": -49440004.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "monthly_hours": 6
+    },
+    "input_conflicts": 0,
+    "elapsed": 1.0
+  },
+  "och_03_duty_leaves_manual": {
+    "success": true,
+    "statuses": [
+      "OPTIMAL"
+    ],
+    "models": [
+      "ec22b746e20064de"
+    ],
+    "schedule": "28c4bc4bf23de7f5",
+    "optimal": true,
+    "objective": -21690006.0,
+    "bound": -21690006.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "monthly_hours": 3
+    },
+    "input_conflicts": 0,
+    "elapsed": 2.9
+  },
+  "och_04_regular_gzuk": {
+    "success": true,
+    "statuses": [
+      "OPTIMAL"
+    ],
+    "models": [
+      "d489caffa500421d"
+    ],
+    "schedule": "8735323fb4507982",
+    "optimal": true,
+    "objective": -62400026.0,
+    "bound": -62400026.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "monthly_hours": 3
+    },
+    "input_conflicts": 0,
+    "elapsed": 4.9
+  },
+  "och_05_regular_preferred_shifts": {
+    "success": true,
+    "statuses": [
+      "OPTIMAL"
+    ],
+    "models": [
+      "6fe2a2b458f3066c"
+    ],
+    "schedule": "c11c1a426b8e0748",
+    "optimal": true,
+    "objective": -34605006.0,
+    "bound": -34605006.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "monthly_hours": 3
+    },
+    "input_conflicts": 0,
+    "elapsed": 0.5
+  },
+  "och_06_multiloc_mixed": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "a20f5a6c9cab2352"
+    ],
+    "schedule": "4f39366e518697cd",
+    "optimal": false,
+    "objective": -28140026.0,
+    "bound": -8700032.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "monthly_hours": 8
+    },
+    "input_conflicts": 0,
+    "elapsed": 49.7
+  },
+  "och_07_max_staff_two": {
+    "success": true,
+    "statuses": [
+      "OPTIMAL"
+    ],
+    "models": [
+      "d2fce018b2e06ed3"
+    ],
+    "schedule": "94f1ab0368279132",
+    "optimal": true,
+    "objective": 0.0,
+    "bound": 0.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {},
+    "input_conflicts": 0,
+    "elapsed": 0.5
+  },
+  "och_08_regular_doba_weekend_prev_month": {
+    "success": true,
+    "statuses": [
+      "OPTIMAL"
+    ],
+    "models": [
+      "f536ab69ab9d8204"
+    ],
+    "schedule": "dd3492e4b60b653c",
+    "optimal": true,
+    "objective": -87420013.0,
+    "bound": -87420013.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "monthly_hours": 5
+    },
+    "input_conflicts": 0,
+    "elapsed": 11.8
+  },
+  "och_09_policies_strict": {
+    "success": true,
+    "statuses": [
+      "OPTIMAL"
+    ],
+    "models": [
+      "76067c5578b07dd0"
+    ],
+    "schedule": "db128167de796658",
+    "optimal": true,
+    "objective": -33000022.0,
+    "bound": -33000022.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {
+      "monthly_hours": 4
+    },
+    "input_conflicts": 0,
+    "elapsed": 1.6
+  },
+  "och_10_client_data": {
+    "success": true,
+    "statuses": [
+      "OPTIMAL"
+    ],
+    "models": [
+      "fe9ead81cee4f93b"
+    ],
+    "schedule": "56b9bf0f8141a9bd",
+    "optimal": true,
+    "objective": -133440013.0,
+    "bound": -133440013.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {},
+    "input_conflicts": 0,
+    "elapsed": 3.8
+  },
+  "custom_01_min_staff_role": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "984d64d8335c2448"
+    ],
+    "schedule": "c2e85b65f9703deb",
+    "optimal": false,
+    "objective": -1687579.0,
+    "bound": -1687549.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {},
+    "input_conflicts": 0,
+    "elapsed": 43.7
+  },
+  "custom_02_rule_override_per_location": {
+    "success": true,
+    "statuses": [
+      "FEASIBLE"
+    ],
+    "models": [
+      "5b52cfde253eae64"
+    ],
+    "schedule": "14b3656e6f06b6bb",
+    "optimal": false,
+    "objective": -1477557.0,
+    "bound": -1477530.0,
+    "hard_count": 0,
+    "hard_rules": [],
+    "soft_by_rule": {},
+    "input_conflicts": 0,
+    "elapsed": 57.8
+  }
+}
