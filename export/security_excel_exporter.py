@@ -26,7 +26,7 @@ def _format_hour(time_str):
     return str(time_str)
 
 
-def export_security_schedule_to_excel(schedule, year, month, path, shop=None, employees=None):
+def export_security_schedule_to_excel(schedule, year, month, path, shop=None, employees=None, location_name=None):
     wb = Workbook()
     ws = wb.active
     ws.title = "Grafik"
@@ -47,6 +47,8 @@ def export_security_schedule_to_excel(schedule, year, month, path, shop=None, em
     name = shop.name if shop is not None and getattr(shop, "name", "") else ""
     title = f"Grafik {month:02d}/{year}" + (f" - {name}" if name else "")
     ws.cell(row=1, column=1, value=title).font = Font(bold=True, size=14)
+    if location_name:
+        ws.cell(row=2, column=1, value=f"Placówka: {location_name}").font = Font(bold=True)
     ws.cell(row=1, column=sum_col_start - 3, value=f"Data wydruku: {datetime.now().strftime('%d/%m/%Y')}").font = Font(bold=True)
 
     ws.merge_cells("A3:B4")

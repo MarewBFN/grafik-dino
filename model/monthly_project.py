@@ -1,5 +1,6 @@
 from typing import Dict, Optional, Tuple
 
+from model.company import Company
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 
@@ -23,6 +24,9 @@ class MonthlyProject:
 
     def __init__(self):
         self.months: Dict[MonthKey, Tuple[MonthSchedule, ShopConfig]] = {}
+        # Dane firm (Plik -> "Dane firmy") - wspólne dla wszystkich
+        # miesięcy, patrz model/company.py.
+        self.companies: Dict[str, Company] = {}
 
     def has(self, year: int, month: int) -> bool:
         return (year, month) in self.months

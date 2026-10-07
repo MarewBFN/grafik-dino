@@ -16,14 +16,15 @@ def _format_hour(time_str):
         return str(int(str(time_str).split(":")[0]))
     return str(time_str)
 
-def export_schedule_to_excel(schedule, year, month, path, shop=None, employees=None):
+def export_schedule_to_excel(schedule, year, month, path, shop=None, employees=None, location_name=None):
     """`shop` - opcjonalny ShopConfig, wyłącznie do podświetlenia przekroczenia
     miesięcznego limitu godzin pełnego etatu na czerwono (brak = brak
     podświetlenia, zachowanie sprzed tej funkcji). `employees` - opcjonalna
-    lista zamiast schedule.employees, do wydruku pojedynczego pracownika."""
+    lista zamiast schedule.employees, do wydruku pojedynczego pracownika.
+    `location_name` - nazwa placówki wpisywana w pole "Komórka:"."""
     if not is_dino_style(shop):
         from export.security_excel_exporter import export_security_schedule_to_excel
-        return export_security_schedule_to_excel(schedule, year, month, path, shop=shop, employees=employees)
+        return export_security_schedule_to_excel(schedule, year, month, path, shop=shop, employees=employees, location_name=location_name)
 
     wb = Workbook()
     ws = wb.active
@@ -45,7 +46,7 @@ def export_schedule_to_excel(schedule, year, month, path, shop=None, employees=N
 
     # NAGŁÓWEK GŁÓWNY (odwzorowanie ImageExporter)
     ws.cell(row=1, column=1, value=f"Grafik planowany {month:02d}/{year}").font = Font(bold=True, size=14)
-    ws.cell(row=2, column=1, value="Komórka:").font = Font(bold=True, size=12)
+    ws.cell(row=2, column=1, value=f"Komórka: {location_name or ''}".rstrip()).font = Font(bold=True, size=12)
     
     ws.cell(row=1, column=sum_col_start-3, value="Wydruk wewnętrzny").font = Font(bold=True)
     ws.cell(row=2, column=sum_col_start-3, value=f"Data: {datetime.now().strftime('%d/%m/%Y')}").font = Font(bold=True)

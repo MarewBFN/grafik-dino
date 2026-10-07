@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 from logic.constraint_presenter import ConstraintPresenter
 from logic.duty_coverage_presenter import is_day_fully_covered, project_uses_duty_rotation
+from logic.leave_requests import format_days
 from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.monthly_hours_status import monthly_hours_status
 from logic.schedule_presenter import SchedulePresenter
@@ -394,6 +395,20 @@ class EmployeeNameDelegate(QStyledItemDelegate):
             icon.paint(painter, icon_x, icon_y, self.RESTRICTION_ICON_SIZE, self.RESTRICTION_ICON_SIZE)
             icon_x += self.RESTRICTION_ICON_SIZE + self.RESTRICTION_ICON_GAP
 
+        # --- Pozostały urlop (Employee.vacation_days_left, patrz
+        # EmployeeDialog "Pozostało urlopu") - do prawej krawędzi komórki,
+        # niezależnie od tego, ile miejsca po lewej zajęły odznaki/imię/
+        # ikony ograniczeń powyżej.
+        vacation_text = f"Urlop: {format_days(employee.vacation_days_left)}"
+        vacation_font = QFont(fraction_font)
+        vacation_metrics = QFontMetrics(vacation_font)
+        vacation_width = vacation_metrics.horizontalAdvance(vacation_text)
+        vacation_rect = text_rect.adjusted(text_rect.width() - vacation_width, 0, 0, 0)
+        painter.setFont(vacation_font)
+        # Na czerwono, gdy zaznaczono więcej urlopu niż zostało w puli.
+        painter.setPen(QColor("#c62828" if employee.vacation_days_left < 0 else "#8a8a8a"))
+        painter.drawText(vacation_rect, Qt.AlignVCenter | Qt.AlignRight, vacation_text)
+
         painter.restore()
 
 class LockedCellDelegate(QStyledItemDelegate):
@@ -609,6 +624,11 @@ class ScheduleGrid(QTableWidget):
         self.frozen_name_column.verticalScrollBar().valueChanged.connect(self.verticalScrollBar().setValue)
         self.verticalHeader().sectionResized.connect(self._sync_frozen_row_height)
         self.horizontalHeader().sectionResized.connect(self._sync_frozen_column_width)
+        # Nakładka ma własny nagłówek z uchwytem zmiany szerokości - bez tej
+        # synchronizacji w drugą stronę przeciągnięcie jej krawędzi zmieniało
+        # tylko nakładkę, a kolumna pod spodem zostawała, robiąc pustą
+        # przerwę między pracownikami a dniami.
+        self.frozen_name_column.horizontalHeader().sectionResized.connect(self._sync_main_name_column_width)
         self.frozen_name_column.clicked.connect(lambda index: self._handle_click(index.row(), 0))
         self.frozen_name_column.doubleClicked.connect(lambda index: self._handle_double_click(index.row(), 0))
         self._update_frozen_name_column()
@@ -621,6 +641,11 @@ class ScheduleGrid(QTableWidget):
         if column == 0 and hasattr(self, "frozen_name_column"):
             self.frozen_name_column.setColumnWidth(0, new_size)
             self._update_frozen_name_column()
+
+    def _sync_main_name_column_width(self, column, _old_size, new_size):
+        if column == 0 and self.columnWidth(0) != new_size:
+            # Wywoła _sync_frozen_column_width, które dociągnie geometrię nakładki.
+            self.setColumnWidth(0, new_size)
 
     def _update_frozen_name_column(self):
         if not hasattr(self, "frozen_name_column"):
@@ -995,6 +1020,12 @@ class ScheduleGrid(QTableWidget):
     def refresh(self):
         if not self.schedule or not self.shop_config:
             return
+
+        # Pula urlopu i pasek wniosków urlopowych (ui/main_window.py) - przed
+        # build(), żeby kolumna z nazwiskami pokazała już zaktualizowaną pulę.
+        on_data_changed = getattr(getattr(self, "main_window", None), "_on_schedule_data_changed", None)
+        if callable(on_data_changed):
+            on_data_changed()
 
         # build() robi clear() i od nowa ustawia liczbę wierszy/kolumn, co
         # resetuje przewinięcie do (0, 0) — bez tego przełączenie np. trybu

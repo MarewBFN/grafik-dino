@@ -35,9 +35,17 @@ from export.employee_card_exporter import (
     save_employee_card_pages_to_pdf,
     sanitize_filename_part,
 )
+from logic.leave_requests import (
+    build_leave_requests,
+    format_days,
+    generate_button_text,
+    mark_leave_requests_printed,
+    pending_requests_text,
+    sync_vacation_balances,
+)
 from logic.schedule_controller import ScheduleController
 from logic.utils.time_utils import previous_calendar_month
-from ui.export_preview_dialog import show_export_preview
+from ui.export_preview_dialog import show_export_preview, show_schedule_export_preview
 from ui.previous_month_shift_dialog import PreviousMonthShiftDialog
 from ui.marquee_text import MarqueeLabel, WrappingLocationButton
 from model.location import format_open_hours_summary
@@ -54,8 +62,12 @@ from ui.locations_dialog import LocationsDialog
 from ui.day_edit_dialog import DayEditDialog
 from ui.day_override_dialog import DayOverrideDialog
 from ui.employee_dialog import EmployeeDialog
+from ui.employees_dialog import EmployeesDialog
 from ui.grid_legend import GridLegendWidget
+from ui import theme
 from ui.grid_view import ScheduleGrid
+from ui.leave_requests_dialog import LeaveRequestsDialog
+from ui.companies_dialog import CompaniesDialog
 from ui.month_picker_dialog import MonthPickerDialog
 from ui.new_project_dialog import NewProjectDialog
 from ui.quick_mode_settings_dialog import QuickModeSettingsDialog
@@ -64,8 +76,11 @@ from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.loading_overlay import LoadingOverlay
 from ui.demo_manager import DemoManager
 from ui.license_manager import get_user_id, show_license_dialog
-from version import APP_VERSION
+from licensing import online as online_license
 from release_channel import RELEASE_CHANNEL
+from version import APP_VERSION
+
+PRIVACY_POLICY_FILE = "polityka_prywatnosci.txt"
 
 class GeneratorWorker(QObject):
     finished = Signal(object)
@@ -79,6 +94,13 @@ class GeneratorWorker(QObject):
     def run(self):
         result = self.controller.generate_schedule(force=self.force, location_key=self.location_key)
         self.finished.emit(result)
+
+
+class LicenseCheckBridge(QObject):
+    # Wynik sprawdzenia licencji z wątku tła (threading, daemon - nie
+    # blokuje zamknięcia programu) do wątku GUI: emit z obcego wątku do
+    # QObject z wątku głównego idzie automatycznie jako queued connection.
+    finished = Signal(object, bool)  # (podpisany rekord albo None, manual)
 
 
 class UpdateCancelled(Exception):
@@ -135,8 +157,16 @@ class MainWindow(QMainWindow):
         self.demo = DemoManager()
 
         saved_key = load_license()
-        if saved_key and validate_license(self.user_id, saved_key):
-            self.demo.is_demo = False
+        self.legacy_license_valid = bool(saved_key and validate_license(self.user_id, saved_key))
+        # Licencja online (licensing/online.py): start z zapamiętanej,
+        # podpisanej odpowiedzi serwera, odświeżenie w tle poniżej.
+        self.online_license = online_license.OnlineLicense(self.user_id)
+        self.license_state, license_lost = self.online_license.evaluate(self.legacy_license_valid)
+        self.demo.is_demo = not self.license_state.is_full
+        self._license_check_running = False
+        self._license_manual_pending = False
+        self.license_bridge = LicenseCheckBridge(self)
+        self.license_bridge.finished.connect(self._on_license_check_finished)
 
         # Branch demonstracyjne (client-demo/enyo-ochrona) celowo nie
         # pokazuje marki "Dino" w tytule okna - patrz CLIENT_DEMO_README.md.
@@ -186,11 +216,105 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.user_id_label)
 
         self.statusBar().showMessage("Gotowe")
+        self._apply_license_ui()
         QTimer.singleShot(0, self._check_first_run)
         QTimer.singleShot(0, self.showMaximized)
+        if license_lost:
+            QTimer.singleShot(0, lambda state=self.license_state: self._show_license_lost(state))
+
+        if online_license.is_configured():
+            QTimer.singleShot(1500, self._start_license_check)
+            self.license_timer = QTimer(self)
+            self.license_timer.setInterval(60 * 60 * 1000)
+            self.license_timer.timeout.connect(self._start_license_check)
+            self.license_timer.start()
 
     def _open_license_dialog(self):
         show_license_dialog(self)
+
+    def _on_license_key_saved(self):
+        """Wołane przez show_license_dialog po wpisaniu poprawnego starego
+        klucza. Zwraca nowy LicenseState (klucz nie pomoże, jeśli ID jest
+        zablokowane na serwerze)."""
+        self.legacy_license_valid = True
+        state, _ = self.online_license.evaluate(self.legacy_license_valid)
+        self._set_license_state(state, lost_full=False)
+        self._start_license_check()
+        return state
+
+    def _start_license_check(self, manual=False):
+        if not online_license.is_configured():
+            if manual:
+                self._show_license_info(reached_server=False)
+            return
+        if self._license_check_running:
+            # Wynik trwającego sprawdzenia pokaże też okienko.
+            self._license_manual_pending = self._license_manual_pending or manual
+            return
+        self._license_check_running = True
+
+        import threading
+
+        user_id = self.user_id
+        legacy = self.legacy_license_valid
+        bridge = self.license_bridge
+
+        def run():
+            record = online_license.fetch_record(user_id, legacy, APP_VERSION, RELEASE_CHANNEL)
+            try:
+                bridge.finished.emit(record, manual)
+            except RuntimeError:
+                pass  # okno już zamknięte
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_license_check_finished(self, record, manual):
+        self._license_check_running = False
+        manual = manual or self._license_manual_pending
+        self._license_manual_pending = False
+        if record is not None:
+            self.online_license.store_record(record)
+        state, lost_full = self.online_license.evaluate(self.legacy_license_valid)
+        self._set_license_state(state, lost_full)
+        if manual:
+            self._show_license_info(reached_server=record is not None)
+
+    def _set_license_state(self, state, lost_full):
+        was_demo = self.demo.is_demo
+        self.license_state = state
+        self.demo.is_demo = not state.is_full
+        self._apply_license_ui()
+
+        if lost_full:
+            self._show_license_lost(state)
+        elif was_demo and state.is_full:
+            self.statusBar().showMessage(online_license.describe_state(state), 5000)
+
+    def _apply_license_ui(self):
+        is_demo = self.demo.is_demo
+        for name in ("demo_divider", "demo_label", "btn_buy"):
+            widget = getattr(self, name, None)
+            if widget is not None:
+                widget.setVisible(is_demo)
+        if hasattr(self, "generate_limit_label"):
+            self._update_generate_label()
+
+    def _show_license_lost(self, state):
+        QMessageBox.information(
+            self,
+            "Wersja demonstracyjna",
+            online_license.describe_state(state)
+            + "\n\nProgram działa teraz w wersji demonstracyjnej. Twoje "
+            "projekty nie zostały usunięte - po aktywacji pełnej wersji "
+            "wszystko będzie dostępne jak wcześniej.",
+        )
+
+    def _show_license_info(self, reached_server):
+        text = online_license.describe_state(self.license_state)
+        text += f"\n\nID użytkownika: {self.user_id}"
+        if online_license.is_configured() and not reached_server:
+            text += "\n\nNie udało się połączyć z serwerem licencji - pokazany jest ostatni znany stan."
+        QMessageBox.information(self, "Licencja", text)
 
     def _build_ui(self):
         self._build_menu()
@@ -251,6 +375,7 @@ class MainWindow(QMainWindow):
         divider.setObjectName("sectionDivider")
         divider.setFrameShape(QFrame.HLine)
         layout.addWidget(divider)
+        return divider
 
     def _build_left_panel(self):
         outer_panel = QFrame()
@@ -444,16 +569,17 @@ class MainWindow(QMainWindow):
 
         layout.addStretch(1)
 
-        if self.demo.is_demo:
-            self._add_section_divider(layout)
-            self.demo_label = QLabel("Wersja demonstracyjna")
-            self.demo_label.setObjectName("dangerHint")
-            layout.addWidget(self.demo_label)
+        # Zawsze budowane - licencja online może zmienić się w trakcie
+        # działania programu, widoczność ustawia _apply_license_ui().
+        self.demo_divider = self._add_section_divider(layout)
+        self.demo_label = QLabel("Wersja demonstracyjna")
+        self.demo_label.setObjectName("dangerHint")
+        layout.addWidget(self.demo_label)
 
-            self.btn_buy = QPushButton("Zakup pełną wersję")
-            self.btn_buy.setObjectName("successButton")
-            self.btn_buy.clicked.connect(self._open_buy_page)
-            layout.addWidget(self.btn_buy)
+        self.btn_buy = QPushButton("Zakup pełną wersję")
+        self.btn_buy.setObjectName("successButton")
+        self.btn_buy.clicked.connect(self._open_buy_page)
+        layout.addWidget(self.btn_buy)
 
         return outer_panel
 
@@ -657,11 +783,37 @@ class MainWindow(QMainWindow):
         self.grid_legend = GridLegendWidget()
         layout.addWidget(self.grid_legend, 0)
 
+        # Pasek "Istnieje X wniosków oczekujących na wydruk" - widoczny tylko,
+        # gdy w bieżącej placówce są wnioski urlopowe jeszcze niezapisane do
+        # PDF (patrz _update_leave_requests_bar). Przycisk otwiera to samo
+        # okno co Plik -> "Wnioski urlopowe...".
+        self.leave_requests_bar = QFrame()
+        self.leave_requests_bar.setObjectName("leaveRequestsBar")
+        self.leave_requests_bar.setStyleSheet(
+            "QFrame#leaveRequestsBar {"
+            f"  background: {theme.WARN_YELLOW};"
+            f"  border: 1px solid {theme.SOFT_BORDER};"
+            "  border-radius: 8px;"
+            "}"
+        )
+        leave_bar_layout = QHBoxLayout(self.leave_requests_bar)
+        leave_bar_layout.setContentsMargins(10, 6, 10, 6)
+        self.leave_requests_label = QLabel("")
+        leave_bar_layout.addWidget(self.leave_requests_label, 0, Qt.AlignLeft | Qt.AlignVCenter)
+        leave_bar_layout.addStretch(1)
+        self.leave_requests_button = QPushButton("")
+        self.leave_requests_button.clicked.connect(self._open_leave_requests_dialog)
+        leave_bar_layout.addWidget(self.leave_requests_button, 0, Qt.AlignRight | Qt.AlignVCenter)
+        self.leave_requests_bar.setVisible(False)
+        layout.addWidget(self.leave_requests_bar, 0)
+
         return panel
 
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("Plik")
         edit_menu = self.menuBar().addMenu("Edycja")
+        # Bezpośrednia akcja w pasku (bez rozwijanego menu) - lista pracowników.
+        self.employees_action = self.menuBar().addAction("Pracownicy", self._open_employees_dialog)
         config_menu = self.menuBar().addMenu("Konfiguracja")
         wyglad_menu = self.menuBar().addMenu("Wygląd")
         help_menu = self.menuBar().addMenu("Pomoc")
@@ -685,6 +837,9 @@ class MainWindow(QMainWindow):
         cards_menu.addAction("JPG...", self._export_employee_cards_image)
         cards_menu.addAction("PDF...", self._export_employee_cards_pdf)
         file_menu.addMenu(cards_menu)
+
+        file_menu.addAction("Dane firmy...", self._open_companies_dialog)
+        file_menu.addAction("Wnioski urlopowe...", self._open_leave_requests_dialog)
 
         file_menu.addSeparator()
         file_menu.addAction("Drukuj...", self._print_schedule)
@@ -752,8 +907,23 @@ class MainWindow(QMainWindow):
         self.show_overtime_column_action.setCheckable(True)
 
         help_menu.addAction("Klucz produktu", self._open_license_dialog)
+        help_menu.addAction("Sprawdź licencję", lambda: self._start_license_check(manual=True))
         help_menu.addAction("Sprawdź aktualizacje", lambda: self._check_updates(manual=True))
+        help_menu.addAction("Polityka prywatności", self._open_privacy_policy)
         help_menu.addAction("O programie", self._about)
+
+    def _open_privacy_policy(self):
+        # Instalator kopiuje plik do {app}, który jest katalogiem roboczym
+        # programu (patrz "InfoBeforeFile" w enyo.iss / "dla inno.iss").
+        path = os.path.abspath(PRIVACY_POLICY_FILE)
+        if os.path.exists(path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        else:
+            QMessageBox.information(
+                self,
+                "Polityka prywatności",
+                f"Nie znaleziono pliku {PRIVACY_POLICY_FILE} w katalogu programu.",
+            )
 
     def _open_new_project(self):
         if self.schedule is not None:
@@ -812,8 +982,9 @@ class MainWindow(QMainWindow):
         gołe domyślne wartości, i z jawnym dopisaniem last_project.json na
         końcu (czego _open_new_project nie robi), żeby stan nie wrócił po
         restarcie. Świadomie NIE dotyka first_run.flag/*_tutorial_seen.flag/
-        license.json/machine_id.json/demo.json/custom_profiles.json - to nie
-        jest "grafik", tylko odrębny stan pierwszego uruchomienia/licencji/
+        license.json/license_status.json/machine_id.json/demo.json/
+        custom_profiles.json - to nie jest "grafik", tylko odrębny stan
+        pierwszego uruchomienia/licencji/
         poradników, który użytkownik wprost poprosił zostawić w spokoju."""
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("Usuń konfigurację")
@@ -842,7 +1013,7 @@ class MainWindow(QMainWindow):
         self._sync_everything()
 
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
 
@@ -852,9 +1023,13 @@ class MainWindow(QMainWindow):
 
     def _init_state(self):
         old_employees = []
+        old_companies = {}
 
         if self.schedule:
             old_employees = self.schedule.employees
+            # Zachowani pracownicy wskazują firmy przez company_key - bez
+            # przeniesienia firm straciliby przypisanie.
+            old_companies = self.project.companies if hasattr(self, "project") else {}
 
         self.schedule = MonthSchedule(self.year, self.month, employees=old_employees)
         self.shop_config = ShopConfig(self.year, self.month)
@@ -864,6 +1039,7 @@ class MainWindow(QMainWindow):
         # (patrz model/monthly_project.py) - żaden inny miesiąc jeszcze nie
         # istnieje, tylko ten właśnie utworzony.
         self.project = MonthlyProject()
+        self.project.companies = old_companies
         self.project.put(self.year, self.month, self.schedule, self.shop_config)
 
         self._apply_default_visible_business_type()
@@ -893,7 +1069,21 @@ class MainWindow(QMainWindow):
             from logic.generator.custom_profile_wiring import apply_new_project_defaults
             apply_new_project_defaults(self.shop_config, custom)
 
+    def _commit_current_month(self):
+        """Wkłada bieżący grafik/konfigurację z powrotem do projektu.
+        Cofnij/Ponów (i część operacji kontrolera) podmieniają self.schedule
+        na NOWY obiekt - bez tego projekt dalej trzymałby stary i zapis
+        gubiłby wszystko od ostatniej zmiany miesiąca."""
+        schedule, shop_config = getattr(self, "schedule", None), getattr(self, "shop_config", None)
+        if schedule is not None and shop_config is not None and getattr(self, "project", None) is not None:
+            self.project.put(schedule.year, schedule.month, schedule, shop_config)
+
+    def _save_bundle(self, path):
+        self._commit_current_month()
+        save_project_bundle(path, self.project, self.year, self.month)
+
     def _sync_everything(self):
+        self._commit_current_month()
         # Bezpiecznik: tabela grafiku filtruje pracowników po location_key
         # (patrz _sync_grid), więc ktoś bez poprawnego przypisania byłby
         # trwale niewidoczny w każdej placówce - dopina go do pierwszej
@@ -1059,6 +1249,69 @@ class MainWindow(QMainWindow):
         self.show_overtime_column_action.setChecked(visible)
         if self.grid:
             self.grid.set_overtime_column_visible(visible)
+
+    def _on_schedule_data_changed(self):
+        """Wołane przy każdym odświeżeniu siatki (ScheduleGrid.refresh), czyli
+        po każdej zmianie grafiku - niezależnie od tego, którą drogą przyszła
+        (menu kontekstowe, tryb szybki, okno dnia, cofnij/ponów). Odejmuje od
+        puli urlopu świeżo zaznaczony urlop / oddaje usunięty
+        (logic/leave_requests.py::sync_vacation_balances) i odświeża pasek
+        wniosków oczekujących na wydruk."""
+        if not self.schedule or not self.shop_config:
+            return
+
+        changes = sync_vacation_balances(self.schedule, self.shop_config)
+        if changes:
+            message = ", ".join(
+                f"{emp.display_name()} {'+' if delta > 0 else '−'}{format_days(abs(delta))} "
+                f"(zostało {format_days(emp.vacation_days_left)})"
+                for emp, delta in changes
+            )
+            self.statusBar().showMessage(f"Urlop: {message}", 4000)
+        self._update_leave_requests_bar()
+
+    def _current_leave_requests(self) -> list:
+        return build_leave_requests(self.schedule, self.shop_config, self.selected_location_key)
+
+    def _update_leave_requests_bar(self):
+        pending = sum(1 for request in self._current_leave_requests() if not request.printed)
+        self.leave_requests_bar.setVisible(pending > 0)
+        if pending:
+            self.leave_requests_label.setText(pending_requests_text(pending))
+            self.leave_requests_button.setText(generate_button_text(pending))
+
+    def _open_leave_requests_dialog(self):
+        if not self.schedule or not self.shop_config:
+            return
+
+        def on_saved(requests):
+            mark_leave_requests_printed(self.schedule, requests)
+            self._update_leave_requests_bar()
+
+        dialog = LeaveRequestsDialog(
+            self,
+            load_requests=self._current_leave_requests,
+            on_saved=on_saved,
+            companies=self.project.companies,
+            default_file_name=f"Wnioski urlopowe {self.month:02d}.{self.year}.pdf",
+        )
+        dialog.exec()
+
+    def _open_companies_dialog(self):
+        employee_counts = {}
+        for emp in (self.schedule.employees if self.schedule else []):
+            if emp.company_key:
+                employee_counts[emp.company_key] = employee_counts.get(emp.company_key, 0) + 1
+
+        dialog = CompaniesDialog(self, self.project.companies, employee_counts)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        self.project.companies = dialog.companies
+        try:
+            self._save_bundle("last_project.json")
+        except OSError:
+            pass
+        self.statusBar().showMessage("Zapisano dane firmy.", 2500)
 
     def _update_window_title(self):
         # Wersja programu zawsze bezpośrednio po nazwie ("Grafik pracy
@@ -1274,7 +1527,10 @@ class MainWindow(QMainWindow):
             )
 
     def _open_add_employee(self):
-        dialog = EmployeeDialog(self, shop_config=self.shop_config, default_location_key=self.selected_location_key)
+        dialog = EmployeeDialog(
+            self, shop_config=self.shop_config, default_location_key=self.selected_location_key,
+            companies=self.project.companies,
+        )
 
         if dialog.exec() != QDialog.Accepted:
             return
@@ -1284,8 +1540,21 @@ class MainWindow(QMainWindow):
         self._sync_everything()
         self.statusBar().showMessage("Dodano pracownika.", 2500)
 
+    def _open_employees_dialog(self):
+        def on_changed(message):
+            self.schedule = self.controller.schedule
+            self._sync_everything()
+            self.statusBar().showMessage(message, 2500)
+
+        dialog = EmployeesDialog(
+            self, self.controller, self.shop_config,
+            on_changed=on_changed, default_location_key=self.selected_location_key,
+            companies=self.project.companies,
+        )
+        dialog.exec()
+
     def _edit_employee(self, emp):
-        dialog = EmployeeDialog(self, employee=emp, shop_config=self.shop_config)
+        dialog = EmployeeDialog(self, employee=emp, shop_config=self.shop_config, companies=self.project.companies)
         if dialog.exec() != QDialog.Accepted:
             return
 
@@ -1538,7 +1807,7 @@ class MainWindow(QMainWindow):
         # tryb szybki) zapisuje się od razu po zamknięciu, więc to też powinno,
         # zamiast czekać na osobne "Zapisz" albo monit przy zamknięciu programu.
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage("Zaktualizowano godziny dnia.", 2500)
@@ -1553,7 +1822,7 @@ class MainWindow(QMainWindow):
         # Constraint policies are part of the local working project, so retain
         # the selected generator configuration for the next application start.
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano konfigurację.", 2500)
@@ -1569,7 +1838,7 @@ class MainWindow(QMainWindow):
         assign_missing_location_keys(self.schedule, self.shop_config)
         self._sync_everything()
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano lokalizacje.", 2500)
@@ -1581,7 +1850,7 @@ class MainWindow(QMainWindow):
         self._update_hours_display_menu()
         self.grid.refresh()
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano wygląd komórek kompaktowych.", 2500)
@@ -1600,7 +1869,7 @@ class MainWindow(QMainWindow):
         self.shop_config.show_grid_legend = not self.shop_config.show_grid_legend
         self._update_grid_legend()
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage(
@@ -1634,7 +1903,7 @@ class MainWindow(QMainWindow):
         self._rebuild_quick_preset_buttons()
         self._update_quick_panel_profile_visibility()
         try:
-            save_project_bundle("last_project.json", self.project, self.year, self.month)
+            self._save_bundle("last_project.json")
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano ustawienia trybu szybkiego.", 2500)
@@ -1659,8 +1928,8 @@ class MainWindow(QMainWindow):
 
         # Cały projekt (patrz model/monthly_project.py) - każdy miesiąc
         # odwiedzony w tej sesji, nie tylko aktualnie otwarty.
-        save_project_bundle(path, self.project, self.year, self.month)
-        save_project_bundle("last_project.json", self.project, self.year, self.month)
+        self._save_bundle(path)
+        self._save_bundle("last_project.json")
         self.statusBar().showMessage("Zapisano projekt.", 2500)
 
     def _load_project(self):
@@ -1705,21 +1974,39 @@ class MainWindow(QMainWindow):
         export_schedule_to_excel(
             self.schedule, self.year, self.month, path, shop=self.shop_config,
             employees=self.grid.get_visible_employees(),
+            location_name=self._selected_location_name(),
         )
         self.statusBar().showMessage("Wyeksportowano do Excela.", 2500)
 
-    def _render_visible_schedule_image(self):
+    def _selected_location_name(self):
+        locations = self.shop_config.locations if self.shop_config else {}
+        location = locations.get(self.selected_location_key)
+        return location.name if location else None
+
+    def _render_schedule_image_for(self, employees):
         return render_schedule_image(
             self.schedule, self.year, self.month, shop=self.shop_config,
-            employees=self.grid.get_visible_employees(),
+            employees=employees, location_name=self._selected_location_name(),
         )
+
+    def _render_visible_schedule_image(self):
+        return self._render_schedule_image_for(self.grid.get_visible_employees())
+
+    def _preview_schedule_export(self, title):
+        """Podgląd grafiku wybranej placówki z opcją "Jeden pracownik" -
+        zwraca obraz do zapisania albo None przy anulowaniu."""
+        pages = show_schedule_export_preview(
+            self.grid.get_visible_employees(), self._render_schedule_image_for,
+            title, parent=self,
+        )
+        return pages[0] if pages else None
 
     def _export_image(self):
         if self.demo.block_export(self):
             return
 
-        image = self._render_visible_schedule_image()
-        if not show_export_preview(image, "Podgląd grafiku — JPG", parent=self):
+        image = self._preview_schedule_export("Podgląd grafiku — JPG")
+        if image is None:
             return
 
         path, _ = QFileDialog.getSaveFileName(self, "Eksport JPG", "", "Obraz JPG (*.jpg)")
@@ -1736,8 +2023,8 @@ class MainWindow(QMainWindow):
         if self.demo.block_export(self):
             return
 
-        image = self._render_visible_schedule_image()
-        if not show_export_preview(image, "Podgląd grafiku — PDF", parent=self):
+        image = self._preview_schedule_export("Podgląd grafiku — PDF")
+        if image is None:
             return
 
         path, _ = QFileDialog.getSaveFileName(self, "Eksport PDF", "", "PDF (*.pdf)")
@@ -1943,13 +2230,19 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Błąd drukowania", str(e))
 
     def _undo(self):
+        # Zapisanie wniosku do PDF to fakt "na zewnątrz" programu - cofnięcie
+        # zmiany w grafiku nie może go odwracać.
+        printed = self.schedule.printed_leave_requests
         self.schedule = self.controller.undo()
+        self.schedule.printed_leave_requests = printed
         self.shop_config = self.controller.shop_config
         self._sync_everything()
         self.statusBar().showMessage("Cofnięto ostatnią zmianę.", 2500)
 
     def _redo(self):
+        printed = self.schedule.printed_leave_requests
         self.schedule = self.controller.redo()
+        self.schedule.printed_leave_requests = printed
         self.shop_config = self.controller.shop_config
         self._sync_everything()
         self.statusBar().showMessage("Ponowiono zmianę.", 2500)
@@ -2349,7 +2642,7 @@ class MainWindow(QMainWindow):
                 return
 
             try:
-                save_project_bundle("last_project.json", self.project, self.year, self.month)
+                self._save_bundle("last_project.json")
             except:
                 pass
 
@@ -2418,7 +2711,7 @@ class MainWindow(QMainWindow):
 
         self._update_nominal_hours_label()
         self._sync_everything()
-        save_project_bundle("last_project.json", self.project, self.year, self.month)
+        self._save_bundle("last_project.json")
         self.statusBar().showMessage("Utworzono placówkę.", 2500)
 
     def _clear_generated(self):

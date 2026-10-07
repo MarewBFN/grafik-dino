@@ -6,7 +6,7 @@
 ; Non-commercial use only
 
 #define MyAppName "Enyo - Grafik Pracy"
-#define MyAppVersion "1.1.3.enyo"
+#define MyAppVersion "1.1.6.enyo"
 #define MyAppPublisher "Kewin Madej"
 #define MyAppURL "https://www.madebykewin.pl"
 #define MyAppExeName "Enyo - Grafik Pracy.exe"
@@ -41,8 +41,13 @@ RestartApplications=yes
 PrivilegesRequired=lowest
 OutputBaseFilename=EnyoSetup
 OutputDir=Output
-SetupIconFile=C:\Users\kewi1\Desktop\madebykewin\Grafik dino V2\dingo_icon.ico
+SetupIconFile=C:\Users\kewi1\Desktop\madebykewin\Grafik dino V2\enyo_icon.ico
 SolidCompression=yes
+; Polityka prywatności pokazywana przed instalacją (strona informacyjna, bez
+; akceptowania) i instalowana do {app} - patrz [Files] oraz menu Pomoc ->
+; Polityka prywatności (ui/main_window.py). Ścieżka względna = katalog tego
+; skryptu. Plik musi być UTF-8 z BOM, inaczej Inno pokaże krzaki.
+InfoBeforeFile=polityka_prywatnosci.txt
 WizardStyle=modern dynamic
 
 [Languages]
@@ -53,6 +58,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "C:\Users\kewi1\Desktop\madebykewin\Grafik dino V2\dist\Enyo - Grafik Pracy\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "polityka_prywatnosci.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]
@@ -66,7 +72,7 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 ; Znaczniki "widziano samouczek" (np. CONFIG_TUTORIAL_FLAG w

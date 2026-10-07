@@ -564,8 +564,10 @@ class LocationsDialog(QDialog):
                         continue  # dzień oznaczony "Nieczynne"
                     # end < start = zmiana przechodząca przez północ, patrz
                     # komentarz przy tej samej walidacji w ui/config_dialog.py.
-                    # Tylko end == start zostaje odrzucone (niejednoznaczne).
-                    if _parse_time(end) == _parse_time(start):
+                    # Tylko end == start zostaje odrzucone (niejednoznaczne) -
+                    # poza dniem "24h" z własnym startem doby (START-START,
+                    # patrz WeeklyHoursEditor.get_hours()).
+                    if _parse_time(end) == _parse_time(start) and not row.hours_editor.is_full_day(wd):
                         day_names = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
                         raise ValueError(
                             f"Godzina otwarcia i zamknięcia nie mogą być takie same "

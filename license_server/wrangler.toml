@@ -1,0 +1,21 @@
+# Serwer licencji DinGo! / Enyo - Cloudflare Worker + baza D1.
+# Instrukcja wdrożenia: README.md w tym katalogu.
+name = "dingo-licencje"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dingo-licencje"
+# Wpisz tu database_id wypisane przez `npx wrangler d1 create dingo-licencje`.
+database_id = "513aff92-5bd0-4bfb-bc47-e6105801ccbb"
+
+# Codziennie usuwa wpisy demo bez połączenia od 24 miesięcy (polityka
+# prywatności, polityka_prywatnosci.txt - okres przechowywania).
+[triggers]
+crons = ["17 3 * * *"]
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true

@@ -9,13 +9,15 @@ _OVERTIME_COLOR = (204, 0, 0)
 
 
 class ImageScheduleExporter:
-    def __init__(self, schedule, year, month, shop=None, employees=None):
+    def __init__(self, schedule, year, month, shop=None, employees=None, location_name=None):
         """`shop` - opcjonalny ShopConfig, wyłącznie do podświetlenia
         przekroczenia miesięcznego limitu godzin pełnego etatu na czerwono
         (brak = brak podświetlenia, zachowanie sprzed tej funkcji).
         `employees` - opcjonalna lista zamiast schedule.employees, do
-        wydruku pojedynczego pracownika."""
+        wydruku pojedynczego pracownika. `location_name` - nazwa placówki
+        wpisywana w pole "Komórka:" nagłówka."""
         self.schedule = schedule
+        self.location_name = location_name or ""
         self.year = year
         self.month = month
         self.shop = shop
@@ -74,7 +76,7 @@ class ImageScheduleExporter:
 
         self.draw.text(
             (x_base + 300, 20),
-            f"Komórka:",
+            f"Komórka: {self.location_name}".rstrip(),
             fill=(0, 0, 0),
             font=self.font_b
         )
@@ -204,11 +206,11 @@ class ImageScheduleExporter:
         self.draw.text((x - w // 2, y - h // 2), text, fill=fill, font=font)
 
 
-def export_schedule_to_image(schedule, year, month, path, shop=None, employees=None):
+def export_schedule_to_image(schedule, year, month, path, shop=None, employees=None, location_name=None):
     if not is_dino_style(shop):
         from export.security_image_exporter import export_security_schedule_to_image
-        return export_security_schedule_to_image(schedule, year, month, path, shop=shop, employees=employees)
+        return export_security_schedule_to_image(schedule, year, month, path, shop=shop, employees=employees, location_name=location_name)
 
-    exporter = ImageScheduleExporter(schedule, year, month, shop=shop, employees=employees)
+    exporter = ImageScheduleExporter(schedule, year, month, shop=shop, employees=employees, location_name=location_name)
     exporter.export(path)
     return True

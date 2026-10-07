@@ -1,4 +1,43 @@
+import dataclasses
 from copy import deepcopy
+
+from model.employee import PERSONAL_DATA_FIELDS
+
+# "id" jest zawsze nowym UUID przy każdym zapisie EmployeeDialog (Employee
+# jest frozen - _save() tworzy nowy obiekt, nie edytuje w miejscu), więc
+# porównanie pól pominęłoby wszystko jako "zmienione", gdyby go nie
+# wykluczyć - patrz _employee_changed_beyond_contact_data.
+_UNDO_IGNORED_EMPLOYEE_FIELDS = {"id", *PERSONAL_DATA_FIELDS}
+
+
+def _normalized_custom_roles(roles: dict) -> dict:
+    # Employee.has_role()/.custom_roles.get(key, False) traktują brakujący
+    # klucz i klucz obecny z wartością False identycznie - a EmployeeDialog._save()
+    # (ui/employee_dialog.py) dopisuje np. "nie_chce_24h": False przy KAŻDYM
+    # zapisie, nawet gdy pracownik nigdy tej flagi nie miał. Bez odfiltrowania
+    # takich wpisów każda edycja (nawet samych danych kontaktowych) wyglądałaby
+    # jak zmiana ról.
+    return {key: value for key, value in roles.items() if value}
+
+
+def _employee_changed_beyond_contact_data(old, new) -> bool:
+    """True, gdy `old` -> `new` różni się na jakimkolwiek polu poza danymi
+    kontaktowymi (telefon/e-mail/adres, patrz PERSONAL_DATA_FIELDS) - używane
+    przez ScheduleController.replace_employee(), żeby sama edycja sekcji
+    "Zaawansowane" w EmployeeDialog (ui/employee_dialog.py) nie trafiała do
+    historii "Cofnij": to metadane bez wpływu na grafik, nie akcja warta
+    miejsca w historii undo."""
+    for field in dataclasses.fields(old):
+        if field.name in _UNDO_IGNORED_EMPLOYEE_FIELDS:
+            continue
+        old_value = getattr(old, field.name)
+        new_value = getattr(new, field.name)
+        if field.name == "custom_roles":
+            old_value = _normalized_custom_roles(old_value)
+            new_value = _normalized_custom_roles(new_value)
+        if old_value != new_value:
+            return True
+    return False
 
 
 class ScheduleController:
@@ -208,6 +247,12 @@ class ScheduleController:
         self._apply_manager_schedule_if_needed(emp)
 
     def replace_employee(self, old, new):
+        if not _employee_changed_beyond_contact_data(old, new):
+            # Tylko dane kontaktowe się zmieniły (albo nic) - zastosuj bez
+            # snapshotu, żeby "Cofnij" tego nie widział (patrz
+            # _employee_changed_beyond_contact_data).
+            self.schedule.replace_employee(old, new)
+            return
         self.snapshot()
         self.schedule.replace_employee(old, new)
         self._apply_manager_schedule_if_needed(new)
