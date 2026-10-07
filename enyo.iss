@@ -6,7 +6,7 @@
 ; Non-commercial use only
 
 #define MyAppName "Enyo - Grafik Pracy"
-#define MyAppVersion "1.1.5.enyo"
+#define MyAppVersion "1.1.6.enyo"
 #define MyAppPublisher "Kewin Madej"
 #define MyAppURL "https://www.madebykewin.pl"
 #define MyAppExeName "Enyo - Grafik Pracy.exe"

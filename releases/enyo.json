@@ -1,5 +1,5 @@
 {
-  "latest_version": "1.1.5.enyo",
-  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.1.5-enyo/EnyoSetup.exe",
-  "changelog": "Wnioski urlopowe (Plik -> Wnioski urlopowe) z automatycznym odejmowaniem urlopu z puli pracownika. Dane firmy (Plik -> Dane firmy) do wnioskow urlopowych. Dane kontaktowe i pozostaly urlop w karcie pracownika. Eksport grafiku: nazwa placowki w naglowku i opcja Jeden pracownik w podgladzie. Kolko myszy nie zmienia juz przypadkiem opcji na listach. Naprawiono zapis po Cofnij/Ponow. Licencja sprawdzana online, Pomoc -> Sprawdz licencje, Pomoc -> Polityka prywatnosci."
+  "latest_version": "1.1.6.enyo",
+  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.1.6-enyo/EnyoSetup.exe",
+  "changelog": "Wnioski urlopowe (Plik -> Wnioski urlopowe) z automatycznym odejmowaniem urlopu z puli pracownika. Dane firmy (Plik -> Dane firmy) do wnioskow urlopowych. Dane kontaktowe i pozostaly urlop w karcie pracownika. Eksport grafiku: nazwa placowki w naglowku i opcja Jeden pracownik w podgladzie. Kolko myszy nie zmienia juz przypadkiem opcji na listach. Naprawiono zapis po Cofnij/Ponow. Licencja sprawdzana online, Pomoc -> Sprawdz licencje, Pomoc -> Polityka prywatnosci. Naprawiono: pierwsze uruchomienie po instalacji lub aktualizacji nie zapisywalo projektu (program startowal pusty). Licencja nie przepada po wiekszej aktualizacji Windows."
 }
