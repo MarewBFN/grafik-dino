@@ -623,6 +623,11 @@ class ScheduleGrid(QTableWidget):
         self.frozen_name_column.verticalScrollBar().valueChanged.connect(self.verticalScrollBar().setValue)
         self.verticalHeader().sectionResized.connect(self._sync_frozen_row_height)
         self.horizontalHeader().sectionResized.connect(self._sync_frozen_column_width)
+        # Nakładka ma własny nagłówek z uchwytem zmiany szerokości - bez tej
+        # synchronizacji w drugą stronę przeciągnięcie jej krawędzi zmieniało
+        # tylko nakładkę, a kolumna pod spodem zostawała, robiąc pustą
+        # przerwę między pracownikami a dniami.
+        self.frozen_name_column.horizontalHeader().sectionResized.connect(self._sync_main_name_column_width)
         self.frozen_name_column.clicked.connect(lambda index: self._handle_click(index.row(), 0))
         self.frozen_name_column.doubleClicked.connect(lambda index: self._handle_double_click(index.row(), 0))
         self._update_frozen_name_column()
@@ -635,6 +640,11 @@ class ScheduleGrid(QTableWidget):
         if column == 0 and hasattr(self, "frozen_name_column"):
             self.frozen_name_column.setColumnWidth(0, new_size)
             self._update_frozen_name_column()
+
+    def _sync_main_name_column_width(self, column, _old_size, new_size):
+        if column == 0 and self.columnWidth(0) != new_size:
+            # Wywoła _sync_frozen_column_width, które dociągnie geometrię nakładki.
+            self.setColumnWidth(0, new_size)
 
     def _update_frozen_name_column(self):
         if not hasattr(self, "frozen_name_column"):
