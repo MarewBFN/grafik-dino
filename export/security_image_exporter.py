@@ -20,8 +20,9 @@ _OVERTIME_COLOR = (204, 0, 0)
 
 
 class SecurityScheduleImageExporter:
-    def __init__(self, schedule, year, month, shop=None, employees=None):
+    def __init__(self, schedule, year, month, shop=None, employees=None, location_name=None):
         self.schedule = schedule
+        self.location_name = location_name or ""
         self.year = year
         self.month = month
         self.shop = shop
@@ -73,6 +74,8 @@ class SecurityScheduleImageExporter:
         title = f"Grafik {self.month:02d}/{self.year}" + (f" - {name}" if name else "")
 
         self.draw.text((20, 15), title, fill=(0, 0, 0), font=self.font_b)
+        if self.location_name:
+            self.draw.text((20, 45), f"Placówka: {self.location_name}", fill=(0, 0, 0), font=self.font)
 
         right_x = self.width - 220
         self.draw.text(
@@ -198,7 +201,7 @@ class SecurityScheduleImageExporter:
         self.draw.text((x - w // 2, y - h // 2), text, fill=fill, font=font)
 
 
-def export_security_schedule_to_image(schedule, year, month, path, shop=None, employees=None):
-    exporter = SecurityScheduleImageExporter(schedule, year, month, shop=shop, employees=employees)
+def export_security_schedule_to_image(schedule, year, month, path, shop=None, employees=None, location_name=None):
+    exporter = SecurityScheduleImageExporter(schedule, year, month, shop=shop, employees=employees, location_name=location_name)
     exporter.export(path)
     return True

@@ -89,13 +89,41 @@ class WeeklyHoursEditorFullDayToggleTests(unittest.TestCase):
 
         self.assertEqual(editor.get_hours()[5], ("00:00", "23:45"))
 
-    def test_fullday_disables_time_inputs(self):
+    def test_fullday_leaves_only_the_start_input(self):
+        """Zgłoszenie 2026-09-30: przy "24h" jedno pole - start doby."""
         editor = WeeklyHoursEditor({5: ("08:00", "20:00")})
         editor._fullday_checks[5].setChecked(True)
 
         start_edit, end_edit = editor._edits[5]
-        self.assertFalse(start_edit.isEnabled())
-        self.assertFalse(end_edit.isEnabled())
+        self.assertTrue(start_edit.isEnabled())
+        self.assertFalse(start_edit.isHidden())
+        self.assertTrue(end_edit.isHidden())
+
+    def test_unchecking_fullday_restores_end_input(self):
+        editor = WeeklyHoursEditor({5: ("07:00", "07:00")})
+        editor._fullday_checks[5].setChecked(False)
+
+        self.assertFalse(editor._edits[5][1].isHidden())
+
+    def test_fullday_with_custom_start_returns_start_to_start(self):
+        editor = WeeklyHoursEditor({5: ("08:00", "20:00")})
+        editor._fullday_checks[5].setChecked(True)
+        editor._edits[5][0].set_time_str("07:00")
+
+        self.assertEqual(editor.get_hours()[5], ("07:00", "07:00"))
+        self.assertTrue(editor.is_full_day(5))
+
+    def test_set_hours_with_start_to_start_preselects_fullday_with_that_start(self):
+        editor = WeeklyHoursEditor({5: ("07:00", "07:00")})
+
+        self.assertTrue(editor._fullday_checks[5].isChecked())
+        self.assertEqual(editor._edits[5][0].get_time_str(), "07:00")
+        self.assertEqual(editor.get_hours()[5], ("07:00", "07:00"))
+
+    def test_start_to_start_is_read_by_generator_as_24h_from_that_hour(self):
+        from logic.generator.opening_hours_coverage import parse_open_hours
+
+        self.assertEqual(parse_open_hours(("07:00", "07:00")), (True, 7 * 60, 31 * 60))
 
     def test_set_hours_with_full_day_sentinel_preselects_fullday_checkbox(self):
         editor = WeeklyHoursEditor({5: ("00:00", "23:45")})

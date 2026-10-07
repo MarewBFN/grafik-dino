@@ -32,6 +32,13 @@ class ValidateTests(unittest.TestCase):
         emp = Employee(last_name="Kowalski", first_name="Jan")
         emp.validate()  # nie powinno rzucić
 
+    def test_negative_vacation_days_left_is_valid(self):
+        # Automatyczne odejmowanie zaznaczonego urlopu
+        # (logic/leave_requests.py) może zejść poniżej zera - to informacja
+        # dla użytkownika, nie błąd danych.
+        emp = Employee(last_name="Kowalski", first_name="Jan", vacation_days_left=-1.5)
+        emp.validate()  # nie powinno rzucić
+
 
 class DisplayNameTests(unittest.TestCase):
     def test_both_names_present(self):

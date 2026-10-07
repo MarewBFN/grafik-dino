@@ -11,6 +11,8 @@ from io import BytesIO
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -38,9 +40,15 @@ class ExportPreviewDialog(QDialog):
     """Podgląd read-only jednej lub więcej "stron" (lista PIL Image) z
     przyciskami Eksportuj/Anuluj - `exec()` zwraca `QDialog.Accepted`
     tylko po kliknięciu Eksportuj. Więcej niż jedna strona (karty pracy
-    dla kilku pracowników) dostaje nawigację Poprzednia/Następna."""
+    dla kilku pracowników) dostaje nawigację Poprzednia/Następna.
 
-    def __init__(self, pages, title="Podgląd przed eksportem", parent=None):
+    Opcjonalnie `employees` + `render_pages` (callable: lista pracowników ->
+    obraz albo lista obrazów) włączają przełącznik "Jeden pracownik": ten
+    sam grafik przerysowany tylko dla wybranej osoby. `pages` po
+    zatwierdzeniu to zawsze to, co było widoczne w podglądzie."""
+
+    def __init__(self, pages, title="Podgląd przed eksportem", parent=None,
+                 employees=None, render_pages=None):
         super().__init__(parent)
         if not pages:
             raise ValueError("ExportPreviewDialog wymaga co najmniej jednej strony")
@@ -53,7 +61,24 @@ class ExportPreviewDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        if len(pages) > 1:
+        self._employees = list(employees or [])
+        self._render_pages_fn = render_pages
+        self._all_pages = pages
+        if self._render_pages_fn is not None and self._employees:
+            scope = QHBoxLayout()
+            self.single_check = QCheckBox("Jeden pracownik")
+            self.single_check.toggled.connect(self._on_scope_changed)
+            scope.addWidget(self.single_check)
+            self.employee_combo = QComboBox()
+            for emp in self._employees:
+                self.employee_combo.addItem(emp.display_name())
+            self.employee_combo.setEnabled(False)
+            self.employee_combo.currentIndexChanged.connect(self._on_scope_changed)
+            scope.addWidget(self.employee_combo, 1)
+            layout.addLayout(scope)
+
+        self._has_nav = len(pages) > 1
+        if self._has_nav:
             nav = QHBoxLayout()
             self.prev_btn = QPushButton("‹ Poprzednia")
             self.prev_btn.clicked.connect(self._show_prev)
@@ -89,10 +114,26 @@ class ExportPreviewDialog(QDialog):
             pixmap = pixmap.scaledToWidth(_PREVIEW_MAX_WIDTH, Qt.SmoothTransformation)
         self.image_label.setPixmap(pixmap)
 
-        if len(self._pages) > 1:
+        if self._has_nav:
             self.page_label.setText(f"Strona {self._index + 1} / {len(self._pages)}")
             self.prev_btn.setEnabled(self._index > 0)
             self.next_btn.setEnabled(self._index < len(self._pages) - 1)
+
+    @property
+    def pages(self):
+        return self._pages
+
+    def _on_scope_changed(self, *_):
+        single = self.single_check.isChecked()
+        self.employee_combo.setEnabled(single)
+        if single:
+            emp = self._employees[self.employee_combo.currentIndex()]
+            pages = self._render_pages_fn([emp])
+            self._pages = pages if isinstance(pages, list) else [pages]
+        else:
+            self._pages = self._all_pages
+        self._index = 0
+        self._render_page()
 
     def _show_prev(self):
         if self._index > 0:
@@ -113,3 +154,19 @@ def show_export_preview(pages, title="Podgląd przed eksportem", parent=None) ->
         pages = [pages]
     dialog = ExportPreviewDialog(pages, title=title, parent=parent)
     return dialog.exec() == QDialog.Accepted
+
+
+def show_schedule_export_preview(employees, render_pages, title="Podgląd przed eksportem", parent=None):
+    """Podgląd całego grafiku z opcją "Jeden pracownik" (patrz
+    ExportPreviewDialog). `render_pages(employees)` zwraca obraz PIL albo
+    listę obrazów. Zwraca listę stron do zapisania albo None przy
+    Anuluj/zamknięciu okna."""
+    pages = render_pages(employees)
+    if not isinstance(pages, list):
+        pages = [pages]
+    dialog = ExportPreviewDialog(
+        pages, title=title, parent=parent, employees=employees, render_pages=render_pages,
+    )
+    if dialog.exec() != QDialog.Accepted:
+        return None
+    return dialog.pages

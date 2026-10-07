@@ -165,6 +165,35 @@ def test_locations_dialog_accepts_a_shift_crossing_midnight():
     assert saved.open_hours[0] == ("15:00", "07:00")
 
 
+def test_saving_hours_tab_accepts_a_24h_day_with_its_own_start():
+    """Zgłoszenie 2026-09-30: "24h" z samym startem doby, np. 07:00 =
+    07:00-07:00 - start == koniec wolno wtedy zapisać."""
+    shop = ShopConfig(2026, 8)
+    loc = LocationConfig(key="site1", name="Site 1")
+    shop.locations["site1"] = loc
+
+    dialog = ConfigDialog(None, shop, location_key="site1")
+    dialog.hours_editor._fullday_checks[5].setChecked(True)
+    dialog.hours_editor._edits[5][0].set_time_str("07:00")
+
+    dialog._save()
+
+    assert loc.open_hours[5] == ("07:00", "07:00")
+
+
+def test_locations_dialog_accepts_a_24h_day_with_its_own_start():
+    shop = ShopConfig(2026, 8)
+    dialog = LocationsDialog(None, shop)
+    row = dialog._location_rows[0]
+    row.hours_editor._fullday_checks[6].setChecked(True)
+    row.hours_editor._edits[6][0].set_time_str("07:00")
+
+    dialog._save()
+
+    saved = next(iter(shop.locations.values()))
+    assert saved.open_hours[6] == ("07:00", "07:00")
+
+
 def test_no_location_key_falls_back_to_project_wide_hours():
     """Back-compat for callers that don't pass location_key (e.g. old tests)."""
     shop = ShopConfig(2026, 8)

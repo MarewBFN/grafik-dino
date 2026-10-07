@@ -34,6 +34,13 @@ installer są gotowe.
 `releases/dino.json` tego problemu nie ma - wydania Dino i tak robi się
 bezpośrednio na `main`.
 
+## Licencja online przed buildem
+
+`licensing/online.py` musi mieć wpisane `LICENSE_SERVER_URL` i
+`LICENSE_PUBLIC_KEY` (patrz `license_server/README.md`). Puste wartości
+dają build bez sprawdzania online, w którym działa tylko stary klucz
+produktu. Licencja online działa w obu kanałach (Dino i Enyo, wspólny serwer).
+
 ## Wydanie Dino (na `main`)
 
 1. Upewnij się, że jesteś na `main` i working tree jest czyste (`git
