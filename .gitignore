@@ -24,3 +24,5 @@ license_status.json
 Cloudflare klucze.txt
 license_server/node_modules/
 license_server/.dev.vars
+user_id.json
+license_server/.wrangler/
