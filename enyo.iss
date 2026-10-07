@@ -6,7 +6,7 @@
 ; Non-commercial use only
 
 #define MyAppName "Enyo - Grafik Pracy"
-#define MyAppVersion "1.1.4.enyo"
+#define MyAppVersion "1.1.5.enyo"
 #define MyAppPublisher "Kewin Madej"
 #define MyAppURL "https://www.madebykewin.pl"
 #define MyAppExeName "Enyo - Grafik Pracy.exe"
@@ -41,7 +41,7 @@ RestartApplications=yes
 PrivilegesRequired=lowest
 OutputBaseFilename=EnyoSetup
 OutputDir=Output
-SetupIconFile=C:\Users\kewi1\Desktop\madebykewin\Grafik dino V2\dingo_icon.ico
+SetupIconFile=C:\Users\kewi1\Desktop\madebykewin\Grafik dino V2\enyo_icon.ico
 SolidCompression=yes
 ; Polityka prywatności pokazywana przed instalacją (strona informacyjna, bez
 ; akceptowania) i instalowana do {app} - patrz [Files] oraz menu Pomoc ->
