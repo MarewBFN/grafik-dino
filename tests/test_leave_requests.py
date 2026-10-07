@@ -525,6 +525,42 @@ class MainWindowIntegrationTests(unittest.TestCase):
 
         self.assertEqual(pending_leave_requests_count(window.schedule, window.shop_config), 0)
 
+    def _two_month_window(self):
+        window = self._window()
+        window.schedule.add_employee(Employee(last_name="Kowalski", first_name="Jan", vacation_days_left=10))
+        window._sync_everything()
+        first = (window.year, window.month)
+        second = (window.year + 1, window.month)
+        window._switch_to_month(*second)
+        return window, first, second
+
+    def _mark_leave(self, window):
+        window._ctx_leave(window.schedule.employees[0], self._working_day(window.schedule))
+        return leave_day_value(window.schedule.employees[0], window.shop_config)
+
+    def test_balance_is_shared_between_months(self):
+        window, first, second = self._two_month_window()
+        used_second = self._mark_leave(window)
+
+        window._switch_to_month(*first)
+        self.assertEqual(window.schedule.employees[0].vacation_days_left, 10 - used_second)
+
+        used_first = self._mark_leave(window)
+        expected = 10 - used_second - used_first
+        self.assertEqual(window.schedule.employees[0].vacation_days_left, expected)
+
+        window._switch_to_month(*second)
+        self.assertEqual(window.schedule.employees[0].vacation_days_left, expected)
+
+    def test_undo_restores_balance_in_other_months(self):
+        window, first, _second = self._two_month_window()
+        self._mark_leave(window)
+
+        window._undo()
+        window._switch_to_month(*first)
+
+        self.assertEqual(window.schedule.employees[0].vacation_days_left, 10)
+
 
 if __name__ == "__main__":
     unittest.main()

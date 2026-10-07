@@ -41,6 +41,7 @@ from logic.leave_requests import (
     generate_button_text,
     mark_leave_requests_printed,
     pending_requests_text,
+    share_vacation_balances,
     sync_vacation_balances,
 )
 from logic.schedule_controller import ScheduleController
@@ -1247,6 +1248,7 @@ class MainWindow(QMainWindow):
             return
 
         changes = sync_vacation_balances(self.schedule, self.shop_config)
+        share_vacation_balances(self.project, self.schedule)
         if changes:
             message = ", ".join(
                 f"{emp.display_name()} {'+' if delta > 0 else '−'}{format_days(abs(delta))} "
@@ -1352,6 +1354,10 @@ class MainWindow(QMainWindow):
         # czasu ostatniego project.put() (te same referencje, więc to tylko
         # zabezpieczenie, nie właściwa kopia).
         self.project.put(self.year, self.month, self.schedule, self.shop_config)
+        # Pula urlopu z miesiąca, który użytkownik właśnie oglądał, wygrywa -
+        # wyrównuje też projekty zapisane, zanim pula była wspólna dla
+        # wszystkich miesięcy (logic/leave_requests.py::share_vacation_balances).
+        share_vacation_balances(self.project, self.schedule)
 
         existing = self.project.get(new_year, new_month)
         if existing is not None:

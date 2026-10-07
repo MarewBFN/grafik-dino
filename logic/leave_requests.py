@@ -76,6 +76,25 @@ def sync_vacation_balances(schedule, shop) -> list[tuple]:
     return changes
 
 
+def share_vacation_balances(project, schedule) -> None:
+    """Pula urlopu jest jedna na pracownika, a każdy miesiąc projektu
+    (model/monthly_project.py) trzyma własne kopie pracowników - przepisuje
+    Employee.vacation_days_left z `schedule` do tych samych pracowników we
+    wszystkich pozostałych miesiącach. Bez tego urlop zaznaczony w jednym
+    miesiącu nie zmniejszał puli widocznej w innym, a po powrocie do
+    tamtego miesiąca kolejny urlop odejmował się od nieaktualnej puli."""
+    balances = {employee: employee.vacation_days_left for employee in schedule.employees}
+    for key, (other, _shop) in project.months.items():
+        # Po klucz miesiąca, nie po tożsamości - po cofnij/ponów
+        # self.schedule jest nowym obiektem, a kontener trzyma jeszcze stary.
+        if key == (schedule.year, schedule.month):
+            continue
+        for employee in list(other.employees):
+            balance = balances.get(employee)
+            if balance is not None and employee.vacation_days_left != balance:
+                other.set_employee_vacation_days(employee, balance)
+
+
 @dataclass(frozen=True)
 class LeaveRequest:
     """Jeden wniosek urlopowy - ciągły okres urlopu jednego pracownika."""
