@@ -391,7 +391,7 @@ class PersistenceTests(unittest.TestCase):
 
         self.assertEqual(emp.vacation_days_left, 19)
         self.assertEqual(loaded.leave_days_charged[emp], 1)
-        self.assertEqual(loaded.printed_leave_requests[emp], {(5, 5)})
+        self.assertEqual(loaded.printed_leave_requests[emp], {(5, 5, 1)})
         self.assertEqual(sync_vacation_balances(loaded, shop), [])
 
     def test_rename_keeps_printed_requests(self):
@@ -403,6 +403,53 @@ class PersistenceTests(unittest.TestCase):
         schedule.replace_employee(_employee(schedule), renamed)
 
         self.assertEqual(pending_leave_requests_count(schedule, shop), 0)
+
+
+class PrintedChangeTests(unittest.TestCase):
+    def test_full_to_half_in_printed_period_is_pending_again(self):
+        schedule, shop = _setup()
+        _set_leave(schedule, 5, 6)
+        mark_leave_requests_printed(schedule, build_leave_requests(schedule, shop))
+
+        schedule.get_day(_employee(schedule), 6).set_leave(half=True)
+
+        requests = build_leave_requests(schedule, shop)
+        self.assertEqual([(r.days, r.printed) for r in requests], [(1.5, False)])
+
+    def test_back_to_printed_days_is_printed_again(self):
+        schedule, shop = _setup()
+        _set_leave(schedule, 5, 6)
+        mark_leave_requests_printed(schedule, build_leave_requests(schedule, shop))
+        schedule.get_day(_employee(schedule), 6).set_leave(half=True)
+
+        _set_leave(schedule, 6)
+
+        self.assertEqual(pending_leave_requests_count(schedule, shop), 0)
+
+    def test_printed_key_with_half_days_round_trips(self):
+        schedule, shop = _setup()
+        _set_leave(schedule, 5)
+        schedule.get_day(_employee(schedule), 6).set_leave(half=True)
+        mark_leave_requests_printed(schedule, build_leave_requests(schedule, shop))
+
+        loaded = MonthSchedule.from_dict(schedule.to_dict())
+
+        self.assertEqual(pending_leave_requests_count(loaded, shop), 0)
+        loaded.get_day(loaded.employees[0], 6).set_leave()
+        self.assertEqual(pending_leave_requests_count(loaded, shop), 1)
+
+    def test_legacy_pair_still_counts_as_printed(self):
+        schedule, shop = _setup()
+        _set_leave(schedule, 5, 6)
+        data = schedule.to_dict()
+        data["employees"][0]["printed_leave_requests"] = [[5, 6]]
+
+        loaded = MonthSchedule.from_dict(data)
+        self.assertEqual(pending_leave_requests_count(loaded, shop), 0)
+
+        mark_leave_requests_printed(loaded, build_leave_requests(loaded, shop))
+        loaded.get_day(loaded.employees[0], 6).set_leave(half=True)
+        self.assertEqual(pending_leave_requests_count(loaded, shop), 1)
 
 
 class TextTests(unittest.TestCase):

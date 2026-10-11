@@ -39,6 +39,14 @@ class PreviousMonthShiftEnd:
     crosses_midnight: bool
 
 
+def _printed_key(entry) -> tuple:
+    """[start, koniec, dni] z pliku projektu -> klucz printed_leave_requests;
+    [start, koniec] (zapis sprzed liczby dni) zostaje parą."""
+    if len(entry) >= 3:
+        return int(entry[0]), int(entry[1]), float(entry[2])
+    return int(entry[0]), int(entry[1])
+
+
 class MonthSchedule:
     def __init__(self, year: int, month: int, employees=None):
         self.year = year
@@ -66,11 +74,14 @@ class MonthSchedule:
         #   następnej synchronizacji (sync_vacation_balances). Brak wpisu =
         #   jeszcze nie liczone (np. projekt sprzed tej funkcji) - pierwsza
         #   synchronizacja przyjmuje wtedy bieżący urlop za już rozliczony.
-        # - printed_leave_requests: zakresy dni (start, koniec) wniosków już
+        # - printed_leave_requests: (start, koniec, liczba dni) wniosków już
         #   zapisanych do PDF - okno "Wnioski urlopowe" domyślnie ich nie
-        #   zaznacza, a pasek pod grafikiem ich nie liczy.
+        #   zaznacza, a pasek pod grafikiem ich nie liczy. Zmiana liczby dni
+        #   w tym samym okresie (np. urlop -> 0,5 urlopu) = nowy wniosek.
+        #   Wpisy (start, koniec) bez liczby dni pochodzą z projektów sprzed
+        #   tej zmiany (LeaveRequest.is_printed_in).
         self.leave_days_charged: Dict[Employee, float] = {}
-        self.printed_leave_requests: Dict[Employee, set[tuple[int, int]]] = {}
+        self.printed_leave_requests: Dict[Employee, set[tuple]] = {}
 
         if employees:
             for emp in employees:
@@ -329,7 +340,7 @@ class MonthSchedule:
                     "vacation_days_left": e.vacation_days_left,
                     "leave_days_charged": self.leave_days_charged.get(e),
                     "printed_leave_requests": sorted(
-                        [start, end] for start, end in self.printed_leave_requests.get(e, ())
+                        list(key) for key in self.printed_leave_requests.get(e, ())
                     ),
                     **e.personal_data(),
                     "settlement_target_minutes": self.settlement_targets.get(e),
@@ -399,7 +410,7 @@ class MonthSchedule:
                 sched.leave_days_charged[emp] = charged
             printed = ed.get("printed_leave_requests") or []
             if printed:
-                sched.printed_leave_requests[emp] = {(int(start), int(end)) for start, end in printed}
+                sched.printed_leave_requests[emp] = {_printed_key(entry) for entry in printed}
 
             prev_end = ed.get("previous_month_shift_end")
             if prev_end is not None:

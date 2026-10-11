@@ -16,7 +16,7 @@ zaokrąglone do 0,5 dnia, minimum 0,5 dnia. Pół dnia urlopu
 wymiaru, liczoną tak samo (8h -> 0,5 dnia, 24h -> 1,5 dnia)."""
 
 import calendar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 from logic.utils.holidays_pl import polish_public_holiday_days
@@ -124,8 +124,16 @@ class LeaveRequest:
         return date(self.year, self.month, self.end_day)
 
     @property
-    def key(self) -> tuple[int, int]:
-        return self.start_day, self.end_day
+    def key(self) -> tuple[int, int, float]:
+        """Zakres dni i liczba przydzielanych dni - zmiana samej liczby dni
+        (np. urlop -> 0,5 urlopu w tym samym okresie) daje nowy wniosek,
+        oczekujący na wydruk."""
+        return self.start_day, self.end_day, self.days
+
+    def is_printed_in(self, printed) -> bool:
+        # (start, koniec) bez liczby dni - zapis sprzed tej zmiany; taki
+        # wniosek dalej uznajemy za zapisany, bez względu na liczbę dni.
+        return self.key in printed or (self.start_day, self.end_day) in printed
 
 
 def _leave_periods(schedule, employee) -> list[tuple[int, int]]:
@@ -161,15 +169,16 @@ def build_leave_requests(schedule, shop, location_key: str | None = None) -> lis
                 if schedule.get_day(employee, day).is_leave
                 and is_leave_working_day(schedule.year, schedule.month, day)
             )
-            requests.append(LeaveRequest(
+            request = LeaveRequest(
                 employee=employee,
                 year=schedule.year,
                 month=schedule.month,
                 start_day=start,
                 end_day=end,
                 days=days,
-                printed=(start, end) in printed,
-            ))
+                printed=False,
+            )
+            requests.append(replace(request, printed=request.is_printed_in(printed)))
     return requests
 
 
@@ -179,7 +188,11 @@ def pending_leave_requests_count(schedule, shop, location_key: str | None = None
 
 def mark_leave_requests_printed(schedule, requests) -> None:
     for request in requests:
-        schedule.printed_leave_requests.setdefault(request.employee, set()).add(request.key)
+        printed = schedule.printed_leave_requests.setdefault(request.employee, set())
+        # Para bez liczby dni (stary zapis) pasowałaby do każdej liczby dni -
+        # po ponownym zapisie zostaje już tylko pełny klucz.
+        printed.discard((request.start_day, request.end_day))
+        printed.add(request.key)
 
 
 def format_days(days: float) -> str:
