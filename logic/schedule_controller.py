@@ -174,6 +174,7 @@ class ScheduleController:
             "start": ds.start,
             "end": ds.end,
             "is_leave": ds.is_leave,
+            "is_half_leave": ds.is_leave and ds.is_half_leave,
             "is_sick": getattr(ds, "is_sick", False),
             "is_full_day": getattr(ds, "is_full_day", False),
             "shift_class": ds.shift_class,
@@ -186,7 +187,7 @@ class ScheduleController:
         więc każdy typ dnia dostaje dokładnie taką walidację, jaką miałby
         wpisany ręcznie."""
         if snapshot.get("is_leave"):
-            self.set_day_leave(emp, day)
+            self.set_day_leave(emp, day, half=bool(snapshot.get("is_half_leave")))
         elif snapshot.get("is_sick"):
             self.set_day_sick(emp, day)
         elif snapshot.get("shift_class"):
@@ -209,14 +210,17 @@ class ScheduleController:
         ds.is_locked = True
         ds.shift_class = None
 
-    def set_day_leave(self, emp, day):
+    def set_day_leave(self, emp, day, half=False):
+        """`half` - pół dnia urlopu ("0,5 urlopu"): dzień zablokowany dla
+        generatora jak zwykły urlop, ale do puli urlopu i nominału godzin
+        liczy się połowa (DaySchedule.leave_fraction())."""
         ds = self.schedule.get_day(emp, day)
 
-        if ds.is_leave:
+        if ds.is_leave and ds.is_half_leave == half:
             return
 
         self.snapshot()
-        ds.set_leave()
+        ds.set_leave(half=half)
         ds.is_locked = True
         ds.shift_class = None
 
@@ -296,7 +300,7 @@ class ScheduleController:
                 return
 
         elif shift_type == "LEAVE":
-            if ds.is_leave:
+            if ds.is_leave and not ds.is_half_leave:
                 return
 
         elif shift_type == "WORK":
@@ -310,12 +314,14 @@ class ScheduleController:
             ds.start = None
             ds.end = None
             ds.is_leave = False
+            ds.is_half_leave = False
             ds.is_sick = False
 
         elif shift_type == "LEAVE":
             ds.start = None
             ds.end = None
             ds.is_leave = True
+            ds.is_half_leave = False
             ds.is_sick = False
 
         elif shift_type == "WORK":
@@ -343,6 +349,7 @@ class ScheduleController:
                     ds.start, ds.end = hours
 
             ds.is_leave = False
+            ds.is_half_leave = False
             ds.is_sick = False
 
         ds.is_locked = True

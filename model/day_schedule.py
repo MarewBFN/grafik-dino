@@ -46,6 +46,19 @@ class DaySchedule:
     # poprawne.
     is_full_day: bool = False
 
+    # Pół dnia urlopu ("0,5 urlopu" - tryb szybki, okno dnia, menu
+    # kontekstowe). Ma znaczenie tylko razem z is_leave=True: dzień jest
+    # zablokowany dla generatora dokładnie jak zwykły urlop, ale do puli
+    # urlopu i do nominału godzin liczy się połowa dnia (leave_fraction()).
+    is_half_leave: bool = False
+
+
+    def leave_fraction(self) -> float:
+        """Ile dnia urlopu to jest: 1 (urlop), 0,5 (pół dnia urlopu), 0 (nie
+        urlop) - mnożnik godzin urlopu w nominale i dni zużytych z puli."""
+        if not self.is_leave:
+            return 0.0
+        return 0.5 if self.is_half_leave else 1.0
 
     def is_empty(self) -> bool:
         """Czy dzień jest pusty (wolne)."""
@@ -68,6 +81,7 @@ class DaySchedule:
         self.start = None
         self.end = None
         self.is_leave = False
+        self.is_half_leave = False
         self.is_locked = False
         self.is_sick = False
         self.is_day_off = False
@@ -79,15 +93,17 @@ class DaySchedule:
         self.start = None
         self.end = None
         self.is_leave = False
+        self.is_half_leave = False
         self.is_sick = False
         self.is_day_off = True
         self.is_full_day = False
 
-    def set_leave(self) -> None:
-        """Ustawia dzień jako urlop."""
+    def set_leave(self, half: bool = False) -> None:
+        """Ustawia dzień jako urlop (`half` - pół dnia urlopu)."""
         self.start = None
         self.end = None
         self.is_leave = True
+        self.is_half_leave = half
         self.is_sick = False
         self.is_day_off = False
         self.is_full_day = False
@@ -111,6 +127,7 @@ class DaySchedule:
         self.start = start
         self.end = end
         self.is_leave = False
+        self.is_half_leave = False
         self.is_sick = False
         self.is_day_off = False
         self.is_full_day = False
@@ -123,6 +140,7 @@ class DaySchedule:
         self.start = start
         self.end = start
         self.is_leave = False
+        self.is_half_leave = False
         self.is_sick = False
         self.is_day_off = False
         self.is_full_day = True
@@ -183,7 +201,7 @@ class DaySchedule:
             return self.shift_class, "", ""
 
         if self.is_leave:
-            return "🌴", "", ""
+            return ("🌴½" if self.is_half_leave else "🌴"), "", ""
 
         if self.is_sick:
             return "🤒", "", ""
@@ -201,6 +219,7 @@ class DaySchedule:
         self.start = None
         self.end = None
         self.is_leave = False
+        self.is_half_leave = False
         self.is_sick = True
         self.is_day_off = False
         self.is_full_day = False
@@ -213,6 +232,7 @@ class DaySchedule:
         self.start = None
         self.end = None
         self.is_leave = False
+        self.is_half_leave = False
         self.is_sick = False
         self.is_day_off = False
         self.is_full_day = False
@@ -223,7 +243,8 @@ class DaySchedule:
         if self.is_leave or self.is_sick:
             if employee and shop:
                 from logic.generator.rest_constraint import get_effective_daily_hours
-                return int(get_effective_daily_hours(employee, shop) * 60)
+                share = self.leave_fraction() if self.is_leave else 1.0
+                return int(get_effective_daily_hours(employee, shop) * share * 60)
             return 0
 
         duration = self.total_duration()

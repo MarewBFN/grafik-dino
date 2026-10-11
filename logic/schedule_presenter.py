@@ -23,11 +23,11 @@ class SchedulePresenter:
 
         if ds.is_leave:
             return CellView(
-                text_start="🌴",
+                text_start="🌴½" if ds.is_half_leave else "🌴",
                 text_end="",
                 text_total="",
                 bg=theme.OK_GREEN,
-                tooltip="Urlop",
+                tooltip="Pół dnia urlopu (0,5)" if ds.is_half_leave else "Urlop",
             )
 
         # Nieczynne = brak handlowej niedzieli/święta ALBO dzień jawnie

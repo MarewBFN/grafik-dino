@@ -171,7 +171,7 @@ ręczny wpis zawsze wygrywa.
 ## Ręczne wpisy i tryb szybki
 
 **Edycja dnia** (dwuklik na komórce): godziny od–do, „Cała doba (24h)”,
-Wolne, Urlop, Chorobowe. W placówkach 24/7 i w placówkach Ochrony z
+Wolne, Urlop, 0,5 urlopu, Chorobowe. W placówkach 24/7 i w placówkach Ochrony z
 godzinami otwarcia wolno wpisać zmianę przez północ (np. 15:00–07:00) i
 24 h; w pozostałych — zmianę w obrębie doby albo nockę 22:00–06:00.
 
@@ -183,6 +183,7 @@ godzinami otwarcia wolno wpisać zmianę przez północ (np. 15:00–07:00) i
 | Rano / Popo (`1`/`2`, Dino) | zablokowany typ zmiany — godzinę dobiera generator |
 | Wolne | dzień zablokowany jako wolny |
 | Urlop / L4 | nieobecność (obniża normę godzin) |
+| 0,5 urlopu | dzień zablokowany jak urlop; do puli urlopu i normy godzin liczy się pół dnia |
 | Usuń | komórka wraca do stanu „nietkniętego” |
 | Własne przedziały | przyciski z „Ustawień trybu szybkiego” (nazwa, start, koniec, 24h, widoczność) |
 

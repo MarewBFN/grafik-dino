@@ -208,6 +208,16 @@ STANDARD_QUICK_BUTTONS: tuple[dict, ...] = (
         "default_visible": lambda business_type: True,
     },
     {
+        "key": "half_leave",
+        "label": "0,5 urlopu",
+        "description": (
+            "Oznacza dzień jako pół dnia urlopu - generator traktuje go jak "
+            "zablokowany (bez zmiany), a do puli urlopu i nominału godzin "
+            "liczy się połowa dnia."
+        ),
+        "default_visible": lambda business_type: True,
+    },
+    {
         "key": "sick",
         "label": "L4",
         "description": "Oznacza dzień jako zwolnienie chorobowe.",

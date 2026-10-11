@@ -183,7 +183,7 @@ def _day_rows(schedule, employee):
 
         ds = schedule.get_day(employee, day)
         if ds.is_leave:
-            rows.append((day_label, "Urlop", "", "", "", ""))
+            rows.append((day_label, "Urlop 0,5" if ds.is_half_leave else "Urlop", "", "", "", ""))
             continue
         if getattr(ds, "is_sick", False):
             rows.append((day_label, "L4", "", "", "", ""))

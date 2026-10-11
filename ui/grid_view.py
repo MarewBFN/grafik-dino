@@ -55,9 +55,10 @@ _STANDARD_BUTTON_SHIFT_TYPE = {
     "delete": "DELETE",
     "off": "OFF",
     "leave": "LEAVE",
+    "half_leave": "HALF_LEAVE",
     "sick": "SICK",
 }
-_STANDARD_BUTTON_MENU_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "sick")
+_STANDARD_BUTTON_MENU_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "half_leave", "sick")
 
 
 def _quick_mode_context_menu_entries(shop):
@@ -1114,9 +1115,9 @@ class ScheduleGrid(QTableWidget):
                 continue
 
             if ds.is_leave:
-                item.setText("🌴")
+                item.setText("🌴½" if ds.is_half_leave else "🌴")
                 item.setBackground(QBrush(QColor(theme.OK_GREEN)))
-                item.setToolTip("Urlop")
+                item.setToolTip("Pół dnia urlopu (0,5)" if ds.is_half_leave else "Urlop")
                 self.setItem(row, day + self._prev_col_offset, item)
                 continue
 
@@ -1701,6 +1702,11 @@ class ScheduleGrid(QTableWidget):
             self.refresh()
             return
 
+        elif shift == "HALF_LEAVE":
+            self.controller.set_day_leave(emp, day, half=True)
+            self.refresh()
+            return
+
         elif isinstance(shift, str) and shift.startswith("PRESET:"):
             preset_name = shift.split(":", 1)[1]
             presets = self.main_window.shop_config.quick_mode_presets
@@ -1737,6 +1743,7 @@ class ScheduleGrid(QTableWidget):
             ds.start = None
             ds.end = None
             ds.is_leave = False
+            ds.is_half_leave = False
             ds.is_sick = False
             ds.is_locked = True
             ds.shift_class = None
@@ -1749,7 +1756,7 @@ class ScheduleGrid(QTableWidget):
         current = (
             ds.start,
             ds.end,
-            ds.is_leave,
+            ds.is_leave and not ds.is_half_leave,
             getattr(ds, "is_sick", False)
         )
 
@@ -1804,6 +1811,7 @@ class ScheduleGrid(QTableWidget):
                 ds.start = None
                 ds.end = None
                 ds.is_leave = False
+                ds.is_half_leave = False
                 ds.is_sick = False
                 ds.is_locked = False
 

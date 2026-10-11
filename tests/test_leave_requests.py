@@ -181,6 +181,125 @@ class SyncVacationBalanceTests(unittest.TestCase):
         self.assertIs(next(iter(schedule.leave_days_charged)), emp)
 
 
+class HalfLeaveTests(unittest.TestCase):
+    def _half(self, schedule, *days):
+        for day in days:
+            schedule.get_day(_employee(schedule), day).set_leave(half=True)
+
+    def test_half_leave_subtracts_half_day(self):
+        schedule, shop = _setup()
+        self._half(schedule, 5)
+
+        sync_vacation_balances(schedule, shop)
+
+        self.assertEqual(_employee(schedule).vacation_days_left, 19.5)
+
+    def test_full_then_half_gives_half_back(self):
+        schedule, shop = _setup()
+        _set_leave(schedule, 5)
+        sync_vacation_balances(schedule, shop)
+
+        self._half(schedule, 5)
+        sync_vacation_balances(schedule, shop)
+
+        self.assertEqual(_employee(schedule).vacation_days_left, 19.5)
+
+    def test_half_leave_of_24h_service_is_one_and_half_day(self):
+        schedule, shop = _setup()
+        shop.standard_daily_hours = 24.0
+        self._half(schedule, 5)
+
+        self.assertEqual(leave_days_used(schedule, shop, _employee(schedule)), 1.5)
+
+    def test_half_leave_minimum_is_half_day(self):
+        schedule, shop = _setup(employment_fraction=0.5)
+        self._half(schedule, 5)
+
+        self.assertEqual(leave_days_used(schedule, shop, _employee(schedule)), 0.5)
+
+    def test_half_leave_on_weekend_is_free(self):
+        schedule, shop = _setup()
+        self._half(schedule, 3)
+
+        self.assertEqual(leave_days_used(schedule, shop, _employee(schedule)), 0)
+
+    def test_request_counts_half_days(self):
+        schedule, shop = _setup()
+        _set_leave(schedule, 5, 6)
+        self._half(schedule, 7)
+
+        requests = build_leave_requests(schedule, shop)
+
+        self.assertEqual([(r.start_day, r.end_day, r.days) for r in requests], [(5, 7, 2.5)])
+
+    def test_half_leave_lowers_monthly_target_by_half_day(self):
+        from logic.monthly_hours_status import monthly_hours_status
+
+        schedule, shop = _setup()
+        emp = _employee(schedule)
+        base = monthly_hours_status(schedule, shop, emp)["target_minutes"]
+        self._half(schedule, 5)
+
+        self.assertEqual(monthly_hours_status(schedule, shop, emp)["target_minutes"], base - 4 * 60)
+
+    def test_half_leave_hours_in_summary(self):
+        schedule, _shop = _setup()
+        emp = _employee(schedule)
+        _set_leave(schedule, 5)
+        self._half(schedule, 6)
+
+        self.assertEqual(schedule.leave_hours_for_employee(emp), "12:00")
+
+    def test_round_trip(self):
+        schedule, _shop = _setup()
+        self._half(schedule, 5)
+        _set_leave(schedule, 6)
+
+        loaded = MonthSchedule.from_dict(schedule.to_dict())
+        emp = loaded.employees[0]
+
+        self.assertTrue(loaded.get_day(emp, 5).is_half_leave)
+        self.assertEqual(loaded.get_day(emp, 5).leave_fraction(), 0.5)
+        self.assertEqual(loaded.get_day(emp, 6).leave_fraction(), 1.0)
+
+    def test_other_states_clear_half_flag(self):
+        schedule, _shop = _setup()
+        ds = schedule.get_day(_employee(schedule), 5)
+        ds.set_leave(half=True)
+
+        ds.set_sick()
+
+        self.assertFalse(ds.is_half_leave)
+        self.assertEqual(ds.leave_fraction(), 0)
+
+    def test_controller_switches_between_full_and_half(self):
+        from logic.schedule_controller import ScheduleController
+
+        schedule, shop = _setup()
+        controller = ScheduleController(schedule, shop)
+        emp = _employee(schedule)
+
+        controller.set_day_leave(emp, 5, half=True)
+        self.assertTrue(schedule.get_day(emp, 5).is_half_leave)
+        self.assertTrue(schedule.get_day(emp, 5).is_locked)
+
+        controller.set_day_leave(emp, 5)
+        self.assertFalse(schedule.get_day(emp, 5).is_half_leave)
+        self.assertEqual(len(controller.history), 2)
+
+    def test_copy_paste_keeps_half(self):
+        from logic.schedule_controller import ScheduleController
+
+        schedule, shop = _setup()
+        controller = ScheduleController(schedule, shop)
+        emp = _employee(schedule)
+        controller.set_day_leave(emp, 5, half=True)
+
+        controller.paste_day_snapshot(emp, 6, controller.copy_day_snapshot(emp, 5))
+
+        self.assertTrue(schedule.get_day(emp, 6).is_half_leave)
+
+
 class BuildLeaveRequestsTests(unittest.TestCase):
     def test_consecutive_days_make_one_request(self):
         schedule, shop = _setup()
@@ -323,8 +442,28 @@ class ExporterTests(unittest.TestCase):
 
         self.assertEqual(
             leave_request_text(self._request()),
-            "Proszę o udzielenie urlopu wypoczynkowego od dnia 05.10.2026 do dnia 06.10.2026.",
+            "Proszę o udzielenie urlopu wypoczynkowego (2 dni) od dnia 05.10.2026 do dnia 06.10.2026.",
         )
+
+    def test_text_counts_half_leave(self):
+        from export.leave_request_exporter import leave_request_text
+
+        schedule, shop = _setup()
+        _set_leave(schedule, 5)
+        schedule.get_day(_employee(schedule), 6).set_leave(half=True)
+
+        self.assertEqual(
+            leave_request_text(build_leave_requests(schedule, shop)[0]),
+            "Proszę o udzielenie urlopu wypoczynkowego (1,5 dnia) od dnia 05.10.2026 do dnia 06.10.2026.",
+        )
+
+    def test_text_single_day(self):
+        from export.leave_request_exporter import leave_request_text
+
+        schedule, shop = _setup()
+        _set_leave(schedule, 5)
+
+        self.assertIn("(1 dzień)", leave_request_text(build_leave_requests(schedule, shop)[0]))
 
     def test_pdf_has_one_page_per_request(self):
         from export.leave_request_exporter import export_leave_requests_to_pdf
@@ -551,6 +690,36 @@ class MainWindowIntegrationTests(unittest.TestCase):
 
         window._switch_to_month(*second)
         self.assertEqual(window.schedule.employees[0].vacation_days_left, expected)
+
+    def test_half_leave_from_quick_mode_and_context_menu(self):
+        from ui.grid_view import _quick_mode_context_menu_entries
+
+        window = self._window()
+        window.schedule.add_employee(Employee(last_name="Kowalski", first_name="Jan", vacation_days_left=10))
+        window._sync_everything()
+        window.shop_config.constraints["force_fulltime_845"] = False
+
+        labels = [label for label, _shift in _quick_mode_context_menu_entries(window.shop_config)[0]]
+        self.assertIn("0,5 urlopu", labels)
+        self.assertTrue(window.btn_half_leave.isVisibleTo(window.quick_panel))
+
+        window._set_quick_shift("HALF_LEAVE")
+        self.assertTrue(window.btn_half_leave.isChecked())
+        day = self._working_day(window.schedule)
+        row = window.grid._visible_employees.index(window.schedule.employees[0])
+        col = next(c for c in range(window.grid.columnCount()) if window.grid._column_to_day(c) == day)
+        window.grid._apply_quick_shift(row, col)
+
+        emp = window.schedule.employees[0]
+        self.assertTrue(window.schedule.get_day(emp, day).is_half_leave)
+        self.assertEqual(emp.vacation_days_left, 9.5)
+
+    def test_half_leave_button_can_be_hidden(self):
+        window = self._window()
+        window.shop_config.quick_mode_standard_buttons["half_leave"] = False
+        window._update_quick_panel_profile_visibility()
+
+        self.assertFalse(window.btn_half_leave.isVisibleTo(window.quick_panel))
 
     def test_undo_restores_balance_in_other_months(self):
         window, first, _second = self._two_month_window()

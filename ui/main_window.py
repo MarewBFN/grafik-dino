@@ -638,6 +638,10 @@ class MainWindow(QMainWindow):
         self.btn_leave.setCheckable(True)
         self.btn_leave.clicked.connect(lambda: self._set_quick_shift("LEAVE"))
 
+        self.btn_half_leave = QPushButton("0,5 urlopu")
+        self.btn_half_leave.setCheckable(True)
+        self.btn_half_leave.clicked.connect(lambda: self._set_quick_shift("HALF_LEAVE"))
+
         self.btn_sick = QPushButton("L4")
         self.btn_sick.setCheckable(True)
         self.btn_sick.clicked.connect(lambda: self._set_quick_shift("SICK"))
@@ -654,6 +658,7 @@ class MainWindow(QMainWindow):
             "delete": self.btn_delete,
             "off": self.btn_off,
             "leave": self.btn_leave,
+            "half_leave": self.btn_half_leave,
             "sick": self.btn_sick,
         }
         self._quick_standard_button_shift_type = {
@@ -664,6 +669,7 @@ class MainWindow(QMainWindow):
             "delete": "DELETE",
             "off": "OFF",
             "leave": "LEAVE",
+            "half_leave": "HALF_LEAVE",
             "sick": "SICK",
         }
         # Opis zachowania - jedno źródło prawdy (STANDARD_QUICK_BUTTONS,
@@ -1162,7 +1168,7 @@ class MainWindow(QMainWindow):
     # ręcznie w osobnym panelu poniżej, w odróżnieniu od reszty - jeden
     # klik), więc widoczność w tym gridzie steruje tylko tym, czy w ogóle da
     # się ją włączyć w "Tryby domyślne"; do samego grida nie trafia.
-    _QUICK_BTN_GRID_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "sick")
+    _QUICK_BTN_GRID_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "half_leave", "sick")
 
     def _relayout_quick_btn_grid(self):
         """Przelicza pozycje przycisków trybu szybkiego tak, żeby te ukryte
@@ -1606,6 +1612,8 @@ class MainWindow(QMainWindow):
             self.controller.set_day_free(emp, day)
         elif dialog.result_mode == "leave":
             self.controller.set_day_leave(emp, day)
+        elif dialog.result_mode == "half_leave":
+            self.controller.set_day_leave(emp, day, half=True)
         elif dialog.result_mode == "sick":
             self.controller.set_day_sick(emp, day)
         elif dialog.result_mode == "full_day":
@@ -1670,6 +1678,7 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         menu.addAction("Ustaw wolne", lambda: self._ctx_free(emp, day))
         menu.addAction("Ustaw urlop", lambda: self._ctx_leave(emp, day))
+        menu.addAction("Ustaw 0,5 urlopu", lambda: self._ctx_half_leave(emp, day))
         menu.exec(global_pos)
 
     def _ctx_copy(self, emp, day):
@@ -1683,6 +1692,7 @@ class MainWindow(QMainWindow):
             "start": ds.start,
             "end": ds.end,
             "is_leave": ds.is_leave,
+            "is_half_leave": ds.is_leave and ds.is_half_leave,
         }
         self.grid.set_clipboard(self._clipboard_day)
         self.statusBar().showMessage("Skopiowano dzień.", 1800)
@@ -1693,7 +1703,7 @@ class MainWindow(QMainWindow):
             return
 
         if clip.get("is_leave"):
-            self.controller.set_day_leave(emp, day)
+            self.controller.set_day_leave(emp, day, half=bool(clip.get("is_half_leave")))
         else:
             self.controller.set_day_hours(emp, day, clip["start"], clip["end"])
 
@@ -1707,6 +1717,11 @@ class MainWindow(QMainWindow):
 
     def _ctx_leave(self, emp, day):
         self.controller.set_day_leave(emp, day)
+        self.schedule = self.controller.schedule
+        self._sync_everything()
+
+    def _ctx_half_leave(self, emp, day):
+        self.controller.set_day_leave(emp, day, half=True)
         self.schedule = self.controller.schedule
         self._sync_everything()
 
@@ -2249,6 +2264,7 @@ class MainWindow(QMainWindow):
                 ds.start = None
                 ds.end = None
                 ds.is_leave = False
+                ds.is_half_leave = False
                 ds.is_sick = False
                 ds.is_locked = False
 
@@ -2708,6 +2724,7 @@ class MainWindow(QMainWindow):
                 ds.start = None
                 ds.end = None
                 ds.is_leave = False
+                ds.is_half_leave = False
                 ds.is_sick = False
 
                 if hasattr(ds, "is_day_off"):

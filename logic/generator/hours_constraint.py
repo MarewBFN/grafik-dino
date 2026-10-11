@@ -70,7 +70,7 @@ def add_monthly_hours_constraint(
         for d in days:
             ds = schedule.get_day(emp, d)
             if ds.is_leave:
-                leave_days += 1
+                leave_days += ds.leave_fraction()
             if getattr(ds, "is_sick", False):
                 sick_days += 1
 
@@ -186,7 +186,7 @@ def add_balance_constraint(
         for d in days:
             ds = schedule.get_day(emp, d)
             if ds.is_leave:
-                leave_days += 1
+                leave_days += ds.leave_fraction()
             if getattr(ds, "is_sick", False):
                 sick_days += 1
 

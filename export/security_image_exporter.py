@@ -143,7 +143,7 @@ class SecurityScheduleImageExporter:
 
             if ds.is_leave:
                 self.draw.rectangle([x, y, x + self.CELL_W, y + 3 * self.CELL_H], outline=self.GRID)
-                self._draw_centered_text(x + self.CELL_W // 2, y + self.CELL_H, "URL", self.font_b)
+                self._draw_centered_text(x + self.CELL_W // 2, y + self.CELL_H, "0,5U" if ds.is_half_leave else "URL", self.font_b)
                 continue
 
             if getattr(ds, "is_sick", False):

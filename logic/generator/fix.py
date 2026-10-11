@@ -85,7 +85,7 @@ def setup_fix_hints_and_penalties(
         for d in days:
             ds = schedule.get_day(emp, d)
             if ds.is_leave:
-                leave_days += 1
+                leave_days += ds.leave_fraction()
             if getattr(ds, "is_sick", False):
                 sick_days += 1
 

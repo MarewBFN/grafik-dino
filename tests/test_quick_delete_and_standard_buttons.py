@@ -376,6 +376,7 @@ class TestQuickModeContextMenuEntries:
             "DELETE": lambda ds: ds.is_blank(),  # no-op on an already-blank day
             "OFF": lambda ds: ds.is_locked is True,
             "LEAVE": lambda ds: ds.is_leave is True,
+            "HALF_LEAVE": lambda ds: ds.is_leave is True and ds.is_half_leave is True,
             "SICK": lambda ds: getattr(ds, "is_sick", False) is True,
         }
 

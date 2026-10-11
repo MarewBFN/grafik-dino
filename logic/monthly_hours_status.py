@@ -23,7 +23,7 @@ def monthly_hours_status(schedule, shop, employee) -> dict:
     for day in range(1, schedule.days_in_month + 1):
         ds = schedule.get_day(employee, day)
         if ds.is_leave:
-            leave_days += 1
+            leave_days += ds.leave_fraction()
         if getattr(ds, "is_sick", False):
             sick_days += 1
 

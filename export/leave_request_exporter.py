@@ -11,7 +11,8 @@ Układ strony:
   ręcznie,
 - prawa strona, niżej: dane firmy pracownika (Plik -> "Dane firmy",
   Employee.company_key) - bez przypisanej firmy kropkowane linie,
-- treść wniosku z wcięciem na początku akapitu,
+- treść wniosku z wcięciem na początku akapitu (z liczbą przydzielanych
+  dni urlopu w nawiasie),
 - prawa strona, na dole: kropkowana linia na podpis z podpisem
   "podpis pracownika" pod spodem."""
 
@@ -19,6 +20,8 @@ from datetime import date
 
 from PySide6.QtCore import QMarginsF, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPageLayout, QPageSize, QPainter, QPdfWriter, QPen
+
+from logic.leave_requests import days_noun, format_days
 
 # Liczba kropkowanych linii zamiast danych firmy, gdy pracownik nie ma
 # przypisanej firmy (nazwa, adres, kod pocztowy i miejscowość).
@@ -40,8 +43,11 @@ def format_date(value: date) -> str:
 
 
 def leave_request_text(request) -> str:
+    """W nawiasie - ile dni urlopu faktycznie przydziela ten wniosek (bez
+    weekendów/świąt w okresie, z połówkami za "0,5 urlopu")."""
+    granted = f"{format_days(request.days)} {days_noun(request.days)}"
     return (
-        "Proszę o udzielenie urlopu wypoczynkowego od dnia "
+        f"Proszę o udzielenie urlopu wypoczynkowego ({granted}) od dnia "
         f"{format_date(request.start_date)} do dnia {format_date(request.end_date)}."
     )
 

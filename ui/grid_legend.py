@@ -27,7 +27,7 @@ LEGEND_ENTRIES = [
     ("solid", theme.SHIFT_CLOSE, "Zmiana zamykająca"),
     ("solid", theme.SHIFT_NIGHT, "Zmiana nocna (przez północ)"),
     ("solid", theme.BG_MAIN, "Zwykła zmiana"),
-    ("solid", theme.OK_GREEN, "Urlop"),
+    ("solid", theme.OK_GREEN, "Urlop (🌴½ - pół dnia)"),
     ("solid", "#FFA07A", "Chorobowe (L4)"),
     ("solid", theme.BG_DISABLED, "Lokalizacja nieczynna"),
     ("hatch", None, "Zablokowane (dzień wolny / typ zmiany)"),

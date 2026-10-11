@@ -199,6 +199,7 @@ class MonthSchedule:
                 total_minutes += int(
                     employee.daily_hours *
                     (1.0 if employee.employment_fraction >= 1.0 else employee.employment_fraction)
+                    * ds.leave_fraction()
                     * 60
                 )
         hours = total_minutes // 60
@@ -231,6 +232,7 @@ class MonthSchedule:
                 total_minutes += int(
                     employee.daily_hours *
                     (1.0 if employee.employment_fraction >= 1.0 else employee.employment_fraction)
+                    * ds.leave_fraction()
                     * 60
                 )
 
@@ -257,6 +259,7 @@ class MonthSchedule:
                 total_minutes += int(
                     employee.daily_hours *
                     (1.0 if employee.employment_fraction >= 1.0 else employee.employment_fraction)
+                    * ds.leave_fraction()
                     * 60
                 )
 
@@ -343,6 +346,7 @@ class MonthSchedule:
                             "start": ds.start,
                             "end": ds.end,
                             "is_leave": ds.is_leave,
+                            "is_half_leave": ds.is_half_leave,
                             "is_locked": ds.is_locked,
                             "is_sick": ds.is_sick,
                             "is_day_off": ds.is_day_off,
@@ -408,6 +412,7 @@ class MonthSchedule:
                 ds.start = None
                 ds.end = None
                 ds.is_leave = False
+                ds.is_half_leave = False
                 ds.is_full_day = False
 
             for day, dd in ed.get("days", {}).items():
@@ -415,6 +420,7 @@ class MonthSchedule:
                 ds.start = dd.get("start")
                 ds.end = dd.get("end")
                 ds.is_leave = dd.get("is_leave", False)
+                ds.is_half_leave = bool(ds.is_leave and dd.get("is_half_leave", False))
                 ds.is_sick = dd.get("is_sick", False)
                 ds.is_locked = dd.get("is_locked", False)
                 ds.is_day_off = dd.get("is_day_off", False)
@@ -472,6 +478,7 @@ class MonthSchedule:
                 ds.start = None
                 ds.end = None
                 ds.is_leave = False
+                ds.is_half_leave = False
                 ds.is_sick = False
                 ds.is_full_day = False
 

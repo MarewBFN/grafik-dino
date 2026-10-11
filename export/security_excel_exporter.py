@@ -103,7 +103,7 @@ def export_security_schedule_to_excel(schedule, year, month, path, shop=None, em
 
             if ds.is_leave:
                 ws.merge_cells(start_row=cur_row, start_column=col, end_row=cur_row + 2, end_column=col)
-                cells[0].value = "URL"
+                cells[0].value = "0,5U" if ds.is_half_leave else "URL"
                 cells[0].font = Font(bold=True)
             elif getattr(ds, "is_sick", False):
                 ws.merge_cells(start_row=cur_row, start_column=col, end_row=cur_row + 2, end_column=col)

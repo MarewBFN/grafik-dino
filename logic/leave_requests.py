@@ -11,7 +11,9 @@ nie zmniejsza puli i nie tworzy osobnego wniosku.
 
 Jeden dzień urlopu kosztuje tyle dni, ile wynosi dzienny wymiar pracownika
 podzielony przez 8h (8h -> 1 dzień, 4h -> 0,5 dnia, 24h -> 3 dni),
-zaokrąglone do 0,5 dnia, minimum 0,5 dnia."""
+zaokrąglone do 0,5 dnia, minimum 0,5 dnia. Pół dnia urlopu
+(DaySchedule.is_half_leave, "0,5 urlopu") kosztuje połowę tego dziennego
+wymiaru, liczoną tak samo (8h -> 0,5 dnia, 24h -> 1,5 dnia)."""
 
 import calendar
 from dataclasses import dataclass
@@ -24,11 +26,17 @@ HOURS_PER_LEAVE_DAY = 8
 MIN_LEAVE_DAY_VALUE = 0.5
 
 
-def leave_day_value(employee, shop) -> float:
-    """Ile dni urlopu zużywa jeden dzień urlopu tego pracownika."""
-    hours = get_effective_daily_hours(employee, shop)
+def leave_day_value(employee, shop, fraction: float = 1.0) -> float:
+    """Ile dni urlopu zużywa jeden dzień urlopu tego pracownika (`fraction`
+    0,5 - pół dnia urlopu, patrz DaySchedule.leave_fraction())."""
+    hours = get_effective_daily_hours(employee, shop) * fraction
     halves = int(hours / HOURS_PER_LEAVE_DAY * 2 + 0.5)
     return max(MIN_LEAVE_DAY_VALUE, halves / 2)
+
+
+def _day_cost(schedule, shop, employee, day: int) -> float:
+    fraction = schedule.get_day(employee, day).leave_fraction()
+    return leave_day_value(employee, shop, fraction)
 
 
 def is_leave_working_day(year: int, month: int, day: int) -> bool:
@@ -48,7 +56,7 @@ def _counted_leave_days(schedule, employee) -> list[int]:
 
 def leave_days_used(schedule, shop, employee) -> float:
     """Dni urlopu zużyte przez pracownika w tym miesiącu."""
-    return len(_counted_leave_days(schedule, employee)) * leave_day_value(employee, shop)
+    return sum(_day_cost(schedule, shop, employee, day) for day in _counted_leave_days(schedule, employee))
 
 
 def sync_vacation_balances(schedule, shop) -> list[tuple]:
@@ -146,11 +154,10 @@ def build_leave_requests(schedule, shop, location_key: str | None = None) -> lis
     for employee in schedule.employees:
         if location_key and employee.location_key != location_key:
             continue
-        value = leave_day_value(employee, shop)
         printed = schedule.printed_leave_requests.get(employee, set())
         for start, end in _leave_periods(schedule, employee):
             days = sum(
-                value for day in range(start, end + 1)
+                _day_cost(schedule, shop, employee, day) for day in range(start, end + 1)
                 if schedule.get_day(employee, day).is_leave
                 and is_leave_working_day(schedule.year, schedule.month, day)
             )

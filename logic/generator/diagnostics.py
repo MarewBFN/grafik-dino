@@ -104,11 +104,11 @@ def audit_schedule(schedule, shop) -> dict[str, Any]:
     for employee in schedule.employees:
         effective_minutes = int(get_effective_daily_hours(employee, shop) * 60)
         leave_or_sick = sum(
-            1
+            1 if getattr(ds, "is_sick", False) else ds.leave_fraction()
             for day in range(1, schedule.days_in_month + 1)
             if (ds := schedule.get_day(employee, day)).is_leave or getattr(ds, "is_sick", False)
         )
-        target = int(nominal_minutes * employee.employment_fraction) - leave_or_sick * effective_minutes
+        target = int(nominal_minutes * employee.employment_fraction) - int(leave_or_sick * effective_minutes)
         worked = 0
         for day in range(1, schedule.days_in_month + 1):
             duration = schedule.get_day(employee, day).total_duration()

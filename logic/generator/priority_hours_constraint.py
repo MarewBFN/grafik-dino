@@ -69,7 +69,7 @@ def add_priority_hours_shortfall_penalty(
         for d in days:
             ds = schedule.get_day(emp, d)
             if ds.is_leave:
-                leave_days += 1
+                leave_days += ds.leave_fraction()
             if getattr(ds, "is_sick", False):
                 sick_days += 1
 
@@ -239,9 +239,11 @@ def add_hours_equalization_penalty(
         tolerance = 0
         for e in indices:
             emp = employees[e]
+            # Pół dnia urlopu (DaySchedule.is_half_leave) to połowa udziału.
             unavailable = sum(
-                1 for d in days
-                if schedule.get_day(emp, d).is_leave or getattr(schedule.get_day(emp, d), "is_sick", False)
+                1 if getattr(ds, "is_sick", False) else ds.leave_fraction()
+                for d in days
+                if (ds := schedule.get_day(emp, d)).is_leave or getattr(ds, "is_sick", False)
             )
             if unavailable >= len(days):
                 continue
@@ -268,7 +270,7 @@ def add_hours_equalization_penalty(
                     sum(x[e, d, s] * minutes_by_shift[s] for d in days for s in all_shifts)
                     + planned_minutes_expr(x, e, emp, days, duty_shifts)
                     + _opening_minutes(x, emp, opening_model)
-                    + unavailable * share_per_day
+                    + int(unavailable * share_per_day)
                 )
             )
             norms.append(norm)
