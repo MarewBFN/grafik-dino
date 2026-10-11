@@ -134,3 +134,30 @@ class DefaultReleaseChannelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --- okno "Dostępna aktualizacja": wypunktowane zmiany, pytanie na dole ---
+
+from update_checker import changelog_items, update_message_html
+
+
+def test_changelog_lines_become_items():
+    assert changelog_items("- Pół dnia urlopu\n- Wspólna pula\n\n• Poprawka") == [
+        "Pół dnia urlopu", "Wspólna pula", "Poprawka",
+    ]
+
+
+def test_old_single_paragraph_changelog_is_split_into_sentences():
+    notes = "Pol dnia urlopu (np. 1,5 dnia). Pula wspolna. Poprawka kolumny."
+    assert changelog_items(notes) == ["Pol dnia urlopu (np. 1,5 dnia).", "Pula wspolna.", "Poprawka kolumny."]
+
+
+def test_question_is_below_the_changes_and_text_is_escaped():
+    text = update_message_html("1.1.8.enyo", "- A <b>\n- B")
+    assert text.index("<li>A &lt;b&gt;</li>") < text.index("Pobrać i zainstalować?")
+    assert "1.1.8.enyo" in text
+
+
+def test_no_changelog_still_asks():
+    text = update_message_html("1.1.8.enyo", "")
+    assert "<ul>" not in text and "Pobrać i zainstalować?" in text

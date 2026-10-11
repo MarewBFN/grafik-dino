@@ -2754,21 +2754,18 @@ class MainWindow(QMainWindow):
                     )
             return
 
+        from update_checker import update_message_html
+
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Question)
         msg.setWindowTitle("Dostępna aktualizacja")
-        msg.setText(
-            f"Dostępna jest nowa wersja programu ({result['version']}).\n\nPobrać i zainstalować?"
-        )
-        # Opis wydania z GitHub Releases (jeśli autor go wypełnił) pokazuje się
-        # od razu pod treścią pytania. setDetailedText() dawałby rozwijany
-        # przycisk, ale Qt sam zarządza jego stanem/tekstem i przy próbie
-        # spolszczenia go w locie potrafi zostawić na przycisku wizualnie
-        # uszkodzony tekst (nakładka starego i nowego renderu) — nie warto
-        # tego obchodzić dla czegoś, co i tak zwykle ma kilka linijek.
-        notes = result.get("notes")
-        if notes:
-            msg.setInformativeText(notes)
+        # Zmiany jako lista punktów, pytanie o instalację pod nimi - cała
+        # treść w jednym tekście HTML (setInformativeText wyświetlałby zmiany
+        # POD pytaniem). setDetailedText() odpada: Qt sam zarządza jego
+        # przyciskiem i przy spolszczaniu potrafi zostawić uszkodzony napis.
+        msg.setTextFormat(Qt.RichText)
+        msg.setText(update_message_html(result["version"], result.get("notes", "")))
+        msg.setStyleSheet("QLabel#qt_msgbox_label { min-width: 460px; }")
 
         btn_yes = msg.addButton("Tak", QMessageBox.YesRole)
         msg.addButton("Nie", QMessageBox.NoRole)

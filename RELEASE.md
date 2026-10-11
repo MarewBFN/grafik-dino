@@ -42,6 +42,22 @@ dają build bez sprawdzania online, w którym działa tylko stary klucz
 produktu. Licencja online jest na branchu Enyo (`integration/enyo-only`).
 Dino (`main`) dostanie ją dopiero po przeniesieniu tych zmian na `main`.
 
+## Format `changelog` w manifeście
+
+Okno "Dostępna aktualizacja" pokazuje `changelog` jako listę punktów, a
+pytanie "Pobrać i zainstalować?" pod nią (`update_checker.py::
+update_message_html`). Pole musi zostać **zwykłym tekstem** (nie listą
+JSON - starsze wersje programu robią na nim `.strip()` i przestałyby
+widzieć aktualizacje). Każda zmiana w osobnej linii, z "- " na początku,
+z polskimi znakami, np.:
+
+```json
+"changelog": "- Pół dnia urlopu: przycisk „0,5 urlopu”
+- Wspólna pula urlopu dla wszystkich miesięcy"
+```
+
+Stare manifesty z jednym akapitem są dzielone na zdania.
+
 ## Wydanie Dino (na `main`)
 
 1. Upewnij się, że jesteś na `main` i working tree jest czyste (`git

@@ -1,4 +1,6 @@
+import html
 import os
+import re
 import tempfile
 
 import requests
@@ -11,6 +13,41 @@ MANIFEST_BASE_URL = "https://raw.githubusercontent.com/MarewBFN/grafik-dino/main
 INSTALLER_ASSET_NAME = "DingoSetup.exe"
 
 DOWNLOAD_CHUNK_SIZE = 1024 * 256
+
+
+def changelog_items(notes: str) -> list[str]:
+    """Punkty listy zmian z pola "changelog" manifestu.
+
+    Manifest musi zostać zwykłym tekstem (starsze wersje programu robią na
+    nim .strip() - lista JSON zablokowałaby im aktualizacje), więc punkty to
+    osobne linie, opcjonalnie z "- "/"* "/"• " na początku. Starsze manifesty
+    z jednym akapitem dzielone są na zdania."""
+    notes = (notes or "").strip()
+    if not notes:
+        return []
+    if "\n" in notes:
+        parts = notes.splitlines()
+    else:
+        parts = re.split(r"(?<=\.)\s+(?=[A-ZĄĆĘŁŃÓŚŹŻ])", notes)
+    items = []
+    for part in parts:
+        item = re.sub(r"^\s*[-*•]\s*", "", part).strip()
+        if item:
+            items.append(item)
+    return items
+
+
+def update_message_html(version: str, notes: str) -> str:
+    """Treść okna "Dostępna aktualizacja": wersja, wypunktowane zmiany, a
+    pytanie o instalację na samym dole, pod zmianami."""
+    parts = [f"<p><b>Dostępna jest nowa wersja programu ({html.escape(version)}).</b></p>"]
+    items = changelog_items(notes)
+    if items:
+        parts.append("<p>Co nowego:</p><ul>")
+        parts.extend(f"<li>{html.escape(item)}</li>" for item in items)
+        parts.append("</ul>")
+    parts.append("<p>Pobrać i zainstalować?</p>")
+    return "".join(parts)
 
 
 def _manifest_url():
