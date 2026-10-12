@@ -24,6 +24,7 @@ from model.custom_profile import (
     CustomBusinessProfile,
     GENERIC_SUMMARY_ROWS,
     RoleDefinition,
+    PARAM_MIN_LEVEL,
     RuleInstance,
     RULE_TYPE_MIN_STAFF_WITH_ROLE,
     RULE_TYPE_ROLE_TIME_RESTRICTION,
@@ -178,6 +179,23 @@ class _RuleRow(QFrame):
 
         outer.addLayout(top_row)
 
+        # Minimalny poziom kwalifikacji, od którego osoba się liczy (np.
+        # "Mięso" 2 = pełna obsługa). 1 = wystarczy mieć rolę - dokładnie
+        # zachowanie sprzed poziomów. Poziomy nazywa katalog kwalifikacji
+        # projektu.
+        level_row = QHBoxLayout()
+        level_row.addWidget(QLabel("Od poziomu kwalifikacji:"))
+        self.min_level_spin = QSpinBox()
+        self.min_level_spin.setRange(1, 9)
+        self.min_level_spin.setValue(1)
+        self.min_level_spin.setToolTip(
+            "Reguła liczy tylko osoby z tą rolą na co najmniej takim poziomie. "
+            "1 = wystarczy mieć rolę (bez względu na poziom)."
+        )
+        level_row.addWidget(self.min_level_spin)
+        level_row.addStretch(1)
+        outer.addLayout(level_row)
+
         self.params_widget = _RuleParamsWidget()
         outer.addWidget(self.params_widget)
 
@@ -196,7 +214,8 @@ class _RuleRow(QFrame):
             if idx >= 0:
                 self.policy_combo.setCurrentIndex(idx)
             self.weight_spin.setValue(rule.weight)
-            self._selected_role_key = rule.role_key
+            self.min_level_spin.setValue(int(rule.params.get(PARAM_MIN_LEVEL, 1)))
+            self._selected_role_key = rule.qualification_key
             # Keep the original id stable across an edit+resave, so any
             # shop.constraint_policies["rule:<id>"] override a project
             # already set for this rule doesn't get silently orphaned.
@@ -227,12 +246,17 @@ class _RuleRow(QFrame):
         if not role_key:
             return None
         rule_type = self.type_combo.currentData()
+        params = self.params_widget.params_for_type(rule_type)
+        if self.min_level_spin.value() > 1:
+            # Zapisywane tylko gdy różne od domyślnego 1 - reguły bez poziomu
+            # zostają w pliku dokładnie w dotychczasowym kształcie.
+            params[PARAM_MIN_LEVEL] = self.min_level_spin.value()
         kwargs = dict(
             type=rule_type,
-            role_key=role_key,
+            qualification_key=role_key,
             policy=self.policy_combo.currentData(),
             weight=self.weight_spin.value(),
-            params=self.params_widget.params_for_type(rule_type),
+            params=params,
         )
         if self._existing_id:
             kwargs["id"] = self._existing_id
@@ -428,7 +452,7 @@ class ProfileWizardDialog(QDialog):
         rules = []
         for row in self._rule_rows:
             rule = row.to_rule_instance()
-            if rule is not None and rule.role_key in role_keys:
+            if rule is not None and rule.qualification_key in role_keys:
                 rules.append(rule)
 
         if self.existing_key:

@@ -70,7 +70,7 @@ class TestBuildRoleTimeRestrictionNight:
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = self._ctx = _ctx(shop, [emp])
 
-        build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
+        build_role_time_restriction(ctx, soft=False, qualification_key="guard", window_start_hour=22, window_end_hour=6)
         ctx.model.Add(ctx.x[0, 3, SHIFT_NIGHT] == 1)
 
         status = cp_model.CpSolver().Solve(ctx.model)
@@ -83,7 +83,7 @@ class TestBuildRoleTimeRestrictionNight:
         ctx = _ctx(shop, [emp])
 
         # Restriction is 13:00-21:00 - doesn't touch the 22:00-06:00 night window at all.
-        build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=13, window_end_hour=21)
+        build_role_time_restriction(ctx, soft=False, qualification_key="guard", window_start_hour=13, window_end_hour=21)
         ctx.model.Add(ctx.x[0, 3, SHIFT_NIGHT] == 1)
 
         status = cp_model.CpSolver().Solve(ctx.model)
@@ -94,7 +94,7 @@ class TestBuildRoleTimeRestrictionNight:
         emp = Employee(last_name="Guard", first_name="A", qualifications=qualifications_of("guard"))
         ctx = _ctx(shop, [emp])
 
-        violations = build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
+        violations = build_role_time_restriction(ctx, soft=False, qualification_key="guard", window_start_hour=22, window_end_hour=6)
         assert violations == []
         # SHIFT_NIGHT is untouched by this rule (still gated elsewhere by
         # add_night_shift_gate_constraint, not this rule's job).
@@ -164,7 +164,7 @@ class TestBuildRoleTimeRestrictionDaytime:
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = _ctx(shop, [emp])
 
-        build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
+        build_role_time_restriction(ctx, soft=False, qualification_key="guard", window_start_hour=22, window_end_hour=6)
         ctx.model.Add(ctx.x[0, 3, SHIFT_OPEN] == 1)
 
         status = cp_model.CpSolver().Solve(ctx.model)
@@ -179,7 +179,7 @@ class TestBuildRoleTimeRestrictionDaytime:
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = _ctx(shop, [emp])
 
-        build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
+        build_role_time_restriction(ctx, soft=False, qualification_key="guard", window_start_hour=22, window_end_hour=6)
         ctx.model.Add(ctx.x[0, 3, SHIFT_CLOSE] == 1)
 
         status = cp_model.CpSolver().Solve(ctx.model)
@@ -193,11 +193,11 @@ def test_end_to_end_night_coverage_rule_conflicts_with_role_time_restriction():
     must be infeasible, not silently solved by assigning the forbidden shift
     to the very employee who shouldn't have it."""
     restriction_rule = RuleInstance(
-        type=RULE_TYPE_ROLE_TIME_RESTRICTION, role_key="guard",
+        type=RULE_TYPE_ROLE_TIME_RESTRICTION, qualification_key="guard",
         policy="MANDATORY", params={"window_start_hour": 22, "window_end_hour": 6},
     )
     coverage_rule = RuleInstance(
-        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="guard",
+        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, qualification_key="guard",
         policy="MANDATORY", params={"min_count": 1, "scope": "night"},
     )
     profile = CustomBusinessProfile(
@@ -259,7 +259,7 @@ class TestBuildRoleTimeRestrictionRegularShifts:
         # meaningless test.
         for shift in (SHIFT_OPEN, SHIFT_CLOSE):
             trial_ctx = _ctx(shop, [emp])
-            build_role_time_restriction(trial_ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
+            build_role_time_restriction(trial_ctx, soft=False, qualification_key="guard", window_start_hour=22, window_end_hour=6)
             trial_ctx.model.Add(trial_ctx.x[0, 3, shift] == 1)
             status = cp_model.CpSolver().Solve(trial_ctx.model)
             assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE), (
@@ -279,7 +279,7 @@ class TestBuildRoleTimeRestrictionRegularShifts:
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = _ctx(shop, [emp])
 
-        build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
+        build_role_time_restriction(ctx, soft=False, qualification_key="guard", window_start_hour=22, window_end_hour=6)
         ctx.model.Add(ctx.x[0, 3, SHIFT_CLOSE] == 1)
 
         status = cp_model.CpSolver().Solve(ctx.model)

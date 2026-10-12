@@ -95,7 +95,7 @@ def test_wizard_skip_rules_step_does_not_apply_rules_selectors():
 
 def test_wizard_custom_profile_with_rule_shows_no_feature_toggle_but_shows_rule_in_rules_step():
     rule = RuleInstance(
-        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="guard",
+        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, qualification_key="guard",
         policy="MANDATORY", params={"min_count": 2, "scope": "open"},
     )
     profile = CustomBusinessProfile(

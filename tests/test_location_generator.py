@@ -248,7 +248,7 @@ def test_whole_project_generation_uses_each_locations_own_policies():
 
 def test_min_staff_with_role_rule_is_resolved_per_employee_location():
     rule = RuleInstance(
-        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="guard",
+        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, qualification_key="guard",
         policy="MANDATORY", params={"min_count": 1, "scope": "open"},
     )
     profile = CustomBusinessProfile(
@@ -295,7 +295,7 @@ def test_min_staff_with_role_rule_skips_days_when_every_role_holder_location_is_
     dnia niespełnialna i cały miesiąc wychodził bez rozwiązania (wcześniej
     solver "spełniał" ją niewidoczną zmianą w zamkniętej placówce)."""
     rule = RuleInstance(
-        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="kier",
+        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, qualification_key="kier",
         policy="MANDATORY", params={"min_count": 1, "scope": "any_shift"},
     )
     profile = CustomBusinessProfile(

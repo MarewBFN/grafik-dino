@@ -103,7 +103,7 @@ def build_specs(custom: CustomBusinessProfile) -> list[ConstraintSpec]:
         extra = {"rule_key": rule_key} if rule.type == RULE_TYPE_MIN_STAFF_WITH_ROLE else {}
         specs.append(ConstraintSpec(
             name=rule_key,
-            build=functools.partial(builder, role_key=rule.role_key, **rule.params, **extra),
+            build=functools.partial(builder, qualification_key=rule.qualification_key, **rule.params, **extra),
         ))
 
     if custom_profile_uses_opening_hours_model(custom):

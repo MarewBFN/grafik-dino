@@ -102,7 +102,7 @@ def _build_24_7_guard_scenario(guard_count, seed, min_on_night=2, leave_probabil
 
     profile_key = f"custom_stress_night_{guard_count}_{seed}"
     rule = RuleInstance(
-        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="guard",
+        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, qualification_key="guard",
         policy="MANDATORY", params={"min_count": min_on_night, "scope": "night"},
     )
     profile = CustomBusinessProfile(

@@ -61,7 +61,7 @@ class TestBuildMinStaffWithRoleNightScope:
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = self._ctx(shop, [emp])
 
-        build_min_staff_with_role(ctx, soft=False, role_key="guard", rule_key="rule:x", min_count=1, scope="night")
+        build_min_staff_with_role(ctx, soft=False, qualification_key="guard", rule_key="rule:x", min_count=1, scope="night")
 
         # Assigning OPEN (not NIGHT) must not satisfy a night-scoped rule.
         ctx.model.Add(ctx.x[0, 3, self.SHIFT_OPEN] == 1)
@@ -76,7 +76,7 @@ class TestBuildMinStaffWithRoleNightScope:
         emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = self._ctx(shop, [emp])
 
-        build_min_staff_with_role(ctx, soft=False, role_key="guard", rule_key="rule:x", min_count=1, scope="night")
+        build_min_staff_with_role(ctx, soft=False, qualification_key="guard", rule_key="rule:x", min_count=1, scope="night")
         ctx.model.Add(ctx.x[0, 3, self.SHIFT_NIGHT] == 1)
 
         status = cp_model.CpSolver().Solve(ctx.model)
@@ -90,7 +90,7 @@ def test_ui_exposes_night_scope_option():
 
 def test_rule_label_describes_night_scope():
     rule = RuleInstance(
-        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="guard",
+        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, qualification_key="guard",
         params={"min_count": 2, "scope": "night"},
     )
     profile = CustomBusinessProfile(
@@ -107,7 +107,7 @@ def test_end_to_end_night_coverage_rule_requires_enough_guards():
     "min. 2 guards on the night shift" rule - the real shape of the
     security-company use case this whole plan exists for."""
     rule = RuleInstance(
-        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="guard",
+        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, qualification_key="guard",
         policy="MANDATORY", params={"min_count": 2, "scope": "night"},
     )
     profile = CustomBusinessProfile(

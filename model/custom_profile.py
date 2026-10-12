@@ -61,10 +61,20 @@ class RoleDefinition:
         )
 
 
+# Parametr reguły (RuleInstance.params): minimalny poziom kwalifikacji
+# (model.qualification), od którego pracownik się liczy. Brak = 1 (wystarczy
+# mieć kwalifikację) - dokładnie zachowanie sprzed poziomów.
+PARAM_MIN_LEVEL = "min_level"
+
+
 @dataclass
 class RuleInstance:
+    """Reguła profilu custom: typ z zamkniętego katalogu (generic_rules.py) +
+    kwalifikacja, której dotyczy (klucz katalogu kwalifikacji - dawniej
+    "role_key", ten sam klucz) + parametry typu, w tym opcjonalny min_level."""
+
     type: str
-    role_key: str
+    qualification_key: str
     policy: str = "PREFERRED"
     weight: int = 1000
     params: dict = field(default_factory=dict)
@@ -76,7 +86,7 @@ class RuleInstance:
     def to_dict(self):
         return {
             "type": self.type,
-            "role_key": self.role_key,
+            "qualification_key": self.qualification_key,
             "policy": self.policy,
             "weight": self.weight,
             "params": self.params,
@@ -87,7 +97,8 @@ class RuleInstance:
     def from_dict(cls, data):
         return cls(
             type=data["type"],
-            role_key=data["role_key"],
+            # Pliki sprzed kwalifikacji zapisywały ten sam klucz jako "role_key".
+            qualification_key=data["qualification_key"] if "qualification_key" in data else data["role_key"],
             policy=data.get("policy", "PREFERRED"),
             weight=data.get("weight", 1000),
             params=dict(data.get("params", {})),
@@ -135,8 +146,16 @@ class CustomBusinessProfile:
                 return role.label
         return role_key
 
+    def min_level(self, rule: RuleInstance) -> int:
+        return int(rule.params.get(PARAM_MIN_LEVEL, 1))
+
+    def _qualification_label(self, rule: RuleInstance) -> str:
+        label = self.role_label(rule.qualification_key)
+        level = self.min_level(rule)
+        return f"{label} (poziom ≥ {level})" if level > 1 else label
+
     def rule_label(self, rule: RuleInstance) -> str:
-        role_label = self.role_label(rule.role_key)
+        role_label = self._qualification_label(rule)
         if rule.type == RULE_TYPE_MIN_STAFF_WITH_ROLE:
             scope_labels = {
                 "open": "na otwarciu",
@@ -158,7 +177,7 @@ class CustomBusinessProfile:
         Konfiguracji -> Zasady generatora (rule_label() wyżej już koduje
         parametry reguły w samej nazwie, więc to tylko tłumaczy MECHANIZM,
         nie powtarza liczb/godzin z etykiety)."""
-        role_label = self.role_label(rule.role_key)
+        role_label = self._qualification_label(rule)
         if rule.type == RULE_TYPE_MIN_STAFF_WITH_ROLE:
             return (
                 f"Wymaga minimalnej liczby pracowników z rolą „{role_label}” "

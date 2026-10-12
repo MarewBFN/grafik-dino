@@ -58,7 +58,7 @@ for name, leave_days, sick_days, locked_days in scenarios:
 # feasibility i brak nakładających się zmian dla scenariusza, który jest
 # powodem całej tej pracy (klient z firmy ochroniarskiej).
 _night_rule = RuleInstance(
-    type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key='guard',
+    type=RULE_TYPE_MIN_STAFF_WITH_ROLE, qualification_key='guard',
     policy='MANDATORY', params={'min_count': 2, 'scope': 'night'},
 )
 _night_profile = CustomBusinessProfile(

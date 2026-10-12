@@ -91,7 +91,7 @@ def build_night_shift_scenario(guard_count: int, seed: int, min_on_night: int = 
 
     profile_key = f"stress_night_{guard_count}_{seed}"
     rule = RuleInstance(
-        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="guard",
+        type=RULE_TYPE_MIN_STAFF_WITH_ROLE, qualification_key="guard",
         policy="MANDATORY", params={"min_count": min_on_night, "scope": "night"},
     )
     profile = CustomBusinessProfile(

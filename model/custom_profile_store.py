@@ -37,8 +37,19 @@ def load_custom_profiles() -> list[CustomBusinessProfile]:
 
 
 def _write_all(profiles: list[CustomBusinessProfile]) -> None:
-    with open(_store_path(), "w", encoding="utf-8") as f:
-        json.dump({"profiles": [p.to_dict() for p in profiles]}, f, ensure_ascii=False, indent=2)
+    # Import lokalny: persistence.project_io importuje modele, które przy
+    # imporcie wczytują ten magazyn (model.business_profile) - cykl.
+    from persistence.project_io import FORMAT_VERSION, backup_legacy_file
+
+    path = _store_path()
+    # Reguły sprzed kwalifikacji ("role_key" zamiast "qualification_key") -
+    # kopia custom_profiles.json.bak przed pierwszym zapisem w nowym formacie.
+    backup_legacy_file(path)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(
+            {"format_version": FORMAT_VERSION, "profiles": [p.to_dict() for p in profiles]},
+            f, ensure_ascii=False, indent=2,
+        )
 
 
 def save_custom_profile(profile: CustomBusinessProfile) -> None:

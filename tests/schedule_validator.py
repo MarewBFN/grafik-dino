@@ -884,7 +884,13 @@ def _validate_custom_rules(cfg, schedule, intervals, report):
     custom = cfg.custom
     for rule in custom.rules:
         key = custom.rule_policy_key(rule)
-        role_emps = [e for e in schedule.employees if e.has_role(rule.role_key)]
+        qualification = rule.qualification_key
+        min_level = rule.params.get("min_level", 1)
+        # Pracownicy z kwalifikacją choć jeden dzień; liczeni tylko w dniach ważności.
+        role_emps = [
+            e for e in schedule.employees
+            if any(_level(e, qualification, cfg, day) >= min_level for day in range(1, cfg.days_in_month + 1))
+        ]
         if rule.type == "min_staff_with_role":
             scope = rule.params.get("scope", "open")
             base_threshold = rule.params.get("min_count", 1)
@@ -896,7 +902,7 @@ def _validate_custom_rules(cfg, schedule, intervals, report):
             for day in range(1, cfg.days_in_month + 1):
                 if not role_emps:
                     if any(cfg.open_window(e, day) for e in schedule.employees):
-                        add(Violation(key, f"brak osób z rolą {rule.role_key} (wymagane {base_threshold})", day=day))
+                        add(Violation(key, f"brak osób z kwalifikacją {qualification} (wymagane {base_threshold})", day=day))
                     continue
                 for threshold, members in groups.items():
                     # dzień pomijany, gdy placówki wszystkich osób z grupy są zamknięte
@@ -906,6 +912,8 @@ def _validate_custom_rules(cfg, schedule, intervals, report):
                         continue
                     count = 0
                     for e, w in open_emps:
+                        if _level(e, qualification, cfg, day) < min_level:
+                            continue
                         for s, en, d, _m, _f in intervals[e.id]:
                             if d != day:
                                 continue
@@ -916,14 +924,16 @@ def _validate_custom_rules(cfg, schedule, intervals, report):
                             elif scope == "any_shift":
                                 count += 1
                     if count < threshold:
-                        add(Violation(key, f"rola {rule.role_key} [{scope}]: {count} < {threshold}", day=day))
+                        add(Violation(key, f"kwalifikacja {qualification} [{scope}]: {count} < {threshold}", day=day))
         elif rule.type == "role_time_restriction":
             ws = rule.params.get("window_start_hour", 22) * 60
             we = rule.params.get("window_end_hour", 6) * 60
             for e in role_emps:
                 for s, en, day, is_manual, _f in intervals[e.id]:
+                    if _level(e, qualification, cfg, day) < min_level:
+                        continue
                     if not is_manual and overlaps_daily_window(s, en, ws, we):
-                        add(Violation(key, f"rola {rule.role_key}: zmiana {fmt_abs(s)}-{fmt_abs(en)} w zakazanym oknie", e.display_name(), day))
+                        add(Violation(key, f"kwalifikacja {qualification}: zmiana {fmt_abs(s)}-{fmt_abs(en)} w zakazanym oknie", e.display_name(), day))
 
 
 # ---------------------------------------------------------------------------

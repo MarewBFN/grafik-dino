@@ -14,6 +14,7 @@ verified dino_retail behavior.
 from datetime import datetime, timedelta
 
 from logic.generator.constraints_basic import is_location_open_for_employee
+from model.qualification import has_on, held_in_month
 from logic.utils.time_utils import (
     daily_windows_overlap,
     get_effective_daily_hours,
@@ -23,14 +24,29 @@ from logic.utils.time_utils import (
 FMT = "%H:%M"
 
 
-def _role_employee_indices(ctx, role_key):
-    return [e for e, emp in enumerate(ctx.employees) if emp.has_role(role_key)]
+def _qualified_on(ctx, e, qualification_key, min_level, d) -> bool:
+    """Czy pracownik `e` ma w dniu `d` kwalifikację `qualification_key` na
+    poziomie >= `min_level` (data ważności, placówka pracownika)."""
+    return has_on(ctx.employees[e], qualification_key, ctx.shop.year, ctx.shop.month, d, min_level)
 
 
-def build_min_staff_with_role(ctx, soft, role_key, rule_key, min_count=1, scope="open"):
-    """"At least `min_count` employees with role `role_key` [on open / on
-    close / working at any point that day]." Generalizes the is_opener/
-    is_meat >= 1 checks baked into constraints_staff.add_fixed_staff_shift_constraints.
+def _qualified_employee_indices(ctx, qualification_key, min_level):
+    """Pracownicy, którzy mają kwalifikację choć jeden dzień miesiąca (na
+    poziomie >= min_level) - wstępna lista; reguły sprawdzają ją jeszcze na
+    każdy dzień osobno (_qualified_on)."""
+    return [
+        e for e, emp in enumerate(ctx.employees)
+        if held_in_month(emp, qualification_key, ctx.shop.year, ctx.shop.month, min_level)
+    ]
+
+
+def build_min_staff_with_role(ctx, soft, qualification_key, rule_key, min_count=1, scope="open", min_level=1):
+    """"Co najmniej `min_count` pracowników z kwalifikacją `qualification_key`
+    na poziomie >= `min_level` [na otwarciu / na zamknięciu / w ciągu dnia /
+    na zmianie nocnej]." Pracownik liczy się tylko w dniach, w których
+    kwalifikacja jest ważna i obowiązuje w jego placówce. Uogólnia zaszyte w
+    constraints_staff.add_fixed_staff_shift_constraints sprawdzenia "Otwarcie"/
+    "Mięso" >= 1.
 
     A location can override the threshold for this specific rule via
     LocationConfig.constraints[rule_key] (rule_key = the same "rule:<id>"
@@ -40,7 +56,7 @@ def build_min_staff_with_role(ctx, soft, role_key, rule_key, min_count=1, scope=
     resolved threshold so e.g. "min. 2 uzbrojonych" can differ per obiekt.
     """
     violations = []
-    role_employees = _role_employee_indices(ctx, role_key)
+    role_employees = _qualified_employee_indices(ctx, qualification_key, min_level)
 
     if scope == "open":
         shifts_by_day = lambda d: (ctx.shift_open,)
@@ -80,13 +96,17 @@ def build_min_staff_with_role(ctx, soft, role_key, rule_key, min_count=1, scope=
             ):
                 continue
             shifts = shifts_by_day(d)
-            terms = [ctx.x[e, d, s] for e in indices for s in shifts]
+            terms = [
+                ctx.x[e, d, s]
+                for e in indices if _qualified_on(ctx, e, qualification_key, min_level, d)
+                for s in shifts
+            ]
             count = sum(terms) if terms else ctx.model.NewConstant(0)
 
             if not soft:
                 ctx.model.Add(count >= threshold)
             else:
-                violation = ctx.model.NewIntVar(0, threshold, f"role_staff_v_{role_key}_{scope}_d{d}_t{threshold}")
+                violation = ctx.model.NewIntVar(0, threshold, f"role_staff_v_{qualification_key}_{scope}_d{d}_t{threshold}")
                 ctx.model.Add(count + violation >= threshold)
                 violations.append(violation)
 
@@ -170,12 +190,13 @@ def forbidden_shifts_for_time_window(
     return forbidden
 
 
-def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, window_end_hour=6):
-    """Employees with role `role_key` can't be scheduled on a shift that
-    touches [window_start_hour, window_end_hour) o'clock. Generalizes
-    no_night/no_afternoon (night_constraint.py/afternoon_constraint.py)."""
+def build_role_time_restriction(ctx, soft, qualification_key, window_start_hour=22, window_end_hour=6, min_level=1):
+    """Pracownicy z kwalifikacją `qualification_key` (poziom >= `min_level`)
+    nie dostają zmiany dotykającej okna [window_start_hour, window_end_hour) -
+    tylko w dniach, w których kwalifikacja jest ważna. Uogólnia no_night/
+    no_afternoon (night_constraint.py/afternoon_constraint.py)."""
     violations = []
-    role_employees = set(_role_employee_indices(ctx, role_key))
+    role_employees = set(_qualified_employee_indices(ctx, qualification_key, min_level))
     if not role_employees:
         return violations
 
@@ -195,6 +216,8 @@ def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, windo
         )
 
         for d in ctx.days:
+            if not _qualified_on(ctx, e, qualification_key, min_level, d):
+                continue
             forbidden_shifts = forbidden_shifts_for_time_window(
                 location, d, shift_delta, window_start_hour, window_end_hour,
                 ctx.shift_open, ctx.shift_close, ctx.start_shift_map, ctx.end_shift_map,
@@ -205,7 +228,7 @@ def build_role_time_restriction(ctx, soft, role_key, window_start_hour=22, windo
 
             for s in forbidden_shifts:
                 if soft:
-                    v = ctx.model.NewBoolVar(f"role_time_v_{role_key}_e{e}_d{d}_s{s}")
+                    v = ctx.model.NewBoolVar(f"role_time_v_{qualification_key}_e{e}_d{d}_s{s}")
                     ctx.model.Add(ctx.x[e, d, s] <= v)
                     violations.append(v)
                 else:

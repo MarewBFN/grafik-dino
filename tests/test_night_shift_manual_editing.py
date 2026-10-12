@@ -748,7 +748,7 @@ class OpenNewProjectCustomProfilePolicyBugTests(unittest.TestCase):
             display_name="Test Policy",
             roles=[RoleDefinition(key="guard", label="Ochroniarz")],
             rules=[RuleInstance(
-                type=RULE_TYPE_MIN_STAFF_WITH_ROLE, role_key="guard",
+                type=RULE_TYPE_MIN_STAFF_WITH_ROLE, qualification_key="guard",
                 policy="MANDATORY", params={"min_count": 1, "scope": "open"},
             )],
         )
