@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from logic.utils.time_utils import get_effective_daily_hours
+from model.qualification import is_light_meat_on
 
 FMT = "%H:%M"
 SLOT_MINUTES = 15
@@ -19,7 +20,7 @@ def build_meat_light_duty(
     max_minutes=MAX_MEAT_LIGHT_MINUTES_PER_DAY,
 ):
     """
-    Twardy budżet czasu "mięsa" dla pracowników is_meat_light: niezależnie od
+    Twardy budżet czasu "mięsa" dla pracowników z "Mięso" na poziomie 1 (pomocniczo): niezależnie od
     tego jak długa jest ich właściwa zmiana, mogą być liczeni jako pokrycie
     mięsa przez maksymalnie `max_minutes` minut dziennie (domyślnie 1h).
 
@@ -36,7 +37,13 @@ def build_meat_light_duty(
         całego wariantu zmiany, do zgrubnych sprawdzeń obecności "mięsa" na
         danej zmianie (add_meat_constraint, add_fixed_staff_shift_constraints).
     """
-    light_employees = [e for e in range(len(employees)) if employees[e].is_meat_light]
+    # Kwalifikacja "Mięso" na poziomie 1 (dawne is_meat_light) - sprawdzana
+    # na każdy dzień osobno (daty ważności, placówka); lista wstępna to osoby,
+    # które mają ją choć jeden dzień miesiąca.
+    light_employees = [
+        e for e in range(len(employees))
+        if any(is_light_meat_on(employees[e], shop.year, shop.month, d) for d in trade_days)
+    ]
 
     slot_duty_sum = {}
     shift_duty_sum = {}
@@ -61,6 +68,8 @@ def build_meat_light_duty(
 
         for e in light_employees:
             emp = employees[e]
+            if not is_light_meat_on(emp, shop.year, shop.month, d):
+                continue
             shift_len = timedelta(hours=get_effective_daily_hours(emp, shop))
 
             windows = {SHIFT_OPEN: (open_dt, open_dt + shift_len),

@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from logic.utils.time_utils import get_effective_daily_hours
+from model.qualification import is_full_meat_on, is_light_meat_on
 
 
 def add_meat_constraint(
@@ -14,8 +15,14 @@ def add_meat_constraint(
     soft=False,
     trace=None,
     meat_light_penalties=None,
-    shift_duty_sum=None
+    shift_duty_sum=None,
+    *,
+    year,
+    month,
 ):
+    """Mięso na zmianach (Dino). "Mięso" pełna obsługa = kwalifikacja na
+    poziomie >= 2, budżet "pomocniczo" = dokładnie poziom 1 - liczone na
+    konkretny dzień (daty ważności, placówka pracownika)."""
     if trace is not None:
         trace.log_constraint("meat", f"soft={soft}")
 
@@ -27,13 +34,13 @@ def add_meat_constraint(
         meat_on_open = sum(
             x[e, d, SHIFT_OPEN]
             for e in range(len(employees))
-            if employees[e].is_meat
+            if is_full_meat_on(employees[e], year, month, d)
         )
 
         meat_on_close = sum(
             x[e, d, SHIFT_CLOSE]
             for e in range(len(employees))
-            if employees[e].is_meat
+            if is_full_meat_on(employees[e], year, month, d)
         )
 
         meat_on_work = sum(
@@ -41,22 +48,22 @@ def add_meat_constraint(
             for e in range(len(employees))
             for s in all_shifts
             if s not in (SHIFT_OPEN, SHIFT_CLOSE)
-            and employees[e].is_meat
+            and is_full_meat_on(employees[e], year, month, d)
         )
 
-        # Budżet "mięsa tymczasowego" (is_meat_light) - twardo ograniczony do
+        # Budżet "mięsa tymczasowego" (Mięso poziom 1, dawne is_meat_light) - twardo ograniczony do
         # max 1h/dzień/osobę w build_meat_light_duty; tu tylko odczytujemy
         # przydzielony budżet w oknie danej zmiany.
         meat_on_open_light = sum(
             shift_duty_sum.get((e, d, SHIFT_OPEN), 0)
             for e in range(len(employees))
-            if employees[e].is_meat_light
+            if is_light_meat_on(employees[e], year, month, d)
         )
 
         meat_on_close_light = sum(
             shift_duty_sum.get((e, d, SHIFT_CLOSE), 0)
             for e in range(len(employees))
-            if employees[e].is_meat_light
+            if is_light_meat_on(employees[e], year, month, d)
         )
 
         meat_on_work_light = sum(
@@ -64,7 +71,7 @@ def add_meat_constraint(
             for e in range(len(employees))
             for s in all_shifts
             if s not in (SHIFT_OPEN, SHIFT_CLOSE)
-            and employees[e].is_meat_light
+            and is_light_meat_on(employees[e], year, month, d)
         )
 
         total_work = sum(
@@ -155,7 +162,7 @@ def add_meat_coverage_constraint(
             for e in range(len(employees)):
 
                 emp = employees[e]
-                if not emp.is_meat:
+                if not is_full_meat_on(emp, shop.year, shop.month, d):
                     continue
 
                 shift_len = timedelta(hours=get_effective_daily_hours(emp, shop))
@@ -188,12 +195,12 @@ def add_meat_coverage_constraint(
                     if work_start <= t < work_end:
                         meat_cover.append(x[e, d, shift])
 
-            # Budżet "mięsa tymczasowego" (is_meat_light) na ten kwadrans -
+            # Budżet "mięsa tymczasowego" (Mięso poziom 1, dawne is_meat_light) na ten kwadrans -
             # twardo ograniczony do max 1h/dzień/osobę w build_meat_light_duty.
             light_terms = [
                 slot_duty_sum[(e, d, slot)]
                 for e in range(len(employees))
-                if employees[e].is_meat_light and (e, d, slot) in slot_duty_sum
+                if (e, d, slot) in slot_duty_sum and is_light_meat_on(employees[e], shop.year, shop.month, d)
             ]
             light_sum = sum(light_terms) if light_terms else 0
 

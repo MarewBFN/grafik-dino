@@ -22,6 +22,12 @@ from ortools.sat.python import cp_model
 
 from logic.utils.time_utils import get_effective_daily_hours
 from model.constraint_policy import ConstraintPolicy
+from model.qualification import (
+    is_full_meat_on,
+    is_light_meat_on,
+    is_opener_on,
+    refuses_24h_on,
+)
 
 
 POLICY_STAGES = (
@@ -145,6 +151,12 @@ def audit_schedule(schedule, shop) -> dict[str, Any]:
     return {"monthly_hours": monthly, "rest_11h_violations": rest_violations}
 
 
+def _any_meat_on(employee, year, month, day) -> bool:
+    """Kwalifikacja "Mięso" na dowolnym poziomie (pełna obsługa albo
+    pomocniczo) - dawne is_meat or is_meat_light."""
+    return is_full_meat_on(employee, year, month, day) or is_light_meat_on(employee, year, month, day)
+
+
 def preflight_supply(schedule, shop) -> list[dict[str, Any]]:
     """Static input facts that commonly explain an infeasible staffing model."""
     report = []
@@ -166,9 +178,9 @@ def preflight_supply(schedule, shop) -> list[dict[str, Any]]:
         report.append({
             "day": day,
             "available_employees": len(available),
-            "available_openers": sum(employee.is_opener for employee in available),
-            "available_meat_staff": sum(employee.is_meat for employee in available),
-            "available_meat_light_staff": sum(employee.is_meat_light for employee in available),
+            "available_openers": sum(is_opener_on(employee, schedule.year, schedule.month, day) for employee in available),
+            "available_meat_staff": sum(is_full_meat_on(employee, schedule.year, schedule.month, day) for employee in available),
+            "available_meat_light_staff": sum(is_light_meat_on(employee, schedule.year, schedule.month, day) for employee in available),
             "min_open_staff": shop.constraints.get("min_open_staff", 3),
             "min_close_staff": shop.constraints.get("min_close_staff", 3),
             "locked_assignments": locked,
@@ -295,15 +307,15 @@ def build_infeasibility_summary(schedule, shop, timed_out=False) -> list[str]:
                     f"Dzień {day}: za mało osób możliwych do pracy na {label} "
                     f"({len(fixed) + len(possible)} z wymaganych {required})."
                 )
-            elif not any(employee.is_opener for employee in fixed + possible):
+            elif not any(is_opener_on(employee, schedule.year, schedule.month, day) for employee in fixed + possible):
                 add(f"Dzień {day}: brak pracownika otwarcia możliwego do pracy na {label}.")
-            elif not any(employee.is_meat or employee.is_meat_light for employee in fixed + possible):
+            elif not any(_any_meat_on(employee, schedule.year, schedule.month, day) for employee in fixed + possible):
                 add(f"Dzień {day}: brak osoby z uprawnieniem mięso (ani zastępczej) możliwej do pracy na {label}.")
 
         if policies.get("meat_coverage") == ConstraintPolicy.MANDATORY:
             available_meat = [
                 employee for employee in open_close_employees
-                if (employee.is_meat or employee.is_meat_light)
+                if _any_meat_on(employee, schedule.year, schedule.month, day)
                 and not schedule.get_day(employee, day).is_leave
                 and not getattr(schedule.get_day(employee, day), "is_sick", False)
                 and not getattr(schedule.get_day(employee, day), "is_day_off", False)
@@ -356,7 +368,7 @@ def _add_opening_hours_supply_messages(schedule, shop, add) -> None:
         DAY,
         MIN_REST_MINUTES,
         OPENING_HOURS_COVERAGE_POLICY,
-        _has_no24h_role,
+        _refuses_24h_on,
         fmt_minutes,
         is_regular_location,
         location_windows,
@@ -412,7 +424,7 @@ def _add_opening_hours_supply_messages(schedule, shop, add) -> None:
                 window.is_full_day
                 and shop.weekday(day) >= 5
                 and len(available) == 1
-                and _has_no24h_role(available[0])
+                and _refuses_24h_on(available[0], schedule.year, schedule.month, day)
                 and policies.get("duty_rotation_no24h", ConstraintPolicy.MANDATORY) == ConstraintPolicy.MANDATORY
             ):
                 add(
@@ -453,7 +465,7 @@ def _add_opening_hours_shift_class_messages(schedule, shop, add) -> None:
         MIN_REST_MINUTES,
         OPENING_HOURS_COVERAGE_POLICY,
         OpeningHoursModel,
-        _has_no24h_role,
+        _refuses_24h_on,
         _minutes,
         _overlaps_night,
         uses_opening_hours_model,
@@ -517,7 +529,8 @@ def _add_opening_hours_shift_class_messages(schedule, shop, add) -> None:
                     reasons.add("„Nie pracuje na popołudniu”")
                     hit = True
                 if (
-                    mandatory("duty_rotation_no24h", key, ConstraintPolicy.MANDATORY) and _has_no24h_role(emp)
+                    mandatory("duty_rotation_no24h", key, ConstraintPolicy.MANDATORY)
+                    and _refuses_24h_on(emp, schedule.year, schedule.month, d)
                     and sh.length >= DAY and shop.weekday(sh.window_day) >= 5
                 ):
                     reasons.add("„Nie chce 24h”")
@@ -667,10 +680,7 @@ def _add_duty_rotation_supply_messages(schedule, shop, add) -> None:
     placówki nie jest tego dnia dostępny (urlop/L4/wolne), albo jedyna
     dostępna osoba nie może wziąć zmiany 24h, a dwóch osób do podziału
     doby nie ma."""
-    from logic.generator.duty_rotation_constraint import (
-        NIE_CHCE_24H_ROLE_KEY,
-        group_employees_with_duty_rotation,
-    )
+    from logic.generator.duty_rotation_constraint import group_employees_with_duty_rotation
 
     from logic.generator.duty_rotation_manual_coverage import build_duty_coverage_plan, match_duty_key
 
@@ -691,7 +701,7 @@ def _add_duty_rotation_supply_messages(schedule, shop, add) -> None:
                 for e in indices:
                     state = schedule.get_day(employees[e], day)
                     if (
-                        employees[e].custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False)
+                        refuses_24h_on(employees[e], schedule.year, schedule.month, day)
                         and state.is_locked
                         and not state.is_leave
                         and match_duty_key(state, rotation, shop.weekday(day)) == "weekend_full"
@@ -745,7 +755,7 @@ def _add_duty_rotation_supply_messages(schedule, shop, add) -> None:
                         f"{name}, dzień {day}: dostępna jest tylko 1 osoba "
                         f"({only.display_name()}), a doba wymaga dwóch zmian."
                     )
-                elif only.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False):
+                elif refuses_24h_on(only, schedule.year, schedule.month, day):
                     add(
                         f"{name}, dzień {day}: dostępna jest tylko 1 osoba "
                         f"({only.display_name()}), a ma zaznaczone „Nie chce "

@@ -50,7 +50,9 @@ def test_trace_logger_records_each_constraint():
     trace = ConstraintTraceLogger()
 
     add_one_shift_per_day_constraint(model, x, employees, days, all_shifts, trace=trace)
-    add_fixed_staff_shift_constraints(model, x, employees, days, 0, 1, soft=False, trace=trace)
+    add_fixed_staff_shift_constraints(
+        model, x, employees, days, 0, 1, soft=False, trace=trace, year=schedule.year, month=schedule.month,
+    )
     add_monthly_hours_constraint(model, x, employees, days, schedule, shop, all_shifts, trace=trace)
 
     names = [event["name"] for event in trace.events if event["type"] == "constraint"]

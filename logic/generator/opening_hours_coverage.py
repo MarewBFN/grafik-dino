@@ -128,10 +128,17 @@ def employee_uses_opening_hours_model(shop, emp) -> bool:
     return uses_opening_hours_model(shop) and is_regular_location(shop.get_location(emp))
 
 
-def _has_no24h_role(emp) -> bool:
-    from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
+def _can_work_24h(emp, year, month) -> bool:
+    """Do liczby osób zdolnych do zmian 24 h (odpoczynek (N-1)x24 h)."""
+    from model.qualification import can_work_24h_in_month
 
-    return bool(getattr(emp, "custom_roles", {}).get(NIE_CHCE_24H_ROLE_KEY, False))
+    return can_work_24h_in_month(emp, year, month)
+
+
+def _refuses_24h_on(emp, year, month, day) -> bool:
+    from model.qualification import refuses_24h_on
+
+    return refuses_24h_on(emp, year, month, day)
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +330,7 @@ class OpeningHoursModel:
             for key, view in self.views.items()
         }
         self.capable_24h = {
-            key: sum(1 for e in members if not _has_no24h_role(ctx.employees[e]))
+            key: sum(1 for e in members if _can_work_24h(ctx.employees[e], shop.year, shop.month))
             for key, members in self.members.items()
         }
 
@@ -715,9 +722,9 @@ def add_opening_hours_no24h_constraint(ctx, soft):
     violations = []
     for e in model.indices:
         emp = ctx.employees[e]
-        if not _has_no24h_role(emp):
-            continue
         for d in model.days:
+            if not _refuses_24h_on(emp, ctx.shop.year, ctx.shop.month, d):
+                continue
             if ctx.schedule.get_day(emp, d).is_locked:
                 continue
             for sid, sh in model.allowed(e, d).items():

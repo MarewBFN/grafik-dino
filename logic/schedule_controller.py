@@ -2,6 +2,7 @@ import dataclasses
 from copy import deepcopy
 
 from model.employee import PERSONAL_DATA_FIELDS
+from model.qualification import QUAL_MANAGER, held_in_month
 
 # "id" jest zawsze nowym UUID przy każdym zapisie EmployeeDialog (Employee
 # jest frozen - _save() tworzy nowy obiekt, nie edytuje w miejscu), więc
@@ -245,7 +246,7 @@ class ScheduleController:
         self._apply_manager_schedule_if_needed(new)
 
     def _apply_manager_schedule_if_needed(self, emp):
-        if not getattr(emp, "is_manager", False):
+        if not held_in_month(emp, QUAL_MANAGER, self.schedule.year, self.schedule.month):
             return
         from logic.manager_schedule import apply_manager_schedule
         apply_manager_schedule(self.schedule, self.shop_config, emp)

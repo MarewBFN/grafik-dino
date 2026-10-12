@@ -1,4 +1,5 @@
-"""Sztywny, cotygodniowy grafik dla pracowników z flagą is_manager.
+"""Sztywny, cotygodniowy grafik dla pracowników z kwalifikacją "Kierowniczka"
+(model.qualification.QUAL_MANAGER, dawne is_manager).
 
 Zamiast wpisywać te same godziny co miesiąc ręcznie, dzień z tą flagą jest
 automatycznie blokowany (is_locked) na stałe godziny:
@@ -13,6 +14,8 @@ manual_constraint.py) - stąd wymóg dokładnie 8h dziennie (patrz
 ui/employee_dialog.py, gdzie wybór "kierowniczki" ustawia wymiar etatu na
 1.01 = dokładnie 8:00, żeby uniknąć rozjazdu z force_fulltime_845).
 """
+
+from model.qualification import QUAL_MANAGER, held_in_month, is_manager_on
 
 # 0=poniedziałek ... 6=niedziela (zgodnie z ShopConfig.weekday())
 MANAGER_WEEKDAY_HOURS = {
@@ -50,6 +53,11 @@ def apply_manager_schedule(schedule, shop, employee) -> None:
         if ds.is_leave or getattr(ds, "is_sick", False):
             continue
 
+        # Wzorzec obowiązuje tylko w dniach, w których kwalifikacja
+        # "Kierowniczka" jest ważna (daty ważności, placówka).
+        if not is_manager_on(employee, schedule.year, schedule.month, day):
+            continue
+
         weekday = shop.weekday(day)
 
         if weekday == MANAGER_DAY_OFF_WEEKDAY:
@@ -81,5 +89,5 @@ def apply_manager_schedule(schedule, shop, employee) -> None:
 
 def apply_all_manager_schedules(schedule, shop) -> None:
     for employee in schedule.employees:
-        if getattr(employee, "is_manager", False):
+        if held_in_month(employee, QUAL_MANAGER, schedule.year, schedule.month):
             apply_manager_schedule(schedule, shop, employee)

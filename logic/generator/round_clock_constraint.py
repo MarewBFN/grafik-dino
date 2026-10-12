@@ -24,7 +24,7 @@ Dwa elementy, ten sam wzorzec co duty_rotation_constraint.py:
   WYŁĄCZNIE przez profil Dino (patrz dino_retail_profile.py), tym samym
   wzorcem co "open"/"close": domyślnie MANDATORY, add_fixed_staff_shift_constraints
   na każdy kafelek osobno. Świadomie NIE jest ogólnodostępna dla dowolnego
-  profilu custom - is_opener/is_meat to role specyficzne dla Dino, więc
+  profilu custom - Otwarcie/Mięso to kwalifikacje specyficzne dla Dino, więc
   narzucanie ich profilowi bez tych ról (np. Ochrona, która i tak ma własny
   duty_rotation na 24/7) nie miałoby sensu.
 
@@ -34,9 +34,9 @@ weekend_full - standardowe 11h zawsze wystarcza, sprawdzenie dnia d wobec
 d+1 jak add_rest_11h_constraint). Ręczna blokada dnia w gridzie:
 round_clock_manual_constraint.py.
 
-Świadome ograniczenie zakresu: budżet "mięsa tymczasowego" (is_meat_light,
+Świadome ograniczenie zakresu: budżet "mięsa tymczasowego" (Mięso poziom 1,
 build_meat_light_duty) nie zna kafelków round-clock (liczony tylko dla
-OPEN/CLOSE/START/END) - pracownik is_meat_light nie policzy się do wymogu
+OPEN/CLOSE/START/END) - pracownik z Mięsem na poziomie 1 nie policzy się do wymogu
 "co najmniej 1 mięso" na kafelku. Akceptowalne uproszczenie v1: budżet
 mięsa tymczasowego to osobna, opcjonalna funkcja, nie blokuje podstawowej
 obsady."""
@@ -169,6 +169,7 @@ def add_round_clock_coverage_constraint(
                 soft=soft, trace=trace,
                 meat_light_penalties=meat_light_penalties,
                 shift_duty_sum=shift_duty_sum,
+                year=shop.year, month=shop.month,
             )
         )
     return violations

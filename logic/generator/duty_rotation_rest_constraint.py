@@ -35,7 +35,7 @@ odpoczynku przed albo po ręcznym wpisie (ani na nią nie zachodzi).
 
 from datetime import datetime, timedelta
 
-from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
+from model.qualification import can_work_24h_in_month
 from logic.generator.duty_rotation_manual_coverage import (
     CUSTOM_KEYS,
     DAY_MINUTES,
@@ -179,7 +179,7 @@ def add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shif
 
     for location_key, (rotation, indices) in groups.items():
         rotation_capable_count = sum(
-            1 for e in indices if not employees[e].custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False)
+            1 for e in indices if can_work_24h_in_month(employees[e], shop.year, shop.month)
         )
         max_required = _required_rest("weekend_full", rotation_capable_count)
         # +2 dni marginesu na przesunięcia z zaokrąglania godzin/zmian

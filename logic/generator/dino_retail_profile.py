@@ -77,6 +77,7 @@ def _build_open(ctx, soft):
         meat_light_penalties=ctx.extra["meat_light_penalties"],
         shift_duty_sum=ctx.extra["shift_duty_sum"],
         employee_indices=_open_close_eligible_indices(ctx),
+        year=ctx.shop.year, month=ctx.shop.month,
     )
 
 
@@ -88,6 +89,7 @@ def _build_close(ctx, soft):
         employee_indices=_open_close_eligible_indices(ctx),
         meat_light_penalties=ctx.extra["meat_light_penalties"],
         shift_duty_sum=ctx.extra["shift_duty_sum"],
+        year=ctx.shop.year, month=ctx.shop.month,
     )
 
 
@@ -113,6 +115,7 @@ def _build_meat(ctx, soft):
         ctx.shift_open, ctx.shift_close, soft=soft, trace=ctx.trace,
         meat_light_penalties=ctx.extra["meat_light_penalties"],
         shift_duty_sum=ctx.extra["shift_duty_sum"],
+        year=ctx.shop.year, month=ctx.shop.month,
     )
 
 
@@ -144,7 +147,7 @@ def _build_dino_policy_specs():
         ConstraintSpec("meat", _build_meat),
         ConstraintSpec("meat_coverage", _build_meat_coverage),
         # Kafelki rotacji całodobowej "ogólnej" (round_clock_constraint.py) -
-        # wyłącznie dla Dino, jak "open"/"close" (is_opener/is_meat to role
+        # wyłącznie dla Dino, jak "open"/"close" (Otwarcie/Mięso to kwalifikacje
         # specyficzne dla tego profilu). Świadomie NIE dla profili custom
         # (np. Ochrona ma własny, dedykowany duty_rotation).
         ConstraintSpec("round_clock_coverage", _build_round_clock_coverage),

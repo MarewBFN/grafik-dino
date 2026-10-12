@@ -39,14 +39,15 @@ lokalizacji dzielą jedną grupę opartą o ShopConfig.duty_rotation.
 
 from logic.generator.night_shift_constraint import night_shift_duration_minutes
 from logic.generator.duty_rotation_manual_coverage import CUSTOM_KEYS, custom_shift_ids, get_plan
+from model.qualification import QUAL_NO_24H, held_in_month, refuses_24h_on
 
 DUTY_ROTATION_KEYS = ("weekday_long", "weekday_short", "weekend_full", "weekend_half_a", "weekend_half_b")
 
-# Employee.custom_roles key - patrz add_duty_rotation_no24h_gate_constraint
+# Klucz kwalifikacji "Nie chce 24h" (dawne custom_roles) - patrz add_duty_rotation_no24h_gate_constraint
 # poniżej i ui/employee_dialog.py (checkbox "Nie chce zmian 24h", widoczny
 # tylko gdy projekt faktycznie używa rotacji służby). Stała, żeby te dwa
 # miejsca nie mogły się rozjechać na literale stringa.
-NIE_CHCE_24H_ROLE_KEY = "nie_chce_24h"
+NIE_CHCE_24H_ROLE_KEY = QUAL_NO_24H
 
 FULL_DAY_MINUTES = 24 * 60
 
@@ -172,9 +173,11 @@ def add_duty_rotation_no24h_gate_constraint(model, x, employees, days, shop, dut
     weekend_full = duty_shifts["weekend_full"]
 
     for e, emp in enumerate(employees):
-        if not emp.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False):
+        if not held_in_month(emp, QUAL_NO_24H, shop.year, shop.month):
             continue
         for d in days:
+            if not refuses_24h_on(emp, shop.year, shop.month, d):
+                continue
             if shop.weekday(d) < 5:
                 # Flaga dotyczy tylko weekendów (patrz tooltip w
                 # ui/employee_dialog.py) - w dni robocze, także przy

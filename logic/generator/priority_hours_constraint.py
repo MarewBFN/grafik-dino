@@ -22,8 +22,9 @@ miejsca, które trzeba trzymać w synchronizacji, gdyby któreś się zmieniło.
 from logic.generator.duty_rotation_manual_coverage import planned_minutes_expr
 from logic.generator.hours_constraint import _duration_overrides_for_employee, _opening_minutes, _shift_minutes_by_type
 from logic.utils.time_utils import get_effective_daily_hours
+from model.qualification import QUAL_CONTRACT, can_work_24h_in_month, held_in_month
 
-UMOWA_ROLE_KEY = "umowa"
+UMOWA_ROLE_KEY = QUAL_CONTRACT
 
 # Wyraźnie ponad typowe wagi generycznych constraintów (rest_11h/
 # availability/duty_rotation_coverage = 5000 w base_specs.GENERIC_WEIGHTS)
@@ -58,8 +59,8 @@ def add_priority_hours_shortfall_penalty(
     penalties = []
 
     for e, emp in enumerate(employees):
-        has_role = emp.has_role(role_key)
-        if has_role if invert else not has_role:
+        holds = held_in_month(emp, role_key, shop.year, shop.month)
+        if holds if invert else not holds:
             continue
 
         daily_hours = get_effective_daily_hours(emp, shop)
@@ -190,8 +191,7 @@ def hours_equalization_weight(policy) -> int:
     return 0
 
 
-def _duty_tolerance_minutes(rotation, emp) -> int:
-    from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
+def _duty_tolerance_minutes(rotation, emp, shop) -> int:
     from logic.generator.night_shift_constraint import night_shift_duration_minutes
 
     keys = ["weekend_half_a", "weekend_half_b"]
@@ -201,7 +201,7 @@ def _duty_tolerance_minutes(rotation, emp) -> int:
         night_shift_duration_minutes((rotation[k]["start"], rotation[k]["end"]))
         for k in keys if rotation.get(k)
     ]
-    if not emp.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False):
+    if can_work_24h_in_month(emp, shop.year, shop.month):
         lengths.append(24 * 60)
     return max(lengths, default=24 * 60)
 
@@ -228,10 +228,10 @@ def add_hours_equalization_penalty(
     for e, emp in enumerate(employees):
         key = emp.location_key or ""
         location_sizes[key] = location_sizes.get(key, 0) + 1
-        groups.setdefault((key, emp.has_role(role_key)), []).append(e)
+        groups.setdefault((key, held_in_month(emp, role_key, shop.year, shop.month)), []).append(e)
 
     penalties = []
-    for (location_key, has_role), indices in groups.items():
+    for (location_key, holds), indices in groups.items():
         if len(indices) < 2:
             continue
 
@@ -250,7 +250,7 @@ def add_hours_equalization_penalty(
             rotation = shop.get_location(emp).get_duty_rotation()
             if rotation:
                 share_per_day = (24 * 60) // max(location_sizes[location_key], 1)
-                shift_tolerance = _duty_tolerance_minutes(rotation, emp)
+                shift_tolerance = _duty_tolerance_minutes(rotation, emp, shop)
             else:
                 share_per_day = daily_minutes
                 shift_tolerance = daily_minutes
@@ -277,7 +277,7 @@ def add_hours_equalization_penalty(
         if len(norms) < 2:
             continue
 
-        tag = f"{location_key}_{int(has_role)}"
+        tag = f"{location_key}_{int(holds)}"
         highest = model.NewIntVar(0, 10_000_000, f"equalize_max_{tag}")
         lowest = model.NewIntVar(0, 10_000_000, f"equalize_min_{tag}")
         model.AddMaxEquality(highest, norms)

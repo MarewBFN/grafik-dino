@@ -21,6 +21,8 @@ from datetime import date, timedelta
 
 import holidays as _holidays
 
+from model.qualification import MEAT_LEVEL_FULL, MEAT_LEVEL_LIGHT, QUAL_MANAGER, QUAL_MEAT, QUAL_NO_24H, QUAL_OPENER
+
 
 DAY = 24 * 60
 SLOT = 15
@@ -30,7 +32,23 @@ DINO = "dino_retail"
 # użytkownika 2026-09-28): "custom_ochrona" albo każdy profil custom z rolą
 # "Nie chce 24h".
 OCHRONA_PROFILE_KEY = "custom_ochrona"
-NIE_CHCE_24H = "nie_chce_24h"
+NIE_CHCE_24H = QUAL_NO_24H
+
+
+def _level(emp, key, cfg, day) -> int:
+    """Poziom kwalifikacji pracownika w dniu `day` (data ważności, placówka).
+    Dzień spoza miesiąca (zmiana z poprzedniego miesiąca) - bez daty."""
+    on = date(cfg.year, cfg.month, day) if 1 <= day <= cfg.days_in_month else None
+    return emp.qualification_level(key, on=on, location_key=emp.location_key or None)
+
+
+def _has(emp, key, cfg, day) -> bool:
+    return _level(emp, key, cfg, day) >= 1
+
+
+def _can_work_24h(emp, cfg) -> bool:
+    """Liczy się do N w odpoczynku (N-1)x24 h: choć jeden dzień bez "Nie chce 24h"."""
+    return any(not _has(emp, NIE_CHCE_24H, cfg, day) for day in range(1, cfg.days_in_month + 1))
 MAX_STAFF_KEY = "max_staff_at_once"
 
 
@@ -406,7 +424,7 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
             if b is None:
                 continue
             fixed = b.is_locked or b.is_leave or b.is_sick
-            if emp.is_manager and cfg.is_dino:
+            if _has(emp, QUAL_MANAGER, cfg, day) and cfg.is_dino:
                 # Kierowniczka: sztywny wzorzec nakładany przez generator
                 # (logic/manager_schedule.py) - traktujemy jak ręczny wpis.
                 fixed = fixed or a.is_locked
@@ -475,7 +493,7 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
                         + (" ani połówką doby" if doba else ""),
                         emp.display_name(), day,
                     ))
-                if full and emp.custom_roles.get(NIE_CHCE_24H) and cfg.weekday(window_day) >= 5:
+                if full and _has(emp, NIE_CHCE_24H, cfg, day) and cfg.weekday(window_day) >= 5:
                     add(Violation(
                         "duty_rotation_no24h", f"zmiana 24h w weekend dla osoby \"nie chce 24h\" ({fmt_abs(start)})",
                         emp.display_name(), day,
@@ -523,7 +541,7 @@ def validate(schedule_before, schedule_after, shop, *, generation_succeeded=True
         capable = None
         long_rest = bool(rotation) or cfg.uses_opening_model(emp)
         if long_rest:
-            capable = sum(1 for other in loc_groups.get(emp.location_key, []) if not other.custom_roles.get(NIE_CHCE_24H))
+            capable = sum(1 for other in loc_groups.get(emp.location_key, []) if _can_work_24h(other, cfg))
         for (s1, e1, d1, m1, full1), (s2, e2, d2, m2, _f2) in zip(rows, rows[1:]):
             required = 11 * 60
             if long_rest and full1:
@@ -665,18 +683,18 @@ def _validate_dino(cfg, schedule, intervals, report):
 
             if len(openers) < min_open:
                 add(Violation("open", f"[{loc_key}] na otwarciu {len(openers)} os. < min {min_open}", day=day, location=loc_key))
-            if not any(e.is_opener for e in openers):
-                add(Violation("open", f"[{loc_key}] brak pracownika otwarcia (is_opener) na otwarciu", day=day, location=loc_key))
-            if not any(e.is_meat or e.is_meat_light for e in openers):
+            if not any(_has(e, QUAL_OPENER, cfg, day) for e in openers):
+                add(Violation("open", f"[{loc_key}] brak pracownika z kwalifikacją Otwarcie na otwarciu", day=day, location=loc_key))
+            if not any(_has(e, QUAL_MEAT, cfg, day) for e in openers):
                 add(Violation("open", f"[{loc_key}] brak mięsa na otwarciu", day=day, location=loc_key))
             if len(closers) < min_close:
                 add(Violation("close", f"[{loc_key}] na zamknięciu {len(closers)} os. < min {min_close}", day=day, location=loc_key))
-            if not any(e.is_meat or e.is_meat_light for e in closers):
+            if not any(_has(e, QUAL_MEAT, cfg, day) for e in closers):
                 add(Violation("close", f"[{loc_key}] brak mięsa na zamknięciu", day=day, location=loc_key))
             # Generator (constraints_staff.add_fixed_staff_shift_constraints)
             # wymaga osoby z "otwarciem" także na zamknięciu.
-            if not any(e.is_opener for e in closers):
-                add(Violation("close", f"[{loc_key}] brak pracownika otwarcia (is_opener) na zamknięciu", day=day, location=loc_key))
+            if not any(_has(e, QUAL_OPENER, cfg, day) for e in closers):
+                add(Violation("close", f"[{loc_key}] brak pracownika z kwalifikacją Otwarcie na zamknięciu", day=day, location=loc_key))
 
             # "Mięso na zmianach" (policy "meat", semantyka trybu MANDATORY w
             # generatorze): jeśli tego dnia jest choć jedna zmiana spoza
@@ -686,17 +704,18 @@ def _validate_dino(cfg, schedule, intervals, report):
                 for s, en, d, _m, _f in intervals[e.id]
                 if d == day and s != open_t and en != close_t
             ]
-            if middle and not any(e.is_meat or e.is_meat_light for e in middle):
+            if middle and not any(_has(e, QUAL_MEAT, cfg, day) for e in middle):
                 add(Violation("meat", f"[{loc_key}] brak mięsa na zmianach środkowych", day=day, location=loc_key))
 
-            # Mięso przez cały dzień (kwadrans po kwadransie): is_meat, a
-            # is_meat_light maks. 60 min/dzień/osobę.
+            # Mięso przez cały dzień (kwadrans po kwadransie): Mięso poziom 2,
+            # a poziom 1 (pomocniczo) maks. 60 min/dzień/osobę.
             gaps = []
-            light_budget = {e.id: 60 for e in emps if e.is_meat_light}
+            light_budget = {e.id: 60 for e in emps if _level(e, QUAL_MEAT, cfg, day) == MEAT_LEVEL_LIGHT}
             t = open_t
             while t < close_t:
                 covered = any(
-                    s <= t < en for e in emps if e.is_meat for s, en, _d, _m, _f in intervals[e.id]
+                    s <= t < en for e in emps if _level(e, QUAL_MEAT, cfg, day) >= MEAT_LEVEL_FULL
+                    for s, en, _d, _m, _f in intervals[e.id]
                 )
                 if not covered:
                     for e in emps:
@@ -750,7 +769,7 @@ def _validate_duty(cfg, schedule, intervals, manual, report):
                 allowed = cfg.standard_duty_windows(rotation, day)
                 if (s, e) not in allowed.values() and not has_manual_work:
                     add(Violation("duty_shape", f"zmiana {fmt_abs(s)}-{fmt_abs(e)} nie pasuje do rotacji", emp.display_name(), day))
-                if is_full and emp.custom_roles.get(NIE_CHCE_24H) and (
+                if is_full and _has(emp, NIE_CHCE_24H, cfg, day) and (
                     cfg.weekday(day) >= 5 if 1 <= day <= cfg.days_in_month else True
                 ):
                     add(Violation("duty_rotation_no24h", f"zmiana 24h dla osoby \"nie chce 24h\" ({fmt_abs(s)})", emp.display_name(), day))

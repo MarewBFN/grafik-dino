@@ -4,6 +4,7 @@ from model.business_profile import DEFAULT_BUSINESS_TYPE
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from model.constraint_policy import ConstraintPolicy
+from model.qualification import is_full_meat_on, is_light_meat_on, is_opener_on
 
 
 # ==========================================
@@ -265,7 +266,7 @@ def opening_closing_stats(
         time = ds.start if mode == "open" else ds.end
         if time == target_time:
             count += 1
-            if emp.is_opener:
+            if is_opener_on(emp, schedule.year, schedule.month, day):
                 has_opener = True
 
     return {"count": count, "has_opener": has_opener}
@@ -300,8 +301,8 @@ def meat_coverage(schedule, shop, day: int) -> dict:
     """
     Sprawdza czy mięso jest pokryte przez cały dzień.
 
-    Rozróżnia pokrycie przez pełnoprawnych "mięsiarzy" (is_meat) od pokrycia
-    zastępczego przez osoby z flagą is_meat_light ("może stanąć na chwilę") -
+    Rozróżnia pokrycie przez pełnoprawnych "mięsiarzy" (Mięso poziom 2) od
+    pokrycia zastępczego przez osoby z Mięsem na poziomie 1 ("pomocniczo") -
     to drugie liczy się jako pokrycie, ale jest zwracane osobno w
     "light_ranges", żeby UI mogło to zaznaczyć jako ostrzeżenie, nie sukces.
     """
@@ -317,7 +318,8 @@ def meat_coverage(schedule, shop, day: int) -> dict:
     light_intervals = []
 
     for emp in schedule.employees:
-        if not (emp.is_meat or emp.is_meat_light):
+        full_meat = is_full_meat_on(emp, schedule.year, schedule.month, day)
+        if not (full_meat or is_light_meat_on(emp, schedule.year, schedule.month, day)):
             continue
 
         ds = schedule.get_day(emp, day)
@@ -331,7 +333,7 @@ def meat_coverage(schedule, shop, day: int) -> dict:
         if start >= end:
             continue
 
-        (real_intervals if emp.is_meat else light_intervals).append((start, end))
+        (real_intervals if full_meat else light_intervals).append((start, end))
 
     real_merged = _merge_intervals(real_intervals)
     light_merged = _merge_intervals(light_intervals)

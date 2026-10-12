@@ -236,7 +236,7 @@ class AutoScheduleGenerator:
         if not is_fix:
             self.schedule.clear_unlocked_days(employees)
 
-        # Kierowniczki (is_manager) mają sztywny, cotygodniowy grafik -
+        # Kierowniczki (kwalifikacja "Kierowniczka") mają sztywny, cotygodniowy grafik -
         # odświeżamy go przed każdym generowaniem, żeby nikt nie musiał
         # wpisywać tych godzin ręcznie ani pilnować, że ich dane przetrwały.
         # Celowo NIE ograniczone do `employees` (idempotentne, dotyka

@@ -20,6 +20,7 @@ no_night/no_afternoon to ograniczenia pracownika, nie kwalifikacje - zostają
 osobnymi polami Employee (osobny krok migracji).
 """
 
+import calendar
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -41,6 +42,10 @@ QUAL_MANAGER = "kierownik"
 # chwilę"), 2 = dawne is_meat (pełna obsługa stoiska).
 MEAT_LEVEL_LIGHT = 1
 MEAT_LEVEL_FULL = 2
+
+# Kwalifikacje profilu Ochrona (dawne custom_roles - ten sam klucz).
+QUAL_CONTRACT = "umowa"
+QUAL_NO_24H = "nie_chce_24h"
 
 # Pole poziomu, gdy kwalifikacja nie ma skali poziomów.
 DEFAULT_LEVEL = 1
@@ -197,6 +202,71 @@ def qualifications_of(*items) -> tuple:
         else:
             result.append(EmployeeQualification(item))
     return tuple(result)
+
+
+# ---------------------------------------------------------------------------
+# Kwalifikacja pracownika w konkretnym dniu grafiku
+# ---------------------------------------------------------------------------
+#
+# Generator, kolorowanie siatki i diagnostyka pytają zawsze o konkretny dzień
+# miesiąca: liczy się tylko kwalifikacja ważna tego dnia (valid_from/valid_to)
+# i obowiązująca w placówce pracownika (location_ids). `employee` jest
+# duck-typed (model.employee.Employee), żeby ten moduł nie importował modelu
+# pracownika.
+
+
+def level_on(employee, key: str, year: int, month: int, day: int) -> int:
+    """Poziom kwalifikacji `key` pracownika w dniu year-month-day (0 = brak)."""
+    return employee.qualification_level(
+        key, on=date(year, month, day), location_key=employee.location_key or None,
+    )
+
+
+def has_on(employee, key: str, year: int, month: int, day: int, min_level: int = 1) -> bool:
+    return level_on(employee, key, year, month, day) >= min_level
+
+
+def held_in_month(employee, key: str, year: int, month: int, min_level: int = 1) -> bool:
+    """Czy pracownik ma kwalifikację `key` ważną choć jeden dzień miesiąca -
+    dla zasad liczonych za cały miesiąc naraz (np. priorytet godzin "Umowy",
+    liczba osób zdolnych do zmian 24h w formule odpoczynku)."""
+    days = calendar.monthrange(year, month)[1]
+    return any(has_on(employee, key, year, month, day, min_level) for day in range(1, days + 1))
+
+
+def held_every_day(employee, key: str, year: int, month: int, min_level: int = 1) -> bool:
+    """Czy pracownik ma kwalifikację `key` ważną każdego dnia miesiąca."""
+    days = calendar.monthrange(year, month)[1]
+    return all(has_on(employee, key, year, month, day, min_level) for day in range(1, days + 1))
+
+
+def is_opener_on(employee, year, month, day) -> bool:
+    return has_on(employee, QUAL_OPENER, year, month, day)
+
+
+def is_full_meat_on(employee, year, month, day) -> bool:
+    """Dawne is_meat: pełna obsługa stoiska mięsnego (poziom >= 2)."""
+    return level_on(employee, QUAL_MEAT, year, month, day) >= MEAT_LEVEL_FULL
+
+
+def is_light_meat_on(employee, year, month, day) -> bool:
+    """Dawne is_meat_light: "może stanąć na chwilę" (dokładnie poziom 1)."""
+    return level_on(employee, QUAL_MEAT, year, month, day) == MEAT_LEVEL_LIGHT
+
+
+def is_manager_on(employee, year, month, day) -> bool:
+    return has_on(employee, QUAL_MANAGER, year, month, day)
+
+
+def refuses_24h_on(employee, year, month, day) -> bool:
+    return has_on(employee, QUAL_NO_24H, year, month, day)
+
+
+def can_work_24h_in_month(employee, year, month) -> bool:
+    """Do liczby osób zdolnych do zmian 24 h (odpoczynek (N-1)x24 h po
+    służbie 24 h) liczy się każdy, kto choć jeden dzień miesiąca nie ma
+    kwalifikacji "Nie chce 24h"."""
+    return not held_every_day(employee, QUAL_NO_24H, year, month)
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,6 @@
+from model.qualification import is_full_meat_on, is_light_meat_on, is_opener_on
+
+
 def add_fixed_staff_shift_constraints(
     model,
     x,
@@ -10,7 +13,14 @@ def add_fixed_staff_shift_constraints(
     meat_light_penalties=None,
     shift_duty_sum=None,
     employee_indices=None,
+    *,
+    year,
+    month,
 ):
+    """Obsada zmiany OPEN/CLOSE (Dino): dokładnie `min_staff` osób, w tym ktoś
+    z kwalifikacją "Otwarcie" i ktoś z "Mięso" (pełna obsługa albo budżet
+    "pomocniczo"). Kwalifikacje liczone na konkretny dzień (year, month, d) -
+    z datami ważności i placówką pracownika."""
     if trace is not None:
         trace.log_constraint("fixed_staff_shift", f"shift={shift_type} min_staff={min_staff} soft={soft}")
 
@@ -42,23 +52,23 @@ def add_fixed_staff_shift_constraints(
         opener_staff = sum(
             x[e, d, shift_type]
             for e in indices
-            if employees[e].is_opener
+            if is_opener_on(employees[e], year, month, d)
         )
 
-        # Budżet "mięsa tymczasowego" (is_meat_light) - ograniczony twardo do
+        # Budżet "mięsa tymczasowego" (Mięso poziom 1) - ograniczony twardo do
         # max 1h/dzień/osobę gdzie indziej (build_meat_light_duty), tu tylko
         # sumujemy przydzielony budżet w oknie tej zmiany.
         meat_light_staff = sum(
             shift_duty_sum.get((e, d, shift_type), 0)
             for e in indices
-            if employees[e].is_meat_light
+            if is_light_meat_on(employees[e], year, month, d)
         )
 
         if not soft:
             meat_staff = sum(
                 x[e, d, shift_type]
                 for e in indices
-                if employees[e].is_meat
+                if is_full_meat_on(employees[e], year, month, d)
             )
 
             model.Add(total_staff == min_staff)
@@ -84,7 +94,7 @@ def add_fixed_staff_shift_constraints(
             meat_staff = sum(
                 x[e, d, shift_type]
                 for e in indices
-                if employees[e].is_meat
+                if is_full_meat_on(employees[e], year, month, d)
             )
             meat_violation = model.NewBoolVar(f"meat_v_d{d}_{shift_type}")
             model.Add(meat_staff + meat_light_staff + meat_violation >= 1)
