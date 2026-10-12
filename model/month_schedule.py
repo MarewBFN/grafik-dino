@@ -5,6 +5,11 @@ from typing import Dict
 
 from model.day_schedule import DaySchedule
 from model.employee import PERSONAL_DATA_FIELDS, Employee
+from model.qualification import (
+    EmployeeQualification,
+    is_legacy_employee_data,
+    qualifications_from_legacy,
+)
 
 # Odkryte z powrotem (2026-09-21) przy okazji pamięci wielu miesięcy - diagnostyka
 # INFEASIBLE (ENYO_ONLY_CHANGES.md, "Naprawiony bug: infeasible bez
@@ -15,6 +20,15 @@ from model.employee import PERSONAL_DATA_FIELDS, Employee
 # - logic/generator/base_specs.py::_build_rest_11h (wpływ na generator),
 # - ui/grid_view.py::_previous_month_last_day_if_shown (kolumna w gridzie).
 PREVIOUS_MONTH_MEMORY_ENABLED = True
+
+
+def employee_qualifications_from_dict(data: dict) -> tuple:
+    """Kwalifikacje pracownika z zapisu: nowy format ("qualifications") albo
+    automatyczna migracja dawnych pól roli (is_opener, is_meat, ...,
+    custom_roles) - patrz model/qualification.py::qualifications_from_legacy."""
+    if is_legacy_employee_data(data):
+        return qualifications_from_legacy(data)
+    return tuple(EmployeeQualification.from_dict(item) for item in data["qualifications"])
 
 
 @dataclass(frozen=True)
@@ -310,13 +324,9 @@ class MonthSchedule:
                 {
                     "first_name": e.first_name,
                     "last_name": e.last_name,
-                    "is_opener": e.is_opener,
-                    "is_meat": e.is_meat,
-                    "is_meat_light": e.is_meat_light,
-                    "is_manager": e.is_manager,
                     "no_night": e.no_night,
                     "no_afternoon": e.no_afternoon,
-                    "custom_roles": e.custom_roles,
+                    "qualifications": [q.to_dict() for q in e.qualifications],
                     "location_key": e.location_key,
                     "company_key": e.company_key,
                     "monthly_target_hours": e.monthly_target_hours,
@@ -368,13 +378,9 @@ class MonthSchedule:
             emp = Employee(
                 last_name=ed["last_name"],
                 first_name=ed["first_name"],
-                is_opener=ed.get("is_opener", False),
-                is_meat=ed.get("is_meat", False),
-                is_meat_light=ed.get("is_meat_light", False),
-                is_manager=ed.get("is_manager", False),
                 no_night=ed.get("no_night", False),
                 no_afternoon=ed.get("no_afternoon", False),
-                custom_roles=dict(ed.get("custom_roles", {})),
+                qualifications=employee_qualifications_from_dict(ed),
                 location_key=ed.get("location_key", ""),
                 company_key=ed.get("company_key", ""),
                 monthly_target_hours=ed.get("monthly_target_hours", 160),

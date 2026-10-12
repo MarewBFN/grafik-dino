@@ -23,6 +23,7 @@ _app = QApplication.instance() or QApplication([])
 from logic.schedule_controller import ScheduleController
 from model.company import Company
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.month_schedule import MonthSchedule
 from model.monthly_project import MonthlyProject
 from model.shop_config import ShopConfig
@@ -42,10 +43,9 @@ class FullRoundtripTests(unittest.TestCase):
         self.company = Company(name="Enyo", nip="7790000000", city="Poznań")
         self.shop = ShopConfig(2026, 10)
         self.emp = Employee(
-            last_name="Kowalski", first_name="Jan", is_opener=True, is_manager=True,
+            last_name="Kowalski", first_name="Jan", qualifications=qualifications_of("otwarcie", "kierownik", "kierowca"),
             no_night=True, monthly_target_hours=120, daily_hours=12, employment_fraction=0.5,
-            availability={1: {"start": "08:00", "end": "16:00", "mode": "hard"}},
-            custom_roles={"kierowca": True}, location_key=next(iter(self.shop.locations)),
+            availability={1: {"start": "08:00", "end": "16:00", "mode": "hard"}}, location_key=next(iter(self.shop.locations)),
             company_key=self.company.key, phone="600 123 456", email="jan@x.pl",
             street="Krótka 1", postal_code="61-001", city="Poznań", vacation_days_left=12.5,
         )

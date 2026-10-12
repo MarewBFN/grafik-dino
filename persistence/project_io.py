@@ -1,6 +1,10 @@
 import dataclasses
 import json
+import os
+import shutil
+
 from model.company import Company
+from model.qualification import Qualification
 from model.month_schedule import MonthSchedule
 from model.monthly_project import MonthlyProject
 from model.shop_config import ShopConfig
@@ -13,13 +17,50 @@ from model.shop_config import ShopConfig
 # faktycznie potrzebne).
 _BUNDLE_FORMAT_MARKER = "multi_month_project"
 
+# Wersja formatu pliku projektu (oba formaty: jednomiesięczny i
+# wielomiesięczny). 2 = role pracownika jako kwalifikacje
+# (Employee.qualifications, katalog MonthlyProject.qualifications) zamiast
+# pól is_opener/is_meat/is_meat_light/is_manager/custom_roles. Pliki bez tego
+# pola albo z niższą wersją wczytują się z automatyczną migracją (patrz
+# model/month_schedule.py::employee_qualifications_from_dict).
+FORMAT_VERSION = 2
+BACKUP_SUFFIX = ".bak"
+
+
+def _needs_legacy_backup(path) -> bool:
+    """Czy plik pod `path` jest w formacie sprzed FORMAT_VERSION (albo nie
+    da się go odczytać) - wtedy przed nadpisaniem robimy kopię zapasową."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return True
+    return not isinstance(data, dict) or data.get("format_version", 1) < FORMAT_VERSION
+
+
+def backup_legacy_file(path) -> str | None:
+    """Kopia zapasowa `<plik>.bak` przed PIERWSZYM zapisem pliku w nowym
+    formacie - tylko gdy na dysku leży plik w starszym formacie i kopii
+    jeszcze nie ma (istniejącej kopii nigdy nie nadpisujemy: to oryginał
+    sprzed migracji). Zwraca ścieżkę utworzonej kopii albo None."""
+    path = os.fspath(path)
+    backup_path = path + BACKUP_SUFFIX
+    if not os.path.exists(path) or os.path.exists(backup_path):
+        return None
+    if not _needs_legacy_backup(path):
+        return None
+    shutil.copy2(path, backup_path)
+    return backup_path
+
 
 def save_project(path, schedule: MonthSchedule, shop_config: ShopConfig):
     data = {
+        "format_version": FORMAT_VERSION,
         "schedule": schedule.to_dict(),
         "shop_config": shop_config.to_dict()
     }
 
+    backup_legacy_file(path)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -84,9 +125,10 @@ def save_project_bundle(path, project: MonthlyProject, active_year: int, active_
     aktualnie otwarty. To jest format .myp/last_project.json od pamięci
     wielu miesięcy - patrz load_project_bundle() niżej po wczytanie
     (rozumie też stary, jednomiesięczny format tych samych plików)."""
+    project.ensure_qualification_catalog()
     data = {
         "format": _BUNDLE_FORMAT_MARKER,
-        "format_version": 1,
+        "format_version": FORMAT_VERSION,
         "active_month": _month_key(active_year, active_month),
         "months": {
             _month_key(year, month): {
@@ -96,8 +138,10 @@ def save_project_bundle(path, project: MonthlyProject, active_year: int, active_
             for (year, month), (schedule, shop_config) in project.months.items()
         },
         "companies": [company.to_dict() for company in project.companies.values()],
+        "qualifications": [qualification.to_dict() for qualification in project.qualifications.values()],
     }
 
+    backup_legacy_file(path)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -119,17 +163,24 @@ def load_project_bundle(path) -> tuple[MonthlyProject, int, int]:
         shop_config = ShopConfig.from_dict(data["shop_config"])
         assign_missing_location_keys(schedule, shop_config)
         project.put(schedule.year, schedule.month, schedule, shop_config)
+        project.ensure_qualification_catalog()
         return project, schedule.year, schedule.month
 
     for company_data in data.get("companies", []):
         company = Company.from_dict(company_data)
         project.companies[company.key] = company
 
+    for qualification_data in data.get("qualifications", []):
+        qualification = Qualification.from_dict(qualification_data)
+        project.qualifications[qualification.id] = qualification
+
     for key, month_data in data["months"].items():
         schedule = MonthSchedule.from_dict(month_data["schedule"])
         shop_config = ShopConfig.from_dict(month_data["shop_config"])
         assign_missing_location_keys(schedule, shop_config)
         project.put(schedule.year, schedule.month, schedule, shop_config)
+
+    project.ensure_qualification_catalog()
 
     active_key = data.get("active_month")
     active = _parse_month_key(active_key) if active_key else None

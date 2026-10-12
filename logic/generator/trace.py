@@ -7,6 +7,7 @@ from logic.utils.time_utils import get_effective_daily_hours
 from model.day_schedule import calc_end
 from model.employee import Employee
 from model.month_schedule import MonthSchedule
+from model.qualification import MEAT_LEVEL_FULL, QUAL_MEAT, QUAL_OPENER, qualifications_of
 from model.shop_config import ShopConfig
 from persistence.project_io import save_project
 
@@ -42,11 +43,13 @@ def build_random_scenario(seed: int = 7, employee_count: int = 4, days: int = 7,
 
     employees = []
     for idx in range(employee_count):
+        opener = rng.choice([True, False])
+        meat = rng.choice([True, False])
         employees.append({
             "first_name": f"Emp{idx}",
             "last_name": f"Worker{idx}",
-            "is_opener": rng.choice([True, False]),
-            "is_meat": rng.choice([True, False]),
+            # [klucz kwalifikacji, poziom] - patrz model/qualification.py
+            "qualifications": [[QUAL_OPENER, 1]] * opener + [[QUAL_MEAT, MEAT_LEVEL_FULL]] * meat,
             "no_night": rng.choice([True, False]),
             "monthly_target_hours": 160,
             "daily_hours": 8,
@@ -107,11 +110,12 @@ def build_random_project(
                 # These windows deliberately include restrictive cases for stress tests.
                 start, end = rng.choice([("05:30", "14:30"), ("13:00", "22:45"), ("08:00", "18:00")])
                 availability[weekday] = [{"start": start, "end": end, "mode": "hard"}]
+        opener = rng.choice([True, False])
+        meat = rng.choice([True, False])
         employee = Employee(
             last_name=f"Worker{index:02d}",
             first_name=f"Emp{index:02d}",
-            is_opener=rng.choice([True, False]),
-            is_meat=rng.choice([True, False]),
+            qualifications=qualifications_of(*[QUAL_OPENER] * opener, *[(QUAL_MEAT, MEAT_LEVEL_FULL)] * meat),
             no_night=rng.choice([True, False]),
             employment_fraction=rng.choice([0.5, 0.75, 1.0, 1.0]),
             availability=availability,
@@ -119,8 +123,7 @@ def build_random_project(
         schedule.add_employee(employee)
         metadata["employees"].append({
             "name": employee.display_name(),
-            "is_opener": employee.is_opener,
-            "is_meat": employee.is_meat,
+            "qualifications": [[q.qualification_id, q.level] for q in employee.qualifications],
             "no_night": employee.no_night,
             "employment_fraction": employee.employment_fraction,
             "availability": availability,

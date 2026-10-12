@@ -15,6 +15,7 @@ from logic.generator.hours_constraint import add_monthly_hours_constraint
 from logic.generator.objective import add_workload_balance_penalty
 from logic.generator.trace import ConstraintTraceLogger, build_random_scenario
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 
@@ -25,8 +26,8 @@ def _build_simple_problem():
     schedule = MonthSchedule(year, month)
 
     employees = [
-        Employee(last_name="Kowalski", first_name="Jan", is_opener=True, is_meat=True),
-        Employee(last_name="Nowak", first_name="Anna", is_opener=False, is_meat=False),
+        Employee(last_name="Kowalski", first_name="Jan", qualifications=qualifications_of("otwarcie", ("mieso", 2))),
+        Employee(last_name="Nowak", first_name="Anna"),
     ]
     for emp in employees:
         schedule.add_employee(emp)

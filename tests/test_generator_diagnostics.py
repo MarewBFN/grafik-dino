@@ -1,3 +1,4 @@
+import dataclasses
 import json
 from contextlib import redirect_stdout
 import io
@@ -18,6 +19,7 @@ from logic.generator.night_constraint import add_no_night_constraint
 from logic.generator.trace import build_random_project
 from model.constraint_policy import ConstraintPolicy
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from logic.schedule_controller import ScheduleController
@@ -33,7 +35,7 @@ class GeneratorDiagnosticsTests(unittest.TestCase):
         shop.constraint_policies["open"] = ConstraintPolicy.MANDATORY
 
         schedule = MonthSchedule(2026, 8)
-        schedule.add_employee(Employee("One", "Employee", is_opener=True, is_meat=True))
+        schedule.add_employee(Employee("One", "Employee", qualifications=qualifications_of("otwarcie", ("mieso", 2))))
 
         report = AutoScheduleGenerator(schedule, shop).diagnose(time_limit_seconds=1)
 
@@ -124,7 +126,7 @@ class GeneratorDiagnosticsTests(unittest.TestCase):
         shop.constraint_policies["open"] = ConstraintPolicy.MANDATORY
 
         for index in range(4):
-            employee = Employee(f"Locked{index}", "Test", is_opener=True, is_meat=True)
+            employee = Employee(f"Locked{index}", "Test", qualifications=qualifications_of("otwarcie", ("mieso", 2)))
             schedule.add_employee(employee)
             state = schedule.get_day(employee, 1)
             state.is_locked = True
@@ -178,11 +180,18 @@ class DutyRotationInfeasibilitySummaryTests(unittest.TestCase):
         employees = [
             Employee(
                 last_name=f"E{i}", first_name="G", location_key="site1",
-                custom_roles={"nie_chce_24h": True} if no24h else {},
+                qualifications=qualifications_of(*(["nie_chce_24h"] if no24h else [])),
             )
             for i in range(n)
         ]
         return shop, MonthSchedule(2026, 10, employees=employees), employees
+
+    @staticmethod
+    def _refuses_24h(schedule, emp):
+        """Kopia pracownika z kwalifikacją "Nie chce 24h", podmieniona w grafiku."""
+        new = dataclasses.replace(emp, qualifications=qualifications_of("nie_chce_24h"))
+        schedule.replace_employee(emp, new)
+        return new
 
     def test_whole_location_on_leave_names_location_and_day(self):
         shop, schedule, employees = self._shop_and_schedule()
@@ -221,7 +230,7 @@ class DutyRotationInfeasibilitySummaryTests(unittest.TestCase):
         (duty_rotation_manual_coverage.py). Podpowiedź "doby nie da się
         obsadzić" byłaby tu fałszywa."""
         shop, schedule, employees = self._shop_and_schedule()
-        employees[0].custom_roles["nie_chce_24h"] = True
+        employees[0] = self._refuses_24h(schedule, employees[0])
         schedule.get_day(employees[1], 9).set_full_day_shift("19:00")
         schedule.get_day(employees[1], 9).is_locked = True
         for emp in employees[1:]:
@@ -254,7 +263,7 @@ class DutyRotationInfeasibilitySummaryTests(unittest.TestCase):
         chce zmian 24h" przy tej zasadzie jako Wymaganej - sprzeczność
         dowodliwa z danych, a komunikat był ogólny."""
         shop, schedule, employees = self._shop_and_schedule(n=3)
-        employees[0].custom_roles["nie_chce_24h"] = True
+        employees[0] = self._refuses_24h(schedule, employees[0])
         schedule.get_day(employees[0], 29).set_full_day_shift("07:00")
         schedule.get_day(employees[0], 29).is_locked = True
 

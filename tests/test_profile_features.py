@@ -17,6 +17,7 @@ from model.business_profile import register_custom_profile
 from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import CustomBusinessProfile, RoleDefinition
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.shop_config import ShopConfig
 from ui.employee_dialog import EmployeeDialog
 from ui.grid_view import _employee_badges, ScheduleGrid
@@ -54,7 +55,7 @@ def test_constraint_engine_skips_dino_only_rules_for_custom_profiles():
     shop.constraints["min_close_staff"] = 99
 
     schedule = MonthSchedule(2026, 3)
-    emp = Employee(last_name="A", first_name="A", custom_roles={"worker": True})
+    emp = Employee(last_name="A", first_name="A", qualifications=qualifications_of("worker"))
     schedule.add_employee(emp)
     ds = schedule.get_day(emp, 2)
     ds.start, ds.end = "08:00", "16:00"
@@ -136,7 +137,7 @@ def test_editing_employee_with_meat_disabled_preserves_is_meat_flag():
     shop = ShopConfig(2026, 3)
     shop.constraint_policies["meat"] = ConstraintPolicy.DISABLED
 
-    existing = Employee(last_name="A", first_name="A", is_meat=True, is_opener=True)
+    existing = Employee(last_name="A", first_name="A", qualifications=qualifications_of(("mieso", 2), "otwarcie"))
     dialog = EmployeeDialog(None, employee=existing, shop_config=shop)
 
     # No checkbox to toggle is_opener off through, but flip it to prove the
@@ -344,7 +345,7 @@ def test_grid_view_hides_meat_summary_row_and_badge_when_disabled():
         shop_config = shop
         icon_open = icon_meat = icon_meat_light = icon_manager = None
 
-    emp = Employee(last_name="A", first_name="A", is_meat=True)
+    emp = Employee(last_name="A", first_name="A", qualifications=qualifications_of(("mieso", 2)))
     assert _employee_badges(_FakeTable(), emp) == []
 
 

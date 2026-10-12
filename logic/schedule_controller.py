@@ -10,16 +10,6 @@ from model.employee import PERSONAL_DATA_FIELDS
 _UNDO_IGNORED_EMPLOYEE_FIELDS = {"id", *PERSONAL_DATA_FIELDS}
 
 
-def _normalized_custom_roles(roles: dict) -> dict:
-    # Employee.has_role()/.custom_roles.get(key, False) traktują brakujący
-    # klucz i klucz obecny z wartością False identycznie - a EmployeeDialog._save()
-    # (ui/employee_dialog.py) dopisuje np. "nie_chce_24h": False przy KAŻDYM
-    # zapisie, nawet gdy pracownik nigdy tej flagi nie miał. Bez odfiltrowania
-    # takich wpisów każda edycja (nawet samych danych kontaktowych) wyglądałaby
-    # jak zmiana ról.
-    return {key: value for key, value in roles.items() if value}
-
-
 def _employee_changed_beyond_contact_data(old, new) -> bool:
     """True, gdy `old` -> `new` różni się na jakimkolwiek polu poza danymi
     kontaktowymi (telefon/e-mail/adres, patrz PERSONAL_DATA_FIELDS) - używane
@@ -32,9 +22,6 @@ def _employee_changed_beyond_contact_data(old, new) -> bool:
             continue
         old_value = getattr(old, field.name)
         new_value = getattr(new, field.name)
-        if field.name == "custom_roles":
-            old_value = _normalized_custom_roles(old_value)
-            new_value = _normalized_custom_roles(new_value)
         if old_value != new_value:
             return True
     return False

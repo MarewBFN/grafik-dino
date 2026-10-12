@@ -33,6 +33,7 @@ from model.custom_profile import (
     RuleInstance,
 )
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -66,7 +67,7 @@ class TestBuildRoleTimeRestrictionNight:
     def test_night_shift_forbidden_when_window_overlaps(self):
         shop = ShopConfig(2026, 8)
         shop.locations["site1"] = _location_with_night()
-        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = self._ctx = _ctx(shop, [emp])
 
         build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
@@ -78,7 +79,7 @@ class TestBuildRoleTimeRestrictionNight:
     def test_night_shift_allowed_when_window_does_not_overlap(self):
         shop = ShopConfig(2026, 8)
         shop.locations["site1"] = _location_with_night()
-        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = _ctx(shop, [emp])
 
         # Restriction is 13:00-21:00 - doesn't touch the 22:00-06:00 night window at all.
@@ -90,7 +91,7 @@ class TestBuildRoleTimeRestrictionNight:
 
     def test_no_restriction_applied_without_night_shift_configured(self):
         shop = ShopConfig(2026, 8)  # no locations at all
-        emp = Employee(last_name="Guard", first_name="A", custom_roles={"guard": True})
+        emp = Employee(last_name="Guard", first_name="A", qualifications=qualifications_of("guard"))
         ctx = _ctx(shop, [emp])
 
         violations = build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
@@ -160,7 +161,7 @@ class TestBuildRoleTimeRestrictionDaytime:
         for wd in range(7):
             loc.open_hours[wd] = ("10:00", "18:00")  # midday-only site
         shop.locations["site1"] = loc
-        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = _ctx(shop, [emp])
 
         build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
@@ -175,7 +176,7 @@ class TestBuildRoleTimeRestrictionDaytime:
         for wd in range(7):
             loc.open_hours[wd] = ("14:30", "23:00")  # closes late, touches 22:00-06:00
         shop.locations["site1"] = loc
-        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = _ctx(shop, [emp])
 
         build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)
@@ -217,7 +218,7 @@ def test_end_to_end_night_coverage_rule_conflicts_with_role_time_restriction():
     shop.locations = {"site1": loc}
 
     schedule = MonthSchedule(2026, 3)
-    emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+    emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
     schedule.add_employee(emp)
 
     with redirect_stdout(io.StringIO()):
@@ -248,7 +249,7 @@ class TestBuildRoleTimeRestrictionRegularShifts:
     def test_daytime_shifts_not_forbidden_by_night_window(self):
         shop = ShopConfig(2026, 3)
         shop.locations["site1"] = self._location(("08:00", "20:00"))
-        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
 
         # OPEN (08:00-16:00) and CLOSE (12:00-20:00) both sit entirely
         # within the day - neither should be forced to 0 by a 22:00-06:00
@@ -275,7 +276,7 @@ class TestBuildRoleTimeRestrictionRegularShifts:
         # TestShiftTouchesWindow above for that function's own boundary
         # coverage - so it's deliberately not used here.)
         shop.locations["site1"] = self._location(("08:00", "22:15"))
-        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = _ctx(shop, [emp])
 
         build_role_time_restriction(ctx, soft=False, role_key="guard", window_start_hour=22, window_end_hour=6)

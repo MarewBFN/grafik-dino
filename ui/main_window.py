@@ -1024,12 +1024,15 @@ class MainWindow(QMainWindow):
     def _init_state(self):
         old_employees = []
         old_companies = {}
+        old_qualifications = {}
 
         if self.schedule:
             old_employees = self.schedule.employees
-            # Zachowani pracownicy wskazują firmy przez company_key - bez
-            # przeniesienia firm straciliby przypisanie.
+            # Zachowani pracownicy wskazują firmy przez company_key, a
+            # kwalifikacje przez klucz katalogu - bez przeniesienia firm i
+            # katalogu straciliby przypisanie/opis.
             old_companies = self.project.companies if hasattr(self, "project") else {}
+            old_qualifications = self.project.qualifications if hasattr(self, "project") else {}
 
         self.schedule = MonthSchedule(self.year, self.month, employees=old_employees)
         self.shop_config = ShopConfig(self.year, self.month)
@@ -1040,9 +1043,11 @@ class MainWindow(QMainWindow):
         # istnieje, tylko ten właśnie utworzony.
         self.project = MonthlyProject()
         self.project.companies = old_companies
+        self.project.qualifications = old_qualifications
         self.project.put(self.year, self.month, self.schedule, self.shop_config)
 
         self._apply_default_visible_business_type()
+        self.project.ensure_qualification_catalog()
 
     def _apply_default_visible_business_type(self):
         """Goły ShopConfig() domyślnie wraca do dino_retail (patrz

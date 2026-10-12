@@ -17,6 +17,8 @@ last_project.json
 *.gitignore
 last_project.json
 last_project1.json
+# kopia sprzed pierwszego zapisu w nowym formacie pliku (persistence/project_io.py)
+last_project.json.bak
 *.jpg
 *.jpeg
 plan Dingo Online.md

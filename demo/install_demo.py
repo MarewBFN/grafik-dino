@@ -57,6 +57,7 @@ from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import CustomBusinessProfile, RoleDefinition
 from model.custom_profile_store import save_custom_profile
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from persistence.project_io import save_project
@@ -119,11 +120,11 @@ def build_shop_config(profile: CustomBusinessProfile, year: int, month: int) -> 
 
 def build_employees() -> list[Employee]:
     return [
-        Employee(last_name="Kowalski", first_name="Jan", employment_fraction=1.0, custom_roles={ROLE_UMOWA: True}),
-        Employee(last_name="Nowak", first_name="Anna", employment_fraction=1.0, custom_roles={ROLE_UMOWA: True}),
+        Employee(last_name="Kowalski", first_name="Jan", employment_fraction=1.0, qualifications=qualifications_of(ROLE_UMOWA)),
+        Employee(last_name="Nowak", first_name="Anna", employment_fraction=1.0, qualifications=qualifications_of(ROLE_UMOWA)),
         Employee(
             last_name="Wiśniewski", first_name="Piotr",
-            employment_fraction=1.0, custom_roles={ROLE_UMOWA: True, ROLE_NIE_CHCE_24H: True},
+            employment_fraction=1.0, qualifications=qualifications_of(ROLE_UMOWA, ROLE_NIE_CHCE_24H),
         ),
         Employee(last_name="Kamiński", first_name="Tomasz", employment_fraction=1.0),
     ]

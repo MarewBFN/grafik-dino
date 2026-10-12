@@ -37,6 +37,7 @@ from logic.auto_generator import AutoScheduleGenerator
 from logic.generator.constraints_basic import add_non_trade_day_constraints
 from model.constraint_policy import ConstraintPolicy
 from model.employee import Employee
+from model.qualification import qualifications_of
 
 
 class WeeklyHoursEditorClosedDayTests(unittest.TestCase):
@@ -404,7 +405,7 @@ class GeneratorRespectsClosedLocationDayTests(unittest.TestCase):
         return [
             Employee(
                 last_name=f"P{i}", first_name="J", location_key="g",
-                employment_fraction=1.0, is_opener=True, is_meat=True,
+                employment_fraction=1.0, qualifications=qualifications_of("otwarcie", ("mieso", 2)),
             )
             for i in range(n)
         ]

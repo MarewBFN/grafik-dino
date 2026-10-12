@@ -106,6 +106,7 @@ from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import CustomBusinessProfile, RoleDefinition
 from model.custom_profile_store import save_custom_profile
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -290,7 +291,7 @@ def build_employees() -> list[Employee]:
             last_name=last_name, first_name="?",
             employment_fraction=1.0,
             location_key="ubojnia_gosz_waga_biuro",
-            custom_roles={ROLE_NIE_CHCE_24H: True},
+            qualifications=qualifications_of(ROLE_NIE_CHCE_24H),
         ))
     for last_name, first_name in PGE_USTKA_EMPLOYEES:
         employees.append(Employee(

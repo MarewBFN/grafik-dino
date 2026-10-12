@@ -28,6 +28,7 @@ from model.business_profile import register_custom_profile
 from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import CustomBusinessProfile, RoleDefinition
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -146,7 +147,7 @@ def _priority_shop_and_schedule(n_regular_employees):
     shop.constraint_policies["monthly_hours"] = ConstraintPolicy.DISABLED
 
     schedule = MonthSchedule(2026, 3)
-    umowa_emp = Employee(last_name="Umowa", first_name="A", employment_fraction=1.0, custom_roles={UMOWA_ROLE_KEY: True})
+    umowa_emp = Employee(last_name="Umowa", first_name="A", employment_fraction=1.0, qualifications=qualifications_of(UMOWA_ROLE_KEY))
     schedule.add_employee(umowa_emp)
     others = []
     for i in range(n_regular_employees):
@@ -198,7 +199,7 @@ class TestPriorityHoursShortfallPenaltyUnit:
         """target_minutes == 0 (cały miesiąc L4/urlop) -> nic do dobijania,
         brak IntVar zamiast bezsensownego "dobij do zera"."""
         shop = ShopConfig(2026, 3)
-        emp = Employee(last_name="Umowa", first_name="A", employment_fraction=1.0, custom_roles={UMOWA_ROLE_KEY: True})
+        emp = Employee(last_name="Umowa", first_name="A", employment_fraction=1.0, qualifications=qualifications_of(UMOWA_ROLE_KEY))
         schedule = MonthSchedule(2026, 3)
         schedule.add_employee(emp)
         for day in range(1, schedule.days_in_month + 1):
@@ -220,7 +221,7 @@ class TestPriorityHoursShortfallPenaltyUnit:
         shop = ShopConfig(2026, 3)
         umowa_emp = Employee(
             last_name="Umowa", first_name="A", employment_fraction=1.0,
-            custom_roles={UMOWA_ROLE_KEY: True},
+            qualifications=qualifications_of(UMOWA_ROLE_KEY),
         )
         other_emp = Employee(last_name="Zwykly", first_name="B", employment_fraction=1.0)
         schedule = MonthSchedule(2026, 3)
@@ -358,10 +359,10 @@ def _equalization_month(policy, umowa_count=0, n=6):
     schedule = MonthSchedule(2026, 10)
     employees = []
     for i in range(n):
-        roles = {"nie_chce_24h": True}
+        roles = ["nie_chce_24h"]
         if i < umowa_count:
-            roles[UMOWA_ROLE_KEY] = True
-        emp = Employee(last_name=f"G{i}", first_name="X", location_key="site1", custom_roles=roles)
+            roles.append(UMOWA_ROLE_KEY)
+        emp = Employee(last_name=f"G{i}", first_name="X", location_key="site1", qualifications=qualifications_of(*roles))
         schedule.add_employee(emp)
         employees.append(emp)
     return shop, schedule, employees

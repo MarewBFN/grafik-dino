@@ -22,6 +22,7 @@ from model.business_profile import register_custom_profile
 from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import CustomBusinessProfile, RoleDefinition
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -90,7 +91,7 @@ def _build_month(year: int, month: int, n_employees: int, no24h_count: int, rota
         no24h = i < no24h_count
         emp = Employee(
             last_name=f"E{i}", first_name="Guard", location_key="site1",
-            custom_roles={"nie_chce_24h": True} if no24h else {},
+            qualifications=qualifications_of(*(["nie_chce_24h"] if no24h else [])),
         )
         employees.append(emp)
         schedule.add_employee(emp)

@@ -1,4 +1,5 @@
 import dataclasses
+from dataclasses import replace
 import os
 
 from PySide6.QtCore import Qt, QTimer
@@ -23,6 +24,14 @@ from PySide6.QtWidgets import (
 )
 
 from model.employee import Employee
+from model.qualification import (
+    MEAT_LEVEL_FULL,
+    MEAT_LEVEL_LIGHT,
+    QUAL_MANAGER,
+    QUAL_MEAT,
+    QUAL_OPENER,
+    EmployeeQualification,
+)
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
 from model.constraint_policy import ConstraintPolicy
 from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
@@ -32,10 +41,49 @@ from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 
 EMPLOYEE_TUTORIAL_FLAG = "employee_tutorial_seen.flag"
 
-# RoleDef.key values that map directly onto an Employee dataclass field
-# (the six legacy Dino flags). Any other key lives in Employee.custom_roles
-# instead, so new business profiles don't need new Employee fields.
+# RoleDef.key wartości będące polem Employee (dziś tylko ograniczenia
+# no_night/no_afternoon). Każdy inny klucz roli to kwalifikacja.
 _EMPLOYEE_FIELDS = {f.name for f in dataclasses.fields(Employee)}
+
+# PRZEJŚCIOWE (Krok 1.1 -> 1.4 migracji na Qualification): checkboxy ról
+# wciąż powstają z BusinessProfile.roles (klucze dawnych pól Dino) - tu
+# zamiana klucza checkboxa na kwalifikację i poziom. Krok 1.4 buduje okno z
+# katalogu kwalifikacji projektu i usuwa to mapowanie.
+_LEGACY_ROLE_QUALIFICATIONS = {
+    "is_opener": (QUAL_OPENER, None),
+    "is_meat": (QUAL_MEAT, MEAT_LEVEL_FULL),
+    "is_meat_light": (QUAL_MEAT, MEAT_LEVEL_LIGHT),
+    "is_manager": (QUAL_MANAGER, None),
+}
+
+
+def _qualifications_from_role_values(old_employee, role_values: dict) -> tuple:
+    """Kwalifikacje pracownika po zapisie okna: `role_values` to stan
+    checkboxów (klucz roli -> bool). Istniejące przypisania (z poziomem,
+    datami, placówkami) zostają bez zmian, jeśli rola dalej jest zaznaczona;
+    kwalifikacje, których okno nie pokazuje, też zostają (zero utraty
+    danych)."""
+    old = {q.qualification_id: q for q in (old_employee.qualifications if old_employee else ())}
+    wanted = {}   # klucz kwalifikacji -> poziom albo None (bez zmiany poziomu)
+    handled = set()
+    for role_key, checked in role_values.items():
+        if role_key in _EMPLOYEE_FIELDS:
+            continue
+        qualification_key, level = _LEGACY_ROLE_QUALIFICATIONS.get(role_key, (role_key, None))
+        handled.add(qualification_key)
+        if checked:
+            wanted[qualification_key] = level if level is not None else wanted.get(qualification_key)
+
+    result = []
+    for key, qualification in old.items():
+        if key not in handled:
+            result.append(qualification)
+        elif key in wanted:
+            level = wanted.pop(key)
+            result.append(qualification if level is None else replace(qualification, level=level))
+    for key, level in wanted.items():
+        result.append(EmployeeQualification(key, level if level is not None else 1))
+    return tuple(result)
 
 
 class EmployeeDialog(QDialog):
@@ -480,16 +528,13 @@ class EmployeeDialog(QDialog):
         self.last_name.setText(self.employee.last_name)
         self.first_name.setText(self.employee.first_name)
         for key, checkbox in self.role_checkboxes.items():
-            if key in _EMPLOYEE_FIELDS:
-                checkbox.setChecked(getattr(self.employee, key, False))
-            else:
-                checkbox.setChecked(self.employee.custom_roles.get(key, False))
+            checkbox.setChecked(self.employee.has_role(key))
         self.monthly_target_hours.setValue(self.employee.monthly_target_hours)
         idx = self.employment_fraction.findData(self.employee.employment_fraction)
         if idx >= 0:
             self.employment_fraction.setCurrentIndex(idx)
         if self.no_24h_check is not None:
-            self.no_24h_check.setChecked(self.employee.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False))
+            self.no_24h_check.setChecked(self.employee.has_role(NIE_CHCE_24H_ROLE_KEY))
         if self.no_night_check is not None:
             self.no_night_check.setChecked(self.employee.no_night)
             self.no_afternoon_check.setChecked(self.employee.no_afternoon)
@@ -592,7 +637,7 @@ class EmployeeDialog(QDialog):
             return
 
         legacy_roles = {}
-        custom_roles = {}
+        role_values = {}
         for role in self.profile.roles:
             key = role.key
             if key in self.role_checkboxes:
@@ -602,23 +647,18 @@ class EmployeeDialog(QDialog):
                 # whatever the employee already had instead of silently
                 # wiping it to False (e.g. turning the "meat" policy off
                 # must not un-flag every meat-counter employee).
-                if key in _EMPLOYEE_FIELDS:
-                    value = getattr(self.employee, key, False) if self.employee else False
-                else:
-                    value = self.employee.custom_roles.get(key, False) if self.employee else False
+                value = self.employee.has_role(key) if self.employee else False
 
             if key in _EMPLOYEE_FIELDS:
                 legacy_roles[key] = value
             else:
-                custom_roles[key] = value
+                role_values[key] = value
 
         if self.no_24h_check is not None:
-            custom_roles[NIE_CHCE_24H_ROLE_KEY] = self.no_24h_check.isChecked()
-        elif self.employee is not None:
-            # Checkbox niewidoczny (projekt nie używa rotacji 24/7) - nie
-            # wolno cicho zgubić wartości, gdyby jednak była już ustawiona
-            # (np. lokalizacja z rotacją została w międzyczasie usunięta).
-            custom_roles[NIE_CHCE_24H_ROLE_KEY] = self.employee.custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False)
+            role_values[NIE_CHCE_24H_ROLE_KEY] = self.no_24h_check.isChecked()
+        # Checkbox niewidoczny (projekt nie używa rotacji 24/7) - wartość
+        # zostaje, bo _qualifications_from_role_values nie rusza kwalifikacji,
+        # których okno nie pokazuje.
 
         # no_night/no_afternoon - dedykowane checkboxy (patrz _build_ui),
         # widoczne/uwzględniane tylko dla WYBRANEJ lokalizacji bez rotacji
@@ -644,7 +684,7 @@ class EmployeeDialog(QDialog):
                 first_name=fn,
                 monthly_target_hours=self.monthly_target_hours.value(),
                 employment_fraction=self.employment_fraction.currentData(),
-                custom_roles=custom_roles,
+                qualifications=_qualifications_from_role_values(self.employee, role_values),
                 location_key=location_key,
                 company_key=self.company_combo.currentData() or "",
                 phone=self.phone.text().strip(),

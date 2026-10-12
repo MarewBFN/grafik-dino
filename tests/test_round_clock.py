@@ -29,6 +29,7 @@ from logic.generator.round_clock_manual_constraint import add_round_clock_manual
 from logic.generator.round_clock_rest_constraint import add_round_clock_rest_constraint
 from model.business_profile import DEFAULT_OCHRONA_PROFILE_KEY
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -208,7 +209,7 @@ class RoundClockCoverageTests(unittest.TestCase):
         employees = [
             Employee(
                 last_name=f"Prac{i}", first_name="Jan", location_key="glowna",
-                employment_fraction=1.0, is_opener=True, is_meat=True,
+                employment_fraction=1.0, qualifications=qualifications_of("otwarcie", ("mieso", 2)),
             )
             for i in range(6)
         ]
@@ -241,7 +242,7 @@ class RoundClockCoverageTests(unittest.TestCase):
         employees = [
             Employee(
                 last_name=f"Prac{i}", first_name="Jan", location_key="glowna",
-                employment_fraction=1.0, is_opener=False, is_meat=True,
+                employment_fraction=1.0, qualifications=qualifications_of(("mieso", 2)),
             )
             for i in range(6)
         ]
@@ -275,7 +276,7 @@ class OpenCloseCoexistenceTests(unittest.TestCase):
         employees = [
             Employee(
                 last_name=f"Prac{i}", first_name="Jan", location_key="glowna",
-                employment_fraction=1.0, is_opener=True, is_meat=True,
+                employment_fraction=1.0, qualifications=qualifications_of("otwarcie", ("mieso", 2)),
             )
             for i in range(6)
         ]
@@ -301,7 +302,7 @@ class OpenCloseCoexistenceTests(unittest.TestCase):
         rc_employees = [
             Employee(
                 last_name=f"RC{i}", first_name="Jan", location_key="rc",
-                employment_fraction=1.0, is_opener=True, is_meat=True,
+                employment_fraction=1.0, qualifications=qualifications_of("otwarcie", ("mieso", 2)),
             )
             for i in range(6)
         ]

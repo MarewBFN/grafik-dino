@@ -1,6 +1,7 @@
 from typing import Dict, Optional, Tuple
 
 from model.company import Company
+from model.qualification import Qualification, merge_catalog, placeholder_qualification
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 
@@ -27,6 +28,11 @@ class MonthlyProject:
         # Dane firm (Plik -> "Dane firmy") - wspólne dla wszystkich
         # miesięcy, patrz model/company.py.
         self.companies: Dict[str, Company] = {}
+        # Katalog kwalifikacji projektu (id -> model.qualification.
+        # Qualification) - jeden dla wszystkich miesięcy, z niego powstaje
+        # lista ról w oknie pracownika. Uzupełniany przez
+        # ensure_qualification_catalog().
+        self.qualifications: Dict[str, Qualification] = {}
 
     def has(self, year: int, month: int) -> bool:
         return (year, month) in self.months
@@ -39,6 +45,32 @@ class MonthlyProject:
 
     def sorted_keys(self) -> list[MonthKey]:
         return sorted(self.months.keys())
+
+    def ensure_qualification_catalog(self) -> None:
+        """Uzupełnia katalog kwalifikacji:
+
+        - pusty katalog (nowy projekt albo plik sprzed katalogu) dostaje
+          domyślne kwalifikacje profilu każdego miesiąca (model.
+          business_profile.default_qualifications);
+        - każda kwalifikacja, którą ma jakikolwiek pracownik, a której katalog
+          nie zna (np. profil custom usunięty z tego komputera), dostaje
+          pozycję zastępczą - żeby żadne przypisanie nie zniknęło.
+
+        Istniejących pozycji nie zmienia ani nie usuwa."""
+        from model.business_profile import default_qualifications
+
+        if not self.qualifications:
+            for key in self.sorted_keys():
+                merge_catalog(self.qualifications, default_qualifications(self.months[key][1].business_type))
+
+        for key in self.sorted_keys():
+            schedule, _shop_config = self.months[key]
+            for employee in schedule.employees:
+                for qualification in employee.qualifications:
+                    if qualification.qualification_id not in self.qualifications:
+                        self.qualifications[qualification.qualification_id] = placeholder_qualification(
+                            qualification.qualification_id
+                        )
 
 
 MONTH_STATE_EMPTY = "empty"

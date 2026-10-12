@@ -1,14 +1,34 @@
 from dataclasses import dataclass, field
 import re
 import uuid
+from datetime import date
 from typing import Dict
+
+from model.qualification import (
+    MEAT_LEVEL_FULL,
+    MEAT_LEVEL_LIGHT,
+    QUAL_MANAGER,
+    QUAL_MEAT,
+    QUAL_OPENER,
+)
 
 # Pola danych osobowych - patrz Employee.phone itd. niżej.
 PERSONAL_DATA_FIELDS = ("phone", "email", "street", "postal_code", "city")
 
-_ROLE_FIELDS = {
-    "is_opener", "is_meat", "is_meat_light", "is_manager", "no_night", "no_afternoon",
+# Ograniczenia pracownika, które (jeszcze) nie są kwalifikacjami - osobne
+# pola Employee, czytane przez has_role() po nazwie pola.
+_RESTRICTION_FIELDS = {"no_night", "no_afternoon"}
+
+# PRZEJŚCIOWE (Krok 1.1 -> 1.5 migracji na Qualification): klucze dawnych pól
+# roli profilu Dino, które UI wciąż podaje do has_role() (RoleDef.key w
+# model/business_profile.py) - mapowane na kwalifikację i warunek poziomu.
+_LEGACY_ROLE_KEYS = {
+    "is_opener": (QUAL_OPENER, None),
+    "is_meat": (QUAL_MEAT, MEAT_LEVEL_FULL),
+    "is_meat_light": (QUAL_MEAT, MEAT_LEVEL_LIGHT),
+    "is_manager": (QUAL_MANAGER, None),
 }
+_LEGACY_QUALIFICATION_KEYS = {QUAL_OPENER, QUAL_MEAT, QUAL_MANAGER}
 
 @dataclass(order=True, frozen=True)
 class Employee:
@@ -25,10 +45,6 @@ class Employee:
     first_name: str
 
     # pozostałe dane (nie wpływają na sortowanie)
-    is_opener: bool = field(default=False, compare=False)
-    is_meat: bool = field(default=False, compare=False)
-    is_meat_light: bool = field(default=False, compare=False)
-    is_manager: bool = field(default=False, compare=False)
     no_night: bool = field(default=False, compare=False)
     no_afternoon: bool = field(default=False, compare=False)
     monthly_target_hours: int = field(default=160, compare=False)
@@ -40,9 +56,11 @@ class Employee:
     id: str = field(default_factory=lambda: str(uuid.uuid4()), compare=False)
     availability: Dict[int, dict] = field(default_factory=dict, compare=False)
 
-    # Role spoza sześciu pól powyżej (np. dla innych profili działalności niż
-    # Dino), trzymane jako słownik zamiast kolejnych pól dataclass.
-    custom_roles: Dict[str, bool] = field(default_factory=dict, compare=False)
+    # Kwalifikacje (role, umiejętności, uprawnienia) - krotka
+    # model.qualification.EmployeeQualification. Zastępuje dawne pola
+    # is_opener/is_meat/is_meat_light/is_manager i słownik custom_roles
+    # (migracja starych plików: model/qualification.py::qualifications_from_legacy).
+    qualifications: tuple = field(default=(), compare=False)
 
     # Klucz lokalizacji (model.location.LocationConfig) do której przypisany
     # jest pracownik. Puste = brak przypisania (dzisiejsze, jednolokalizacyjne
@@ -85,13 +103,71 @@ class Employee:
         town = " ".join(part for part in (self.postal_code, self.city) if part)
         return ", ".join(part for part in (self.street, town) if part)
 
+    # ------------------------------------------------------------------
+    # Kwalifikacje
+    # ------------------------------------------------------------------
+
+    def qualification_level(self, key: str, on: date | None = None, location_key: str | None = None) -> int:
+        """Poziom kwalifikacji `key` (0 = brak). Z `on` (data) liczą się tylko
+        kwalifikacje ważne w tym dniu; z `location_key` - tylko obowiązujące
+        w tej placówce. Bez nich - bez sprawdzania dat i placówek."""
+        level = 0
+        for qualification in self.qualifications:
+            if qualification.qualification_id != key:
+                continue
+            if not qualification.is_valid_on(on) or not qualification.applies_to_location(location_key):
+                continue
+            level = max(level, qualification.level)
+        return level
+
+    def has_qualification(
+        self, key: str, min_level: int = 1, on: date | None = None, location_key: str | None = None,
+    ) -> bool:
+        return self.qualification_level(key, on=on, location_key=location_key) >= min_level
+
+    # ------------------------------------------------------------------
+    # PRZEJŚCIOWE (Krok 1.1 -> 1.5): dawne nazwy ról jako widoki tylko do
+    # odczytu, liczone z kwalifikacji (bez dat i placówek - dokładnie tak,
+    # jak działały dawne pola). Jedynym źródłem danych są `qualifications`;
+    # kolejne kroki migracji zastępują te odczyty jawnym has_qualification()
+    # i usuwają poniższe właściwości.
+    # ------------------------------------------------------------------
+
+    @property
+    def is_opener(self) -> bool:
+        return self.has_qualification(QUAL_OPENER)
+
+    @property
+    def is_meat(self) -> bool:
+        return self.qualification_level(QUAL_MEAT) >= MEAT_LEVEL_FULL
+
+    @property
+    def is_meat_light(self) -> bool:
+        return self.qualification_level(QUAL_MEAT) == MEAT_LEVEL_LIGHT
+
+    @property
+    def is_manager(self) -> bool:
+        return self.has_qualification(QUAL_MANAGER)
+
+    @property
+    def custom_roles(self) -> Dict[str, bool]:
+        return {
+            q.qualification_id: True
+            for q in self.qualifications
+            if q.qualification_id not in _LEGACY_QUALIFICATION_KEYS
+        }
+
     def has_role(self, key: str) -> bool:
-        """True if this employee carries role `key`, whether it's one of the
-        six legacy Dino fields (is_opener, is_meat, ...) or a custom_roles
-        entry from another business profile."""
-        if key in _ROLE_FIELDS:
+        """True gdy pracownik ma rolę `key`: dawny klucz pola Dino
+        (is_opener, is_meat, ...), ograniczenie (no_night/no_afternoon) albo
+        klucz kwalifikacji (dawne custom_roles)."""
+        if key in _RESTRICTION_FIELDS:
             return bool(getattr(self, key))
-        return bool(self.custom_roles.get(key, False))
+        if key in _LEGACY_ROLE_KEYS:
+            qualification_key, exact_level = _LEGACY_ROLE_KEYS[key]
+            level = self.qualification_level(qualification_key)
+            return level == exact_level if exact_level is not None else level >= 1
+        return self.has_qualification(key)
 
     def validate(self) -> None:
         if not self.last_name.strip():
@@ -100,8 +176,14 @@ class Employee:
         # Imię jest opcjonalne - klient może nie znać/nie chcieć podawać
         # imion pracowników, samo nazwisko wystarcza do identyfikacji.
 
-        if self.is_meat and self.is_meat_light:
-            raise ValueError("Pracownik nie może mieć jednocześnie flagi mięsa i \"może stanąć na chwilę na mięsie\"")
+        seen_qualifications = set()
+        for qualification in self.qualifications:
+            qualification.validate()
+            if qualification.qualification_id in seen_qualifications:
+                raise ValueError(
+                    f"Pracownik ma dwa razy tę samą kwalifikację: {qualification.qualification_id}"
+                )
+            seen_qualifications.add(qualification.qualification_id)
 
         # 🔧 ZMIANA – luzujemy ograniczenie
         if self.daily_hours <= 0:

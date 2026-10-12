@@ -14,6 +14,7 @@ from model.custom_profile import (
     RuleInstance,
 )
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -29,10 +30,10 @@ for name, leave_days, sick_days, locked_days in scenarios:
     shop = ShopConfig(2026, 8)
     schedule = MonthSchedule(2026, 8)
     employees = [
-        Employee('Kowalski', 'Jan', is_opener=True, is_meat=True, monthly_target_hours=160, daily_hours=8),
-        Employee('Nowak', 'Anna', is_opener=False, is_meat=False, monthly_target_hours=160, daily_hours=8),
-        Employee('Wiśniewska', 'Maria', is_opener=False, is_meat=True, monthly_target_hours=160, daily_hours=8),
-        Employee('Kaczmarek', 'Piotr', is_opener=False, is_meat=False, monthly_target_hours=160, daily_hours=8),
+        Employee('Kowalski', 'Jan', qualifications=qualifications_of("otwarcie", ("mieso", 2)), monthly_target_hours=160, daily_hours=8),
+        Employee('Nowak', 'Anna', monthly_target_hours=160, daily_hours=8),
+        Employee('Wiśniewska', 'Maria', qualifications=qualifications_of(("mieso", 2)), monthly_target_hours=160, daily_hours=8),
+        Employee('Kaczmarek', 'Piotr', monthly_target_hours=160, daily_hours=8),
     ]
     for emp in employees:
         schedule.add_employee(emp)
@@ -80,7 +81,7 @@ night_shop.locations = {'site1': night_loc}
 
 night_schedule = MonthSchedule(2026, 8)
 night_employees = [
-    Employee(f'Guard{i}', 'A', location_key='site1', custom_roles={'guard': True})
+    Employee(f'Guard{i}', 'A', location_key='site1', qualifications=qualifications_of('guard'))
     for i in range(4)
 ]
 for emp in night_employees:

@@ -20,6 +20,7 @@ from model.custom_profile import (
     RuleInstance,
 )
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -41,8 +42,7 @@ def build_scenario(employee_count: int, seed: int) -> Tuple[dict, MonthSchedule,
         emp = Employee(
             last_name=f"Emp{idx}",
             first_name=f"{idx}",
-            is_opener=is_opener,
-            is_meat=is_meat,
+            qualifications=qualifications_of(*(["otwarcie"] if is_opener else []), *([("mieso", 2)] if is_meat else [])),
             monthly_target_hours=160,
             daily_hours=8,
             employment_fraction=employment_fraction,
@@ -113,7 +113,7 @@ def build_night_shift_scenario(guard_count: int, seed: int, min_on_night: int = 
 
     schedule = MonthSchedule(2026, 8)
     employees = [
-        Employee(last_name=f"Guard{i}", first_name=f"{i}", location_key="site1", custom_roles={"guard": True})
+        Employee(last_name=f"Guard{i}", first_name=f"{i}", location_key="site1", qualifications=qualifications_of("guard"))
         for i in range(guard_count)
     ]
     for emp in employees:

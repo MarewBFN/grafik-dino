@@ -15,6 +15,7 @@ _app = QApplication.instance() or QApplication([])
 from model.business_profile import get_profile, register_custom_profile
 from model.custom_profile import CustomBusinessProfile, RoleDefinition
 from model.employee import Employee
+from model.qualification import qualifications_of
 
 
 def test_custom_profile_role_icon_is_registered_and_visible_on_the_business_profile():
@@ -54,8 +55,8 @@ def test_grid_view_badges_include_emoji_icon_for_employee_with_role():
         shop_config = _FakeShop()
         icon_open = icon_meat = icon_meat_light = icon_manager = None
 
-    armed_emp = Employee(last_name="A", first_name="A", custom_roles={"uzbrojony": True})
-    plain_emp = Employee(last_name="B", first_name="B", custom_roles={"uzbrojony": False})
+    armed_emp = Employee(last_name="A", first_name="A", qualifications=qualifications_of("uzbrojony"))
+    plain_emp = Employee(last_name="B", first_name="B")
 
     table = _FakeTable()
     assert len(_employee_badges(table, armed_emp)) == 1

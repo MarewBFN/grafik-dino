@@ -30,6 +30,7 @@ from model.custom_profile import (
     RuleInstance,
 )
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -134,7 +135,7 @@ def _build_24_7_guard_scenario(guard_count, seed, min_on_night=2, leave_probabil
 
     schedule = MonthSchedule(YEAR, MONTH)
     employees = [
-        Employee(last_name=f"Guard{i}", first_name="A", location_key="site1", custom_roles={"guard": True})
+        Employee(last_name=f"Guard{i}", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         for i in range(guard_count)
     ]
     for emp in employees:

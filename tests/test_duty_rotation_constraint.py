@@ -22,6 +22,7 @@ from logic.generator.duty_rotation_constraint import (
 )
 from logic.generator.constraints_basic import add_one_shift_per_day_constraint
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -137,7 +138,7 @@ class TestDutyRotationGate:
 class TestDutyRotationNo24hGate:
     def test_nie_chce_24h_employee_cannot_get_weekend_full(self):
         shop = ShopConfig(2026, 8)
-        emp = Employee(last_name="Guard", first_name="A", custom_roles={"nie_chce_24h": True})
+        emp = Employee(last_name="Guard", first_name="A", qualifications=qualifications_of("nie_chce_24h"))
         model, x = _model_and_x([emp], [SATURDAY])
 
         add_duty_rotation_no24h_gate_constraint(model, x, [emp], [SATURDAY], shop, DUTY_SHIFTS, soft=False)
@@ -163,7 +164,7 @@ class TestDutyRotationNo24hGate:
         is a weekend-only preference, so a weekday assignment must stay
         feasible for these employees too."""
         shop = ShopConfig(2026, 8)
-        emp = Employee(last_name="Guard", first_name="A", custom_roles={"nie_chce_24h": True})
+        emp = Employee(last_name="Guard", first_name="A", qualifications=qualifications_of("nie_chce_24h"))
         model, x = _model_and_x([emp], [WEEKDAY])
 
         add_duty_rotation_no24h_gate_constraint(model, x, [emp], [WEEKDAY], shop, DUTY_SHIFTS, soft=False)
@@ -249,8 +250,8 @@ class TestDutyRotationCoverage:
         split 12h/12h with someone else."""
         shop = ShopConfig(2026, 8)
         shop.locations["site1"] = _location_with_rotation()
-        emp_a = Employee(last_name="A", first_name="A", location_key="site1", custom_roles={"nie_chce_24h": True})
-        emp_b = Employee(last_name="B", first_name="B", location_key="site1", custom_roles={"nie_chce_24h": True})
+        emp_a = Employee(last_name="A", first_name="A", location_key="site1", qualifications=qualifications_of("nie_chce_24h"))
+        emp_b = Employee(last_name="B", first_name="B", location_key="site1", qualifications=qualifications_of("nie_chce_24h"))
         employees = [emp_a, emp_b]
         model, x = _model_and_x(employees, [SATURDAY])
 
@@ -285,7 +286,7 @@ def test_end_to_end_generation_covers_a_full_week_with_duty_rotation():
     employees = [
         Employee(last_name="A", first_name="A", location_key="site1"),
         Employee(last_name="B", first_name="B", location_key="site1"),
-        Employee(last_name="C", first_name="C", location_key="site1", custom_roles={"nie_chce_24h": True}),
+        Employee(last_name="C", first_name="C", location_key="site1", qualifications=qualifications_of("nie_chce_24h")),
     ]
     for emp in employees:
         schedule.add_employee(emp)
@@ -388,7 +389,7 @@ class TestOnly1224hToggle:
         employees = [
             Employee(last_name="A", first_name="A", location_key="site1"),
             Employee(last_name="B", first_name="B", location_key="site1"),
-            Employee(last_name="C", first_name="C", location_key="site1", custom_roles={"nie_chce_24h": True}),
+            Employee(last_name="C", first_name="C", location_key="site1", qualifications=qualifications_of("nie_chce_24h")),
         ]
         for emp in employees:
             schedule.add_employee(emp)

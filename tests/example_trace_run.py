@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
 from logic.auto_generator import AutoScheduleGenerator
 from logic.generator.trace import build_random_scenario
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 
@@ -22,8 +23,7 @@ if __name__ == "__main__":
         emp = Employee(
             first_name=item["first_name"],
             last_name=item["last_name"],
-            is_opener=item["is_opener"],
-            is_meat=item["is_meat"],
+            qualifications=qualifications_of(*(["otwarcie"] if item["is_opener"] else []), *([("mieso", 2)] if item["is_meat"] else [])),
             no_night=item["no_night"],
             monthly_target_hours=item["monthly_target_hours"],
             daily_hours=item["daily_hours"],

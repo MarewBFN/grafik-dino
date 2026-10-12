@@ -27,6 +27,7 @@ from logic.generator.duty_rotation_rest_constraint import add_duty_rotation_rest
 from logic.generator.rest_constraint import add_rest_11h_constraint, add_rest_11h_constraint_simplified
 from logic.utils.time_utils import is_next_calendar_month
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule, PreviousMonthShiftEnd
 from model.monthly_project import MonthlyProject
@@ -623,7 +624,7 @@ class PreviousMonthBlocksDay1DiagnosticsTests(unittest.TestCase):
 
         shop = ShopConfig(2026, 8)  # default profile: min_open_staff=3, MANDATORY "open"
         emps = [
-            Employee(last_name=f"E{i}", first_name="X", is_opener=(i == 0), is_meat=(i == 1))
+            Employee(last_name=f"E{i}", first_name="X", qualifications=qualifications_of(*(["otwarcie"] if i == 0 else []), *([("mieso", 2)] if i == 1 else [])))
             for i in range(5)
         ]
         schedule = MonthSchedule(2026, 8, employees=emps)
@@ -640,7 +641,7 @@ class PreviousMonthBlocksDay1DiagnosticsTests(unittest.TestCase):
     def test_generation_reports_the_specific_reason_end_to_end(self):
         shop = ShopConfig(2026, 8)
         emps = [
-            Employee(last_name=f"E{i}", first_name="X", is_opener=(i == 0), is_meat=(i == 1))
+            Employee(last_name=f"E{i}", first_name="X", qualifications=qualifications_of(*(["otwarcie"] if i == 0 else []), *([("mieso", 2)] if i == 1 else [])))
             for i in range(5)
         ]
         schedule = MonthSchedule(2026, 8, employees=emps)
@@ -661,7 +662,7 @@ class PreviousMonthBlocksDay1DiagnosticsTests(unittest.TestCase):
         from logic.generator.diagnostics import build_infeasibility_summary
 
         shop = ShopConfig(2026, 8)
-        emp = Employee(last_name="Kowalski", first_name="Jan", is_opener=True, is_meat=True)
+        emp = Employee(last_name="Kowalski", first_name="Jan", qualifications=qualifications_of("otwarcie", ("mieso", 2)))
         schedule = MonthSchedule(2026, 8, employees=[emp])
         # Default open hour is 05:30 - ending well before midnight leaves > 11h.
         schedule.set_previous_month_end_shift(emp, "14:00", False)

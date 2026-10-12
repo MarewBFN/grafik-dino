@@ -31,6 +31,7 @@ from model.business_profile import register_custom_profile
 from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import CustomBusinessProfile
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -109,7 +110,7 @@ def _duty_rotation_shop_and_schedule(n_employees=4, all_no24h=True):
         Employee(
             last_name=f"Guard{i}", first_name="Rotation", employment_fraction=1.0,
             location_key="site1",
-            custom_roles={NIE_CHCE_24H_ROLE_KEY: True} if all_no24h else {},
+            qualifications=qualifications_of(*([NIE_CHCE_24H_ROLE_KEY] if all_no24h else [])),
         )
         for i in range(n_employees)
     ]
@@ -261,7 +262,7 @@ def _plain_shop_and_schedule(n_employees=8):
     employees = [
         Employee(
             last_name=f"Pracownik{i}", first_name="Test", employment_fraction=1.0,
-            is_opener=(1 <= i <= 3), is_meat=(1 <= i <= 3),
+            qualifications=qualifications_of(*(["otwarcie"] if 1 <= i <= 3 else []), *([("mieso", 2)] if 1 <= i <= 3 else [])),
         )
         for i in range(n_employees)
     ]

@@ -29,6 +29,7 @@ from model.custom_profile import (
     RuleInstance,
 )
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -57,7 +58,7 @@ class TestBuildMinStaffWithRoleNightScope:
         shop = ShopConfig(2026, 8)
         loc = LocationConfig(key="site1", name="Site 1")
         shop.locations["site1"] = loc
-        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = self._ctx(shop, [emp])
 
         build_min_staff_with_role(ctx, soft=False, role_key="guard", rule_key="rule:x", min_count=1, scope="night")
@@ -72,7 +73,7 @@ class TestBuildMinStaffWithRoleNightScope:
         shop = ShopConfig(2026, 8)
         loc = LocationConfig(key="site1", name="Site 1")
         shop.locations["site1"] = loc
-        emp = Employee(last_name="Guard", first_name="A", location_key="site1", custom_roles={"guard": True})
+        emp = Employee(last_name="Guard", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
         ctx = self._ctx(shop, [emp])
 
         build_min_staff_with_role(ctx, soft=False, role_key="guard", rule_key="rule:x", min_count=1, scope="night")
@@ -132,7 +133,7 @@ def test_end_to_end_night_coverage_rule_requires_enough_guards():
 
         schedule = MonthSchedule(2026, 3)
         for i in range(guard_count):
-            emp = Employee(last_name=f"Guard{i}", first_name="A", location_key="site1", custom_roles={"guard": True})
+            emp = Employee(last_name=f"Guard{i}", first_name="A", location_key="site1", qualifications=qualifications_of("guard"))
             schedule.add_employee(emp)
 
         with redirect_stdout(io.StringIO()):

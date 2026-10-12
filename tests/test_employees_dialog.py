@@ -19,6 +19,7 @@ _app = QApplication.instance() or QApplication([])
 
 from logic.schedule_controller import ScheduleController
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
 from ui import employees_dialog as module
@@ -115,7 +116,7 @@ def test_edit_can_update_contact_data_inline_and_keeps_schedule(monkeypatch):
     # lokalizacji przy KAŻDYM zapisie (patrz komentarz przy
     # self.location_combo w ui/employee_dialog.py::_build_ui), co fałszywie
     # wyglądałoby jak zmiana poza danymi kontaktowymi.
-    emp = Employee(last_name="Kowalski", first_name="Jan", is_opener=True, location_key="glowna")
+    emp = Employee(last_name="Kowalski", first_name="Jan", qualifications=qualifications_of("otwarcie"), location_key="glowna")
     shop, controller = _setup(emp)
     controller.schedule.set_day_hours(emp, 3, "08:00", "16:00")
     changes = []
@@ -144,7 +145,7 @@ def test_edit_can_update_contact_data_inline_and_keeps_schedule(monkeypatch):
 
 
 def test_role_change_alongside_contact_edit_still_creates_undo_entry(monkeypatch):
-    emp = Employee(last_name="Kowalski", first_name="Jan", is_opener=False)
+    emp = Employee(last_name="Kowalski", first_name="Jan")
     shop, controller = _setup(emp)
     dialog = EmployeesDialog(None, controller, shop)
 

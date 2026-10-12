@@ -17,6 +17,7 @@ from model.custom_profile import (
 )
 from logic.generator.custom_profile_wiring import default_policies
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -46,10 +47,10 @@ def test_multi_location_generator_resolves_each_employees_own_location_hours():
 
     schedule = MonthSchedule(2026, 3)
     employees = [
-        Employee(last_name="Alfa1", first_name="A", location_key="loc_a", custom_roles={"worker": True}),
-        Employee(last_name="Alfa2", first_name="A", location_key="loc_a", custom_roles={"worker": True}),
-        Employee(last_name="Beta1", first_name="B", location_key="loc_b", custom_roles={"worker": True}),
-        Employee(last_name="Beta2", first_name="B", location_key="loc_b", custom_roles={"worker": True}),
+        Employee(last_name="Alfa1", first_name="A", location_key="loc_a", qualifications=qualifications_of("worker")),
+        Employee(last_name="Alfa2", first_name="A", location_key="loc_a", qualifications=qualifications_of("worker")),
+        Employee(last_name="Beta1", first_name="B", location_key="loc_b", qualifications=qualifications_of("worker")),
+        Employee(last_name="Beta2", first_name="B", location_key="loc_b", qualifications=qualifications_of("worker")),
     ]
     for emp in employees:
         schedule.add_employee(emp)
@@ -98,8 +99,8 @@ def test_generate_with_location_key_leaves_other_locations_completely_untouched(
     shop.locations = {"loc_a": loc_a, "loc_b": loc_b}
 
     schedule = MonthSchedule(2026, 3)
-    alfa = Employee(last_name="Alfa", first_name="A", location_key="loc_a", custom_roles={"worker": True})
-    beta = Employee(last_name="Beta", first_name="B", location_key="loc_b", custom_roles={"worker": True})
+    alfa = Employee(last_name="Alfa", first_name="A", location_key="loc_a", qualifications=qualifications_of("worker"))
+    beta = Employee(last_name="Beta", first_name="B", location_key="loc_b", qualifications=qualifications_of("worker"))
     for emp in (alfa, beta):
         schedule.add_employee(emp)
 
@@ -153,7 +154,7 @@ def test_max_consecutive_days_is_resolved_per_employee_location():
         shop.locations = {"loc": loc}
 
         schedule = MonthSchedule(2026, 3)
-        emp = Employee(last_name="A", first_name="A", location_key="loc", custom_roles={"worker": True})
+        emp = Employee(last_name="A", first_name="A", location_key="loc", qualifications=qualifications_of("worker"))
         schedule.add_employee(emp)
 
         # Lock 3 consecutive worked days - satisfiable only if the location's
@@ -199,7 +200,7 @@ def _consecutive_policy_project(key, location_policies):
         if policy is not None:
             loc.constraint_policies["max_consecutive"] = policy
         shop.locations[loc_key] = loc
-        emp = Employee(last_name=loc_key.upper(), first_name="A", location_key=loc_key, custom_roles={"worker": True})
+        emp = Employee(last_name=loc_key.upper(), first_name="A", location_key=loc_key, qualifications=qualifications_of("worker"))
         schedule.add_employee(emp)
         for day in (2, 3, 4):
             ds = schedule.get_day(emp, day)
@@ -273,7 +274,7 @@ def test_min_staff_with_role_rule_is_resolved_per_employee_location():
         shop.locations = {"loc": loc}
 
         schedule = MonthSchedule(2026, 3)
-        emp = Employee(last_name="A", first_name="A", location_key="loc", custom_roles={"guard": True})
+        emp = Employee(last_name="A", first_name="A", location_key="loc", qualifications=qualifications_of("guard"))
         schedule.add_employee(emp)
 
         with redirect_stdout(io.StringIO()):
@@ -318,7 +319,7 @@ def test_min_staff_with_role_rule_skips_days_when_every_role_holder_location_is_
         ),
     }
     employees = [
-        Employee(last_name=f"A{i}", first_name="X", location_key="a", custom_roles={"kier": True})
+        Employee(last_name=f"A{i}", first_name="X", location_key="a", qualifications=qualifications_of("kier"))
         for i in range(3)
     ] + [Employee(last_name=f"B{i}", first_name="X", location_key="b") for i in range(3)]
     schedule = MonthSchedule(2026, 11, employees=employees)

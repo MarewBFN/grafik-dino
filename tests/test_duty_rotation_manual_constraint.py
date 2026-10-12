@@ -22,6 +22,7 @@ from logic.generator.duty_rotation_manual_constraint import add_duty_rotation_ma
 from model.business_profile import register_custom_profile
 from model.custom_profile import CustomBusinessProfile
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -308,7 +309,7 @@ def _generate_can_work(w_cells, prefer_24h=False, names="ABC", roles_by_index=No
 
     schedule = MonthSchedule(2026, month)
     employees = [
-        Employee(last_name=n, first_name=n, employment_fraction=1.0, custom_roles=dict((roles_by_index or {}).get(i, {})))
+        Employee(last_name=n, first_name=n, employment_fraction=1.0, qualifications=qualifications_of(*(roles_by_index or {}).get(i, ())))
         for i, n in enumerate(names)
     ]
     for e in employees:
@@ -437,7 +438,7 @@ class TestDutyRotationManualShiftCanWork:
         """"Nie chce zmian 24h" (Wymagane) + "W" w sobotę - wcześniej
         sprzeczne (W wymuszało 24h), teraz jedna z połówek doby."""
         result, schedule, employees = _generate_can_work(
-            [(0, 7)], prefer_24h=True, roles_by_index={0: {"nie_chce_24h": True}},
+            [(0, 7)], prefer_24h=True, roles_by_index={0: ("nie_chce_24h",)},
         )
         assert result["success"], result
         ds = schedule.get_day(employees[0], 7)
@@ -472,7 +473,7 @@ class TestDutyRotationManualShiftCanWork:
         schedule = MonthSchedule(2026, 10)
         employees = [
             Employee(last_name=f"E{i}", first_name="Guard", employment_fraction=1.0,
-                      location_key="site1", custom_roles={"nie_chce_24h": True})
+                      location_key="site1", qualifications=qualifications_of("nie_chce_24h"))
             for i in range(4)
         ]
         for e in employees:

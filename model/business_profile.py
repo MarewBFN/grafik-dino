@@ -193,6 +193,32 @@ def register_custom_profile(custom) -> None:
     ))
 
 
+# Kwalifikacje Ochrony (dawne custom_roles) mają w siatce własne, rysowane
+# ikony (ui/grid_view.py) zamiast emoji wybranego w kreatorze profilu.
+_BUILTIN_ROLE_ICONS = {"umowa": "builtin:contract", "nie_chce_24h": "builtin:no_24h"}
+
+
+def default_qualifications(business_type: str | None) -> tuple:
+    """Kwalifikacje, od których zaczyna katalog projektu tego profilu
+    (MonthlyProject.qualifications): dla Dino - "Otwarcie", "Mięso"
+    (poziomy 1/2) i "Kierowniczka"; dla profilu custom - jego role."""
+    from model.qualification import DINO_QUALIFICATIONS, Qualification
+
+    custom = CUSTOM_PROFILES.get(business_type)
+    if custom is None:
+        if business_type in BUSINESS_PROFILES and business_type != DEFAULT_BUSINESS_TYPE:
+            return ()
+        return DINO_QUALIFICATIONS
+    return tuple(
+        Qualification(
+            id=role.key,
+            name=role.label,
+            icon=_BUILTIN_ROLE_ICONS.get(role.key, role.icon),
+        )
+        for role in custom.roles
+    )
+
+
 def unregister_custom_profile(key: str) -> None:
     """Drop a custom profile from the in-memory registries. Projects that
     already reference this key are untouched - get_profile() already falls

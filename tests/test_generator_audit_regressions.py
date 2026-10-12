@@ -752,6 +752,7 @@ def test_manager_gets_day_off_on_automatically_closed_public_holiday():
     roboczy kierowniczki (07:00-15:00)."""
     from logic.manager_schedule import apply_all_manager_schedules
     from model.employee import Employee
+    from model.qualification import qualifications_of
     from model.month_schedule import MonthSchedule
     from model.shop_config import DEFAULT_LOCATION_KEY, ShopConfig
 
@@ -761,7 +762,7 @@ def test_manager_gets_day_off_on_automatically_closed_public_holiday():
     # który is_closed_for_public_holiday() ma na sztywno False (to pojęcie
     # istnieje wyłącznie per LocationConfig) - dokładnie tak samo jak dla
     # zwykłych pracowników w realnym użyciu (patrz ui/employee_dialog.py).
-    emp = Employee(last_name="Kierownik", first_name="", is_manager=True, location_key=DEFAULT_LOCATION_KEY)
+    emp = Employee(last_name="Kierownik", first_name="", qualifications=qualifications_of("kierownik"), location_key=DEFAULT_LOCATION_KEY)
     schedule = MonthSchedule(2026, 1, employees=[emp])
 
     apply_all_manager_schedules(schedule, shop)

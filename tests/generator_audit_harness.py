@@ -28,6 +28,14 @@ from model.constraint_policy import ConstraintPolicy  # noqa: E402
 from model.employee import Employee  # noqa: E402
 from model.location import LocationConfig, normalize_duty_rotation  # noqa: E402
 from model.month_schedule import MonthSchedule  # noqa: E402
+from model.qualification import (  # noqa: E402
+    MEAT_LEVEL_FULL,
+    MEAT_LEVEL_LIGHT,
+    QUAL_MANAGER,
+    QUAL_MEAT,
+    QUAL_OPENER,
+    qualifications_of,
+)
 from model.shop_config import ShopConfig  # noqa: E402
 from tests.schedule_validator import evaluate, validate  # noqa: E402
 
@@ -76,6 +84,23 @@ def _build_from_project_file(spec):
             ds.set_sick()
         ds.is_locked = True
     return schedule, shop
+
+
+def _spec_qualifications(emp_spec):
+    """Kwalifikacje pracownika ze `spec`: flagi opisu przypadku (opener, meat,
+    meat_light, manager - role Dino) i słownik "roles" (klucze kwalifikacji
+    profili custom, np. "umowa")."""
+    items = []
+    if emp_spec.get("opener"):
+        items.append(QUAL_OPENER)
+    if emp_spec.get("meat"):
+        items.append((QUAL_MEAT, MEAT_LEVEL_FULL))
+    elif emp_spec.get("meat_light"):
+        items.append((QUAL_MEAT, MEAT_LEVEL_LIGHT))
+    if emp_spec.get("manager"):
+        items.append(QUAL_MANAGER)
+    items.extend(key for key, value in emp_spec.get("roles", {}).items() if value)
+    return qualifications_of(*items)
 
 
 def build_case(spec):
@@ -145,14 +170,10 @@ def build_case(spec):
         emp = Employee(
             last_name=emp_spec.get("name", f"P{i:02d}"),
             first_name="",
-            is_opener=emp_spec.get("opener", False),
-            is_meat=emp_spec.get("meat", False),
-            is_meat_light=emp_spec.get("meat_light", False),
-            is_manager=emp_spec.get("manager", False),
+            qualifications=_spec_qualifications(emp_spec),
             no_night=emp_spec.get("no_night", False),
             no_afternoon=emp_spec.get("no_afternoon", False),
             employment_fraction=emp_spec.get("fraction", 1.0),
-            custom_roles=dict(emp_spec.get("roles", {})),
             location_key=emp_spec.get("location", default_loc),
             availability=emp_spec.get("availability", {}),
         )

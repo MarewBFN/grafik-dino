@@ -40,6 +40,7 @@ from model.business_profile import register_custom_profile
 from model.constraint_policy import ConstraintPolicy
 from model.custom_profile import CustomBusinessProfile
 from model.employee import Employee
+from model.qualification import qualifications_of
 from model.location import LocationConfig
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
@@ -108,7 +109,7 @@ def _shop_with_rotation(rotation):
 def _employees(n, no24h_indices=()):
     return [
         Employee(last_name=f"E{i}", first_name="Guard", location_key="site1",
-                 custom_roles={"nie_chce_24h": True} if i in no24h_indices else {})
+                 qualifications=qualifications_of(*(["nie_chce_24h"] if i in no24h_indices else [])))
         for i in range(n)
     ]
 
@@ -376,7 +377,7 @@ def _shop_schedule_with_profile(rotation, n_employees, no24h_indices=(), key="te
     schedule = MonthSchedule(2026, 8)
     employees = [
         Employee(last_name=f"E{i}", first_name="Guard", employment_fraction=1.0, location_key="site1",
-                 custom_roles={"nie_chce_24h": True} if i in no24h_indices else {})
+                 qualifications=qualifications_of(*(["nie_chce_24h"] if i in no24h_indices else [])))
         for i in range(n_employees)
     ]
     for emp in employees:
