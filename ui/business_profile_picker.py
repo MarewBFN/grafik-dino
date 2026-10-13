@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
 )
 
 from model.business_profile import get_custom_profile, visible_profiles
-from release_channel import RELEASE_CHANNEL
 from ui.profile_wizard_dialog import ProfileWizardDialog
 
 
@@ -35,15 +34,9 @@ class BusinessProfilePicker(QWidget):
         layout.addLayout(self.profiles_container)
         self._reload()
 
-        # Tworzenie profilu schowane na kanale Enyo - klient ma dokładnie
-        # jeden, gotowy profil "Ochrona" i nie zarządza profilami przez UI
-        # (patrz ENYO_ONLY_CHANGES.md). Na pozostałych kanałach (domyślnie
-        # "dino") guzik zostaje widoczny jak przed scaleniem z
-        # integration/enyo-only.
         new_branch_btn = QPushButton("+ Nowa branża...")
         new_branch_btn.setObjectName("secondaryButton")
         new_branch_btn.clicked.connect(self._open_profile_wizard)
-        new_branch_btn.setVisible(RELEASE_CHANNEL != "enyo")
         layout.addWidget(new_branch_btn)
 
     def selected_key(self):
@@ -78,18 +71,14 @@ class BusinessProfilePicker(QWidget):
 
             custom = get_custom_profile(profile.key)
             if custom is not None:
-                # Edycja/kasowanie schowane na kanale Enyo - patrz komentarz
-                # przy new_branch_btn wyżej.
                 edit_btn = QPushButton("Edytuj...")
                 edit_btn.setObjectName("secondaryButton")
                 edit_btn.clicked.connect(lambda _=False, key=profile.key: self._open_profile_wizard_for_edit(key))
-                edit_btn.setVisible(RELEASE_CHANNEL != "enyo")
                 row_layout.addWidget(edit_btn)
 
                 delete_btn = QPushButton("Usuń...")
                 delete_btn.setObjectName("dangerButton")
                 delete_btn.clicked.connect(lambda _=False, key=profile.key: self._delete_profile(key))
-                delete_btn.setVisible(RELEASE_CHANNEL != "enyo")
                 row_layout.addWidget(delete_btn)
 
             self._button_group.addButton(radio)

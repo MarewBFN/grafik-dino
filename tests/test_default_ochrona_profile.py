@@ -102,6 +102,54 @@ class EnsureDefaultOchronaProfileTests(unittest.TestCase):
         self.assertIn(bp.DEFAULT_OCHRONA_PROFILE_KEY, visible_keys)
         self.assertNotIn(bp.DEFAULT_BUSINESS_TYPE, visible_keys)
 
+    def test_user_edits_survive_the_startup_repair(self):
+        """Profil Ochrony edytowalny w kreatorze (reguły kwalifikacji) -
+        naprawa przy starcie nie może kasować zmian klienta."""
+        from model.custom_profile import RuleInstance
+
+        edited = bp.build_default_ochrona_profile()
+        edited.display_name = "Ochrona – Enyo"
+        edited.roles.append(RoleDefinition(key="uzbrojony", label="Uzbrojony", icon="🔫"))
+        edited.rules.append(RuleInstance(
+            type="min_staff_with_role", qualification_key="uzbrojony",
+            params={"min_count": 2, "scope": "window", "window_start": "10:00", "window_end": "14:00"},
+        ))
+        bp.CUSTOM_PROFILES[bp.DEFAULT_OCHRONA_PROFILE_KEY] = edited
+
+        with patch("model.custom_profile_store.save_custom_profile") as mock_save:
+            bp._ensure_default_ochrona_profile()
+
+        mock_save.assert_not_called()
+        self.assertIs(bp.get_custom_profile(bp.DEFAULT_OCHRONA_PROFILE_KEY), edited)
+
+    def test_repair_drops_only_abandoned_role_and_its_rules(self):
+        from model.custom_profile import RuleInstance
+
+        stale = CustomBusinessProfile(
+            key=bp.DEFAULT_OCHRONA_PROFILE_KEY,
+            display_name="Ochrona",
+            roles=[
+                RoleDefinition(key="ob_o_enie", label="Obłożenie"),
+                RoleDefinition(key="umowa", label="Umowa o pracę"),
+                RoleDefinition(key="uzbrojony", label="Uzbrojony"),
+            ],
+            rules=[
+                RuleInstance(type="min_staff_with_role", qualification_key="ob_o_enie", params={}),
+                RuleInstance(type="min_staff_with_role", qualification_key="uzbrojony", params={}),
+            ],
+        )
+        bp.CUSTOM_PROFILES[stale.key] = stale
+
+        with patch("model.custom_profile_store.save_custom_profile") as mock_save:
+            bp._ensure_default_ochrona_profile()
+
+        mock_save.assert_called_once()
+        registered = bp.get_custom_profile(bp.DEFAULT_OCHRONA_PROFILE_KEY)
+        self.assertEqual([(r.key, r.label) for r in registered.roles], [
+            ("umowa", "Umowa o pracę"), ("uzbrojony", "Uzbrojony"), ("nie_chce_24h", "Nie chce 24h"),
+        ])
+        self.assertEqual([r.qualification_key for r in registered.rules], ["uzbrojony"])
+
     def test_broken_app_data_location_does_not_raise(self):
         bp.CUSTOM_PROFILES.pop(bp.DEFAULT_OCHRONA_PROFILE_KEY, None)
         bp.BUSINESS_PROFILES.pop(bp.DEFAULT_OCHRONA_PROFILE_KEY, None)

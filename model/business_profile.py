@@ -246,9 +246,7 @@ _load_persisted_custom_profiles()
 # enyo-only, patrz ENYO_ONLY_CHANGES.md "Auto-provisioning profilu Ochrona")
 # -------------------------------------------------------------------------
 #
-# Ten build ma profile management (ProfileWizardDialog i wszystkie wejścia
-# do niego) świadomie schowane z UI - klient nigdy nie tworzy/nie edytuje
-# profilu samodzielnie. Ale %LOCALAPPDATA%\GrafikDino\custom_profiles.json
+# %LOCALAPPDATA%\GrafikDino\custom_profiles.json
 # NIE jest częścią instalatora (to per-maszynowy plik danych, nie
 # repo/build) - świeża instalacja na maszynie klienta zaczyna z ZUPEŁNIE
 # pustym magazynem profili. Bez tego bloku visible_profiles() (wyklucza
@@ -256,12 +254,12 @@ _load_persisted_custom_profiles()
 # (ui/first_run_wizard.py) nie miałby czego zaproponować, a klient
 # utknąłby na starcie bez żadnego działającego profilu.
 #
-# Synchronizowane BEZWARUNKOWO przy każdym starcie (nie tylko gdy brakuje),
-# żeby też naprawić już zarejestrowany, ale przestarzały profil - znalezione
-# podczas testów na tej maszynie: profil "custom_ochrona" z porzuconą rolą
-# "Obłożenie" (checkbox per pracownik) sprzed właściwego mechanizmu
-# LocationConfig.duty_rotation, który dziś liczy obłożenie automatycznie
-# per lokalizacja, nie jako ręczną flagę pracownika.
+# Sprawdzane przy każdym starcie (nie tylko gdy brakuje), żeby też naprawić
+# już zarejestrowany, ale przestarzały profil - znalezione podczas testów:
+# profil "custom_ochrona" z porzuconą rolą "Obłożenie" (checkbox per
+# pracownik) sprzed właściwego mechanizmu LocationConfig.duty_rotation.
+# Naprawa nie nadpisuje profilu - zmiany klienta z kreatora profilu (reguły
+# kwalifikacji, własne role) zostają (patrz _repaired_ochrona_profile).
 
 
 def build_default_ochrona_profile():
@@ -283,15 +281,44 @@ def build_default_ochrona_profile():
     )
 
 
+# Porzucona rola profilu Ochrona (checkbox "Obłożenie" per pracownik sprzed
+# LocationConfig.duty_rotation, klucz "ob_o_enie" z dawnego slugify) -
+# usuwana przy naprawie profilu razem z regułami na niej.
+_ABANDONED_OCHRONA_ROLE_KEYS = {"ob_o_enie"}
+_ABANDONED_OCHRONA_ROLE_LABELS = {"obłożenie"}
+
+
+def _repaired_ochrona_profile(current, canonical):
+    """Profil Ochrony po naprawie: bez porzuconej roli "Obłożenie" (i reguł
+    na niej) i z rolami kanonicznymi, których brakuje. Wszystko inne - role,
+    reguły, nazwa dodane albo zmienione przez użytkownika w kreatorze
+    profilu - zostaje. Wcześniej profil był nadpisywany kanonicznym przy
+    każdym starcie, bo zarządzanie profilami było schowane; od kiedy jest
+    dostępne (reguły kwalifikacji ustawia się w kreatorze), nadpisanie
+    kasowałoby pracę klienta."""
+    from dataclasses import replace
+
+    dropped = {
+        role.key for role in current.roles
+        if role.key in _ABANDONED_OCHRONA_ROLE_KEYS or role.label.strip().casefold() in _ABANDONED_OCHRONA_ROLE_LABELS
+    }
+    roles = [role for role in current.roles if role.key not in dropped]
+    present = {role.key for role in roles}
+    roles += [role for role in canonical.roles if role.key not in present]
+    rules = [rule for rule in current.rules if rule.qualification_key not in dropped]
+    return replace(current, roles=roles, rules=rules)
+
+
 def _ensure_default_ochrona_profile() -> None:
     canonical = build_default_ochrona_profile()
     current = CUSTOM_PROFILES.get(DEFAULT_OCHRONA_PROFILE_KEY)
-    if current is not None and current.to_dict() == canonical.to_dict():
+    target = canonical if current is None else _repaired_ochrona_profile(current, canonical)
+    if current is not None and current.to_dict() == target.to_dict():
         return
 
     try:
         from model.custom_profile_store import save_custom_profile
-        save_custom_profile(canonical)
+        save_custom_profile(target)
     except Exception:
         # Same defensive fallback as _load_persisted_custom_profiles() - a
         # missing/broken app-data location must not break importing this
@@ -299,7 +326,7 @@ def _ensure_default_ochrona_profile() -> None:
         # usable for THIS run even if it couldn't be persisted to disk.
         pass
 
-    register_custom_profile(canonical)
+    register_custom_profile(target)
 
 
 _ensure_default_ochrona_profile()

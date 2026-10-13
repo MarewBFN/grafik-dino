@@ -31,7 +31,6 @@ from ui.weekly_hours_editor import WeeklyHoursEditor
 from model.constraint_policy import ConstraintPolicy
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile, visible_profiles
 from model.location import normalize_duty_rotation
-from release_channel import RELEASE_CHANNEL
 from logic.generator.opening_hours_coverage import (
     DEFAULT_MAX_STAFF,
     MAX_STAFF_CONSTRAINT_KEY,
@@ -211,29 +210,19 @@ class ConfigDialog(QDialog):
         self.business_type_selector.currentIndexChanged.connect(self._on_business_type_changed)
         profile_row.addWidget(self.business_type_selector)
 
-        # Zarządzanie profilami (tworzenie/edycja/kasowanie) schowane na
-        # kanale Enyo - klient ma dokładnie jeden, gotowy profil "Ochrona"
-        # i nie zarządza profilami przez UI (patrz ENYO_ONLY_CHANGES.md).
-        # Na pozostałych kanałach (domyślnie "dino") guziki zostają widoczne
-        # jak przed scaleniem z integration/enyo-only.
-        show_profile_management = RELEASE_CHANNEL != "enyo"
-
         new_profile_btn = QPushButton("Nowy profil...")
         new_profile_btn.setObjectName("secondaryButton")
         new_profile_btn.clicked.connect(self._open_profile_wizard)
-        new_profile_btn.setVisible(show_profile_management)
         profile_row.addWidget(new_profile_btn)
 
         self.edit_profile_btn = QPushButton("Edytuj profil...")
         self.edit_profile_btn.setObjectName("secondaryButton")
         self.edit_profile_btn.clicked.connect(self._open_profile_wizard_for_edit)
-        self.edit_profile_btn.setVisible(show_profile_management)
         profile_row.addWidget(self.edit_profile_btn)
 
         self.delete_profile_btn = QPushButton("Usuń profil...")
         self.delete_profile_btn.setObjectName("dangerButton")
         self.delete_profile_btn.clicked.connect(self._delete_current_profile)
-        self.delete_profile_btn.setVisible(show_profile_management)
         profile_row.addWidget(self.delete_profile_btn)
 
         self._sync_edit_profile_button()
