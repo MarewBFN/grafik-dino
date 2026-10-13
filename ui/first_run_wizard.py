@@ -34,8 +34,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from model.business_profile import get_custom_profile, get_profile
+from model.business_profile import default_qualifications, get_custom_profile, get_profile
 from model.constraint_policy import ConstraintPolicy
+from model.qualification import QUALIFICATION_POLICIES
 from ui.business_profile_picker import BusinessProfilePicker
 
 POLICY_OPTIONS = (
@@ -245,34 +246,33 @@ class FirstRunWizardDialog(QDialog):
         profile, _ = self._current_profile()
         policy_label_map = dict(profile.policy_labels)
 
-        # Przełączalne cechy = wyróżnione role z RoleDef.linked_policy (dziś
-        # tylko "meat" u Dino) - jedyny mechanizm, który realnie coś w
-        # generatorze/UI włącza lub wyłącza. Role bez linked_policy (np.
-        # kierowniczka) są zawsze dostępne i przypisuje się je per pracownik
-        # w oknie "Pracownicy", więc nie mają tu przełącznika.
-        seen = set()
-        for role in profile.roles:
-            if not role.linked_policy or role.linked_policy in seen:
-                continue
-            seen.add(role.linked_policy)
-            label = policy_label_map.get(role.linked_policy, role.linked_policy)
-            check = QCheckBox(f"{label}")
-            check.setChecked(
-                self.result_policy_overrides.get(role.linked_policy)
-                != ConstraintPolicy.DISABLED
-            )
+        # Przełączalne cechy = zasady powiązane z kwalifikacjami profilu
+        # (model.qualification.QUALIFICATION_POLICIES, dziś tylko "meat" u
+        # Dino) - wyłączenie chowa kwalifikację w oknie pracownika i zasadę
+        # w generatorze. Pozostałe kwalifikacje (np. kierowniczka) są zawsze
+        # dostępne i przypisuje się je per pracownik, więc nie mają tu
+        # przełącznika.
+        _, key = self._current_profile()
+        policies = []
+        for qualification in default_qualifications(key):
+            policy = QUALIFICATION_POLICIES.get(qualification.id)
+            if policy and policy not in policies:
+                policies.append(policy)
+        for policy in policies:
+            check = QCheckBox(policy_label_map.get(policy, policy))
+            check.setChecked(self.result_policy_overrides.get(policy) != ConstraintPolicy.DISABLED)
             self._features_layout.addWidget(check)
-            self._feature_checks[role.linked_policy] = check
+            self._feature_checks[policy] = check
 
         if self._feature_checks:
             self._features_hint.setText(
-                "Odznacz to, czego ta placówka nie ma - odpowiadające role i "
-                "zasady znikną z generatora i formularza pracownika."
+                "Odznacz to, czego ta placówka nie ma - odpowiadające kwalifikacje "
+                "i zasady znikną z generatora i formularza pracownika."
             )
         else:
             self._features_hint.setText(
-                "Ten profil nie ma dodatkowych przełączalnych cech - role "
-                "specyficzne dla konkretnego pracownika (np. kierowniczka) "
+                "Ten profil nie ma dodatkowych przełączalnych cech - kwalifikacje "
+                "konkretnego pracownika (np. kierowniczka) "
                 "przypisuje się później, w oknie \"Pracownicy\"."
             )
             none_label = QLabel("(brak)")

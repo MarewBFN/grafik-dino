@@ -311,7 +311,7 @@ def test_end_to_end_generation_covers_a_full_week_with_duty_rotation():
 
         # Nobody with "nie_chce_24h" ever gets the 24h shift.
         for emp, ds in zip(employees, ds_list):
-            if emp.custom_roles.get("nie_chce_24h") and ds.is_full_day:
+            if emp.has_qualification("nie_chce_24h") and ds.is_full_day:
                 assert False, f"day {day}: {emp.display_name()} has nie_chce_24h but got a 24h shift"
 
 
@@ -415,5 +415,5 @@ class TestOnly1224hToggle:
                 assert len(assigned) == 2, f"day {day} (12h+12h variant) should have exactly 2 people"
 
             for emp, ds in zip(employees, ds_list):
-                if emp.custom_roles.get("nie_chce_24h") and ds.is_full_day:
+                if emp.has_qualification("nie_chce_24h") and ds.is_full_day:
                     assert False, f"day {day}: {emp.display_name()} has nie_chce_24h but got a 24h shift"

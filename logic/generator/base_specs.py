@@ -71,7 +71,7 @@ GENERIC_POLICY_LABELS = (
     # ShopConfig.__init__), a pokazywanie tego przełącznika w "Zasadach
     # generatora" KAŻDEGO profilu (w tym Dino) byłoby myleniem UI czymś
     # nieistotnym dla niego - dokładnie to, czemu ma zapobiegać
-    # RoleDef.linked_policy. Ekran do edycji tych dwóch polityk to zadanie
+    # QUALIFICATION_POLICIES (model/qualification.py). Ekran do edycji tych dwóch polityk to zadanie
     # osobnego etapu UI (Etap D/E planu), na razie edytowalne tylko
     # programowo (ShopConfig.constraint_policies), domyślnie MANDATORY.
 )

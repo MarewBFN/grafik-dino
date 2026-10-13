@@ -134,7 +134,7 @@ def test_edit_can_update_contact_data_inline_and_keeps_schedule(monkeypatch):
 
     saved = controller.schedule.employees[0]
     assert (saved.phone, saved.email, saved.city) == ("600 123 456", "jan@firma.pl", "Gdańsk")
-    assert saved.is_opener is True
+    assert saved.has_qualification("otwarcie")
     assert controller.schedule.get_day(saved, 3).start == "08:00"
     assert changes == ["Zapisano pracownika."]
     assert dialog.table.item(0, 6).text() == "Gdańsk"
@@ -159,7 +159,7 @@ def test_role_change_alongside_contact_edit_still_creates_undo_entry(monkeypatch
     dialog._edit_employee(emp)
 
     saved = controller.schedule.employees[0]
-    assert saved.is_opener is True
+    assert saved.has_qualification("otwarcie")
     assert saved.phone == "600 123 456"
     # Tym razem zmieniła się też rola (nie tylko dane kontaktowe) - to
     # normalna, cofalna akcja.

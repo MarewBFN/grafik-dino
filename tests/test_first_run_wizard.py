@@ -109,7 +109,7 @@ def test_wizard_custom_profile_with_rule_shows_no_feature_toggle_but_shows_rule_
     wizard = _advance_to_branch(FirstRunWizardDialog(None))
     wizard.profile_picker._profile_radios["custom_test_wizard_rule"].setChecked(True)
     wizard._go_next()  # -> features
-    assert wizard._feature_checks == {}  # no linked_policy roles on this profile
+    assert wizard._feature_checks == {}  # no qualification tied to a policy on this profile
 
     wizard._go_next()  # -> rules
     rule_key = profile.rule_policy_key(rule)

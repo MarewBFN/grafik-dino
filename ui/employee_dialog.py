@@ -500,7 +500,7 @@ class EmployeeDialog(QDialog):
         # Ograniczenia pracownika z profilu (Dino: no_night/no_afternoon z
         # własnymi etykietami) - pola Employee, nie kwalifikacje.
         for role in self.profile.roles:
-            if role.key not in _EMPLOYEE_FIELDS or self._policy_disabled(role.linked_policy):
+            if role.key not in _EMPLOYEE_FIELDS:
                 continue
             checkbox = QCheckBox(role.label)
             if role.description:

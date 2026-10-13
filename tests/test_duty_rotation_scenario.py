@@ -100,7 +100,7 @@ def _build_month(year: int, month: int, n_employees: int, no24h_count: int, rota
 
 
 def _rotation_capable_count(employees) -> int:
-    return sum(1 for e in employees if not e.custom_roles.get("nie_chce_24h", False))
+    return sum(1 for e in employees if not e.has_qualification("nie_chce_24h"))
 
 
 def _verify_full_month(shop, schedule, employees):
@@ -137,7 +137,7 @@ def _verify_full_month(shop, schedule, employees):
                     f"day {day} (weekend): full-day variant must be exactly 1 person, no halves - got {assigned}"
                 )
                 emp, ds = full_day[0]
-                assert not emp.custom_roles.get("nie_chce_24h", False), (
+                assert not emp.has_qualification("nie_chce_24h"), (
                     f"day {day}: employee with nie_chce_24h got a 24h shift"
                 )
             else:

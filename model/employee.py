@@ -4,31 +4,8 @@ import uuid
 from datetime import date
 from typing import Dict
 
-from model.qualification import (
-    MEAT_LEVEL_FULL,
-    MEAT_LEVEL_LIGHT,
-    QUAL_MANAGER,
-    QUAL_MEAT,
-    QUAL_OPENER,
-)
-
 # Pola danych osobowych - patrz Employee.phone itd. niżej.
 PERSONAL_DATA_FIELDS = ("phone", "email", "street", "postal_code", "city")
-
-# Ograniczenia pracownika, które (jeszcze) nie są kwalifikacjami - osobne
-# pola Employee, czytane przez has_role() po nazwie pola.
-_RESTRICTION_FIELDS = {"no_night", "no_afternoon"}
-
-# PRZEJŚCIOWE (Krok 1.1 -> 1.5 migracji na Qualification): klucze dawnych pól
-# roli profilu Dino, które UI wciąż podaje do has_role() (RoleDef.key w
-# model/business_profile.py) - mapowane na kwalifikację i warunek poziomu.
-_LEGACY_ROLE_KEYS = {
-    "is_opener": (QUAL_OPENER, None),
-    "is_meat": (QUAL_MEAT, MEAT_LEVEL_FULL),
-    "is_meat_light": (QUAL_MEAT, MEAT_LEVEL_LIGHT),
-    "is_manager": (QUAL_MANAGER, None),
-}
-_LEGACY_QUALIFICATION_KEYS = {QUAL_OPENER, QUAL_MEAT, QUAL_MANAGER}
 
 @dataclass(order=True, frozen=True)
 class Employee:
@@ -124,50 +101,6 @@ class Employee:
         self, key: str, min_level: int = 1, on: date | None = None, location_key: str | None = None,
     ) -> bool:
         return self.qualification_level(key, on=on, location_key=location_key) >= min_level
-
-    # ------------------------------------------------------------------
-    # PRZEJŚCIOWE (Krok 1.1 -> 1.5): dawne nazwy ról jako widoki tylko do
-    # odczytu, liczone z kwalifikacji (bez dat i placówek - dokładnie tak,
-    # jak działały dawne pola). Jedynym źródłem danych są `qualifications`;
-    # kolejne kroki migracji zastępują te odczyty jawnym has_qualification()
-    # i usuwają poniższe właściwości.
-    # ------------------------------------------------------------------
-
-    @property
-    def is_opener(self) -> bool:
-        return self.has_qualification(QUAL_OPENER)
-
-    @property
-    def is_meat(self) -> bool:
-        return self.qualification_level(QUAL_MEAT) >= MEAT_LEVEL_FULL
-
-    @property
-    def is_meat_light(self) -> bool:
-        return self.qualification_level(QUAL_MEAT) == MEAT_LEVEL_LIGHT
-
-    @property
-    def is_manager(self) -> bool:
-        return self.has_qualification(QUAL_MANAGER)
-
-    @property
-    def custom_roles(self) -> Dict[str, bool]:
-        return {
-            q.qualification_id: True
-            for q in self.qualifications
-            if q.qualification_id not in _LEGACY_QUALIFICATION_KEYS
-        }
-
-    def has_role(self, key: str) -> bool:
-        """True gdy pracownik ma rolę `key`: dawny klucz pola Dino
-        (is_opener, is_meat, ...), ograniczenie (no_night/no_afternoon) albo
-        klucz kwalifikacji (dawne custom_roles)."""
-        if key in _RESTRICTION_FIELDS:
-            return bool(getattr(self, key))
-        if key in _LEGACY_ROLE_KEYS:
-            qualification_key, exact_level = _LEGACY_ROLE_KEYS[key]
-            level = self.qualification_level(qualification_key)
-            return level == exact_level if exact_level is not None else level >= 1
-        return self.has_qualification(key)
 
     def validate(self) -> None:
         if not self.last_name.strip():

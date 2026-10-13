@@ -147,8 +147,8 @@ def test_editing_employee_with_meat_disabled_preserves_is_meat_flag():
     dialog._save()
 
     saved = dialog.employee_result
-    assert saved.is_opener is False  # visible role: honors the UI change
-    assert saved.is_meat is True  # hidden role: preserved, not wiped to False
+    assert not saved.has_qualification("otwarcie")  # visible: honors the UI change
+    assert saved.qualification_level("mieso") == 2  # hidden: preserved, not wiped
 
 
 def test_employee_dialog_shows_wymiar_etatu_for_dino():

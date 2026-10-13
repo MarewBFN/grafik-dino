@@ -100,18 +100,25 @@ class LegacyMappingTests(unittest.TestCase):
         quals = qualifications_from_legacy({"custom_roles": {"umowa": True, "nie_chce_24h": False, "guard": True}})
         self.assertEqual(quals, qualifications_of("umowa", "guard"))
 
-    def test_legacy_views_match_original_flags(self):
+    def test_migrated_qualifications_answer_like_original_flags(self):
+        from model.qualification import is_full_meat_on, is_light_meat_on, is_manager_on, is_opener_on
+
+        checks = {
+            "is_opener": is_opener_on, "is_meat": is_full_meat_on,
+            "is_meat_light": is_light_meat_on, "is_manager": is_manager_on,
+        }
         for flags in (
             {"is_opener": True, "is_meat": True},
             {"is_meat_light": True, "is_manager": True},
-            {"custom_roles": {"umowa": True}},
+            {"custom_roles": {"umowa": True, "pusta": False}},
             {},
         ):
             emp = Employee("A", "B", qualifications=qualifications_from_legacy(flags))
             with self.subTest(flags=flags):
-                for key in ("is_opener", "is_meat", "is_meat_light", "is_manager"):
-                    self.assertEqual(getattr(emp, key), bool(flags.get(key, False)))
-                self.assertEqual(emp.custom_roles, {k: True for k, v in flags.get("custom_roles", {}).items() if v})
+                for key, check in checks.items():
+                    self.assertEqual(check(emp, 2026, 10, 1), bool(flags.get(key, False)))
+                for key, value in flags.get("custom_roles", {}).items():
+                    self.assertEqual(emp.has_qualification(key), value)
 
 
 def _strip_legacy(employee_dict):

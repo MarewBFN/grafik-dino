@@ -13,24 +13,20 @@ from release_channel import RELEASE_CHANNEL
 
 @dataclass(frozen=True)
 class RoleDef:
-    """One employee role/attribute checkbox.
+    """Rola/atrybut pracownika opisany przez profil.
 
-    `key` matching an existing Employee dataclass field (e.g. "is_opener")
-    is read/written on the Employee object directly, like today. Any other
-    key is read/written through Employee.custom_roles instead, so new
-    business profiles don't need new Employee fields.
+    - `key` będący polem Employee (no_night/no_afternoon) - ograniczenie
+      pracownika z etykietą tego profilu (checkbox w oknie pracownika);
+    - każdy inny klucz - rola profilu custom (nazwa, ikona). Pracownikom
+      przypisuje się ją jako kwalifikację z katalogu projektu
+      (model.qualification, MonthlyProject.qualifications), do którego
+      trafia przez default_qualifications().
     """
 
     key: str
     label: str
     description: str = ""
     icon: str = ""
-    # When set, this role is only shown/usable while
-    # shop.constraint_policies[linked_policy] isn't DISABLED - e.g. Dino's
-    # meat-counter roles disappear from the UI once the "meat" policy is
-    # turned off, instead of showing a checkbox for a constraint that no
-    # longer does anything.
-    linked_policy: str = ""
 
 
 @dataclass(frozen=True)
@@ -90,14 +86,9 @@ def visible_profiles() -> list[BusinessProfile]:
 DINO_RETAIL_PROFILE = BusinessProfile(
     key=DEFAULT_BUSINESS_TYPE,
     display_name="Sklep (Dino)",
+    # Otwarcie/Mięso/Kierowniczka to kwalifikacje (model.qualification.
+    # DINO_QUALIFICATIONS), nie role profilu - tu tylko ograniczenia.
     roles=(
-        RoleDef("is_opener", "Pracownik otwarcia"),
-        RoleDef("is_meat", "Obsługa stoiska mięsnego", linked_policy="meat"),
-        RoleDef("is_meat_light", "mooooże stanąć na chwilę na mięsie", linked_policy="meat"),
-        RoleDef(
-            "is_manager",
-            "Kierowniczka (sztywny grafik: pon. wolne, wt-pt 7:00-15:00, sob 6:00-14:00)",
-        ),
         RoleDef("no_night", "Nie pracuje w godzinach nocnych (przed 6:00 i po 22:00)"),
         RoleDef("no_afternoon", "Nie pracuje na popołudniu (tylko zmiany poranne)"),
     ),

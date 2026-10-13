@@ -9,11 +9,11 @@ grafik" zrobiłyby ręcznie w UI, tylko bez klikania:
    sekcja 9 pkt 1) i zapisuje go tam, gdzie normalnie zapisuje go kreator
    w UI (%LOCALAPPDATA%\\GrafikDino\\custom_profiles.json) - profil jest
    więc trwały i widoczny też w kreatorze/Konfiguracji, nie tylko w tym
-   demo. Te dwie role celowo NIE mają żadnej reguły (custom.rules=[]) -
-   to same checkboxy w EmployeeDialog, zapisywane w Employee.custom_roles
-   i przechodzące przez zapis/odczyt projektu bez żadnego wpływu na
-   generator - przyszłe flagi pod zmienne godziny/zmianę 24h (sekcje
-   4.4/7 planu), które czekają na odpowiedzi klienta, nie gotowa reguła.
+   demo. Te dwie role nie mają reguł profilu (custom.rules=[]) - to
+   kwalifikacje z katalogu projektu (checkboxy w EmployeeDialog, zapisywane
+   w Employee.qualifications), które generator czyta wprost: "Umowa" daje
+   pierwszeństwo przy rozdzielaniu godzin, "Nie chce 24h" dzieli dobę
+   weekendową na 2x12h.
 2. Buduje przykładowy projekt na PRAWDZIWYM mechanizmie rotacji 24/7
    (LocationConfig.duty_rotation, Etapy A-C planu) - obiekt pokryty
    16h+8h w tygodniu i 24h (albo 12h+12h dla "nie chce 24h") w weekend -

@@ -71,8 +71,8 @@ def build_scenario(employee_count: int, seed: int) -> Tuple[dict, MonthSchedule,
         "employees": [
             {
                 "name": emp.display_name(),
-                "is_opener": emp.is_opener,
-                "is_meat": emp.is_meat,
+                "is_opener": emp.has_qualification("otwarcie"),
+                "is_meat": emp.qualification_level("mieso") >= 2,
                 "employment_fraction": emp.employment_fraction,
             }
             for emp in employees
