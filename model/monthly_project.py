@@ -49,19 +49,19 @@ class MonthlyProject:
     def ensure_qualification_catalog(self) -> None:
         """Uzupełnia katalog kwalifikacji:
 
-        - pusty katalog (nowy projekt albo plik sprzed katalogu) dostaje
-          domyślne kwalifikacje profilu każdego miesiąca (model.
-          business_profile.default_qualifications);
+        - o domyślne kwalifikacje profilu każdego miesiąca (model.
+          business_profile.default_qualifications) - także później, gdy
+          profil dostanie nową rolę albo miesiąc zmieni profil;
         - każda kwalifikacja, którą ma jakikolwiek pracownik, a której katalog
           nie zna (np. profil custom usunięty z tego komputera), dostaje
           pozycję zastępczą - żeby żadne przypisanie nie zniknęło.
 
-        Istniejących pozycji nie zmienia ani nie usuwa."""
+        Istniejących pozycji nie zmienia ani nie usuwa (użytkownik mógł je
+        edytować w Plik -> "Kwalifikacje")."""
         from model.business_profile import default_qualifications
 
-        if not self.qualifications:
-            for key in self.sorted_keys():
-                merge_catalog(self.qualifications, default_qualifications(self.months[key][1].business_type))
+        for key in self.sorted_keys():
+            merge_catalog(self.qualifications, default_qualifications(self.months[key][1].business_type))
 
         for key in self.sorted_keys():
             schedule, _shop_config = self.months[key]
@@ -71,6 +71,34 @@ class MonthlyProject:
                         self.qualifications[qualification.qualification_id] = placeholder_qualification(
                             qualification.qualification_id
                         )
+
+    def protected_qualifications(self) -> set:
+        """Klucze kwalifikacji, których nie da się usunąć z katalogu:
+        domyślne kwalifikacje profilu któregoś miesiąca (wróciłyby przy
+        najbliższym uzupełnieniu katalogu, odwołują się do nich zasady
+        generatora) i kwalifikacje użyte w regułach profilu custom."""
+        from model.business_profile import default_qualifications, get_custom_profile
+
+        protected = set()
+        for key in self.sorted_keys():
+            business_type = self.months[key][1].business_type
+            protected.update(q.id for q in default_qualifications(business_type))
+            custom = get_custom_profile(business_type)
+            if custom is not None:
+                protected.update(rule.qualification_key for rule in custom.rules if rule.qualification_key)
+        return protected
+
+    def qualification_usage(self) -> dict:
+        """{klucz kwalifikacji: (liczba pracowników, najwyższy poziom)} we
+        wszystkich miesiącach projektu (pracownik liczony raz)."""
+        holders = {}
+        top = {}
+        for key in self.sorted_keys():
+            for employee in self.months[key][0].employees:
+                for qualification in employee.qualifications:
+                    holders.setdefault(qualification.qualification_id, set()).add(employee.display_name())
+                    top[qualification.qualification_id] = max(top.get(qualification.qualification_id, 0), qualification.level)
+        return {key: (len(names), top[key]) for key, names in holders.items()}
 
 
 MONTH_STATE_EMPTY = "empty"

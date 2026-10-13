@@ -411,6 +411,11 @@ KNOWN_QUALIFICATIONS = {
 # zasadach mięsa). Przypisania pracowników zostają bez zmian.
 QUALIFICATION_POLICIES = {QUAL_MEAT: "meat"}
 
+# Kwalifikacje, których poziomy generator czyta na sztywno (Dino "Mięso":
+# 1 = pomocniczo, 2 = pełna obsługa) - w katalogu można zmienić tylko nazwy
+# poziomów, nie ich liczbę.
+FIXED_LEVEL_COUNTS = {QUAL_MEAT: 2}
+
 
 def placeholder_qualification(key: str) -> Qualification:
     """Pozycja katalogu dla klucza, który jest na pracowniku, ale nie ma go w

@@ -839,6 +839,7 @@ class MainWindow(QMainWindow):
         file_menu.addMenu(cards_menu)
 
         file_menu.addAction("Dane firmy...", self._open_companies_dialog)
+        file_menu.addAction("Kwalifikacje...", self._open_qualifications_dialog)
         file_menu.addAction("Wnioski urlopowe...", self._open_leave_requests_dialog)
 
         file_menu.addSeparator()
@@ -1089,6 +1090,11 @@ class MainWindow(QMainWindow):
 
     def _sync_everything(self):
         self._commit_current_month()
+        # Nowa rola profilu (kreator) albo zmiana profilu miesiąca - katalog
+        # kwalifikacji dostaje brakujące pozycje (patrz
+        # MonthlyProject.ensure_qualification_catalog).
+        if getattr(self, "project", None) is not None:
+            self.project.ensure_qualification_catalog()
         # Bezpiecznik: tabela grafiku filtruje pracowników po location_key
         # (patrz _sync_grid), więc ktoś bez poprawnego przypisania byłby
         # trwale niewidoczny w każdej placówce - dopina go do pierwszej
@@ -1318,6 +1324,27 @@ class MainWindow(QMainWindow):
         except OSError:
             pass
         self.statusBar().showMessage("Zapisano dane firmy.", 2500)
+
+    def _open_qualifications_dialog(self):
+        from ui.qualifications_dialog import QualificationsDialog
+
+        self._commit_current_month()
+        self.project.ensure_qualification_catalog()
+        dialog = QualificationsDialog(
+            self, self.project.qualifications,
+            usage=self.project.qualification_usage(),
+            protected=self.project.protected_qualifications(),
+        )
+        if dialog.exec() != QDialog.Accepted:
+            return
+        self.project.qualifications = dialog.qualifications
+        self.project.ensure_qualification_catalog()
+        try:
+            self._save_bundle("last_project.json")
+        except OSError:
+            pass
+        self._sync_everything()
+        self.statusBar().showMessage("Zapisano kwalifikacje.", 2500)
 
     def _update_window_title(self):
         # Wersja programu zawsze bezpośrednio po nazwie ("Grafik pracy
