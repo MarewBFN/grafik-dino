@@ -173,6 +173,17 @@ def register_custom_profile(custom) -> None:
     summary_rows.extend(
         (role.label, f"role:{role.key}") for role in custom.roles if role.show_summary_row
     )
+    # Kwalifikacja z regułą "min. N osób" zawsze ma swój wiersz - koloruje
+    # go walidacja siatki (model/constraints.py::CustomStaffRule), więc bez
+    # niego naruszenie reguły nie miałoby gdzie się pokazać.
+    from model.custom_profile import RULE_TYPE_MIN_STAFF_WITH_ROLE
+
+    shown = {key for _label, key in summary_rows}
+    for rule in custom.rules:
+        key = f"role:{rule.qualification_key}"
+        if rule.type == RULE_TYPE_MIN_STAFF_WITH_ROLE and key not in shown:
+            summary_rows.append((custom.role_label(rule.qualification_key), key))
+            shown.add(key)
 
     register_profile(BusinessProfile(
         key=custom.key,

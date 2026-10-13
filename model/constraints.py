@@ -17,6 +17,11 @@ class ConstraintViolation:
     employee: object   # Employee lub None (jeśli globalne)
     day: int | None
     message: str
+    # Wiersz podsumowania nad tabelą, który to naruszenie koloruje (np.
+    # "role:kasa" dla reguły profilu custom) - None = wg `type`.
+    row_key: str | None = None
+    # Ostrzeżenie (żółty, zasada Preferowana) zamiast błędu (czerwony).
+    warning: bool = False
 
 
 # ==========================================
@@ -192,6 +197,40 @@ class MeatCoverageRule(Rule):
         return results
 
 
+class CustomStaffRule(Rule):
+    """Reguły profilu custom "min. N osób z kwalifikacją X" - ta sama
+    definicja co w generatorze (model/staffing_rules.py). Zasada Wymagana -
+    błąd, Preferowana - ostrzeżenie, Wyłączona (albo bez wpisu w projekcie,
+    jak w generatorze) - pomijana. Koloruje wiersz kwalifikacji "role:<klucz>"."""
+
+    def __init__(self, custom):
+        self.custom = custom
+
+    def apply(self, schedule, shop):
+        from model.custom_profile import RULE_TYPE_MIN_STAFF_WITH_ROLE
+        from model.staffing_rules import check_min_staff
+
+        results = []
+        for rule in self.custom.rules:
+            if rule.type != RULE_TYPE_MIN_STAFF_WITH_ROLE:
+                continue
+            rule_key = self.custom.rule_policy_key(rule)
+            policy = shop.constraint_policies.get(rule_key)
+            if policy not in (ConstraintPolicy.MANDATORY, ConstraintPolicy.PREFERRED):
+                continue
+            label = self.custom.rule_label(rule)
+            for day, detail in check_min_staff(schedule, shop, rule_key, rule.qualification_key, rule.params):
+                results.append(ConstraintViolation(
+                    type="custom_min_staff",
+                    employee=None,
+                    day=day,
+                    message=f"{label} – {detail}",
+                    row_key=f"role:{rule.qualification_key}",
+                    warning=policy == ConstraintPolicy.PREFERRED,
+                ))
+        return results
+
+
 # ==========================================
 # ENGINE
 # ==========================================
@@ -219,8 +258,7 @@ class ConstraintEngine:
         # business_type, so without this guard every custom profile's grid
         # would get validated against Dino's own staffing numbers instead of
         # its actual rules (which live in model.custom_profile.RuleInstance,
-        # not shop.constraints, and already get their own coloring via
-        # logic/generator/generic_rules.py at generation time).
+        # not shop.constraints - checked below by CustomStaffRule).
         if shop.business_type == DEFAULT_BUSINESS_TYPE:
             if "min_open_staff" in cfg:
                 rules.append(
@@ -235,6 +273,12 @@ class ConstraintEngine:
             meat_policy = shop.constraint_policies.get("meat_coverage", ConstraintPolicy.MANDATORY)
             if meat_policy != ConstraintPolicy.DISABLED or cfg.get("enforce_meat_coverage", False):
                 rules.append(MeatCoverageRule())
+
+        from model.business_profile import get_custom_profile
+
+        custom = get_custom_profile(shop.business_type)
+        if custom is not None:
+            rules.append(CustomStaffRule(custom))
 
         violations: List[ConstraintViolation] = []
 

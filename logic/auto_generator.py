@@ -4,10 +4,10 @@ from ortools.sat.python import cp_model
 from model.location import LOCATION_RUN_SETTING_KEYS
 from model.month_schedule import MonthSchedule
 from model.shop_config import ShopConfig
+from model.staffing_rules import staffing_days
 from logic.generator.solver import build_objective, solve_model
 from logic.generator.solution_mapper import save_solution
 from logic.generator.constraint_registry import ConstraintContext, apply_registry
-from logic.generator.constraints_basic import is_location_open_for_employee
 from logic.generator.trace import ConstraintTraceLogger
 
 # Only the "dino_retail" business profile exists today; AutoScheduleGenerator
@@ -269,11 +269,7 @@ class AutoScheduleGenerator:
         # obsady - add_non_trade_day_constraints blokuje w nim wszystkie
         # zmiany, więc wymogi obsady (open/close/mięso/role) byłyby w nim
         # niespełnialne. Projekt bez pracowników - bez zmian.
-        trade_days = [
-            d for d in days
-            if shop.is_trade_day(d)
-            and (not employees or any(is_location_open_for_employee(shop, emp, d) for emp in employees))
-        ]
+        trade_days = staffing_days(employees, shop, days)
 
         print("Liczba pracowników:", len(employees))
         print("Dni w miesiącu:", len(days))

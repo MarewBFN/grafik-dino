@@ -36,7 +36,10 @@ class ConstraintPresenter:
         for v in self.violations:
             if v.day != day:
                 continue
-            if key == "open" and v.type == "min_open_staff":
+            if v.row_key is not None:
+                if v.row_key == key:
+                    (warn_messages if v.warning else messages).append(v.message)
+            elif key == "open" and v.type == "min_open_staff":
                 messages.append(v.message)
             elif key == "close" and v.type == "min_close_staff":
                 messages.append(v.message)

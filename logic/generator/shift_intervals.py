@@ -19,39 +19,17 @@ zmiana się zaczyna (koniec > start, także przez północ i dla 24 h):
 Ręcznie zablokowany dzień z godzinami (ds.is_locked + start/end) to stały
 przedział - ręczny wpis wygrywa, a jego zmienne x są i tak ustalone przez
 ograniczenia ręcznych wpisów, więc nie liczy się ich drugi raz
-(locked_interval)."""
-
-from datetime import datetime
+(locked_interval). Przedział wpisanej zmiany i podział okna na odcinki są
+wspólne z walidacją siatki (model/staffing_rules.py)."""
 
 from logic.utils.time_utils import get_effective_daily_hours
-
-DAY = 24 * 60
-FMT = "%H:%M"
-
-
-def _minutes(value: str) -> int:
-    t = datetime.strptime(value, FMT)
-    return t.hour * 60 + t.minute
-
-
-def _span(start: str, end: str) -> tuple[int, int]:
-    s, e = _minutes(start), _minutes(end)
-    if e <= s:
-        e += DAY
-    return s, e
+from model.staffing_rules import DAY, cell_interval, minutes as _minutes, span as _span
 
 
 def locked_interval(day_state) -> tuple[int, int] | None:
     """Stały przedział ręcznie zablokowanego dnia z godzinami (minuty od
     północy jego dnia) albo None."""
-    if not day_state.is_locked or day_state.is_leave or getattr(day_state, "is_sick", False):
-        return None
-    if not day_state.start or not day_state.end:
-        return None
-    if getattr(day_state, "is_full_day", False):
-        start = _minutes(day_state.start)
-        return start, start + DAY
-    return _span(day_state.start, day_state.end)
+    return cell_interval(day_state) if day_state.is_locked else None
 
 
 def shift_intervals(ctx, e: int, d: int) -> dict:
@@ -112,18 +90,3 @@ def shift_intervals(ctx, e: int, d: int) -> dict:
         if night:
             result[ctx.shift_night] = _span(*night)
     return result
-
-
-def segments(start: int, end: int, intervals) -> list[tuple[int, int]]:
-    """Podział [start, end) na odcinki w punktach, w których zaczyna się albo
-    kończy którykolwiek z `intervals` - w każdym odcinku zbiór pokrywających
-    go przedziałów jest stały."""
-    points = {start, end}
-    for a, b in intervals:
-        if start < a < end:
-            points.add(a)
-        if start < b < end:
-            points.add(b)
-    points = sorted(points)
-    return list(zip(points, points[1:]))
-

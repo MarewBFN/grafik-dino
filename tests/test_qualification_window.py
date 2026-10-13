@@ -11,7 +11,7 @@ from ortools.sat.python import cp_model
 
 from logic.generator.constraint_registry import ConstraintContext
 from logic.generator.generic_rules import build_min_staff_with_role
-from logic.generator.shift_intervals import segments
+from model.staffing_rules import segments
 from model.custom_profile import (
     PARAM_MIN_LEVEL,
     RULE_TYPE_MIN_STAFF_WITH_ROLE,

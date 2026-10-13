@@ -13,9 +13,10 @@ verified dino_retail behavior.
 
 from datetime import datetime, timedelta
 
-from logic.generator.constraints_basic import is_location_open_for_employee
-from logic.generator.shift_intervals import DAY, locked_interval, segments, shift_intervals
-from model.qualification import has_on, held_in_month
+from logic.generator.shift_intervals import locked_interval, shift_intervals
+from model import staffing_rules
+from model.qualification import held_in_month
+from model.staffing_rules import DAY, SCOPE_WINDOW, covers, segments, slots, span
 from logic.utils.time_utils import (
     daily_windows_overlap,
     get_effective_daily_hours,
@@ -28,7 +29,7 @@ FMT = "%H:%M"
 def _qualified_on(ctx, e, qualification_key, min_level, d) -> bool:
     """Czy pracownik `e` ma w dniu `d` kwalifikację `qualification_key` na
     poziomie >= `min_level` (data ważności, placówka pracownika)."""
-    return has_on(ctx.employees[e], qualification_key, ctx.shop.year, ctx.shop.month, d, min_level)
+    return staffing_rules.qualified_on(ctx.employees[e], ctx.shop, qualification_key, min_level, d)
 
 
 def _qualified_employee_indices(ctx, qualification_key, min_level):
@@ -41,34 +42,19 @@ def _qualified_employee_indices(ctx, qualification_key, min_level):
     ]
 
 
-# Zakres reguły min_staff_with_role "w oknie godzin" (params window_start/
-# window_end, "HH:MM"; koniec <= początek = przez północ): w KAŻDEJ chwili
-# okna co najmniej min_count osób z kwalifikacją.
-SCOPE_WINDOW = "window"
-SLOT_MINUTES = 15
-
-
-def _window_span(window_start: str, window_end: str) -> tuple[int, int]:
-    start = int(window_start[:2]) * 60 + int(window_start[3:5])
-    end = int(window_end[:2]) * 60 + int(window_end[3:5])
-    if end <= start:
-        end += DAY
-    return start, end
-
-
 def _add_min_staff_in_window(ctx, soft, qualification_key, min_level, groups, window_start, window_end, violations):
-    """Obsada w oknie [window_start, window_end) dnia d: okno dzielone na
-    odcinki w punktach początku/końca zmian; w każdym odcinku suma zmian
-    osób z kwalifikacją (ważną w dniu rozpoczęcia zmiany), które pokrywają
-    CAŁY odcinek, plus ręcznie zablokowane wpisy (stałe) >= próg. Liczą się
-    też zmiany z dnia poprzedniego i następnego (okna i zmiany przez
-    północ)."""
-    win_start, win_end = _window_span(window_start, window_end)
+    """Obsada w oknie [window_start, window_end) dnia d (koniec <= początek =
+    przez północ): okno dzielone na odcinki w punktach początku/końca zmian
+    (model.staffing_rules.segments); w każdym odcinku suma zmian osób z
+    kwalifikacją (ważną w dniu rozpoczęcia zmiany), które pokrywają CAŁY
+    odcinek, plus ręcznie zablokowane wpisy (stałe) >= próg. Liczą się też
+    zmiany z dnia poprzedniego i następnego (okna i zmiany przez północ).
+    Walidacja siatki liczy to samo na wpisanych godzinach
+    (model.staffing_rules.check_min_staff)."""
+    win_start, win_end = span(window_start, window_end)
     for threshold, indices in groups.items():
         for d in ctx.trade_days:
-            if indices and not any(
-                is_location_open_for_employee(ctx.shop, ctx.employees[e], d) for e in indices
-            ):
+            if not staffing_rules.group_active_on(ctx.shop, ctx.employees, indices, d):
                 continue
             candidates = []  # (start, koniec, zmienna x)
             fixed = []       # (start, koniec) ręcznych wpisów
@@ -89,10 +75,10 @@ def _add_min_staff_in_window(ctx, soft, qualification_key, min_level, groups, wi
 
             pieces = segments(win_start, win_end, [(a, b) for a, b, _ in candidates] + fixed)
             for a, b in pieces:
-                need = threshold - sum(1 for fa, fb in fixed if fa <= a and b <= fb)
+                need = threshold - sum(1 for interval in fixed if covers(interval, a, b))
                 if need <= 0:
                     continue
-                terms = [var for start, end, var in candidates if start <= a and b <= end]
+                terms = [var for start, end, var in candidates if covers((start, end), a, b)]
                 if not soft:
                     if terms:
                         ctx.model.Add(sum(terms) >= need)
@@ -101,7 +87,7 @@ def _add_min_staff_in_window(ctx, soft, qualification_key, min_level, groups, wi
                 else:
                     v = ctx.model.NewIntVar(0, need, f"role_window_v_{qualification_key}_d{d}_{a}_t{threshold}")
                     ctx.model.Add(sum(terms) + v >= need)
-                    violations.append(v * -(-(b - a) // SLOT_MINUTES))
+                    violations.append(v * slots(a, b))
     return violations
 
 
@@ -111,10 +97,12 @@ def build_min_staff_with_role(
 ):
     """"Co najmniej `min_count` pracowników z kwalifikacją `qualification_key`
     na poziomie >= `min_level` [na otwarciu / na zamknięciu / w ciągu dnia /
-    na zmianie nocnej / w każdej chwili okna window_start-window_end]." Pracownik liczy się tylko w dniach, w których
-    kwalifikacja jest ważna i obowiązuje w jego placówce. Uogólnia zaszyte w
-    constraints_staff.add_fixed_staff_shift_constraints sprawdzenia "Otwarcie"/
-    "Mięso" >= 1.
+    na zmianie nocnej / w każdej chwili okna window_start-window_end]."
+    Definicja reguły (kto się liczy którego dnia, progi per placówka, dni,
+    zakres) jest wspólna z walidacją siatki - model/staffing_rules.py; tu
+    tylko ograniczenia CP-SAT na zmiennych. Uogólnia zaszyte w
+    constraints_staff.add_fixed_staff_shift_constraints sprawdzenia
+    "Otwarcie"/"Mięso" >= 1.
 
     A location can override the threshold for this specific rule via
     LocationConfig.constraints[rule_key] (rule_key = the same "rule:<id>"
@@ -124,38 +112,16 @@ def build_min_staff_with_role(
     resolved threshold so e.g. "min. 2 uzbrojonych" can differ per obiekt.
     """
     violations = []
-    role_employees = _qualified_employee_indices(ctx, qualification_key, min_level)
-
-    if scope == "open":
-        shifts_by_day = lambda d: (ctx.shift_open,)
-    elif scope == "close":
-        shifts_by_day = lambda d: (ctx.shift_close,)
-    elif scope == "night":
-        # Etap F planu zmian nocnych - liczy wyłącznie SHIFT_NIGHT, nie
-        # "any_shift" (który już i tak liczy noc razem z dniem). Dla
-        # lokalizacji bez skonfigurowanego night_shift SHIFT_NIGHT jest
-        # zawsze 0 (bramka z Etapu C) - reguła wtedy słusznie sygnalizuje
-        # niespełnialność zamiast cicho nic nie sprawdzać.
-        shifts_by_day = lambda d: (ctx.shift_night,)
-    else:  # "any_shift"
-        shifts_by_day = lambda d: ctx.all_shifts
-
-    if role_employees:
-        groups: dict[int, list[int]] = {}
-        for e in role_employees:
-            threshold = ctx.shop.get_location(ctx.employees[e]).constraints.get(rule_key, min_count)
-            groups.setdefault(threshold, []).append(e)
-    else:
-        # No employee has this role at all - still enforce (or flag) the
-        # base threshold against zero people, same as before per-location
-        # grouping existed.
-        groups = {min_count: []}
+    groups = staffing_rules.threshold_groups(
+        ctx.employees, ctx.shop, rule_key, qualification_key, min_count, min_level,
+    )
 
     if scope == SCOPE_WINDOW:
         return _add_min_staff_in_window(
             ctx, soft, qualification_key, min_level, groups, window_start, window_end, violations,
         )
 
+    shifts = staffing_rules.scope_shift_ids(scope, ctx)
     for threshold, indices in groups.items():
         for d in ctx.trade_days:
             # Dzień zostaje w trade_days, gdy czynna jest KTÓRAKOLWIEK
@@ -164,11 +130,8 @@ def build_min_staff_with_role(
             # każdą zmianę i wymóg byłby niespełnialny (cały miesiąc bez
             # rozwiązania). Pusta grupa (nikt nie ma roli) nadal sygnalizuje
             # brak, tak jak wcześniej.
-            if indices and not any(
-                is_location_open_for_employee(ctx.shop, ctx.employees[e], d) for e in indices
-            ):
+            if not staffing_rules.group_active_on(ctx.shop, ctx.employees, indices, d):
                 continue
-            shifts = shifts_by_day(d)
             terms = [
                 ctx.x[e, d, s]
                 for e in indices if _qualified_on(ctx, e, qualification_key, min_level, d)
