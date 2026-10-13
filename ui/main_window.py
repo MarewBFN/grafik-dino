@@ -1227,6 +1227,7 @@ class MainWindow(QMainWindow):
             on_context_menu=self._open_day_context_menu,
             on_header_menu=self._open_header_menu,
             location_filter=self.selected_location_key,
+            qualifications=self.project.qualifications,
         )
         self.grid.build()
         self.grid.refresh()

@@ -35,7 +35,7 @@ from model.qualification import (
     EmployeeQualification,
     merge_catalog,
 )
-from model.business_profile import DEFAULT_BUSINESS_TYPE, default_qualifications, get_profile
+from model.business_profile import DEFAULT_BUSINESS_TYPE, catalog_or_default, get_profile
 from model.constraint_policy import ConstraintPolicy
 from logic.leave_requests import days_noun, format_days
 from logic.utils.time_utils import month_scope_note
@@ -286,11 +286,7 @@ class EmployeeDialog(QDialog):
         # profilu. Ten sam słownik co w projekcie: zapis dokłada do niego
         # znane programowi kwalifikacje, które okno pokazało spoza katalogu
         # ("Nie chce 24h" przy rotacji 24/7).
-        if qualifications is None:
-            qualifications = {
-                q.id: q for q in default_qualifications(shop_config.business_type if shop_config else None)
-            }
-        self.catalog = qualifications
+        self.catalog = catalog_or_default(qualifications, shop_config.business_type if shop_config else None)
         # Lokalizacja, na którą ma się domyślnie ustawić kombo poniżej dla
         # NOWEGO pracownika (patrz _fill_from_employee) - zwykle aktualnie
         # przeglądana placówka (main_window.selected_location_key), żeby

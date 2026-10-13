@@ -216,6 +216,14 @@ def default_qualifications(business_type: str | None) -> tuple:
     )
 
 
+def catalog_or_default(catalog: dict | None, business_type: str | None) -> dict:
+    """Katalog kwalifikacji projektu albo - gdy go nie ma (okno/siatka poza
+    projektem) - domyślny katalog profilu."""
+    if catalog is not None:
+        return catalog
+    return {qualification.id: qualification for qualification in default_qualifications(business_type)}
+
+
 def unregister_custom_profile(key: str) -> None:
     """Drop a custom profile from the in-memory registries. Projects that
     already reference this key are untouched - get_profile() already falls

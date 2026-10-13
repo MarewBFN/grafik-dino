@@ -50,6 +50,7 @@ def test_grid_view_badges_include_emoji_icon_for_employee_with_role():
     class _FakeShop:
         business_type = "custom_test_icons2"
         constraint_policies = {}
+        year, month = 2026, 3
 
     class _FakeTable:
         shop_config = _FakeShop()
@@ -69,6 +70,7 @@ def test_dino_employees_get_no_emoji_badges():
     class _FakeShop:
         business_type = "dino_retail"
         constraint_policies = {}
+        year, month = 2026, 3
 
     class _FakeTable:
         shop_config = _FakeShop()

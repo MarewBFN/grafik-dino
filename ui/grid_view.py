@@ -26,13 +26,13 @@ from PySide6.QtWidgets import (
 from logic.constraint_presenter import ConstraintPresenter
 from logic.duty_coverage_presenter import is_day_fully_covered, project_uses_duty_rotation
 from logic.leave_requests import format_days
-from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.monthly_hours_status import monthly_hours_status
 from logic.schedule_presenter import SchedulePresenter
 from logic.utils.time_utils import classify_shift_as_morning_or_afternoon, format_hours_as_fraction, fraction_hour
-from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
+from model.business_profile import DEFAULT_BUSINESS_TYPE, catalog_or_default, get_profile
 from model.constraint_policy import ConstraintPolicy
 from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
+from model.qualification import MEAT_LEVEL_FULL, has_on, qualification_marks
 from model.shop_config import STANDARD_QUICK_BUTTONS, is_standard_button_visible
 from utils import resource_path
 from ui import theme
@@ -258,30 +258,36 @@ def _emoji_icon(emoji: str, size: int = 64) -> QIcon:
     return QIcon(pixmap)
 
 
+def employee_qualification_marks(table, employee) -> list:
+    """Kwalifikacje pracownika pokazywane w siatce (patrz
+    model.qualification.qualification_marks) - z katalogu projektu
+    (set_data(qualifications=...)), bez niego z domyślnego katalogu profilu."""
+    shop = table.shop_config
+    catalog = catalog_or_default(getattr(table, "qualifications", None), shop.business_type)
+    return qualification_marks(employee, catalog, shop)
+
+
+# Rysowane ikony kwalifikacji (Qualification.icon "builtin:...") - duże
+# odznaki przed nazwiskiem; "Mięso" ma osobną, wyszarzoną dla poziomu
+# "pomocniczo".
+_BADGE_ICONS = {"builtin:open": "icon_open", "builtin:manager": "icon_manager"}
+# ... i małe ikony obok wymiaru etatu.
+_RESTRICTION_ICONS = {"builtin:contract": "icon_contract", "builtin:no_24h": "icon_no_24h"}
+
+
 def _employee_badges(table, employee):
-    """Large corner-role badges shown for an employee: Dino's hand-drawn
-    opener/meat/manager icons, plus one emoji badge per custom-profile role
-    that has an icon set and this employee carries."""
+    """Large corner badges shown for an employee: hand-drawn icons of the
+    built-in qualifications (Otwarcie/Mięso/Kierowniczka) and one emoji badge
+    per catalog qualification with an emoji icon."""
     badges = []
-    meat_disabled = (
-        table.shop_config is not None
-        and table.shop_config.constraint_policies.get("meat") == ConstraintPolicy.DISABLED
-    )
-    if employee.is_opener:
-        badges.append(table.icon_open)
-    if not meat_disabled and employee.is_meat:
-        badges.append(table.icon_meat)
-    elif not meat_disabled and employee.is_meat_light:
-        badges.append(table.icon_meat_light)
-    if employee.is_manager:
-        badges.append(table.icon_manager)
-
-    if table.shop_config is not None:
-        profile = get_profile(table.shop_config.business_type)
-        for role in profile.roles:
-            if role.icon and employee.has_role(role.key):
-                badges.append(_emoji_icon(role.icon))
-
+    for qualification, level in employee_qualification_marks(table, employee):
+        icon = qualification.icon
+        if icon == "builtin:meat":
+            badges.append(table.icon_meat if level >= MEAT_LEVEL_FULL else table.icon_meat_light)
+        elif icon in _BADGE_ICONS:
+            badges.append(getattr(table, _BADGE_ICONS[icon]))
+        elif icon and not icon.startswith("builtin:"):
+            badges.append(_emoji_icon(icon))
     return badges
 
 
@@ -292,10 +298,9 @@ def _employee_restriction_icons(table, employee):
         icons.append(table.icon_no_night)
     if getattr(employee, "no_afternoon", False):
         icons.append(table.icon_no_afternoon)
-    if employee.has_role("umowa"):
-        icons.append(table.icon_contract)
-    if employee.has_role(NIE_CHCE_24H_ROLE_KEY):
-        icons.append(table.icon_no_24h)
+    for qualification, _level in employee_qualification_marks(table, employee):
+        if qualification.icon in _RESTRICTION_ICONS:
+            icons.append(getattr(table, _RESTRICTION_ICONS[qualification.icon]))
     return icons
 
 
@@ -535,6 +540,9 @@ class ScheduleGrid(QTableWidget):
 
         self.schedule = None
         self.shop_config = None
+        # Katalog kwalifikacji projektu (patrz table_catalog) - None =
+        # domyślny katalog profilu.
+        self.qualifications = None
         self.controller = None
 
         # Klucz aktualnie wybranej placówki (patrz set_data()) - tabela
@@ -730,9 +738,11 @@ class ScheduleGrid(QTableWidget):
         on_context_menu=None,
         on_header_menu=None,
         location_filter=None,
+        qualifications=None,
     ):
         self.schedule = schedule
         self.shop_config = shop_config
+        self.qualifications = qualifications
         self.controller = controller
         self.main_window = main_window
         self.on_edit_day = on_edit_day
@@ -1310,7 +1320,6 @@ class ScheduleGrid(QTableWidget):
                 at_closing = 0
                 total_morning = 0
                 total_afternoon = 0
-                count_meat = 0
                 count_role = 0
                 role_key = key[len("role:"):] if key.startswith("role:") else None
                 fmt = "%H:%M"
@@ -1356,12 +1365,12 @@ class ScheduleGrid(QTableWidget):
                         elif classification == "afternoon":
                             total_afternoon += 1
 
-                        # 3. Mięso (w tym zastępczo "mooooże stanąć na chwilę na mięsie")
-                        if (emp.is_meat or emp.is_meat_light) and ds.start and not ds.is_leave and not getattr(ds, "is_sick", False):
-                            count_meat += 1
-
-                        # 4. Generyczna rola custom profilu (patrz "role:" wiersze)
-                        if role_key and emp.has_role(role_key) and not ds.is_leave and not getattr(ds, "is_sick", False):
+                        # 3. Kwalifikacja z wiersza "role:<klucz>" (profil
+                        # custom), ważna tego dnia. Wiersz "Mięso" pokazuje
+                        # status walidacji pokrycia (model.constraints.
+                        # meat_coverage), nie licznik.
+                        if role_key and has_on(emp, role_key, self.shop_config.year, self.shop_config.month, day) \
+                                and not ds.is_leave and not getattr(ds, "is_sick", False):
                             count_role += 1
                     except ValueError:
                         continue

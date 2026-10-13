@@ -26,9 +26,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.utils.time_utils import month_scope_note
-from model.business_profile import get_profile
+from model.business_profile import catalog_or_default, get_profile
+from model.qualification import qualification_marks
 from ui.employee_dialog import EmployeeDialog
 from ui.theme import ACCENT, ACCENT_SOFT
 
@@ -43,9 +43,8 @@ EMPLOYMENT_FRACTION_LABELS = {
     0.25: "1/4",
 }
 
-# Flagi z dedykowanymi checkboxami w EmployeeDialog (poza profile.roles).
-_EXTRA_FLAG_LABELS = {
-    NIE_CHCE_24H_ROLE_KEY: "Nie chce 24h",
+# Ograniczenia pracownika (pola Employee) poza profile.roles.
+_RESTRICTION_LABELS = {
     "no_night": "Bez nocy",
     "no_afternoon": "Bez popołudni",
 }
@@ -70,17 +69,21 @@ _ROW_HEIGHT = 42
 _ACTION_BUTTON_STYLE = "padding: 3px 10px; font-size: 9pt;"
 
 
-def employee_flag_labels(emp, shop_config) -> list[str]:
-    """Nazwy ról/ograniczeń, które pracownik ma zaznaczone."""
-    profile = get_profile(shop_config.business_type if shop_config else None)
-    labels, seen = [], set()
-    for role in profile.roles:
-        if role.key not in seen and emp.has_role(role.key):
-            labels.append(role.label)
-        seen.add(role.key)
-    for key, label in _EXTRA_FLAG_LABELS.items():
-        if key not in seen and emp.has_role(key):
-            labels.append(label)
+def employee_flag_labels(emp, shop_config, catalog=None) -> list[str]:
+    """Kwalifikacje pracownika ważne w miesiącu projektu (nazwy z katalogu
+    projektu `catalog`, poziom w nawiasie) i jego ograniczenia."""
+    business_type = shop_config.business_type if shop_config else None
+    labels = []
+    if shop_config is not None:
+        for qualification, level in qualification_marks(emp, catalog_or_default(catalog, business_type), shop_config):
+            level_name = qualification.level_name(level) if len(qualification.levels) > 1 else ""
+            labels.append(f"{qualification.name} ({level_name})" if level_name else qualification.name)
+    # Dino podpisuje ograniczenia własnymi etykietami ról profilu.
+    restriction_labels = dict(_RESTRICTION_LABELS)
+    for role in get_profile(business_type).roles:
+        if role.key in restriction_labels:
+            restriction_labels[role.key] = role.label
+    labels.extend(label for key, label in restriction_labels.items() if getattr(emp, key, False))
     return labels
 
 
@@ -248,7 +251,7 @@ class EmployeesDialog(QDialog):
         self._row_employees = employees
         self.table.setRowCount(len(employees))
         for row, emp in enumerate(employees):
-            flags = employee_flag_labels(emp, self.shop_config)
+            flags = employee_flag_labels(emp, self.shop_config, self.qualifications)
             # Kolumny 1/4/5/6 zostają zwykłymi QTableWidgetItem (tekst do
             # testów/wyszukiwania); 2/3 dostają dodatkowo widget rysowany NAD
             # itemem - "chip" etatu, "chipy" flag (patrz

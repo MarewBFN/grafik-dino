@@ -240,6 +240,48 @@ def held_every_day(employee, key: str, year: int, month: int, min_level: int = 1
     return all(has_on(employee, key, year, month, day, min_level) for day in range(1, days + 1))
 
 
+def level_in_month(employee, key: str, year: int, month: int) -> int:
+    """Najwyższy poziom kwalifikacji `key` ważnej choć jeden dzień miesiąca
+    w placówce pracownika (0 = brak) - do widoków całego miesiąca (ikony w
+    siatce, lista pracowników). To samo co max(level_on(...)) po dniach
+    miesiąca, ale bez sprawdzania każdego dnia osobno."""
+    first = date(year, month, 1)
+    last = date(year, month, calendar.monthrange(year, month)[1])
+    location_key = employee.location_key or None
+    return max(
+        (
+            qualification.level
+            for qualification in employee.qualifications
+            if qualification.qualification_id == key
+            and qualification.applies_to_location(location_key)
+            and (qualification.valid_from is None or qualification.valid_from <= last)
+            and (qualification.valid_to is None or qualification.valid_to >= first)
+        ),
+        default=0,
+    )
+
+
+def qualification_marks(employee, catalog: dict, shop_config) -> list:
+    """[(Qualification, poziom)] kwalifikacji pracownika ważnych choć jeden
+    dzień miesiąca `shop_config` (w jego placówce), w kolejności katalogu -
+    bez tych, których zasada jest w projekcie Wyłączona (Dino: "Mięso").
+    Do widoków całego miesiąca: ikony w siatce, kolumna "Flagi"."""
+    from model.constraint_policy import ConstraintPolicy
+
+    order = {key: index for index, key in enumerate(catalog)}
+    marks = []
+    for assignment in sorted(employee.qualifications, key=lambda q: order.get(q.qualification_id, len(order))):
+        key = assignment.qualification_id
+        policy = QUALIFICATION_POLICIES.get(key)
+        if policy and shop_config.constraint_policies.get(policy) == ConstraintPolicy.DISABLED:
+            continue
+        level = level_in_month(employee, key, shop_config.year, shop_config.month)
+        if level < 1:
+            continue
+        marks.append((catalog.get(key) or placeholder_qualification(key), level))
+    return marks
+
+
 def is_opener_on(employee, year, month, day) -> bool:
     return has_on(employee, QUAL_OPENER, year, month, day)
 
