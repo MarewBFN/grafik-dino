@@ -133,9 +133,15 @@ def _flags_cell_widget(flags: list[str]) -> QWidget:
 
 
 class EmployeesDialog(QDialog):
-    def __init__(self, parent, controller, shop_config, on_changed=None, default_location_key=None, companies=None):
+    def __init__(
+        self, parent, controller, shop_config, on_changed=None, default_location_key=None, companies=None,
+        qualifications=None,
+    ):
         super().__init__(parent)
         self.companies = companies or {}
+        # Katalog kwalifikacji projektu (MonthlyProject.qualifications) dla
+        # EmployeeDialog; None = domyślny katalog profilu.
+        self.qualifications = qualifications
         self.controller = controller
         self.shop_config = shop_config
         self.on_changed = on_changed
@@ -306,6 +312,7 @@ class EmployeesDialog(QDialog):
         dialog = EmployeeDialog(
             self, shop_config=self.shop_config, default_location_key=self.default_location_key,
             companies=self.companies,
+            qualifications=self.qualifications,
         )
         if dialog.exec() != QDialog.Accepted:
             return
@@ -320,6 +327,7 @@ class EmployeesDialog(QDialog):
         dialog = EmployeeDialog(
             self, employee=emp, shop_config=self.shop_config,
             expand_contact=expand_contact, focus_field=focus_field, companies=self.companies,
+            qualifications=self.qualifications,
         )
         if dialog.exec() != QDialog.Accepted:
             return

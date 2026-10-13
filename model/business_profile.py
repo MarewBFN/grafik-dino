@@ -193,16 +193,15 @@ def register_custom_profile(custom) -> None:
     ))
 
 
-# Kwalifikacje Ochrony (dawne custom_roles) mają w siatce własne, rysowane
-# ikony (ui/grid_view.py) zamiast emoji wybranego w kreatorze profilu.
-_BUILTIN_ROLE_ICONS = {"umowa": "builtin:contract", "nie_chce_24h": "builtin:no_24h"}
-
-
 def default_qualifications(business_type: str | None) -> tuple:
     """Kwalifikacje, od których zaczyna katalog projektu tego profilu
     (MonthlyProject.qualifications): dla Dino - "Otwarcie", "Mięso"
-    (poziomy 1/2) i "Kierowniczka"; dla profilu custom - jego role."""
-    from model.qualification import DINO_QUALIFICATIONS, Qualification
+    (poziomy 1/2) i "Kierowniczka"; dla profilu custom - jego role (role
+    znane programowi, np. "Umowa"/"Nie chce 24h" Ochrony, z rysowaną ikoną
+    i opisem z model.qualification.KNOWN_QUALIFICATIONS)."""
+    from dataclasses import replace
+
+    from model.qualification import DINO_QUALIFICATIONS, KNOWN_QUALIFICATIONS, Qualification
 
     custom = CUSTOM_PROFILES.get(business_type)
     if custom is None:
@@ -210,11 +209,9 @@ def default_qualifications(business_type: str | None) -> tuple:
             return ()
         return DINO_QUALIFICATIONS
     return tuple(
-        Qualification(
-            id=role.key,
-            name=role.label,
-            icon=_BUILTIN_ROLE_ICONS.get(role.key, role.icon),
-        )
+        replace(KNOWN_QUALIFICATIONS[role.key], name=role.label)
+        if role.key in KNOWN_QUALIFICATIONS
+        else Qualification(id=role.key, name=role.label, icon=role.icon)
         for role in custom.roles
     )
 

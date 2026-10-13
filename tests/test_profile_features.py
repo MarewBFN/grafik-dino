@@ -121,16 +121,17 @@ def test_employee_dialog_hides_meat_roles_when_meat_policy_disabled():
     shop.constraint_policies["meat"] = ConstraintPolicy.DISABLED
 
     dialog = EmployeeDialog(None, shop_config=shop)
-    assert "is_meat" not in dialog.role_checkboxes
-    assert "is_meat_light" not in dialog.role_checkboxes
-    assert "is_opener" in dialog.role_checkboxes  # unrelated role stays
+    assert "mieso" not in dialog.qualification_rows
+    assert "otwarcie" in dialog.qualification_rows  # unrelated qualification stays
 
 
 def test_employee_dialog_shows_meat_roles_when_meat_policy_enabled():
     shop = ShopConfig(2026, 3)  # meat defaults to PREFERRED
     dialog = EmployeeDialog(None, shop_config=shop)
-    assert "is_meat" in dialog.role_checkboxes
-    assert "is_meat_light" in dialog.role_checkboxes
+    assert "mieso" in dialog.qualification_rows
+    # Dawne dwa checkboxy (pełna obsługa / "może stanąć na chwilę") to teraz
+    # poziomy jednej kwalifikacji.
+    assert dialog.qualification_rows["mieso"].level_combo.count() == 2
 
 
 def test_editing_employee_with_meat_disabled_preserves_is_meat_flag():
@@ -142,7 +143,7 @@ def test_editing_employee_with_meat_disabled_preserves_is_meat_flag():
 
     # No checkbox to toggle is_opener off through, but flip it to prove the
     # save path still works normally for a visible role...
-    dialog.role_checkboxes["is_opener"].setChecked(False)
+    dialog.qualification_rows["otwarcie"].checkbox.setChecked(False)
     dialog._save()
 
     saved = dialog.employee_result
@@ -232,8 +233,8 @@ def test_employee_dialog_dino_profile_has_no_dedicated_no_night_checkboxes():
 
     assert dialog.no_night_check is None
     assert dialog.no_afternoon_check is None
-    assert "no_night" in dialog.role_checkboxes
-    assert "no_afternoon" in dialog.role_checkboxes
+    assert "no_night" in dialog.restriction_checkboxes
+    assert "no_afternoon" in dialog.restriction_checkboxes
 
 
 def test_employee_dialog_save_writes_no_night_for_plain_location():

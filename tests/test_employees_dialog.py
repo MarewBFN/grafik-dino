@@ -151,7 +151,7 @@ def test_role_change_alongside_contact_edit_still_creates_undo_entry(monkeypatch
 
     def fake_exec(self):
         self.phone.setText("600 123 456")
-        self.role_checkboxes["is_opener"].setChecked(True)
+        self.qualification_rows["otwarcie"].checkbox.setChecked(True)
         self._save()
         return QDialog.Accepted
 

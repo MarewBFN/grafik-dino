@@ -339,11 +339,43 @@ DINO_QUALIFICATIONS = (
 )
 
 
+CONTRACT_QUALIFICATION = Qualification(
+    id=QUAL_CONTRACT,
+    name="Umowa",
+    icon="builtin:contract",
+    description="Pierwszeństwo przy rozdzielaniu godzin (umowa o pracę).",
+)
+NO_24H_QUALIFICATION = Qualification(
+    id=QUAL_NO_24H,
+    name="Nie chce 24h",
+    icon="builtin:no_24h",
+    description=(
+        "Ta osoba nie dostanie od generatora zmiany 24h w sobotę ani niedzielę - "
+        "doba jest wtedy dzielona na dwie zmiany po 12h (rotacja 24/7 i placówki "
+        "z dobą w godzinach otwarcia)."
+    ),
+)
+
+# Pozycje katalogu, które program zna niezależnie od profilu (rysowane
+# ikony w siatce, opisy) - źródło dla katalogów domyślnych i pozycji
+# zastępczych.
+KNOWN_QUALIFICATIONS = {
+    qualification.id: qualification
+    for qualification in (*DINO_QUALIFICATIONS, CONTRACT_QUALIFICATION, NO_24H_QUALIFICATION)
+}
+
+# Kwalifikacja ukrywana w oknie pracownika, gdy zasada generatora, która z
+# niej korzysta, jest w projekcie Wyłączona (Dino: "Mięso" przy wyłączonych
+# zasadach mięsa). Przypisania pracowników zostają bez zmian.
+QUALIFICATION_POLICIES = {QUAL_MEAT: "meat"}
+
+
 def placeholder_qualification(key: str) -> Qualification:
     """Pozycja katalogu dla klucza, który jest na pracowniku, ale nie ma go w
-    żadnym znanym katalogu (np. profil custom usunięty z tego komputera) -
-    żeby przypisanie nie zniknęło z projektu przy pierwszym zapisie."""
-    return Qualification(id=key, name=key)
+    katalogu projektu (np. profil custom usunięty z tego komputera) - żeby
+    przypisanie nie zniknęło z projektu przy pierwszym zapisie. Znane
+    programowi kwalifikacje dostają swoją pełną definicję."""
+    return KNOWN_QUALIFICATIONS.get(key) or Qualification(id=key, name=key)
 
 
 def merge_catalog(catalog: dict, qualifications) -> None:

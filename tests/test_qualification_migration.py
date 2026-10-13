@@ -14,7 +14,6 @@ from datetime import date
 from pathlib import Path
 
 from model.employee import Employee
-from model.month_schedule import MonthSchedule
 from model.qualification import (
     MEAT_LEVEL_FULL,
     MEAT_LEVEL_LIGHT,
@@ -303,43 +302,6 @@ class BundleMigrationTests(unittest.TestCase):
                          qualifications_of("umowa", "nie_chce_24h"))
         self.assertEqual(list(project.qualifications), ["umowa", "nie_chce_24h"])
         self.assertEqual(project.qualifications["umowa"].icon, "builtin:contract")
-
-
-class EmployeeDialogTransitionTests(unittest.TestCase):
-    """Przejściowe mapowanie checkboxów ról (BusinessProfile.roles) na
-    kwalifikacje w oknie pracownika - do Kroku 1.4."""
-
-    def test_existing_assignment_keeps_dates_and_unknown_qualifications_survive(self):
-        from ui.employee_dialog import _qualifications_from_role_values
-
-        old = Employee("A", "B", qualifications=(
-            EmployeeQualification(QUAL_MEAT, MEAT_LEVEL_FULL, valid_to=date(2027, 1, 1)),
-            EmployeeQualification("spoza_okna"),
-        ))
-        result = _qualifications_from_role_values(
-            old, {"is_opener": True, "is_meat": True, "is_meat_light": False, "is_manager": False, "no_night": True},
-        )
-        self.assertEqual(result, (
-            EmployeeQualification(QUAL_MEAT, MEAT_LEVEL_FULL, valid_to=date(2027, 1, 1)),
-            EmployeeQualification("spoza_okna"),
-            EmployeeQualification(QUAL_OPENER),
-        ))
-
-    def test_switching_full_meat_to_light_keeps_dates_changes_level(self):
-        from ui.employee_dialog import _qualifications_from_role_values
-
-        old = Employee("A", "B", qualifications=(EmployeeQualification(QUAL_MEAT, MEAT_LEVEL_FULL, valid_to=date(2027, 1, 1)),))
-        result = _qualifications_from_role_values(old, {"is_meat": False, "is_meat_light": True})
-        self.assertEqual(result, (EmployeeQualification(QUAL_MEAT, MEAT_LEVEL_LIGHT, valid_to=date(2027, 1, 1)),))
-
-    def test_unchecking_removes(self):
-        from ui.employee_dialog import _qualifications_from_role_values
-
-        old = Employee("A", "B", qualifications=qualifications_of("umowa", QUAL_OPENER))
-        self.assertEqual(
-            _qualifications_from_role_values(old, {"umowa": False, "is_opener": True}),
-            qualifications_of(QUAL_OPENER),
-        )
 
 
 if __name__ == "__main__":

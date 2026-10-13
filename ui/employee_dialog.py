@@ -1,11 +1,14 @@
+import calendar
 import dataclasses
-from dataclasses import replace
+from datetime import date
 import os
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QDate, Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
+    QDateEdit,
     QDialog,
+    QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
     QInputDialog,
@@ -25,71 +28,249 @@ from PySide6.QtWidgets import (
 
 from model.employee import Employee
 from model.qualification import (
-    MEAT_LEVEL_FULL,
-    MEAT_LEVEL_LIGHT,
+    NO_24H_QUALIFICATION,
     QUAL_MANAGER,
-    QUAL_MEAT,
-    QUAL_OPENER,
+    QUAL_NO_24H,
+    QUALIFICATION_POLICIES,
     EmployeeQualification,
+    merge_catalog,
 )
-from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
+from model.business_profile import DEFAULT_BUSINESS_TYPE, default_qualifications, get_profile
 from model.constraint_policy import ConstraintPolicy
-from logic.generator.duty_rotation_constraint import NIE_CHCE_24H_ROLE_KEY
 from logic.leave_requests import days_noun, format_days
 from logic.utils.time_utils import month_scope_note
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 
 EMPLOYEE_TUTORIAL_FLAG = "employee_tutorial_seen.flag"
 
-# RoleDef.key wartości będące polem Employee (dziś tylko ograniczenia
-# no_night/no_afternoon). Każdy inny klucz roli to kwalifikacja.
+# RoleDef.key profilu będące polem Employee - ograniczenia no_night/
+# no_afternoon (Dino pokazuje je z profile.roles, z własnymi etykietami).
+# Kwalifikacje pochodzą z katalogu projektu, nie z profile.roles.
 _EMPLOYEE_FIELDS = {f.name for f in dataclasses.fields(Employee)}
 
-# PRZEJŚCIOWE (Krok 1.1 -> 1.4 migracji na Qualification): checkboxy ról
-# wciąż powstają z BusinessProfile.roles (klucze dawnych pól Dino) - tu
-# zamiana klucza checkboxa na kwalifikację i poziom. Krok 1.4 buduje okno z
-# katalogu kwalifikacji projektu i usuwa to mapowanie.
-_LEGACY_ROLE_QUALIFICATIONS = {
-    "is_opener": (QUAL_OPENER, None),
-    "is_meat": (QUAL_MEAT, MEAT_LEVEL_FULL),
-    "is_meat_light": (QUAL_MEAT, MEAT_LEVEL_LIGHT),
-    "is_manager": (QUAL_MANAGER, None),
-}
+DATE_FMT = "%d.%m.%Y"
 
 
-def _qualifications_from_role_values(old_employee, role_values: dict) -> tuple:
-    """Kwalifikacje pracownika po zapisie okna: `role_values` to stan
-    checkboxów (klucz roli -> bool). Istniejące przypisania (z poziomem,
-    datami, placówkami) zostają bez zmian, jeśli rola dalej jest zaznaczona;
-    kwalifikacje, których okno nie pokazuje, też zostają (zero utraty
-    danych)."""
-    old = {q.qualification_id: q for q in (old_employee.qualifications if old_employee else ())}
-    wanted = {}   # klucz kwalifikacji -> poziom albo None (bez zmiany poziomu)
-    handled = set()
-    for role_key, checked in role_values.items():
-        if role_key in _EMPLOYEE_FIELDS:
-            continue
-        qualification_key, level = _LEGACY_ROLE_QUALIFICATIONS.get(role_key, (role_key, None))
-        handled.add(qualification_key)
-        if checked:
-            wanted[qualification_key] = level if level is not None else wanted.get(qualification_key)
+def _to_qdate(value: date) -> QDate:
+    return QDate(value.year, value.month, value.day)
 
+
+def _from_qdate(value: QDate) -> date:
+    return date(value.year(), value.month(), value.day())
+
+
+def scope_summary(valid_from, valid_to, location_ids, locations) -> str:
+    """Krótki opis ważności i placówek przypisania kwalifikacji."""
+    if valid_from and valid_to:
+        text = f"{valid_from:{DATE_FMT}} – {valid_to:{DATE_FMT}}"
+    elif valid_from:
+        text = f"od {valid_from:{DATE_FMT}}"
+    elif valid_to:
+        text = f"do {valid_to:{DATE_FMT}}"
+    else:
+        text = "bezterminowo"
+    if location_ids:
+        names = [locations[key].name if key in locations else key for key in location_ids]
+        text += ", tylko: " + ", ".join(names)
+    return text
+
+
+class QualificationScopeDialog(QDialog):
+    """Daty ważności (obie opcjonalne, włącznie) i placówki (żadna
+    zaznaczona = wszystkie) jednego przypisania kwalifikacji."""
+
+    def __init__(self, parent, qualification, valid_from, valid_to, location_ids, locations, default_month):
+        super().__init__(parent)
+        self.setWindowTitle(f"{qualification.name} – ważność i placówki")
+        self.setModal(True)
+        year, month = default_month
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.from_check, self.from_edit = self._date_row(valid_from, date(year, month, 1))
+        self.to_check, self.to_edit = self._date_row(valid_to, date(year, month, calendar.monthrange(year, month)[1]))
+        form.addRow("Ważna od:", self._row(self.from_check, self.from_edit))
+        form.addRow("Ważna do:", self._row(self.to_check, self.to_edit))
+        layout.addLayout(form)
+
+        self.location_checks = {}
+        if len(locations) > 1:
+            title = QLabel("Obowiązuje w placówkach:")
+            title.setObjectName("groupLabel")
+            layout.addWidget(title)
+            for key, location in locations.items():
+                check = QCheckBox(location.name)
+                check.setChecked(key in location_ids)
+                layout.addWidget(check)
+                self.location_checks[key] = check
+            hint = QLabel("Nic nie zaznaczone = wszystkie placówki.")
+            hint.setObjectName("mutedHint")
+            layout.addWidget(hint)
+        self._other_locations = tuple(key for key in location_ids if key not in locations)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @staticmethod
+    def _date_row(value, default):
+        check = QCheckBox()
+        edit = QDateEdit()
+        edit.setCalendarPopup(True)
+        edit.setDisplayFormat("dd.MM.yyyy")
+        edit.setDate(_to_qdate(value or default))
+        check.setChecked(value is not None)
+        edit.setEnabled(value is not None)
+        check.toggled.connect(edit.setEnabled)
+        return check, edit
+
+    @staticmethod
+    def _row(check, edit):
+        widget = QWidget()
+        row = QHBoxLayout(widget)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(check)
+        row.addWidget(edit, 1)
+        return widget
+
+    def values(self):
+        """(valid_from, valid_to, location_ids)."""
+        valid_from = _from_qdate(self.from_edit.date()) if self.from_check.isChecked() else None
+        valid_to = _from_qdate(self.to_edit.date()) if self.to_check.isChecked() else None
+        location_ids = self._other_locations + tuple(
+            key for key, check in self.location_checks.items() if check.isChecked()
+        )
+        return valid_from, valid_to, location_ids
+
+    def _accept(self):
+        valid_from, valid_to, _ = self.values()
+        if valid_from and valid_to and valid_from > valid_to:
+            QMessageBox.critical(self, "Błąd", "Data „od” jest późniejsza niż data „do”.")
+            return
+        self.accept()
+
+
+class QualificationRow(QWidget):
+    """Jedna kwalifikacja z katalogu w oknie pracownika: zaznaczenie,
+    poziom (gdy kwalifikacja ma skalę poziomów) i ważność/placówki."""
+
+    def __init__(self, qualification, locations, default_month, parent=None):
+        super().__init__(parent)
+        self.qualification = qualification
+        self.locations = locations
+        self.default_month = default_month
+        self.level = 1
+        self.valid_from = None
+        self.valid_to = None
+        self.location_ids = ()
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self.checkbox = QCheckBox(qualification.name)
+        if qualification.description:
+            self.checkbox.setToolTip(qualification.description)
+        layout.addWidget(self.checkbox, 1)
+
+        self.level_combo = None
+        if qualification.levels:
+            self.level_combo = QComboBox()
+            for level in qualification.levels:
+                self.level_combo.addItem(level.name or f"Poziom {level.value}", level.value)
+            # Domyślnie najwyższy poziom (Dino: "Mięso" = pełna obsługa, jak
+            # dawny główny checkbox "Obsługa stoiska mięsnego").
+            self.level_combo.setCurrentIndex(self.level_combo.count() - 1)
+            self.level_combo.setToolTip("Poziom kwalifikacji")
+            layout.addWidget(self.level_combo)
+
+        self.scope_btn = QPushButton()
+        self.scope_btn.setObjectName("secondaryButton")
+        self.scope_btn.setToolTip("Daty ważności i placówki, w których kwalifikacja obowiązuje")
+        self.scope_btn.clicked.connect(self._edit_scope)
+        layout.addWidget(self.scope_btn)
+
+        self.checkbox.toggled.connect(self._sync_enabled)
+        self._sync_enabled()
+        self._update_scope_text()
+
+    def _sync_enabled(self):
+        # Poziom i ważność widoczne tylko dla zaznaczonej kwalifikacji.
+        checked = self.checkbox.isChecked()
+        if self.level_combo is not None:
+            self.level_combo.setVisible(checked)
+        self.scope_btn.setVisible(checked)
+
+    def _update_scope_text(self):
+        self.scope_btn.setText(scope_summary(self.valid_from, self.valid_to, self.location_ids, self.locations))
+
+    def _edit_scope(self):
+        dialog = QualificationScopeDialog(
+            self, self.qualification, self.valid_from, self.valid_to, self.location_ids,
+            self.locations, self.default_month,
+        )
+        if dialog.exec() == QDialog.Accepted:
+            self.valid_from, self.valid_to, self.location_ids = dialog.values()
+            self._update_scope_text()
+
+    def set_assignment(self, assignment: EmployeeQualification | None):
+        self.checkbox.setChecked(assignment is not None)
+        if assignment is None:
+            return
+        if self.level_combo is not None:
+            idx = self.level_combo.findData(assignment.level)
+            if idx < 0:
+                # Poziom spoza skali katalogu (np. skala zmieniona później) -
+                # zostaje, zamiast cicho przeskoczyć na inny.
+                self.level_combo.addItem(f"Poziom {assignment.level}", assignment.level)
+                idx = self.level_combo.count() - 1
+            self.level_combo.setCurrentIndex(idx)
+        self.level = assignment.level
+        self.valid_from = assignment.valid_from
+        self.valid_to = assignment.valid_to
+        self.location_ids = assignment.location_ids
+        self._update_scope_text()
+
+    def assignment(self) -> EmployeeQualification | None:
+        if not self.checkbox.isChecked():
+            return None
+        level = self.level_combo.currentData() if self.level_combo is not None else self.level
+        return EmployeeQualification(
+            self.qualification.id, level,
+            valid_from=self.valid_from, valid_to=self.valid_to, location_ids=self.location_ids,
+        )
+
+
+def qualifications_after_edit(old_employee, rows: dict) -> tuple:
+    """Kwalifikacje pracownika po zapisie okna: przypisania z widocznych
+    wierszy (`rows`: klucz kwalifikacji -> QualificationRow) zastępują
+    dotychczasowe; kwalifikacje, których okno nie pokazuje (ukryte przy
+    wyłączonej zasadzie, spoza katalogu), zostają bez zmian - zero utraty
+    danych."""
+    old = list(old_employee.qualifications) if old_employee else []
     result = []
-    for key, qualification in old.items():
-        if key not in handled:
+    for qualification in old:
+        row = rows.get(qualification.qualification_id)
+        if row is None:
             result.append(qualification)
-        elif key in wanted:
-            level = wanted.pop(key)
-            result.append(qualification if level is None else replace(qualification, level=level))
-    for key, level in wanted.items():
-        result.append(EmployeeQualification(key, level if level is not None else 1))
+            continue
+        assignment = row.assignment()
+        if assignment is not None:
+            result.append(assignment)
+    old_keys = {qualification.qualification_id for qualification in old}
+    for key, row in rows.items():
+        if key not in old_keys:
+            assignment = row.assignment()
+            if assignment is not None:
+                result.append(assignment)
     return tuple(result)
 
 
 class EmployeeDialog(QDialog):
     def __init__(
         self, parent=None, employee=None, shop_config=None, default_location_key=None,
-        expand_contact=False, focus_field=None, companies=None,
+        expand_contact=False, focus_field=None, companies=None, qualifications=None,
     ):
         super().__init__(parent)
         self.employee = employee
@@ -99,13 +280,25 @@ class EmployeeDialog(QDialog):
         self.shop_config = shop_config
         self.profile = get_profile(shop_config.business_type if shop_config else None)
         self.locations = shop_config.locations if shop_config else {}
+        # Katalog kwalifikacji projektu (MonthlyProject.qualifications, id ->
+        # Qualification) - z niego powstają wiersze kwalifikacji. Bez
+        # katalogu (np. okno otwarte poza projektem) - domyślny katalog
+        # profilu. Ten sam słownik co w projekcie: zapis dokłada do niego
+        # znane programowi kwalifikacje, które okno pokazało spoza katalogu
+        # ("Nie chce 24h" przy rotacji 24/7).
+        if qualifications is None:
+            qualifications = {
+                q.id: q for q in default_qualifications(shop_config.business_type if shop_config else None)
+            }
+        self.catalog = qualifications
         # Lokalizacja, na którą ma się domyślnie ustawić kombo poniżej dla
         # NOWEGO pracownika (patrz _fill_from_employee) - zwykle aktualnie
         # przeglądana placówka (main_window.selected_location_key), żeby
         # dodany właśnie pracownik od razu pojawił się w widocznej tabeli
         # zamiast "zniknąć" w nieprzefiltrowanej lokalizacji.
         self.default_location_key = default_location_key
-        self.role_checkboxes: dict[str, QCheckBox] = {}
+        self.qualification_rows: dict[str, QualificationRow] = {}
+        self.restriction_checkboxes: dict[str, QCheckBox] = {}
         self.location_combo: QComboBox | None = None
         self.vacation_days_left = 0
         self._contact_expanded = False
@@ -131,13 +324,34 @@ class EmployeeDialog(QDialog):
 
         QTimer.singleShot(0, self._maybe_show_tutorial)
 
-    def _role_is_hidden(self, role) -> bool:
-        """True when this role's linked_policy (e.g. Dino's meat roles ->
-        "meat") is DISABLED for the active project, so the checkbox for it
-        shouldn't be shown at all."""
-        if not role.linked_policy or not self.shop_config:
+    def _policy_disabled(self, policy: str) -> bool:
+        """True when a constraint policy (e.g. Dino's "meat") is DISABLED for
+        the active project - the role/qualification tied to it isn't shown."""
+        if not policy or not self.shop_config:
             return False
-        return self.shop_config.constraint_policies.get(role.linked_policy) == ConstraintPolicy.DISABLED
+        return self.shop_config.constraint_policies.get(policy) == ConstraintPolicy.DISABLED
+
+    def _visible_qualifications(self) -> list:
+        """Kwalifikacje z katalogu pokazywane w oknie, w kolejności katalogu:
+        - bez tych, których zasada jest Wyłączona (QUALIFICATION_POLICIES),
+        - "Nie chce 24h" tylko gdy projekt używa rotacji 24/7 albo modelu
+          godzin otwarcia Ochrony (poza nimi nic tej kwalifikacji nie czyta);
+          wtedy także, gdy katalog jej jeszcze nie ma."""
+        from logic.generator.opening_hours_coverage import profile_uses_opening_hours_model
+
+        uses_24h = self._project_uses_duty_rotation() or (
+            self.shop_config is not None and profile_uses_opening_hours_model(self.shop_config.business_type)
+        )
+        result = []
+        for qualification in self.catalog.values():
+            if self._policy_disabled(QUALIFICATION_POLICIES.get(qualification.id, "")):
+                continue
+            if qualification.id == QUAL_NO_24H and not uses_24h:
+                continue
+            result.append(qualification)
+        if uses_24h and QUAL_NO_24H not in self.catalog:
+            result.append(NO_24H_QUALIFICATION)
+        return result
 
     def _project_uses_duty_rotation(self) -> bool:
         """Ten sam warunek co "Rotacja 24/7" w ui/config_dialog.py -
@@ -270,58 +484,33 @@ class EmployeeDialog(QDialog):
         flags_layout = QVBoxLayout(self.flags_card)
         flags_layout.setSpacing(10)
 
+        default_month = (
+            (self.shop_config.year, self.shop_config.month) if self.shop_config is not None
+            else (date.today().year, date.today().month)
+        )
+        for qualification in self._visible_qualifications():
+            row = QualificationRow(qualification, self.locations, default_month)
+            flags_layout.addWidget(row)
+            self.qualification_rows[qualification.id] = row
+
+        # Kierowniczka (Dino) ma zawsze zmiany po 8h - wymusza wymiar etatu.
+        manager_row = self.qualification_rows.get(QUAL_MANAGER)
+        if manager_row is not None and self.profile.key == DEFAULT_BUSINESS_TYPE:
+            manager_row.checkbox.toggled.connect(self._on_manager_toggled)
+
+        no_24h_row = self.qualification_rows.get(QUAL_NO_24H)
+        self.no_24h_check = no_24h_row.checkbox if no_24h_row is not None else None
+
+        # Ograniczenia pracownika z profilu (Dino: no_night/no_afternoon z
+        # własnymi etykietami) - pola Employee, nie kwalifikacje.
         for role in self.profile.roles:
-            if self._role_is_hidden(role):
-                continue
-            if role.key == NIE_CHCE_24H_ROLE_KEY:
-                # Ten klucz ma dedykowany checkbox niżej (self.no_24h_check),
-                # gated na _project_uses_duty_rotation() - poza rotacją 24/7
-                # nic go nie czyta (patrz logic/generator/duty_rotation_constraint.py),
-                # więc pokazywanie go tu drugi raz byłoby martwym duplikatem:
-                # oba pisały do tego samego Employee.custom_roles["nie_chce_24h"],
-                # a _save() niżej i tak zawsze nadpisywał tę wartość stanem
-                # self.no_24h_check, gdy oba były widoczne naraz.
+            if role.key not in _EMPLOYEE_FIELDS or self._policy_disabled(role.linked_policy):
                 continue
             checkbox = QCheckBox(role.label)
             if role.description:
                 checkbox.setToolTip(role.description)
             flags_layout.addWidget(checkbox)
-            self.role_checkboxes[role.key] = checkbox
-
-        # Zachowania specyficzne dla konkretnych ról (wykluczanie się mięsa/
-        # mięsa-lekkiego, wymuszanie wymiaru etatu kierowniczki) są pinowane
-        # po kluczu roli, nie generyczną regułą - inne profile ich nie mają.
-        meat_cb = self.role_checkboxes.get("is_meat")
-        meat_light_cb = self.role_checkboxes.get("is_meat_light")
-        if meat_cb and meat_light_cb:
-            meat_cb.toggled.connect(self._on_meat_toggled)
-            meat_light_cb.toggled.connect(self._on_meat_light_toggled)
-
-        manager_cb = self.role_checkboxes.get("is_manager")
-        if manager_cb:
-            manager_cb.toggled.connect(self._on_manager_toggled)
-
-        # Flaga dla rotacji służby 24/7 (patrz LocationConfig.duty_rotation,
-        # logic/generator/duty_rotation_constraint.py) - osobna od systemu
-        # ról profilu, bo dotyczy generatora niezależnie od tego, jakie role
-        # ma dany profil. Widoczna tylko gdy projekt faktycznie używa tego
-        # mechanizmu (na poziomie projektu albo którejkolwiek lokalizacji) -
-        # dla profili bez rotacji nic by nie robiła.
-        self.no_24h_check = None
-        # Także profil Ochrony bez rotacji (placówki z godzinami otwarcia -
-        # doba sob/nd to tam zmiana 24h albo dwie po 12h, patrz
-        # logic/generator/opening_hours_coverage.py).
-        from logic.generator.opening_hours_coverage import profile_uses_opening_hours_model
-        if self._project_uses_duty_rotation() or (
-            self.shop_config is not None and profile_uses_opening_hours_model(self.shop_config.business_type)
-        ):
-            self.no_24h_check = QCheckBox("Nie chce pracować zmian 24h")
-            self.no_24h_check.setToolTip(
-                "Ta osoba nie dostanie od generatora zmiany 24h w sobotę ani "
-                "niedzielę - doba jest wtedy dzielona na dwie zmiany po 12h "
-                "(rotacja 24/7 i placówki z dobą w godzinach otwarcia)."
-            )
-            flags_layout.addWidget(self.no_24h_check)
+            self.restriction_checkboxes[role.key] = checkbox
 
         # "Nie pracuje w godzinach nocnych"/"Nie pracuje na popołudniu" -
         # pola Employee.no_night/no_afternoon istnieją zawsze (patrz
@@ -458,16 +647,6 @@ class EmployeeDialog(QDialog):
 
         root.addLayout(button_row)
 
-    def _on_meat_toggled(self, checked):
-        meat_light_cb = self.role_checkboxes["is_meat_light"]
-        if checked and meat_light_cb.isChecked():
-            meat_light_cb.setChecked(False)
-
-    def _on_meat_light_toggled(self, checked):
-        meat_cb = self.role_checkboxes["is_meat"]
-        if checked and meat_cb.isChecked():
-            meat_cb.setChecked(False)
-
     def _on_manager_toggled(self, checked):
         # Jej zmiany są zawsze dokładnie 8h - "1/1 max 8:00" jest jedynym
         # wymiarem etatu, który tego gwarantuje (patrz force_fulltime_845).
@@ -527,14 +706,15 @@ class EmployeeDialog(QDialog):
             return
         self.last_name.setText(self.employee.last_name)
         self.first_name.setText(self.employee.first_name)
-        for key, checkbox in self.role_checkboxes.items():
-            checkbox.setChecked(self.employee.has_role(key))
+        assignments = {q.qualification_id: q for q in self.employee.qualifications}
+        for key, row in self.qualification_rows.items():
+            row.set_assignment(assignments.get(key))
+        for key, checkbox in self.restriction_checkboxes.items():
+            checkbox.setChecked(bool(getattr(self.employee, key)))
         self.monthly_target_hours.setValue(self.employee.monthly_target_hours)
         idx = self.employment_fraction.findData(self.employee.employment_fraction)
         if idx >= 0:
             self.employment_fraction.setCurrentIndex(idx)
-        if self.no_24h_check is not None:
-            self.no_24h_check.setChecked(self.employee.has_role(NIE_CHCE_24H_ROLE_KEY))
         if self.no_night_check is not None:
             self.no_night_check.setChecked(self.employee.no_night)
             self.no_afternoon_check.setChecked(self.employee.no_afternoon)
@@ -559,7 +739,7 @@ class EmployeeDialog(QDialog):
             TutorialStep(
                 "Dane pracownika",
                 "Tutaj ustawiasz podstawowe dane pracownika: imię, nazwisko, "
-                "wymiar etatu oraz role wykorzystywane przez generator.",
+                "wymiar etatu oraz kwalifikacje wykorzystywane przez generator.",
             ),
             TutorialStep(
                 "Wymiar etatu",
@@ -575,9 +755,11 @@ class EmployeeDialog(QDialog):
                 target=self.location_combo,
             ))
         steps.append(TutorialStep(
-            "Role",
-            "Zaznacz role tego pracownika - generator używa ich przy układaniu "
-            "grafiku (np. kto ma priorytet w przydzielaniu godzin).",
+            "Kwalifikacje",
+            "Zaznacz kwalifikacje tego pracownika - generator używa ich przy "
+            "układaniu grafiku. Przy kwalifikacji z poziomami wybierz poziom; "
+            "przycisk obok ustawia daty ważności i placówki (domyślnie "
+            "bezterminowo, we wszystkich placówkach).",
             target=self.flags_card,
         ))
         if self.no_24h_check is not None:
@@ -636,29 +818,23 @@ class EmployeeDialog(QDialog):
             QMessageBox.critical(self, "Błąd", "Nazwisko nie może być puste.")
             return
 
+        for key, row in self.qualification_rows.items():
+            assignment = row.assignment()
+            if assignment is not None and row.qualification.requires_validity and assignment.valid_to is None:
+                QMessageBox.critical(
+                    self, "Błąd",
+                    f"Kwalifikacja „{row.qualification.name}” wymaga daty ważności - ustaw „Ważna do”.",
+                )
+                return
+
         legacy_roles = {}
-        role_values = {}
         for role in self.profile.roles:
-            key = role.key
-            if key in self.role_checkboxes:
-                value = self.role_checkboxes[key].isChecked()
+            if role.key not in _EMPLOYEE_FIELDS:
+                continue
+            if role.key in self.restriction_checkboxes:
+                legacy_roles[role.key] = self.restriction_checkboxes[role.key].isChecked()
             else:
-                # Hidden because its linked_policy is DISABLED - preserve
-                # whatever the employee already had instead of silently
-                # wiping it to False (e.g. turning the "meat" policy off
-                # must not un-flag every meat-counter employee).
-                value = self.employee.has_role(key) if self.employee else False
-
-            if key in _EMPLOYEE_FIELDS:
-                legacy_roles[key] = value
-            else:
-                role_values[key] = value
-
-        if self.no_24h_check is not None:
-            role_values[NIE_CHCE_24H_ROLE_KEY] = self.no_24h_check.isChecked()
-        # Checkbox niewidoczny (projekt nie używa rotacji 24/7) - wartość
-        # zostaje, bo _qualifications_from_role_values nie rusza kwalifikacji,
-        # których okno nie pokazuje.
+                legacy_roles[role.key] = getattr(self.employee, role.key) if self.employee else False
 
         # no_night/no_afternoon - dedykowane checkboxy (patrz _build_ui),
         # widoczne/uwzględniane tylko dla WYBRANEJ lokalizacji bez rotacji
@@ -684,7 +860,7 @@ class EmployeeDialog(QDialog):
                 first_name=fn,
                 monthly_target_hours=self.monthly_target_hours.value(),
                 employment_fraction=self.employment_fraction.currentData(),
-                qualifications=_qualifications_from_role_values(self.employee, role_values),
+                qualifications=qualifications_after_edit(self.employee, self.qualification_rows),
                 location_key=location_key,
                 company_key=self.company_combo.currentData() or "",
                 phone=self.phone.text().strip(),
@@ -700,6 +876,9 @@ class EmployeeDialog(QDialog):
             QMessageBox.critical(self, "Błąd", str(exc))
             return
 
+        merge_catalog(self.catalog, [
+            row.qualification for row in self.qualification_rows.values() if row.checkbox.isChecked()
+        ])
         self.employee_result = emp
         self.accept()
 
