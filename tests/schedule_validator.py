@@ -910,6 +910,32 @@ def _validate_custom_rules(cfg, schedule, intervals, report):
                     open_emps = [(e, w) for e, w in open_emps if w is not None]
                     if not open_emps:
                         continue
+                    if scope == "window":
+                        # W każdym kwadransie okna (dnia `day`, koniec <= początek
+                        # = przez północ) co najmniej `threshold` osób z
+                        # kwalifikacją ważną w dniu rozpoczęcia ich zmiany.
+                        ws = hm(rule.params.get("window_start", "10:00"))
+                        we = hm(rule.params.get("window_end", "14:00"))
+                        if we <= ws:
+                            we += DAY
+                        base = (day - 1) * DAY
+                        short = []
+                        for t in range(base + ws, base + we, SLOT):
+                            present = sum(
+                                1 for e in members
+                                if any(
+                                    s <= t < en and _level(e, qualification, cfg, d) >= min_level
+                                    for s, en, d, _m, _f in intervals[e.id]
+                                )
+                            )
+                            if present < threshold:
+                                short.append(t)
+                        if short:
+                            add(Violation(
+                                key, f"kwalifikacja {qualification} [okno]: {len(short)} kwadransów < {threshold} "
+                                f"(pierwszy {fmt_abs(short[0])})", day=day,
+                            ))
+                        continue
                     count = 0
                     for e, w in open_emps:
                         if _level(e, qualification, cfg, day) < min_level:

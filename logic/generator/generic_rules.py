@@ -14,6 +14,7 @@ verified dino_retail behavior.
 from datetime import datetime, timedelta
 
 from logic.generator.constraints_basic import is_location_open_for_employee
+from logic.generator.shift_intervals import DAY, locked_interval, segments, shift_intervals
 from model.qualification import has_on, held_in_month
 from logic.utils.time_utils import (
     daily_windows_overlap,
@@ -40,10 +41,77 @@ def _qualified_employee_indices(ctx, qualification_key, min_level):
     ]
 
 
-def build_min_staff_with_role(ctx, soft, qualification_key, rule_key, min_count=1, scope="open", min_level=1):
+# Zakres reguły min_staff_with_role "w oknie godzin" (params window_start/
+# window_end, "HH:MM"; koniec <= początek = przez północ): w KAŻDEJ chwili
+# okna co najmniej min_count osób z kwalifikacją.
+SCOPE_WINDOW = "window"
+SLOT_MINUTES = 15
+
+
+def _window_span(window_start: str, window_end: str) -> tuple[int, int]:
+    start = int(window_start[:2]) * 60 + int(window_start[3:5])
+    end = int(window_end[:2]) * 60 + int(window_end[3:5])
+    if end <= start:
+        end += DAY
+    return start, end
+
+
+def _add_min_staff_in_window(ctx, soft, qualification_key, min_level, groups, window_start, window_end, violations):
+    """Obsada w oknie [window_start, window_end) dnia d: okno dzielone na
+    odcinki w punktach początku/końca zmian; w każdym odcinku suma zmian
+    osób z kwalifikacją (ważną w dniu rozpoczęcia zmiany), które pokrywają
+    CAŁY odcinek, plus ręcznie zablokowane wpisy (stałe) >= próg. Liczą się
+    też zmiany z dnia poprzedniego i następnego (okna i zmiany przez
+    północ)."""
+    win_start, win_end = _window_span(window_start, window_end)
+    for threshold, indices in groups.items():
+        for d in ctx.trade_days:
+            if indices and not any(
+                is_location_open_for_employee(ctx.shop, ctx.employees[e], d) for e in indices
+            ):
+                continue
+            candidates = []  # (start, koniec, zmienna x)
+            fixed = []       # (start, koniec) ręcznych wpisów
+            for e in indices:
+                emp = ctx.employees[e]
+                for shift_day in (d - 1, d, d + 1):
+                    if shift_day not in ctx.days or not _qualified_on(ctx, e, qualification_key, min_level, shift_day):
+                        continue
+                    offset = (shift_day - d) * DAY
+                    locked = locked_interval(ctx.schedule.get_day(emp, shift_day)) if ctx.schedule is not None else None
+                    if locked is not None:
+                        fixed.append((locked[0] + offset, locked[1] + offset))
+                        continue
+                    for sid, (start, end) in shift_intervals(ctx, e, shift_day).items():
+                        start, end = start + offset, end + offset
+                        if end > win_start and start < win_end:
+                            candidates.append((start, end, ctx.x[e, shift_day, sid]))
+
+            pieces = segments(win_start, win_end, [(a, b) for a, b, _ in candidates] + fixed)
+            for a, b in pieces:
+                need = threshold - sum(1 for fa, fb in fixed if fa <= a and b <= fb)
+                if need <= 0:
+                    continue
+                terms = [var for start, end, var in candidates if start <= a and b <= end]
+                if not soft:
+                    if terms:
+                        ctx.model.Add(sum(terms) >= need)
+                    else:
+                        ctx.model.AddBoolOr([])  # nikt nie może tu pracować
+                else:
+                    v = ctx.model.NewIntVar(0, need, f"role_window_v_{qualification_key}_d{d}_{a}_t{threshold}")
+                    ctx.model.Add(sum(terms) + v >= need)
+                    violations.append(v * -(-(b - a) // SLOT_MINUTES))
+    return violations
+
+
+def build_min_staff_with_role(
+    ctx, soft, qualification_key, rule_key, min_count=1, scope="open", min_level=1,
+    window_start="10:00", window_end="14:00",
+):
     """"Co najmniej `min_count` pracowników z kwalifikacją `qualification_key`
     na poziomie >= `min_level` [na otwarciu / na zamknięciu / w ciągu dnia /
-    na zmianie nocnej]." Pracownik liczy się tylko w dniach, w których
+    na zmianie nocnej / w każdej chwili okna window_start-window_end]." Pracownik liczy się tylko w dniach, w których
     kwalifikacja jest ważna i obowiązuje w jego placówce. Uogólnia zaszyte w
     constraints_staff.add_fixed_staff_shift_constraints sprawdzenia "Otwarcie"/
     "Mięso" >= 1.
@@ -82,6 +150,11 @@ def build_min_staff_with_role(ctx, soft, qualification_key, rule_key, min_count=
         # base threshold against zero people, same as before per-location
         # grouping existed.
         groups = {min_count: []}
+
+    if scope == SCOPE_WINDOW:
+        return _add_min_staff_in_window(
+            ctx, soft, qualification_key, min_level, groups, window_start, window_end, violations,
+        )
 
     for threshold, indices in groups.items():
         for d in ctx.trade_days:

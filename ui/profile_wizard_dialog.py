@@ -32,6 +32,7 @@ from model.custom_profile import (
 from model.custom_profile_store import save_custom_profile
 from ui.emoji_palette import ROLE_ICON_PALETTE
 from ui.slug import slugify as _slugify
+from ui.time_input import TimeInputWidget
 
 POLICY_OPTIONS = (
     ("Preferowane", ConstraintPolicy.PREFERRED.value),
@@ -49,6 +50,7 @@ SCOPE_OPTIONS = (
     ("na zamknięciu", "close"),
     ("w dowolnym momencie dnia", "any_shift"),
     ("na zmianie nocnej", "night"),
+    ("w każdej chwili okna godzin", "window"),
 )
 
 
@@ -106,10 +108,28 @@ class _RuleParamsWidget(QStackedWidget):
         self.scope = QComboBox()
         for text, value in SCOPE_OPTIONS:
             self.scope.addItem(text, value)
+        # Zakres "w każdej chwili okna godzin" - np. 10:00-14:00, koniec
+        # wcześniejszy niż początek = przez północ (22:00-06:00).
+        self.window_from = TimeInputWidget()
+        self.window_from.set_time_str("10:00")
+        self.window_to = TimeInputWidget()
+        self.window_to.set_time_str("14:00")
+        window_row = QWidget()
+        window_layout = QHBoxLayout(window_row)
+        window_layout.setContentsMargins(0, 0, 0, 0)
+        window_layout.addWidget(self.window_from)
+        window_layout.addWidget(QLabel("–"))
+        window_layout.addWidget(self.window_to)
+        window_layout.addStretch(1)
         min_staff_page = QWidget()
         min_staff_form = QFormLayout(min_staff_page)
         min_staff_form.addRow("Min. liczba osób:", self.min_staff)
         min_staff_form.addRow("Zakres:", self.scope)
+        self.window_label = QLabel("Godziny:")
+        min_staff_form.addRow(self.window_label, window_row)
+        self._window_row = window_row
+        self.scope.currentIndexChanged.connect(self._sync_window_visible)
+        self._sync_window_visible()
         self.addWidget(min_staff_page)
 
         self.window_start = QSpinBox()
@@ -124,12 +144,21 @@ class _RuleParamsWidget(QStackedWidget):
         time_form.addRow("do godziny:", self.window_end)
         self.addWidget(time_page)
 
+    def _sync_window_visible(self):
+        visible = self.scope.currentData() == "window"
+        self.window_label.setVisible(visible)
+        self._window_row.setVisible(visible)
+
     def show_for_type(self, rule_type: str):
         self.setCurrentIndex(0 if rule_type == RULE_TYPE_MIN_STAFF_WITH_ROLE else 1)
 
     def params_for_type(self, rule_type: str) -> dict:
         if rule_type == RULE_TYPE_MIN_STAFF_WITH_ROLE:
-            return {"min_count": self.min_staff.value(), "scope": self.scope.currentData()}
+            params = {"min_count": self.min_staff.value(), "scope": self.scope.currentData()}
+            if params["scope"] == "window":
+                params["window_start"] = self.window_from.get_time_str()
+                params["window_end"] = self.window_to.get_time_str()
+            return params
         return {"window_start_hour": self.window_start.value(), "window_end_hour": self.window_end.value()}
 
     def set_params(self, rule_type: str, params: dict):
@@ -138,6 +167,8 @@ class _RuleParamsWidget(QStackedWidget):
             idx = self.scope.findData(params.get("scope", "open"))
             if idx >= 0:
                 self.scope.setCurrentIndex(idx)
+            self.window_from.set_time_str(params.get("window_start", "10:00"))
+            self.window_to.set_time_str(params.get("window_end", "14:00"))
         else:
             self.window_start.setValue(params.get("window_start_hour", 22))
             self.window_end.setValue(params.get("window_end_hour", 6))

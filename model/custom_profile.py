@@ -163,7 +163,12 @@ class CustomBusinessProfile:
                 "any_shift": "w ciągu dnia",
                 "night": "na zmianie nocnej",
             }
-            scope = scope_labels.get(rule.params.get("scope"), rule.params.get("scope", ""))
+            if rule.params.get("scope") == "window":
+                start = rule.params.get("window_start", "10:00")
+                end = rule.params.get("window_end", "14:00")
+                scope = f"w godz. {start}–{end}"
+            else:
+                scope = scope_labels.get(rule.params.get("scope"), rule.params.get("scope", ""))
             min_count = rule.params.get("min_count", 1)
             return f"{role_label}: min. {min_count} os. {scope}"
         if rule.type == RULE_TYPE_ROLE_TIME_RESTRICTION:
