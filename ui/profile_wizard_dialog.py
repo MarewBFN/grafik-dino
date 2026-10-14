@@ -235,6 +235,10 @@ class _RuleRow(QFrame):
         )
         self.policy_combo.currentIndexChanged.connect(self._sync_weight_enabled)
 
+        # Kwalifikacja reguły zapamiętana PRZED wypełnieniem listy - inaczej
+        # lista ustawiała się na pierwszą rolę i "Zapisz zmiany" po cichu
+        # przepisywało każdą regułę na pierwszą rolę profilu.
+        self._selected_role_key = rule.qualification_key if rule is not None else None
         self.refresh_roles()
         if rule is not None:
             idx = self.type_combo.findData(rule.type)
@@ -246,13 +250,11 @@ class _RuleRow(QFrame):
                 self.policy_combo.setCurrentIndex(idx)
             self.weight_spin.setValue(rule.weight)
             self.min_level_spin.setValue(int(rule.params.get(PARAM_MIN_LEVEL, 1)))
-            self._selected_role_key = rule.qualification_key
             # Keep the original id stable across an edit+resave, so any
             # shop.constraint_policies["rule:<id>"] override a project
             # already set for this rule doesn't get silently orphaned.
             self._existing_id = rule.id
         else:
-            self._selected_role_key = None
             self._existing_id = None
 
         self.params_widget.show_for_type(self.type_combo.currentData())

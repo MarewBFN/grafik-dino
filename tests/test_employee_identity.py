@@ -67,10 +67,9 @@ def test_employees_still_sort_by_name():
 # ---------------------------------------------------------------------------
 
 def _dialog(**kwargs):
-    import ui.employee_dialog as module
+    from ui.employee_dialog import EmployeeDialog
 
-    module.EmployeeDialog._maybe_show_tutorial = lambda self: None
-    return module.EmployeeDialog(None, shop_config=ShopConfig(2026, 10), **kwargs)
+    return EmployeeDialog(None, shop_config=ShopConfig(2026, 10), **kwargs)
 
 
 def test_edit_keeps_id_and_fields_the_dialog_does_not_show():

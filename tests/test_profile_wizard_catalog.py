@@ -91,3 +91,20 @@ def test_wizard_without_project_catalog_lists_only_roles(monkeypatch):
     wizard = _wizard(monkeypatch, "Test bez katalogu", catalog=None)
     wizard._add_rule_row()
     assert [key for key, _ in _rule_choices(wizard._rule_rows[0])] == [wizard._current_role_labels()[0][0]]
+
+
+def test_editing_profile_keeps_each_rule_on_its_own_qualification(monkeypatch):
+    """Dawniej każda reguła w edytowanym profilu pokazywała pierwszą rolę, a
+    "Zapisz zmiany" przepisywało ją na nią po cichu."""
+    from tests.golden.cases import GOLDEN_CUSTOM_PROFILE
+    from model.custom_profile import CustomBusinessProfile
+
+    monkeypatch.setattr("ui.profile_wizard_dialog.save_custom_profile", lambda profile: None)
+    existing = CustomBusinessProfile.from_dict({**GOLDEN_CUSTOM_PROFILE, "key": "custom_test_wizard_roundtrip"})
+    wizard = ProfileWizardDialog(None, existing=existing)
+
+    assert [row.role_combo.currentData() for row in wizard._rule_rows] == ["kasa", "dostawa", "student"]
+
+    wizard._save()
+    saved = get_custom_profile("custom_test_wizard_roundtrip")
+    assert [(r.qualification_key, r.id) for r in saved.rules] == [(r.qualification_key, r.id) for r in existing.rules]

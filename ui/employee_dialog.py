@@ -165,14 +165,23 @@ class QualificationRow(QWidget):
         self.valid_to = None
         self.location_ids = ()
 
-        layout = QHBoxLayout(self)
+        # Dwie linie: zaznaczenie, a pod nim (tylko dla zaznaczonej) poziom i
+        # ważność - w jednej linii długie nazwy poziomów wypychały przycisk
+        # ważności poza okno.
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(4)
 
         self.checkbox = QCheckBox(qualification.name)
         if qualification.description:
             self.checkbox.setToolTip(qualification.description)
-        layout.addWidget(self.checkbox, 1)
+        layout.addWidget(self.checkbox)
+
+        self.details = QWidget()
+        details_layout = QHBoxLayout(self.details)
+        details_layout.setContentsMargins(32, 0, 0, 0)
+        details_layout.setSpacing(8)
+        layout.addWidget(self.details)
 
         self.level_combo = None
         if qualification.levels:
@@ -183,13 +192,16 @@ class QualificationRow(QWidget):
             # dawny główny checkbox "Obsługa stoiska mięsnego").
             self.level_combo.setCurrentIndex(self.level_combo.count() - 1)
             self.level_combo.setToolTip("Poziom kwalifikacji")
-            layout.addWidget(self.level_combo)
+            self.level_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+            self.level_combo.setMinimumContentsLength(14)
+            details_layout.addWidget(self.level_combo, 1)
 
         self.scope_btn = QPushButton()
         self.scope_btn.setObjectName("secondaryButton")
         self.scope_btn.setToolTip("Daty ważności i placówki, w których kwalifikacja obowiązuje")
         self.scope_btn.clicked.connect(self._edit_scope)
-        layout.addWidget(self.scope_btn)
+        details_layout.addWidget(self.scope_btn)
+        details_layout.addStretch(0 if self.level_combo is not None else 1)
 
         self.checkbox.toggled.connect(self._sync_enabled)
         self._sync_enabled()
@@ -197,10 +209,7 @@ class QualificationRow(QWidget):
 
     def _sync_enabled(self):
         # Poziom i ważność widoczne tylko dla zaznaczonej kwalifikacji.
-        checked = self.checkbox.isChecked()
-        if self.level_combo is not None:
-            self.level_combo.setVisible(checked)
-        self.scope_btn.setVisible(checked)
+        self.details.setVisible(self.checkbox.isChecked())
 
     def _update_scope_text(self):
         self.scope_btn.setText(scope_summary(self.valid_from, self.valid_to, self.location_ids, self.locations))
