@@ -150,8 +150,11 @@ def _parse_time(value: str) -> QTime:
 
 
 class ConfigDialog(QDialog):
-    def __init__(self, parent, shop_config, location_key=None):
+    def __init__(self, parent, shop_config, location_key=None, qualifications=None):
         super().__init__(parent)
+        # Katalog kwalifikacji projektu (MonthlyProject.qualifications) dla
+        # kreatora profilu - reguły mogą wskazać kwalifikację z katalogu.
+        self.qualifications = qualifications
         self.shop_config = shop_config
         # Zakładka "Godziny otwarcia" edytuje godziny TEJ lokalizacji wprost
         # (dokładnie te same dane co Konfiguracja -> Lokalizacje), zamiast
@@ -310,7 +313,7 @@ class ConfigDialog(QDialog):
         self.delete_profile_btn.setEnabled(is_custom)
 
     def _open_profile_wizard(self):
-        wizard = ProfileWizardDialog(self)
+        wizard = ProfileWizardDialog(self, qualifications=self.qualifications)
         if wizard.exec() != QDialog.Accepted or not wizard.new_profile_key:
             return
         self._reload_business_type_selector()
@@ -326,7 +329,7 @@ class ConfigDialog(QDialog):
         if custom is None:
             return
 
-        wizard = ProfileWizardDialog(self, existing=custom)
+        wizard = ProfileWizardDialog(self, existing=custom, qualifications=self.qualifications)
         if wizard.exec() != QDialog.Accepted or not wizard.new_profile_key:
             return
         # Same key as before (the wizard reuses it on edit), so re-select it

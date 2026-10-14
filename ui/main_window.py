@@ -1849,7 +1849,10 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Zaktualizowano godziny dnia.", 2500)
 
     def _open_config(self):
-        dialog = ConfigDialog(self, self.shop_config, location_key=self.selected_location_key)
+        dialog = ConfigDialog(
+            self, self.shop_config, location_key=self.selected_location_key,
+            qualifications=self.project.qualifications,
+        )
         if dialog.exec() != QDialog.Accepted:
             return
         self._update_nominal_hours_label()

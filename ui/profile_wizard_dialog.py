@@ -299,9 +299,16 @@ class ProfileWizardDialog(QDialog):
     catalog of role/rule building blocks - no code, no Python file to write.
     """
 
-    def __init__(self, parent=None, existing=None):
+    def __init__(self, parent=None, existing=None, qualifications=None):
         super().__init__(parent)
         self.existing_key = existing.key if existing else None
+        # Katalog kwalifikacji projektu (MonthlyProject.qualifications) albo
+        # None (kreator otwarty bez projektu). Reguła może wskazać
+        # kwalifikację z katalogu, której profil nie ma - przy zapisie trafia
+        # ona do profilu jako rola, więc każdy projekt z tym profilem ma ją w
+        # katalogu (MonthlyProject.ensure_qualification_catalog) i reguła
+        # nigdy nie żąda osób, których nikt nie może mieć.
+        self.catalog = qualifications or {}
         self.setWindowTitle("Edytuj profil działalności" if existing else "Nowy profil działalności")
         self.setModal(True)
         self.resize(640, 560)
@@ -446,11 +453,29 @@ class ProfileWizardDialog(QDialog):
             result.append((key, label))
         return result
 
+    def _catalog_only_qualifications(self, role_labels):
+        """[(klucz, nazwa)] kwalifikacji z katalogu projektu, których profil
+        (jeszcze) nie ma jako roli - ani po kluczu, ani po nazwie."""
+        keys = {key for key, _ in role_labels}
+        names = {label.casefold() for _, label in role_labels}
+        return [
+            (key, qualification.name) for key, qualification in self.catalog.items()
+            if key not in keys and qualification.name.casefold() not in names
+        ]
+
+    def _rule_qualification_labels(self):
+        """Wybór kwalifikacji w regule: role profilu, potem kwalifikacje z
+        katalogu projektu (oznaczone - przy zapisie dopisywane do profilu)."""
+        role_labels = self._current_role_labels()
+        return role_labels + [
+            (key, f"{name} (z katalogu projektu)") for key, name in self._catalog_only_qualifications(role_labels)
+        ]
+
     def _add_rule_row(self, rule: RuleInstance | None = None):
         if not self._current_role_labels():
             QMessageBox.information(self, "Profil", "Najpierw dodaj przynajmniej jedną rolę z nazwą.")
             return
-        row = _RuleRow(self._remove_rule_row, self._current_role_labels, rule)
+        row = _RuleRow(self._remove_rule_row, self._rule_qualification_labels, rule)
         self._rule_rows.append(row)
         self.rules_container.addWidget(row)
 
@@ -480,10 +505,24 @@ class ProfileWizardDialog(QDialog):
                 icon=row.icon(),
             ))
 
+        # Kwalifikacja z katalogu projektu użyta w regule - dopisana do
+        # profilu jako rola (ten sam klucz, nazwa i ikona-emoji z katalogu;
+        # wiersz podsumowania dodaje reguła, patrz register_custom_profile).
+        catalog_only = dict(self._catalog_only_qualifications(role_labels))
         rules = []
         for row in self._rule_rows:
             rule = row.to_rule_instance()
-            if rule is not None and rule.qualification_key in role_keys:
+            if rule is None:
+                continue
+            key = rule.qualification_key
+            if key in catalog_only and key not in role_keys:
+                icon = self.catalog[key].icon
+                roles.append(RoleDefinition(
+                    key=key, label=catalog_only[key], show_summary_row=False,
+                    icon="" if icon.startswith("builtin:") else icon,
+                ))
+                role_keys.add(key)
+            if key in role_keys:
                 rules.append(rule)
 
         if self.existing_key:
