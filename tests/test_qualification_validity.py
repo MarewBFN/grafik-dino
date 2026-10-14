@@ -145,14 +145,26 @@ def test_grid_validation_counts_opener_only_while_valid():
     schedule, shop = _two_opener_dino_case()
     emp = next(e for e in schedule.employees if e.last_name == "OtwA")
     emp = _replace_qualifications(schedule, emp, EmployeeQualification(QUAL_OPENER, valid_to=date(2026, 10, 10)))
-    # Walidacja siatki czyta godziny otwarcia z poziomu projektu
-    # (shop.get_open_hours_for_day), nie z placówki. 9.10 - piątek (ważna),
-    # 12.10 - poniedziałek (po dacie ważności).
+    # Walidacja siatki czyta godziny otwarcia placówki pracownika (jak
+    # generator). 9.10 - piątek (ważna), 12.10 - poniedziałek (po dacie ważności).
     for day in (9, 12):
-        schedule.get_day(emp, day).set_hours(shop.get_open_hours_for_day(day)[0], "14:30")
+        schedule.get_day(emp, day).set_hours(shop.get_location(emp).get_open_hours_for_day(day)[0], "14:30")
 
     assert opening_closing_stats(schedule, shop, 9, "open")["has_opener"]
     assert not opening_closing_stats(schedule, shop, 12, "open")["has_opener"]
+
+
+def test_grid_uses_location_hours_not_project_hours():
+    """Godziny edytowane per placówka (nowe okno Konfiguracji) trafiają tylko
+    do LocationConfig - siatka ma liczyć otwarcie wg nich, jak generator."""
+    from model.constraints import opening_closing_stats
+
+    schedule, shop = _two_opener_dino_case()
+    emp = next(e for e in schedule.employees if e.last_name == "OtwA")
+    location_open = shop.get_location(emp).get_open_hours_for_day(9)[0]
+    assert location_open != shop.get_open_hours_for_day(9)[0]  # przypadek z błędu
+    schedule.get_day(emp, 9).set_hours(location_open, "14:30")
+    assert opening_closing_stats(schedule, shop, 9, "open")["count"] == 1
 
 
 def test_grid_meat_coverage_uses_level_valid_that_day():
@@ -166,7 +178,7 @@ def test_grid_meat_coverage_uses_level_valid_that_day():
         schedule, emp, EmployeeQualification(QUAL_MEAT, MEAT_LEVEL_FULL, valid_to=date(2026, 10, 10)),
     )
     for day in (9, 12):
-        schedule.get_day(emp, day).set_hours(*shop.get_open_hours_for_day(day))
+        schedule.get_day(emp, day).set_hours(*shop.get_location(emp).get_open_hours_for_day(day))
 
     assert meat_coverage(schedule, shop, 9)["ok"]
     assert not meat_coverage(schedule, shop, 12)["ok"]

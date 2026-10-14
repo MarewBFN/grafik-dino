@@ -28,6 +28,11 @@ def get_allowed_shifts_for_day(
     # brak preferencji → wszystko dozwolone
     if not rules:
         return None
+    # Jedno okno zapisane bez listy ({"start", "end", "mode"}) - ten sam
+    # kształt, który przyjmuje Employee.validate(); wcześniej iteracja po
+    # kluczach słownika przerywała generowanie.
+    if isinstance(rules, dict):
+        rules = [rules]
 
     hours = location.get_open_hours_for_day(day)
     if not hours:

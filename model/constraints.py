@@ -92,6 +92,11 @@ class MinStaffRule(Rule):
 
             stats = opening_closing_stats(schedule, shop, day, self.mode)
 
+            # Wszystkie placówki zamknięte - generator też pomija ten dzień
+            # (model.staffing_rules.staffing_days).
+            if stats.get("closed"):
+                continue
+
             if stats["count"] < self.minimum:
 
                 results.append(
@@ -293,16 +298,23 @@ def opening_closing_stats(
     day: int,
     mode: str  # "open" | "close"
 ) -> dict:
-    open_hours = shop.get_open_hours_for_day(day)
-    if not open_hours:
-        return {"count": 0, "has_opener": False}
-
-    target_time = open_hours[0] if mode == "open" else open_hours[1]
-
+    """Ile osób zaczyna (open) / kończy (close) pracę o godzinie otwarcia /
+    zamknięcia SWOJEJ placówki - tak jak generator, którego zmiany OPEN/CLOSE
+    są zakotwiczone przy godzinach placówki pracownika (shop.get_location),
+    a nie przy godzinach z poziomu projektu (te nie widzą godzin edytowanych
+    per placówka, DINO_REGRESSION_AUDIT.md punkt 3). "closed" = placówki
+    wszystkich pracowników są tego dnia zamknięte."""
     count = 0
     has_opener = False
+    any_open = not schedule.employees and bool(shop.get_open_hours_for_day(day))
 
     for emp in schedule.employees:
+        open_hours = shop.get_location(emp).get_open_hours_for_day(day)
+        if not open_hours:
+            continue
+        any_open = True
+        target_time = open_hours[0] if mode == "open" else open_hours[1]
+
         ds = schedule.get_day(emp, day)
         if ds.is_empty():
             continue
@@ -313,7 +325,7 @@ def opening_closing_stats(
             if is_opener_on(emp, schedule.year, schedule.month, day):
                 has_opener = True
 
-    return {"count": count, "has_opener": has_opener}
+    return {"count": count, "has_opener": has_opener, "closed": not any_open}
 
 
 # ==================================================
@@ -351,7 +363,11 @@ def meat_coverage(schedule, shop, day: int) -> dict:
     "light_ranges", żeby UI mogło to zaznaczyć jako ostrzeżenie, nie sukces.
     """
 
-    open_hours = shop.get_open_hours_for_day(day)
+    # Te same godziny co generator (meat_constraint.add_meat_coverage_constraint):
+    # placówka pracownika, nie poziom projektu - mięso to funkcja Dino, w
+    # praktyce jednej placówki.
+    hours_location = shop.get_location(schedule.employees[0]) if schedule.employees else shop
+    open_hours = hours_location.get_open_hours_for_day(day)
     if not open_hours:
         return {"ok": True, "gap": None, "light_ranges": []}
 

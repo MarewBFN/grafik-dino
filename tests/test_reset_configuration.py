@@ -162,7 +162,7 @@ class ResetConfigurationTests(unittest.TestCase):
                     "locations_tutorial_seen.flag": "seen",
                     "quick_mode_tutorial_seen.flag": "seen",
                     "license.json": '{"key": "ABC-123"}',
-                    "machine_id.json": '{"id": "xyz"}',
+                    "machine_id.json": '{"node": "xyz"}',
                     "demo.json": '{"generations_used": 3}',
                 }
                 for name, content in untouched_files.items():

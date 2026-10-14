@@ -2644,8 +2644,10 @@ class MainWindow(QMainWindow):
         try:
             start = datetime.strptime(self.start_input.get_time_str(), fmt)
             end = datetime.strptime(self.end_input.get_time_str(), fmt)
-        except:
-            self.quick_duration_label.setText(f"Czas pracy: {h}:{m:02d}")
+        except ValueError:
+            # Niepełna/niepoprawna godzina w trakcie wpisywania - wcześniej
+            # ta gałąź używała niezdefiniowanych h/m (NameError).
+            self.quick_duration_label.setText("Czas pracy: –")
             return
 
         minutes = int((end - start).total_seconds() / 60)
