@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from typing import Dict
 
 from model.day_schedule import DaySchedule
-from model.employee import PERSONAL_DATA_FIELDS, Employee
+from model.employee import PERSONAL_DATA_FIELDS, Employee, legacy_employee_id
 from model.qualification import (
     EmployeeQualification,
     is_legacy_employee_data,
@@ -322,6 +322,7 @@ class MonthSchedule:
             "is_generated": getattr(self, "is_generated", False),
             "employees": [
                 {
+                    "id": e.id,
                     "first_name": e.first_name,
                     "last_name": e.last_name,
                     "no_night": e.no_night,
@@ -376,6 +377,8 @@ class MonthSchedule:
 
         for ed in data["employees"]:
             emp = Employee(
+                # Pliki sprzed zapisywania ID - stałe ID z imienia i nazwiska.
+                id=ed.get("id") or legacy_employee_id(ed["last_name"], ed["first_name"]),
                 last_name=ed["last_name"],
                 first_name=ed["first_name"],
                 no_night=ed.get("no_night", False),

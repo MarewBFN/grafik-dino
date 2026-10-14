@@ -271,9 +271,14 @@ class EmployeeDialog(QDialog):
     def __init__(
         self, parent=None, employee=None, shop_config=None, default_location_key=None,
         expand_contact=False, focus_field=None, companies=None, qualifications=None,
+        existing_employees=None,
     ):
         super().__init__(parent)
         self.employee = employee
+        # Pozostali pracownicy grafiku - do pytania przy powtórzonym imieniu i
+        # nazwisku (tożsamością jest stałe Employee.id, więc dwie osoby o tym
+        # samym imieniu i nazwisku są dozwolone, ale zwykle to pomyłka).
+        self.existing_employees = list(existing_employees or ())
         # Firmy z Plik -> "Dane firmy" (MonthlyProject.companies) do kombo
         # "Firma" w sekcji Zaawansowane.
         self.companies = companies or {}
@@ -851,7 +856,12 @@ class EmployeeDialog(QDialog):
         location_key = self.location_combo.currentData() if self.location_combo is not None else ""
 
         try:
-            emp = Employee(
+            # Edycja: dataclasses.replace na dotychczasowym pracowniku - to,
+            # czego okno nie edytuje (stałe id, dostępność, daily_hours),
+            # zostaje. Wcześniej powstawał nowy obiekt i każda edycja gubiła
+            # dostępność oraz tożsamość pracownika.
+            build = (lambda **fields: dataclasses.replace(self.employee, **fields)) if self.employee else Employee
+            emp = build(
                 last_name=ln,
                 first_name=fn,
                 monthly_target_hours=self.monthly_target_hours.value(),
@@ -870,6 +880,18 @@ class EmployeeDialog(QDialog):
             emp.validate()
         except Exception as exc:
             QMessageBox.critical(self, "Błąd", str(exc))
+            return
+
+        same_name = [
+            other for other in self.existing_employees
+            if other.id != emp.id and other.display_name().casefold() == emp.display_name().casefold()
+        ]
+        if same_name and QMessageBox.question(
+            self, "Ta sama osoba?",
+            f"W grafiku jest już pracownik „{emp.display_name()}”.\n\n"
+            "Zapisać jako drugą, osobną osobę o tym samym imieniu i nazwisku?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        ) != QMessageBox.Yes:
             return
 
         merge_catalog(self.catalog, [

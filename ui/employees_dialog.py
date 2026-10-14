@@ -308,14 +308,11 @@ class EmployeesDialog(QDialog):
         if self.on_changed is not None:
             self.on_changed(message)
 
-    def _name_taken(self, old, new) -> bool:
-        return new != old and new in self.schedule.employees
-
     def _add_employee(self):
         dialog = EmployeeDialog(
             self, shop_config=self.shop_config, default_location_key=self.default_location_key,
             companies=self.companies,
-            qualifications=self.qualifications,
+            qualifications=self.qualifications, existing_employees=self.schedule.employees,
         )
         if dialog.exec() != QDialog.Accepted:
             return
@@ -330,7 +327,7 @@ class EmployeesDialog(QDialog):
         dialog = EmployeeDialog(
             self, employee=emp, shop_config=self.shop_config,
             expand_contact=expand_contact, focus_field=focus_field, companies=self.companies,
-            qualifications=self.qualifications,
+            qualifications=self.qualifications, existing_employees=self.schedule.employees,
         )
         if dialog.exec() != QDialog.Accepted:
             return
@@ -341,11 +338,8 @@ class EmployeesDialog(QDialog):
         self._replace(emp, dialog.employee_result, "Zapisano pracownika.")
 
     def _replace(self, old, new, message):
-        # replace_employee usuwa starego przed dodaniem nowego - kolizja
-        # imienia i nazwiska zgubiłaby jego grafik, więc sprawdzamy wcześniej.
-        if self._name_taken(old, new):
-            QMessageBox.critical(self, "Błąd", f"Pracownik „{new.display_name()}” już istnieje.")
-            return
+        # Dane pracownika są kluczowane jego stałym id - powtórzone imię i
+        # nazwisko niczego nie nadpisze (pyta o nie EmployeeDialog).
         self.controller.replace_employee(old, new)
         self._changed(message)
 

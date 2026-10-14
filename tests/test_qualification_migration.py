@@ -13,7 +13,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from model.employee import Employee
+from model.employee import Employee, legacy_employee_id
 from model.qualification import (
     MEAT_LEVEL_FULL,
     MEAT_LEVEL_LIGHT,
@@ -130,6 +130,7 @@ def _strip_new(document):
     document.pop("format_version", None)
     for employee in document["schedule"]["employees"]:
         employee.pop("qualifications")
+        employee.pop("id")  # stałe ID pracownika (F1) - nowe pole
     return document
 
 
@@ -164,6 +165,9 @@ class GoldenProjectsRoundtripTests(unittest.TestCase):
                 saved = json.loads(copy_path.read_text(encoding="utf-8"))
 
                 self.assertEqual(saved["format_version"], FORMAT_VERSION)
+                # Stare pliki nie mają ID - dostaje stałe ID z imienia i nazwiska.
+                for employee in saved["schedule"]["employees"]:
+                    self.assertEqual(employee["id"], legacy_employee_id(employee["last_name"], employee["first_name"]))
                 expected = copy.deepcopy(original)
                 expected["schedule"]["employees"] = [_strip_legacy(e) for e in expected["schedule"]["employees"]]
                 self.assertEqual(_strip_new(saved), expected)
@@ -174,8 +178,7 @@ class GoldenProjectsRoundtripTests(unittest.TestCase):
                 reloaded, _shop = load_project(copy_path)
                 for before, after in zip(schedule.employees, reloaded.employees):
                     for field in dataclasses.fields(Employee):
-                        if field.name != "id":
-                            self.assertEqual(getattr(after, field.name), getattr(before, field.name), field.name)
+                        self.assertEqual(getattr(after, field.name), getattr(before, field.name), field.name)
 
 
 LEGACY_BUNDLE = {

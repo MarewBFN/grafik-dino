@@ -1563,6 +1563,7 @@ class MainWindow(QMainWindow):
         dialog = EmployeeDialog(
             self, shop_config=self.shop_config, default_location_key=self.selected_location_key,
             companies=self.project.companies, qualifications=self.project.qualifications,
+            existing_employees=self.schedule.employees,
         )
 
         if dialog.exec() != QDialog.Accepted:
@@ -1589,7 +1590,7 @@ class MainWindow(QMainWindow):
     def _edit_employee(self, emp):
         dialog = EmployeeDialog(
             self, employee=emp, shop_config=self.shop_config, companies=self.project.companies,
-            qualifications=self.project.qualifications,
+            qualifications=self.project.qualifications, existing_employees=self.schedule.employees,
         )
         if dialog.exec() != QDialog.Accepted:
             return

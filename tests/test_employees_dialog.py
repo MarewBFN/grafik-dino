@@ -202,18 +202,27 @@ def test_double_click_on_name_column_opens_dialog_without_expanding_contact(monk
     assert seen["expanded"] is False
 
 
-def test_advanced_rename_to_existing_employee_is_refused(monkeypatch):
+def test_rename_to_existing_name_keeps_both_people_and_their_days(monkeypatch):
+    """Tożsamością jest stałe Employee.id - zmiana nazwiska na już istniejące
+    nie nadpisuje grafiku drugiej osoby (dawniej blokowane, bo słowniki
+    grafiku były kluczowane imieniem i nazwiskiem). O powtórzone imię i
+    nazwisko pyta EmployeeDialog."""
+    import dataclasses
+
     jan = Employee(last_name="Kowalski", first_name="Jan")
     anna = Employee(last_name="Nowak", first_name="Anna")
     shop, controller = _setup(jan, anna)
+    controller.schedule.get_day(jan, 3).set_hours("06:00", "14:00")
+    controller.schedule.get_day(anna, 3).set_hours("14:00", "22:00")
     dialog = EmployeesDialog(None, controller, shop)
-    errors = []
-    monkeypatch.setattr(module.QMessageBox, "critical", lambda *a, **k: errors.append(a))
 
-    dialog._replace(jan, Employee(last_name="Nowak", first_name="Anna"), "x")
+    renamed = dataclasses.replace(jan, last_name="Nowak", first_name="Anna")
+    dialog._replace(jan, renamed, "x")
 
-    assert errors
-    assert len(controller.schedule.employees) == 2
+    schedule = controller.schedule
+    assert len(schedule.employees) == 2
+    assert schedule.get_day(renamed, 3).start == "06:00"
+    assert schedule.get_day(anna, 3).start == "14:00"
 
 
 def test_delete_asks_and_removes(monkeypatch):

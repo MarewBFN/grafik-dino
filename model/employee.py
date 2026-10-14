@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from functools import total_ordering
 import re
 import uuid
 from datetime import date
@@ -7,10 +8,27 @@ from typing import Dict
 # Pola danych osobowych - patrz Employee.phone itd. niżej.
 PERSONAL_DATA_FIELDS = ("phone", "email", "street", "postal_code", "city")
 
-@dataclass(order=True, frozen=True)
+_LEGACY_ID_NAMESPACE = uuid.UUID("5f0c7d2e-6a1b-4c3d-9e8f-0a1b2c3d4e5f")
+
+
+def legacy_employee_id(last_name: str, first_name: str) -> str:
+    """Stałe ID pracownika z pliku sprzed zapisywania ID - wyliczane z imienia
+    i nazwiska, więc ta sama osoba dostaje to samo ID w każdym miesiącu
+    projektu i przy każdym wczytaniu (dawniej tożsamością było właśnie
+    imię i nazwisko). Po pierwszym zapisie ID jest już w pliku."""
+    return str(uuid.uuid5(_LEGACY_ID_NAMESPACE, f"{last_name}\x1f{first_name}"))
+
+
+@total_ordering
+@dataclass(frozen=True, eq=False)
 class Employee:
     """
     Reprezentuje jednego pracownika.
+
+    Tożsamość = stałe `id` (zapisywane w pliku): równość i hash liczą się z
+    niego, więc zmiana nazwiska nie zrywa ciągłości między miesiącami, a dwie
+    osoby o tym samym imieniu i nazwisku są dwiema osobami. Kolejność
+    (sortowanie) - alfabetycznie po nazwisku i imieniu.
 
     frozen=True:
     - obiekt jest hashowalny
@@ -66,6 +84,19 @@ class Employee:
     # należy pracownik - EmployeeDialog -> "Zaawansowane". Używane tylko w
     # nagłówku wniosków urlopowych. Puste = nie wybrano.
     company_key: str = field(default="", compare=False)
+
+    def __eq__(self, other):
+        if not isinstance(other, Employee):
+            return NotImplemented
+        return self.id == other.id
+
+    def __hash__(self):
+        return hash(self.id)
+
+    def __lt__(self, other):
+        if not isinstance(other, Employee):
+            return NotImplemented
+        return (self.last_name, self.first_name, self.id) < (other.last_name, other.first_name, other.id)
 
     def display_name(self) -> str:
         # Imię jest opcjonalne (patrz validate()) - bez niego samo
