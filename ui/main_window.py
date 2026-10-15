@@ -56,6 +56,7 @@ from persistence.project_io import (
     assign_missing_location_keys,
     load_project_bundle,
     save_project_bundle,
+    unknown_business_types,
 )
 from ui.config_dialog import ConfigDialog
 from ui.locations_dialog import LocationsDialog
@@ -1990,6 +1991,24 @@ class MainWindow(QMainWindow):
         self._set_date_controls(self.year, self.month)
         self._update_nominal_hours_label()
         self._sync_everything()
+        self._warn_unknown_profiles()
+
+    def _warn_unknown_profiles(self):
+        """Stary plik z profilem custom, którego nie ma na tym komputerze -
+        takie miesiące działają wg profilu Dino (get_profile); mówimy o tym
+        zamiast robić to po cichu. Nowe pliki niosą kopię profilu
+        (persistence.project_io.embedded_profiles)."""
+        unknown = unknown_business_types(self.project)
+        if not unknown:
+            return
+        names = ", ".join(f"„{key}”" for key in unknown)
+        QTimer.singleShot(0, lambda: QMessageBox.warning(
+            self, "Brak profilu działalności",
+            f"Projekt używa profilu działalności, którego nie ma na tym komputerze: {names}.\n\n"
+            "Te miesiące działają teraz według zasad profilu „Sklep (Dino)”. Profil wróci, gdy "
+            "otworzysz ten projekt zapisany w nowej wersji programu na komputerze, który go ma - "
+            "plik niesie wtedy kopię profilu.",
+        ))
 
     def _open_project_from_path(self, path) -> bool:
         """Load a project passed on the command line - e.g. Windows launching

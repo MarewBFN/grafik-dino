@@ -53,11 +53,64 @@ def backup_legacy_file(path) -> str | None:
     return backup_path
 
 
+def embedded_profiles(shop_configs) -> list[dict]:
+    """Definicje profili custom używanych przez miesiące projektu - zapisywane
+    w pliku projektu, żeby projekt otwierał się tak samo na każdym komputerze
+    (definicja profilu żyje poza projektem, w %LOCALAPPDATA%)."""
+    from model.business_profile import get_custom_profile
+
+    result, seen = [], set()
+    for shop_config in shop_configs:
+        key = shop_config.business_type
+        custom = get_custom_profile(key)
+        if custom is not None and key not in seen:
+            seen.add(key)
+            result.append(custom.to_dict())
+    return result
+
+
+def restore_embedded_profiles(profile_dicts) -> list[str]:
+    """Profile z pliku projektu, których nie ma na tym komputerze: rejestruje
+    je i dopisuje do biblioteki profili. Profil, który już jest na komputerze,
+    wygrywa (zmiany z kreatora obowiązują wszystkie projekty z tym profilem;
+    projekt dostaje jego aktualną kopię przy zapisie). Zwraca klucze
+    przywróconych profili."""
+    from model.business_profile import get_custom_profile, register_custom_profile
+    from model.custom_profile import CustomBusinessProfile
+    from model.custom_profile_store import save_custom_profile
+
+    restored = []
+    for data in profile_dicts or ():
+        profile = CustomBusinessProfile.from_dict(data)
+        if get_custom_profile(profile.key) is not None:
+            continue
+        register_custom_profile(profile)
+        try:
+            save_custom_profile(profile)
+        except OSError:
+            pass  # zarejestrowany na tę sesję; zapis do biblioteki się nie udał
+        restored.append(profile.key)
+    return restored
+
+
+def unknown_business_types(project: MonthlyProject) -> list[str]:
+    """Klucze profili użytych w projekcie, których program nie zna (stary
+    plik z profilem custom z innego komputera) - takie miesiące działają wg
+    profilu Dino (get_profile), więc UI ostrzega zamiast robić to po cichu."""
+    from model.business_profile import BUSINESS_PROFILES
+
+    return sorted({
+        shop_config.business_type for _schedule, shop_config in project.months.values()
+        if shop_config.business_type not in BUSINESS_PROFILES
+    })
+
+
 def save_project(path, schedule: MonthSchedule, shop_config: ShopConfig):
     data = {
         "format_version": FORMAT_VERSION,
         "schedule": schedule.to_dict(),
-        "shop_config": shop_config.to_dict()
+        "shop_config": shop_config.to_dict(),
+        "custom_profiles": embedded_profiles([shop_config]),
     }
 
     backup_legacy_file(path)
@@ -69,6 +122,7 @@ def load_project(path):
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
+    restore_embedded_profiles(data.get("custom_profiles"))
     schedule = MonthSchedule.from_dict(data["schedule"])
     shop_config = ShopConfig.from_dict(data["shop_config"])
     assign_missing_location_keys(schedule, shop_config)
@@ -91,9 +145,8 @@ def assign_missing_location_keys(schedule: MonthSchedule, shop_config: ShopConfi
     # zmienić location_key w miejscu, trzeba podmienić element listy na kopię
     # z dataclasses.replace(). Bezpieczne dla MonthSchedule._data/settlement_targets
     # (słowniki kluczowane obiektem Employee): __eq__/__hash__ Employee liczy
-    # się tylko z last_name/first_name (patrz model/employee.py - reszta pól
-    # ma compare=False), więc kopia z inną location_key nadal trafia w ten
-    # sam wpis słownika co oryginał.
+    # się ze stałego id (patrz model/employee.py), które replace() zachowuje,
+    # więc kopia z inną location_key nadal trafia w ten sam wpis słownika.
     fallback_key = next(iter(shop_config.locations))
     migrated = getattr(shop_config, "_migrated_default_location", False)
     for i, emp in enumerate(schedule.employees):
@@ -139,6 +192,7 @@ def save_project_bundle(path, project: MonthlyProject, active_year: int, active_
         },
         "companies": [company.to_dict() for company in project.companies.values()],
         "qualifications": [qualification.to_dict() for qualification in project.qualifications.values()],
+        "custom_profiles": embedded_profiles(shop_config for _schedule, shop_config in project.months.values()),
     }
 
     backup_legacy_file(path)
@@ -157,6 +211,9 @@ def load_project_bundle(path) -> tuple[MonthlyProject, int, int]:
         data = json.load(f)
 
     project = MonthlyProject()
+    # Przed katalogiem kwalifikacji - ensure_qualification_catalog bierze
+    # domyślne kwalifikacje z profilu.
+    restore_embedded_profiles(data.get("custom_profiles"))
 
     if data.get("format") != _BUNDLE_FORMAT_MARKER:
         schedule = MonthSchedule.from_dict(data["schedule"])

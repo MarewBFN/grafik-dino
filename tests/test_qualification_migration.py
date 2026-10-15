@@ -128,6 +128,7 @@ def _strip_legacy(employee_dict):
 def _strip_new(document):
     document = copy.deepcopy(document)
     document.pop("format_version", None)
+    document.pop("custom_profiles", None)  # kopia profilu custom w pliku (F1.2) - nowe pole
     for employee in document["schedule"]["employees"]:
         employee.pop("qualifications")
         employee.pop("id")  # stałe ID pracownika (F1) - nowe pole
