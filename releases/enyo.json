@@ -1,5 +1,5 @@
 {
-  "latest_version": "1.1.7.enyo",
-  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.1.7-enyo/EnyoSetup.exe",
-  "changelog": "Pol dnia urlopu: przycisk 0,5 urlopu w trybie szybkim, menu pod prawym przyciskiem i oknie dnia; na wniosku liczba dni (np. 1,5 dnia). Pula urlopu wspolna dla wszystkich miesiecy projektu - nie rozjezdza sie przy przechodzeniu miedzy miesiacami. Wniosek wraca do wydruku po zmianie liczby dni w tym samym okresie. Zmiana szerokosci kolumny pracownikow nie zostawia pustej przerwy."
+  "latest_version": "1.1.8.enyo",
+  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.1.8-enyo/EnyoSetup.exe",
+  "changelog": "- Wyczyść grafik i Wyczyść auto działają tylko na wybranej placówce, okno potwierdzenia podaje jej nazwę\n- Okno aktualizacji pokazuje zmiany jako listę punktów, a pytanie o instalację pod nimi"
 }
