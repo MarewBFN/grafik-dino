@@ -2240,6 +2240,23 @@ class MainWindow(QMainWindow):
         self._sync_everything()
         self.statusBar().showMessage("Ponowiono zmianę.", 2500)
 
+    def _selected_location_employees(self) -> list:
+        """Pracownicy obecnie wybranej placówki - "Wyczyść grafik"/"Wyczyść
+        auto" nie mogą dotykać pozostałych placówek projektu (tak samo jak
+        _generate_schedule). Projekt bez zdefiniowanych lokalizacji -> cały
+        projekt, jak dotychczas."""
+        location_key = self.selected_location_key
+        if not self.shop_config or not self.shop_config.locations or location_key is None:
+            return list(self.schedule.employees)
+        return [e for e in self.schedule.employees if e.location_key == location_key]
+
+    def _selected_location_suffix(self) -> str:
+        locations = self.shop_config.locations if self.shop_config else {}
+        location = locations.get(self.selected_location_key)
+        if len(locations) < 2 or not location:
+            return ""
+        return f" placówki „{location.name}”"
+
     def _clear_schedule(self):
         if not self.schedule or not self.controller:
             return
@@ -2247,7 +2264,7 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(
             self,
             "Potwierdzenie",
-            "Czy na pewno chcesz skasować wszystkie dane na grafiku?",
+            f"Czy na pewno chcesz skasować wszystkie dane na grafiku{self._selected_location_suffix()}?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -2257,7 +2274,7 @@ class MainWindow(QMainWindow):
 
         self.controller.snapshot()
 
-        for emp in self.schedule.employees:
+        for emp in self._selected_location_employees():
             for day in range(1, self.schedule.days_in_month + 1):
                 ds = self.schedule.get_day(emp, day)
 
@@ -2268,7 +2285,7 @@ class MainWindow(QMainWindow):
                 ds.is_sick = False
                 ds.is_locked = False
 
-        self.schedule.settlement_targets.clear()
+            self.schedule.settlement_targets.pop(emp, None)
 
         self._sync_everything()
         self.statusBar().showMessage("Wyczyszczono grafik.", 2500)
@@ -2704,7 +2721,7 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(
             self,
             "Potwierdzenie",
-            "Usunąć tylko zmiany wygenerowane automatycznie?",
+            f"Usunąć tylko zmiany wygenerowane automatycznie{self._selected_location_suffix()}?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -2714,7 +2731,7 @@ class MainWindow(QMainWindow):
 
         self.controller.snapshot()
 
-        for emp in self.schedule.employees:
+        for emp in self._selected_location_employees():
             for day in range(1, self.schedule.days_in_month + 1):
                 ds = self.schedule.get_day(emp, day)
 
