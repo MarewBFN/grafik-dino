@@ -223,6 +223,18 @@ STANDARD_QUICK_BUTTONS: tuple[dict, ...] = (
         "description": "Oznacza dzień jako zwolnienie chorobowe.",
         "default_visible": lambda business_type: True,
     },
+    {
+        "key": "paid_off",
+        "label": "Wolne płatne",
+        "description": (
+            "Dzień wolny za święto, za który firma płaci (na grafiku „WP”) - "
+            "pracownika nie ma w pracy, ale do czasu pracy liczy się zawsze 8 h, "
+            "w każdej placówce. Generator go nie uwzględnia: traktuje komórkę "
+            "jak pustą i nadpisuje ją przy generowaniu - wpisuj WP ręcznie, po "
+            "wygenerowaniu grafiku."
+        ),
+        "default_visible": lambda business_type: True,
+    },
 )
 
 STANDARD_QUICK_BUTTON_KEYS = tuple(b["key"] for b in STANDARD_QUICK_BUTTONS)

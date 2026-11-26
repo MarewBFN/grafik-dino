@@ -12,6 +12,8 @@ Zasady (potwierdzone przez klienta):
   flagi "nie_chce_24h" - oni i tak nigdy jej nie dostają, więc nie powinni
   wydłużać cyklu odpoczynku tym, którzy faktycznie rotują). Nigdy mniej
   niż 24h nawet przy N<=1 (dolna granica, klient: "nie mniej niż 24h").
+  Przy „Ilości osób na obłożeniu” H > 1 placówki N to N // H (rotują
+  H-osobowe składy).
 
 Gdy lokalizacja ma `duty_rotation["only_12_24h"]` (toggle "Używaj tylko
 zmian 12/24h" w Konfiguracji), powyższe zasady dla weekend_full/half_a/
@@ -42,6 +44,7 @@ from logic.generator.duty_rotation_manual_coverage import (
     get_plan,
     window_offsets,
 )
+from model.location import coverage_staff_for
 
 MIN_REST = timedelta(hours=11)
 FMT = "%H:%M"
@@ -181,6 +184,12 @@ def add_duty_rotation_rest_constraint(model, x, employees, days, shop, duty_shif
         rotation_capable_count = sum(
             1 for e in indices if not employees[e].custom_roles.get(NIE_CHCE_24H_ROLE_KEY, False)
         )
+        # „Ilość osób na obłożeniu” N > 1: dobę pełni naraz N osób, więc
+        # „doba za dobę” rotuje N-osobowymi składami - cykl to N_24h // N
+        # (np. 4 osoby po 2 na dobę = 24h pracy, 24h odpoczynku).
+        staff = coverage_staff_for(shop, location_key)
+        if staff > 1:
+            rotation_capable_count //= staff
         max_required = _required_rest("weekend_full", rotation_capable_count)
         # +2 dni marginesu na przesunięcia z zaokrąglania godzin/zmian
         # przechodzących przez północ - taniej sprawdzić kilka dni za dużo

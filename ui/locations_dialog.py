@@ -25,7 +25,13 @@ from ui.slug import slugify
 from ui.time_input import TimeInputWidget
 from ui.tutorial_overlay import TutorialOverlay, TutorialStep
 from ui.weekly_hours_editor import WeeklyHoursEditor
-from model.location import DEFAULT_LOCATION_CONSTRAINTS, LocationConfig
+from model.location import (
+    COVERAGE_STAFF_KEY,
+    DEFAULT_COVERAGE_STAFF,
+    DEFAULT_LOCATION_CONSTRAINTS,
+    MAX_COVERAGE_STAFF,
+    LocationConfig,
+)
 
 LOCATIONS_TUTORIAL_FLAG = "locations_tutorial_seen.flag"
 
@@ -69,6 +75,7 @@ class _LocationRow(QFrame):
         original_key=None, duty_rotation=None, round_clock_start_hour=None,
         closed_on_public_holidays=True, show_preferred_shifts=False,
         preferred_shifts_enabled=False, preferred_shifts=None,
+        coverage_staff=None,
     ):
         super().__init__()
         self.setObjectName("configCard")
@@ -138,6 +145,23 @@ class _LocationRow(QFrame):
             "zaawansowane."
         )
         consecutive_row.addWidget(self.max_consecutive_spin)
+
+        # „Ilość osób na obłożeniu” (LocationConfig.constraints[COVERAGE_STAFF_KEY],
+        # domyślnie 1) - ile osób pilnuje placówki jednocześnie, w tych
+        # samych godzinach (generator + wiersz „Obłożenie”).
+        consecutive_row.addSpacing(18)
+        consecutive_row.addWidget(QLabel("Ilość osób na obłożeniu:"))
+        self.coverage_staff_spin = QSpinBox()
+        self.coverage_staff_spin.setRange(1, MAX_COVERAGE_STAFF)
+        self.coverage_staff_spin.setFixedWidth(60)
+        self.coverage_staff_spin.setValue(int(coverage_staff or DEFAULT_COVERAGE_STAFF))
+        self.coverage_staff_spin.setToolTip(
+            "Ile osób pracuje w tej placówce jednocześnie, w tych samych godzinach. "
+            "1 = jedna osoba na zmianie (jak dotąd); 2 = generator obsadza każdą "
+            "zmianę dwiema osobami naraz, a wiersz „Obłożenie” pod grafikiem "
+            "sprawdza, czy w każdej chwili pracują dokładnie 2 osoby."
+        )
+        consecutive_row.addWidget(self.coverage_staff_spin)
         consecutive_row.addStretch()
         outer.addLayout(consecutive_row)
 
@@ -293,7 +317,10 @@ class _LocationRow(QFrame):
         return self.name_edit.text().strip()
 
     def constraints_overrides(self) -> dict:
-        overrides = {"max_consecutive_days": self.max_consecutive_spin.value()}
+        overrides = {
+            "max_consecutive_days": self.max_consecutive_spin.value(),
+            COVERAGE_STAFF_KEY: self.coverage_staff_spin.value(),
+        }
         for rule_key, spin in self.rule_spins.items():
             if spin.value():
                 overrides[rule_key] = spin.value()
@@ -388,6 +415,7 @@ class LocationsDialog(QDialog):
             self._add_location_row(
                 loc.name, dict(loc.open_hours), is_24_7=loc.is_24_7,
                 max_consecutive_days=loc.constraints.get("max_consecutive_days"),
+                coverage_staff=loc.constraints.get(COVERAGE_STAFF_KEY),
                 rule_overrides=loc.constraints,
                 original_key=key,
                 duty_rotation=loc.duty_rotation,
@@ -429,11 +457,12 @@ class LocationsDialog(QDialog):
         max_consecutive_days=None, rule_overrides=None, original_key=None,
         duty_rotation=None, round_clock_start_hour=None,
         closed_on_public_holidays=True, preferred_shifts_enabled=False,
-        preferred_shifts=None,
+        preferred_shifts=None, coverage_staff=None,
     ):
         row = _LocationRow(
             self._remove_location_row, name, open_hours, is_24_7=is_24_7,
             max_consecutive_days=max_consecutive_days,
+            coverage_staff=coverage_staff,
             rule_defs=self._location_rule_defs,
             rule_overrides=rule_overrides,
             original_key=original_key,
@@ -603,7 +632,7 @@ class LocationsDialog(QDialog):
                     # -> Zasady generatora -> ustawienia zaawansowane, np. tryb
                     # odpoczynku, maks. obsada naraz) - też bez UI w tym oknie.
                     loc.constraint_policies = old.constraint_policies
-                    managed = {"max_consecutive_days", *row.rule_spins}
+                    managed = {"max_consecutive_days", COVERAGE_STAFF_KEY, *row.rule_spins}
                     for name, value in old.constraints.items():
                         if name not in managed:
                             loc.constraints.setdefault(name, value)

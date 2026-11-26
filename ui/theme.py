@@ -23,6 +23,8 @@ ERR_RED = "#ffd0cf"
 SHIFT_MORNING = "#dbeafe"
 SHIFT_CLOSE = "#ede9fe"
 SHIFT_NIGHT = "#c7d2fe"
+# „Wolne płatne” (WP) - dzień wolny za święto, płatny 8 h.
+PAID_OFF = "#fde68a"
 TEXT_MAIN = "#1f2937"
 TEXT_MUTED = "#6b7280"
 GRID_BORDER = "#cbd5e1"

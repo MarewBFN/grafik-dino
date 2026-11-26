@@ -778,8 +778,9 @@ class ConfigDialog(QDialog):
         )))
         self.max_staff.setToolTip(
             "Ile osób z jednej placówki z godzinami otwarcia (bez rotacji 24/7) "
-            "może pracować jednocześnie. Tryb ustawiasz przy zasadzie "
-            "„Maks. obsada naraz” niżej."
+            "może pracować jednocześnie - nigdy mniej niż „Ilość osób na "
+            "obłożeniu” placówki (Konfiguracja → Lokalizacje). Tryb ustawiasz "
+            "przy zasadzie „Maks. obsada naraz” niżej."
         )
         if profile_uses_opening_hours_model(self.shop_config.business_type):
             location_form.addRow("Maks. osób naraz w placówce:", self.max_staff)

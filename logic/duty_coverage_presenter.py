@@ -6,7 +6,8 @@ specyfikacji klienta).md", sekcja 12).
 
 Sprawdza faktyczne pokrycie doby w czasie (2026-09-25): od początku doby
 rotacji tego dnia do początku doby następnego dnia w każdej chwili musi
-pracować DOKŁADNIE jedna osoba placówki - niezależnie od tego, czy zmiany
+pracować DOKŁADNIE jedna osoba placówki (dokładnie N przy „Ilości osób na
+obłożeniu” N > 1, okno Lokalizacje) - niezależnie od tego, czy zmiany
 mają standardowe godziny rotacji, czy są ręcznymi wpisami (liczonymi przez
 generator jako pokrycie, patrz logic/generator/duty_rotation_manual_coverage.py).
 Wcześniej wiersz sprawdzał tylko, czy istnieją zmiany o godzinach rotacji,
@@ -18,6 +19,7 @@ powiodło.
 
 from logic.generator.duty_rotation_constraint import group_employees_with_duty_rotation
 from logic.generator.duty_rotation_manual_coverage import DAY_MINUTES, day_anchor, manual_offsets
+from model.location import coverage_staff_for, coverage_staff_from
 
 
 def project_uses_duty_rotation(shop, employees) -> bool:
@@ -49,7 +51,8 @@ def _intervals_around(schedule, employees, indices, day: int) -> list[tuple[int,
     return intervals
 
 
-def _exactly_one_person(intervals, start: int, end: int) -> bool:
+def _exactly_n_persons(intervals, start: int, end: int, staff: int = 1) -> bool:
+    """W każdej chwili [start, end) pracuje dokładnie `staff` osób."""
     points = {start, end}
     for a, b in intervals:
         if a < end and b > start:
@@ -60,7 +63,7 @@ def _exactly_one_person(intervals, start: int, end: int) -> bool:
         if a == b:
             continue
         count = sum(1 for s, e in intervals if s <= a and e >= b)
-        if count != 1:
+        if count != staff:
             return False
     return True
 
@@ -80,9 +83,10 @@ def _opening_hours_groups(shop, employees) -> dict:
 
 def _opening_hours_day_ok(schedule, shop, members, day: int) -> bool:
     """Okno dnia `day` placówki z godzinami otwarcia (np. 15:00-07:00, doba
-    od końca okna dnia poprzedniego) - w każdej chwili co najmniej 1 osoba i
-    nie więcej niż „Maks. obsada naraz” (gdy ta zasada nie jest
-    Wyłączona). Część okna ostatniego dnia po końcu miesiąca należy już do
+    od końca okna dnia poprzedniego) - w każdej chwili co najmniej 1 osoba
+    (N przy „Ilości osób na obłożeniu” N > 1) i nie więcej niż „Maks.
+    obsada naraz” (gdy ta zasada nie jest Wyłączona; nigdy mniej niż N).
+    Część okna ostatniego dnia po końcu miesiąca należy już do
     następnego grafiku. Dzień bez okna (zamknięty) - nic do obsadzenia."""
     from logic.generator.opening_hours_coverage import (
         MAX_STAFF_POLICY,
@@ -98,6 +102,7 @@ def _opening_hours_day_ok(schedule, shop, members, day: int) -> bool:
     # location_windows: dzień 1 00:00 = 0; tutaj (jak _doba) dzień d = d * DAY_MINUTES.
     start = window.start + DAY_MINUTES
     end = min(window.end, schedule.days_in_month * DAY_MINUTES) + DAY_MINUTES
+    staff = coverage_staff_from(view.constraints)
     cap = None
     # Tryb „Maks. obsada naraz” tej placówki (tryby zasad są per placówka).
     if shop.effective_constraint_policies(members[0].location_key).get(MAX_STAFF_POLICY) != ConstraintPolicy.DISABLED:
@@ -123,14 +128,15 @@ def _opening_hours_day_ok(schedule, shop, members, day: int) -> bool:
     ordered = sorted(points)
     for a, b in zip(ordered, ordered[1:]):
         count = sum(1 for s, e in intervals if s <= a and e >= b)
-        if count < 1 or (cap is not None and count > cap):
+        if count < staff or (cap is not None and count > cap):
             return False
     return True
 
 
 def is_day_fully_covered(schedule, shop, employees, day: int) -> bool:
     """True gdy KAŻDA lokalizacja z duty_rotation ma tego dnia w każdej
-    chwili doby rotacji dokładnie jedną osobę w pracy, a każda placówka z
+    chwili doby rotacji dokładnie jedną osobę w pracy (tyle, ile „Ilość osób
+    na obłożeniu” placówki), a każda placówka z
     godzinami otwarcia profilu Ochrony ma obsadzone całe okno dnia (patrz
     _opening_hours_day_ok). Zwraca False, gdy żadna lokalizacja projektu nie
     używa żadnego z tych mechanizmów (wywołujący powinien wtedy w ogóle nie
@@ -157,7 +163,8 @@ def is_day_fully_covered(schedule, shop, employees, day: int) -> bool:
         # niepokryta) bez osobnego warunku - 24h to po prostu 24-godzinny
         # interwał, tak samo jak każdy inny, w _intervals_around/_doba niżej.
         start, end = _doba(shop, rotation, day)
-        if not _exactly_one_person(_intervals_around(schedule, employees, indices, day), start, end):
+        staff = coverage_staff_for(shop, location_key)
+        if not _exactly_n_persons(_intervals_around(schedule, employees, indices, day), start, end, staff):
             return False
 
     return True

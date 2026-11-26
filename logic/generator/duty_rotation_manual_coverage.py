@@ -16,6 +16,8 @@ krótsze niż MIN_PIECE_MINUTES są scalane z sąsiednim kawałkiem, z którym
 się stykają (przykład użytkownika: 10.10 zostaje 19:00-20:00 + 20:00-08:00
 -> jedna zmiana 19:00-08:00; noc 9.10 przycięta do 20:00-07:00). Każdy
 kawałek to osobna "zmiana resztkowa" (custom_0..N) z dokładnie jedną osobą.
+Przy „Ilości osób na obłożeniu” > 1 doba ma tyle "warstw", ile osób naraz,
+a ręczny wpis przycina tylko jedną z nich (_assign_layers).
 Ręczne wpisy są przy tym stałymi przedziałami: liczą się do godzin
 pracownika i do jego odpoczynku względem zmian przydzielanych przez
 generator.
@@ -202,9 +204,32 @@ def _pattern_intervals(shop, rotation, day: int) -> list:
     ]
 
 
-def _plan_location(shop, rotation, location, days, unmatched, matched):
+def _assign_layers(entries, staff: int) -> list:
+    """Ręczne wpisy (abs_start, abs_end) rozdzielone na `staff` "warstw"
+    obłożenia - przy „Ilości osób na obłożeniu” N > 1 każdy ręczny wpis
+    zajmuje tylko jedno z N miejsc, więc standardowy podział doby jest
+    przycinany o niego w jednej warstwie, a pozostałe warstwy zostają pełne.
+    Wpis trafia do pierwszej warstwy, w której nie nachodzi na inny; gdy
+    nachodzi we wszystkich (więcej ręcznych osób naraz niż N) - do ostatniej
+    (ręczny wpis wygrywa). Przy N = 1 wszystkie wpisy w jednej warstwie -
+    dokładnie dotychczasowy plan."""
+    layers = [[] for _ in range(max(staff, 1))]
+    for start, end in sorted(entries):
+        target = layers[-1]
+        for layer in layers[:-1]:
+            if all(end <= a or start >= b for a, b in layer):
+                target = layer
+                break
+        target.append((start, end))
+    return layers
+
+
+def _plan_location(shop, rotation, location, days, unmatched, matched, staff=1):
     """Zmiany resztkowe jednej placówki na osi czasu całego miesiąca:
-    (lista kawałków (abs_start, abs_end), zbiór zaplanowanych dób)."""
+    (lista kawałków (abs_start, abs_end), zbiór zaplanowanych dób). Przy
+    obłożeniu `staff` > 1 kawałki liczone osobno dla każdej warstwy (patrz
+    _assign_layers) - ten sam przedział może się więc powtórzyć (każdy
+    egzemplarz to osobna zmiana resztkowa z jedną osobą)."""
 
     def is_open(d):
         return 1 <= d <= days[-1] and not (
@@ -223,7 +248,14 @@ def _plan_location(shop, rotation, location, days, unmatched, matched):
     for _ in range(len(days) + 1):
         day_cuts = cuts + [(s, e) for d in planned for _, s, e in matched.get(d, [])]
         pattern = [interval for d in sorted(planned) for interval in _pattern_intervals(shop, rotation, d)]
-        pieces = _merge_short(_subtract(pattern, day_cuts))
+        if staff <= 1:
+            pieces = _merge_short(_subtract(pattern, day_cuts))
+        else:
+            pieces = sorted(
+                piece
+                for layer_cuts in _assign_layers(day_cuts, staff)
+                for piece in _merge_short(_subtract(pattern, layer_cuts))
+            )
 
         # Krótki kawałek na granicy doby bez sąsiada do scalenia - dołączamy
         # sąsiednią dobę do planu, żeby dało się go scalić z jej zmianą
@@ -247,6 +279,7 @@ def _plan_location(shop, rotation, location, days, unmatched, matched):
 
 def build_duty_coverage_plan(schedule, shop, employees) -> DutyCoveragePlan | None:
     from logic.generator.duty_rotation_constraint import group_employees_with_duty_rotation
+    from model.location import coverage_staff_for
 
     plan = DutyCoveragePlan()
     days = list(range(1, schedule.days_in_month + 1))
@@ -277,7 +310,9 @@ def build_duty_coverage_plan(schedule, shop, employees) -> DutyCoveragePlan | No
         if not unmatched:
             continue
 
-        pieces, planned = _plan_location(shop, rotation, location, days, unmatched, matched)
+        pieces, planned = _plan_location(
+            shop, rotation, location, days, unmatched, matched, staff=coverage_staff_for(shop, location_key),
+        )
 
         by_day = {}
         for start, end in pieces:

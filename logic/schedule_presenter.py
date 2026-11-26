@@ -30,6 +30,15 @@ class SchedulePresenter:
                 tooltip="Pół dnia urlopu (0,5)" if ds.is_half_leave else "Urlop",
             )
 
+        if ds.is_paid_off:
+            return CellView(
+                text_start=s,
+                text_end="",
+                text_total=t,
+                bg=theme.PAID_OFF,
+                tooltip="Wolne płatne (WP) - dzień wolny za święto, do czasu pracy liczone 8 h",
+            )
+
         # Nieczynne = brak handlowej niedzieli/święta ALBO dzień jawnie
         # oznaczony "Nieczynne" (patrz WeeklyHoursEditor/DayOverrideDialog) -
         # get_open_hours_for_day() sprawdza oba, per lokalizacja pracownika.

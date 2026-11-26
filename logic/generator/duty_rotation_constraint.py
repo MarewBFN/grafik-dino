@@ -25,8 +25,11 @@ Trzy constrainty:
 - add_duty_rotation_coverage_constraint: dokładnie 1 osoba na
   weekday_long/weekday_short każdego dnia roboczego; w weekend albo
   dokładnie 1 na weekend_full, albo dokładnie po 1 na obu połówkach -
-  nigdy inna kombinacja. Też przez system polityk (domyślnie MANDATORY -
-  klient: "ZAWSZE musi być pokrycie 24/7"). Gdy lokalizacja ma
+  nigdy inna kombinacja. „1” to „Ilość osób na obłożeniu” placówki
+  (N, domyślnie 1, model/location.py::coverage_staff_for): przy N > 1
+  każda zmiana tygodnia ma dokładnie N osób, a doba weekendowa k osób na
+  24h i po N-k na każdej połówce (k = 0..N). Też przez system polityk
+  (domyślnie MANDATORY - klient: "ZAWSZE musi być pokrycie 24/7"). Gdy lokalizacja ma
   `duty_rotation["only_12_24h"]` (toggle "Używaj tylko zmian 12/24h" w
   Konfiguracji), wariant weekendowy (24h-albo-12h+12h) obowiązuje KAŻDEGO
   dnia tygodnia, a weekday_long/weekday_short w ogóle się nie przydzielają.
@@ -39,6 +42,7 @@ lokalizacji dzielą jedną grupę opartą o ShopConfig.duty_rotation.
 
 from logic.generator.night_shift_constraint import night_shift_duration_minutes
 from logic.generator.duty_rotation_manual_coverage import CUSTOM_KEYS, custom_shift_ids, get_plan
+from model.location import coverage_staff_for
 
 DUTY_ROTATION_KEYS = ("weekday_long", "weekday_short", "weekend_full", "weekend_half_a", "weekend_half_b")
 
@@ -217,14 +221,19 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
         violations.extend([under, over])
 
     for location_key, (rotation, indices) in groups.items():
-        max_count = max(len(indices), 1)
         only_12_24h = rotation.get("only_12_24h", False)
         location = shop.locations.get(location_key)
+        # „Ilość osób na obłożeniu” placówki - tyle osób naraz na każdej
+        # zmianie standardowego podziału doby (domyślnie 1).
+        staff = coverage_staff_for(shop, location_key)
+        # Zakres kar miękkich - także gdy placówka ma mniej osób niż obłożenie.
+        max_count = max(len(indices), staff, 1)
 
         for d in days:
             # Zmiany resztkowe zaczynające się tego dnia (kawałki dób
             # zaplanowanych wokół ręcznych wpisów, duty_rotation_manual_
-            # coverage.py) - dokładnie 1 osoba na każdej. Niezależne od
+            # coverage.py) - dokładnie 1 osoba na każdej (przy obłożeniu
+            # N > 1 plan ma osobny kawałek dla każdej z N osób). Niezależne od
             # zamknięcia TEGO dnia: kawałek po północy należy do doby dnia
             # poprzedniego.
             if plan is not None:
@@ -259,12 +268,12 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
                 # byłoby tu zawsze niespełnialne.
                 if rotation.get("weekday_long"):
                     _exactly(
-                        sum(x[e, d, weekday_long] for e in indices), 1, max_count,
+                        sum(x[e, d, weekday_long] for e in indices), staff, max_count,
                         f"duty_weekday_long_{location_key}_d{d}",
                     )
                 if rotation.get("weekday_short"):
                     _exactly(
-                        sum(x[e, d, weekday_short] for e in indices), 1, max_count,
+                        sum(x[e, d, weekday_short] for e in indices), staff, max_count,
                         f"duty_weekday_short_{location_key}_d{d}",
                     )
                 continue
@@ -272,8 +281,13 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
             # Weekend (albo KAŻDY dzień, gdy only_12_24h): albo dokładnie 1
             # osoba na całej dobie (weekend_full), albo dokładnie po 1 na
             # każdej połówce - nigdy oba naraz, nigdy żaden z wariantów.
-            # use_24h koduje, który wariant wybrano.
-            use_24h = model.NewBoolVar(f"duty_use_24h_{location_key}_d{d}")
+            # use_24h koduje, który wariant wybrano. Przy obłożeniu N > 1:
+            # use_24h = liczba osób na 24h (0..N), po N - use_24h na każdej
+            # połówce - w każdej chwili doby dokładnie N osób.
+            if staff == 1:
+                use_24h = model.NewBoolVar(f"duty_use_24h_{location_key}_d{d}")
+            else:
+                use_24h = model.NewIntVar(0, staff, f"duty_use_24h_{location_key}_d{d}")
 
             full_count = sum(x[e, d, weekend_full] for e in indices)
             half_a_count = sum(x[e, d, weekend_half_a] for e in indices)
@@ -281,11 +295,11 @@ def add_duty_rotation_coverage_constraint(model, x, employees, days, shop, duty_
 
             if not soft:
                 model.Add(full_count == use_24h)
-                model.Add(half_a_count == 1 - use_24h)
-                model.Add(half_b_count == 1 - use_24h)
+                model.Add(half_a_count == staff - use_24h)
+                model.Add(half_b_count == staff - use_24h)
             else:
                 _exactly(full_count, use_24h, max_count, f"duty_full_{location_key}_d{d}")
-                _exactly(half_a_count, 1 - use_24h, max_count, f"duty_half_a_{location_key}_d{d}")
-                _exactly(half_b_count, 1 - use_24h, max_count, f"duty_half_b_{location_key}_d{d}")
+                _exactly(half_a_count, staff - use_24h, max_count, f"duty_half_a_{location_key}_d{d}")
+                _exactly(half_b_count, staff - use_24h, max_count, f"duty_half_b_{location_key}_d{d}")
 
     return violations

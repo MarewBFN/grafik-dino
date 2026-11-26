@@ -32,6 +32,7 @@ from logic.schedule_presenter import SchedulePresenter
 from logic.utils.time_utils import classify_shift_as_morning_or_afternoon, format_hours_as_fraction, fraction_hour
 from model.business_profile import DEFAULT_BUSINESS_TYPE, get_profile
 from model.constraint_policy import ConstraintPolicy
+from model.location import coverage_staff_for
 from model.month_schedule import PREVIOUS_MONTH_MEMORY_ENABLED
 from model.shop_config import STANDARD_QUICK_BUTTONS, is_standard_button_visible
 from utils import resource_path
@@ -57,8 +58,9 @@ _STANDARD_BUTTON_SHIFT_TYPE = {
     "leave": "LEAVE",
     "half_leave": "HALF_LEAVE",
     "sick": "SICK",
+    "paid_off": "PAID_OFF",
 }
-_STANDARD_BUTTON_MENU_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "half_leave", "sick")
+_STANDARD_BUTTON_MENU_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "half_leave", "sick", "paid_off")
 
 
 def _quick_mode_context_menu_entries(shop):
@@ -1121,6 +1123,21 @@ class ScheduleGrid(QTableWidget):
                 self.setItem(row, day + self._prev_col_offset, item)
                 continue
 
+            if ds.is_paid_off:
+                # „Wolne płatne” - w trybie kompaktowym sam skrót „WP”, w
+                # rozszerzonym też liczone 8 h (DaySchedule.as_rows). Przed
+                # maską dnia nieczynnego - WP liczy się do godzin, więc musi
+                # być widoczne także w dniu, w którym placówka nie pracuje.
+                start_text, _end_text, total_text = ds.as_rows()
+                item.setText(start_text if self.compact_mode else f"{start_text}\n{total_text}")
+                item.setBackground(QBrush(QColor(theme.PAID_OFF)))
+                item.setToolTip(
+                    "Wolne płatne (WP) - dzień wolny za święto, do czasu pracy liczone 8 h.\n"
+                    "Generator traktuje tę komórkę jak pustą i nadpisze ją przy generowaniu."
+                )
+                self.setItem(row, day + self._prev_col_offset, item)
+                continue
+
             # Nieczynne = brak handlowej niedzieli/święta (is_trade_day) ALBO
             # dzień jawnie oznaczony "Nieczynne" (patrz WeeklyHoursEditor/
             # DayOverrideDialog - (None, None) w open_hours/day_overrides) -
@@ -1294,12 +1311,19 @@ class ScheduleGrid(QTableWidget):
                     item = QTableWidgetItem("✅" if covered else "❌")
                     item.setTextAlignment(Qt.AlignCenter)
                     item.setBackground(QBrush(QColor(theme.OK_GREEN if covered else theme.ERR_RED)))
-                    if not covered:
+                    # „Ilość osób na obłożeniu” wybranej placówki (okno
+                    # Lokalizacje) - tyle osób naraz jest wymaganych.
+                    staff = coverage_staff_for(self.shop_config, self._location_filter)
+                    people = "jedna osoba" if staff == 1 else f"{staff} osoby" if staff < 5 else f"{staff} osób"
+                    if covered:
+                        item.setToolTip(f"Obłożenie OK - w każdej chwili {people} naraz.")
+                    else:
                         item.setToolTip(
                             "Luka w obsadzie albo za dużo osób naraz (rotacja 24/7: "
-                            "dokładnie jedna osoba na dobę; placówka z godzinami "
-                            "otwarcia: całe okno obsadzone, najwyżej tyle osób, "
-                            "ile pozwala „Maks. obsada naraz”)."
+                            f"dokładnie {people} naraz przez całą dobę; placówka z godzinami "
+                            f"otwarcia: całe okno obsadzone - co najmniej {people}, najwyżej "
+                            "tyle osób, ile pozwala „Maks. obsada naraz”). Liczbę osób "
+                            "ustawisz w Konfiguracja → Lokalizacje („Ilość osób na obłożeniu”)."
                         )
                     self.setItem(row, day + self._prev_col_offset, item)
                     continue
@@ -1707,6 +1731,11 @@ class ScheduleGrid(QTableWidget):
             self.refresh()
             return
 
+        elif shift == "PAID_OFF":
+            self.controller.set_day_paid_off(emp, day)
+            self.refresh()
+            return
+
         elif isinstance(shift, str) and shift.startswith("PRESET:"):
             preset_name = shift.split(":", 1)[1]
             presets = self.main_window.shop_config.quick_mode_presets
@@ -1745,6 +1774,7 @@ class ScheduleGrid(QTableWidget):
             ds.is_leave = False
             ds.is_half_leave = False
             ds.is_sick = False
+            ds.is_paid_off = False
             ds.is_locked = True
             ds.shift_class = None
 
@@ -1814,5 +1844,6 @@ class ScheduleGrid(QTableWidget):
                 ds.is_half_leave = False
                 ds.is_sick = False
                 ds.is_locked = False
+                ds.is_paid_off = False
 
         self.refresh()

@@ -64,7 +64,10 @@ class ScheduleController:
     def set_day_free(self, emp, day):
         ds = self.schedule.get_day(emp, day)
 
-        if ds.start is None and ds.end is None and not ds.is_leave and not ds.is_sick and not ds.shift_class:
+        if (
+            ds.start is None and ds.end is None and not ds.is_leave and not ds.is_sick
+            and not ds.shift_class and not ds.is_paid_off
+        ):
             return
 
         self.snapshot()
@@ -178,6 +181,7 @@ class ScheduleController:
             "is_sick": getattr(ds, "is_sick", False),
             "is_full_day": getattr(ds, "is_full_day", False),
             "shift_class": ds.shift_class,
+            "is_paid_off": ds.is_paid_off,
         }
 
     def paste_day_snapshot(self, emp, day, snapshot: dict) -> None:
@@ -186,7 +190,9 @@ class ScheduleController:
         nocnych itd. - patrz set_day_hours) zamiast nadpisywać dane wprost,
         więc każdy typ dnia dostaje dokładnie taką walidację, jaką miałby
         wpisany ręcznie."""
-        if snapshot.get("is_leave"):
+        if snapshot.get("is_paid_off"):
+            self.set_day_paid_off(emp, day)
+        elif snapshot.get("is_leave"):
             self.set_day_leave(emp, day, half=bool(snapshot.get("is_half_leave")))
         elif snapshot.get("is_sick"):
             self.set_day_sick(emp, day)
@@ -223,6 +229,18 @@ class ScheduleController:
         ds.set_leave(half=half)
         ds.is_locked = True
         ds.shift_class = None
+
+    def set_day_paid_off(self, emp, day):
+        """„Wolne płatne” (WP, tryb szybki) - dzień wolny za święto, płatny
+        8 h. Celowo BEZ blokady (patrz DaySchedule.is_paid_off): generator
+        traktuje tę komórkę jak pustą i nadpisuje ją przy generowaniu."""
+        ds = self.schedule.get_day(emp, day)
+
+        if ds.is_paid_off:
+            return
+
+        self.snapshot()
+        ds.set_paid_off()
 
     def set_shift_class(self, emp, day, code):
         # "1"/"2" (rano/popołudnie, Dino) - typ zmiany zablokowany, generator
@@ -296,7 +314,10 @@ class ScheduleController:
 
         # --- BLOKADA DUPLIKATÓW ---
         if shift_type == "OFF":
-            if ds.start is None and ds.end is None and not ds.is_leave and not ds.is_sick and not ds.shift_class:
+            if (
+                ds.start is None and ds.end is None and not ds.is_leave and not ds.is_sick
+                and not ds.shift_class and not ds.is_paid_off
+            ):
                 return
 
         elif shift_type == "LEAVE":
@@ -316,6 +337,7 @@ class ScheduleController:
             ds.is_leave = False
             ds.is_half_leave = False
             ds.is_sick = False
+            ds.is_paid_off = False
 
         elif shift_type == "LEAVE":
             ds.start = None
@@ -323,6 +345,7 @@ class ScheduleController:
             ds.is_leave = True
             ds.is_half_leave = False
             ds.is_sick = False
+            ds.is_paid_off = False
 
         elif shift_type == "WORK":
             from datetime import datetime
@@ -351,6 +374,7 @@ class ScheduleController:
             ds.is_leave = False
             ds.is_half_leave = False
             ds.is_sick = False
+            ds.is_paid_off = False
 
         ds.is_locked = True
         ds.shift_class = None

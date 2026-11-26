@@ -116,6 +116,11 @@ def export_schedule_to_excel(schedule, year, month, path, shop=None, employees=N
                 ws.merge_cells(start_row=cur_row, start_column=col, end_row=cur_row+2, end_column=col)
                 cells[0].value = "L4"
                 cells[0].font = Font(bold=True)
+            elif ds.is_paid_off:
+                # „Wolne płatne” - liczone 8 h w kolumnach podsumowania.
+                ws.merge_cells(start_row=cur_row, start_column=col, end_row=cur_row+2, end_column=col)
+                cells[0].value = "WP"
+                cells[0].font = Font(bold=True)
             elif not ds.is_empty():
                 cells[0].value = _format_hour(ds.start)
                 # Bez znacznika "(+1)" dla zmian przez północ - usunięty

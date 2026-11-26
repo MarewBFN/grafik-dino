@@ -378,6 +378,7 @@ class TestQuickModeContextMenuEntries:
             "LEAVE": lambda ds: ds.is_leave is True,
             "HALF_LEAVE": lambda ds: ds.is_leave is True and ds.is_half_leave is True,
             "SICK": lambda ds: getattr(ds, "is_sick", False) is True,
+            "PAID_OFF": lambda ds: ds.is_paid_off is True and ds.is_locked is False,
         }
 
         standard, _presets = _quick_mode_context_menu_entries(shop)

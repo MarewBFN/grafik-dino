@@ -24,11 +24,43 @@ DEFAULT_OPEN_HOURS = {
     6: ("05:30", "22:45"),
 }
 
+# „Ilość osób na obłożeniu” (okno Lokalizacje, obok „Maks. dni pracy pod
+# rząd”): ile osób pilnuje placówki jednocześnie, w tych samych godzinach.
+# Domyślnie 1 - dotychczasowe zachowanie. Generator obsadza każdą zmianę
+# rotacji 24/7 i każdą chwilę godzin otwarcia (profil Ochrony) tyloma
+# osobami naraz, a wiersz „Obłożenie” w grafiku sprawdza dokładnie tę liczbę
+# - patrz coverage_staff_for(). Zapisywane w LocationConfig.constraints;
+# brak wpisu (projekty sprzed tego pola) = 1.
+COVERAGE_STAFF_KEY = "coverage_staff"
+DEFAULT_COVERAGE_STAFF = 1
+MAX_COVERAGE_STAFF = 10
+
 DEFAULT_LOCATION_CONSTRAINTS = {
     "min_open_staff": 3,
     "min_close_staff": 3,
     "max_consecutive_days": 4,
 }
+
+
+def coverage_staff_from(constraints) -> int:
+    """„Ilość osób na obłożeniu” ze słownika ustawień placówki (albo widoku
+    placówki - _LocationView.constraints); brak/niepoprawna wartość = 1."""
+    try:
+        value = int((constraints or {}).get(COVERAGE_STAFF_KEY, DEFAULT_COVERAGE_STAFF))
+    except (TypeError, ValueError):
+        return DEFAULT_COVERAGE_STAFF
+    return min(max(value, 1), MAX_COVERAGE_STAFF)
+
+
+def coverage_staff_for(shop, location_key) -> int:
+    """„Ilość osób na obłożeniu” placówki `location_key` projektu `shop`
+    (1, gdy projekt nie ma takiej placówki - np. pracownicy bez placówki)."""
+    locations = getattr(shop, "locations", None) or {}
+    location = locations.get(location_key) if location_key is not None else None
+    if location is None:
+        return DEFAULT_COVERAGE_STAFF
+    return coverage_staff_from(location.constraints)
+
 
 # Ustawienia z „Zasad generatora” (ustawienia zaawansowane) zapisywane per
 # placówka w LocationConfig.constraints, a czytane przez generator z

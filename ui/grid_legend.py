@@ -29,6 +29,7 @@ LEGEND_ENTRIES = [
     ("solid", theme.BG_MAIN, "Zwykła zmiana"),
     ("solid", theme.OK_GREEN, "Urlop (🌴½ - pół dnia)"),
     ("solid", "#FFA07A", "Chorobowe (L4)"),
+    ("solid", theme.PAID_OFF, "Wolne płatne (WP, 8 h)"),
     ("solid", theme.BG_DISABLED, "Lokalizacja nieczynna"),
     ("hatch", None, "Zablokowane (dzień wolny / typ zmiany)"),
 ]

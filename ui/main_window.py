@@ -646,6 +646,12 @@ class MainWindow(QMainWindow):
         self.btn_sick.setCheckable(True)
         self.btn_sick.clicked.connect(lambda: self._set_quick_shift("SICK"))
 
+        # „Wolne płatne” (WP) - dzień wolny za święto, płatny 8 h (patrz
+        # DaySchedule.is_paid_off).
+        self.btn_paid_off = QPushButton("Wolne płatne")
+        self.btn_paid_off.setCheckable(True)
+        self.btn_paid_off.clicked.connect(lambda: self._set_quick_shift("PAID_OFF"))
+
         # {klucz STANDARD_QUICK_BUTTONS: widget} - widoczność/kolejność w
         # siatce sterowana teraz jednym mechanizmem (is_standard_button_visible,
         # patrz _relayout_quick_btn_grid) zamiast osobnych, zaszytych w kodzie
@@ -660,6 +666,7 @@ class MainWindow(QMainWindow):
             "leave": self.btn_leave,
             "half_leave": self.btn_half_leave,
             "sick": self.btn_sick,
+            "paid_off": self.btn_paid_off,
         }
         self._quick_standard_button_shift_type = {
             "work": "WORK",
@@ -671,6 +678,7 @@ class MainWindow(QMainWindow):
             "leave": "LEAVE",
             "half_leave": "HALF_LEAVE",
             "sick": "SICK",
+            "paid_off": "PAID_OFF",
         }
         # Opis zachowania - jedno źródło prawdy (STANDARD_QUICK_BUTTONS,
         # model/shop_config.py) współdzielone z zakładką "Tryby domyślne"
@@ -1168,7 +1176,7 @@ class MainWindow(QMainWindow):
     # ręcznie w osobnym panelu poniżej, w odróżnieniu od reszty - jeden
     # klik), więc widoczność w tym gridzie steruje tylko tym, czy w ogóle da
     # się ją włączyć w "Tryby domyślne"; do samego grida nie trafia.
-    _QUICK_BTN_GRID_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "half_leave", "sick")
+    _QUICK_BTN_GRID_ORDER = ("morning", "afternoon", "can_work", "delete", "off", "leave", "half_leave", "sick", "paid_off")
 
     def _relayout_quick_btn_grid(self):
         """Przelicza pozycje przycisków trybu szybkiego tak, żeby te ukryte
@@ -2284,6 +2292,7 @@ class MainWindow(QMainWindow):
                 ds.is_half_leave = False
                 ds.is_sick = False
                 ds.is_locked = False
+                ds.is_paid_off = False
 
             self.schedule.settlement_targets.pop(emp, None)
 
@@ -2735,7 +2744,9 @@ class MainWindow(QMainWindow):
             for day in range(1, self.schedule.days_in_month + 1):
                 ds = self.schedule.get_day(emp, day)
 
-                if ds.is_locked:
+                # „Wolne płatne” wpisuje szef ręcznie - to nie jest
+                # wygenerowana zmiana (choć komórka nie jest zablokowana).
+                if ds.is_locked or ds.is_paid_off:
                     continue
 
                 ds.start = None

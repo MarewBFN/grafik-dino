@@ -88,11 +88,13 @@ branża, zasady generatora), a potem samouczek po oknie (Pomoc → Samouczek).
   odpoczynek na początku miesiąca).
 - Na końcu wiersza: godziny pracy, urlop, L4, razem i **nadgodziny** —
   przekroczenie miesięcznego limitu pełnego etatu jest podświetlone na
-  czerwono (także w eksportach).
+  czerwono (także w eksportach). Każdy dzień „Wolne płatne” (WP) dodaje 8 h
+  do godzin pracy (i do „Razem”).
 - Wiersze podsumowania pod pracownikami: dla Ochrony **„Obłożenie”** (✅/❌
-  na każdy dzień — rotacja 24/7: dokładnie jedna osoba przez całą dobę;
-  placówka z godzinami: całe okno obsadzone i nie więcej osób niż „Maks.
-  obsada naraz”), dla Dino Otwarcie, Zamknięcie, Rano, Popo, Mięso.
+  na każdy dzień — rotacja 24/7: dokładnie tyle osób naraz, ile „Ilość osób
+  na obłożeniu” placówki (domyślnie 1), przez całą dobę; placówka z
+  godzinami: całe okno obsadzone co najmniej tyloma osobami i nie więcej niż
+  „Maks. obsada naraz”), dla Dino Otwarcie, Zamknięcie, Rano, Popo, Mięso.
 - Obsługa:
   - dwuklik na nazwisku — edycja pracownika,
   - dwuklik na komórce — edycja dnia,
@@ -138,6 +140,10 @@ Konfiguracja → Generator → „Godziny otwarcia”). Każda placówka ma:
 - **Zamknięte w polskie święta ustawowe** (domyślnie włączone),
 - **Maks. dni pracy pod rząd** (domyślnie 4) — 1 oznacza, że nikt nie pracuje
   dwa dni z rzędu, czyli w placówce z 2 osobami zmiany na przemian,
+- **Ilość osób na obłożeniu** (domyślnie 1, obok „Maks. dni pracy pod rząd”) —
+  ile osób pilnuje placówki jednocześnie, w tych samych godzinach. Np. 2:
+  generator obsadza każdą zmianę dwiema osobami naraz, a wiersz „Obłożenie”
+  pokazuje ✅ tylko gdy w każdej chwili pracują dokładnie 2 osoby,
 - **własne zasady generatora** — tryby zasad i ustawienia z „Zasad
   generatora” (ustawienia zaawansowane) — patrz niżej,
 - **Działalność całodobowa (24/7)** + edytor **rotacji służby** (godzina
@@ -184,12 +190,13 @@ godzinami otwarcia wolno wpisać zmianę przez północ (np. 15:00–07:00) i
 | Wolne | dzień zablokowany jako wolny |
 | Urlop / L4 | nieobecność (obniża normę godzin) |
 | 0,5 urlopu | dzień zablokowany jak urlop; do puli urlopu i normy godzin liczy się pół dnia |
+| Wolne płatne (`WP`) | dzień wolny za święto, za który firma płaci: do godzin pracy liczy się zawsze **8 h** (w każdej placówce), w siatce i na wydrukach „WP”. Generator go **nie uwzględnia** — traktuje komórkę jak pustą i nadpisuje ją przy generowaniu, więc WP wpisuje się ręcznie, po wygenerowaniu grafiku |
 | Usuń | komórka wraca do stanu „nietkniętego” |
 | Własne przedziały | przyciski z „Ustawień trybu szybkiego” (nazwa, start, koniec, 24h, widoczność) |
 
 Każdy ręczny wpis godzin jest **blokadą**: generator go nie zmienia, liczy do
 obsady, godzin, odpoczynku i dni pod rząd, a resztę dopasowuje wokół niego.
-„Wyczyść auto” usuwa tylko zmiany z generatora; „Wyczyść grafik” — wszystko.
+„Wyczyść auto” usuwa tylko zmiany z generatora (WP zostaje); „Wyczyść grafik” — wszystko.
 
 ---
 
@@ -246,15 +253,19 @@ Placówka Ochrony działa w jednym z dwóch trybów.
 Włączana w Lokalizacjach („Działalność całodobowa (24/7)”). Użytkownik podaje
 godzinę rozpoczęcia doby S i godzinę podziału P. **Każdego dnia**: albo jedna
 zmiana 24 h od S, albo dwie zmiany S→P i P→S — zawsze **dokładnie jedna
-osoba** w pracy.
+osoba** w pracy (przy „Ilości osób na obłożeniu” N — dokładnie N osób na
+każdej zmianie; w dobie 24h/12h+12h dowolnie: k osób na 24 h i po N−k na
+połówkach).
 
 - „Preferuj zmiany 24h” odwraca domyślną lekką preferencję (domyślnie
   generator woli dwie połówki).
 - „Nie chce pracować zmian 24h”: w sobotę/niedzielę tylko połówki.
 - Odpoczynek po zmianie 24 h: **(N−1)×24 h, nie mniej niż 24 h** (N = osoby
-  placówki bez „Nie chce 24h”); po pozostałych zmianach 11 h.
+  placówki bez „Nie chce 24h”, podzielone przez „Ilość osób na obłożeniu” —
+  np. 4 osoby po 2 na dobę: 24 h odpoczynku); po pozostałych zmianach 11 h.
 - Ręczny wpis dowolnych godzin liczy się jako pokrycie — generator dokłada
-  zmiany resztkowe, żeby doba była pełna.
+  zmiany resztkowe, żeby doba była pełna (przy obłożeniu > 1 ręczny wpis
+  zajmuje jedno z miejsc).
 - Święto (przy „Zamknięte w święta”) i „Nieczynne tego dnia” zamykają dobę.
 - Obsada rotacji jest zawsze wymagana.
 
@@ -285,8 +296,8 @@ Zasady tego trybu:
 
 | Zasada | Domyślnie | Co robi |
 |---|---|---|
-| Obłożenie godzin otwarcia | Wymagane | w każdym kwadransie okna co najmniej 1 osoba z placówki |
-| Maks. obsada naraz | Preferowane | najwyżej N osób naraz (N domyślnie 1; pole „Maks. osób naraz w placówce” w ustawieniach zaawansowanych „Zasad generatora”). Waga wyższa niż „Umowa”, więc druga osoba nie jest dokładana tylko po to, żeby dobić godziny. Ręczne wpisy zajmują miejsca w limicie, ale same go nie łamią |
+| Obłożenie godzin otwarcia | Wymagane | w każdym kwadransie okna co najmniej 1 osoba z placówki (tyle, ile „Ilość osób na obłożeniu”) |
+| Maks. obsada naraz | Preferowane | najwyżej N osób naraz (N domyślnie 1; pole „Maks. osób naraz w placówce” w ustawieniach zaawansowanych „Zasad generatora”; nigdy mniej niż „Ilość osób na obłożeniu”). Waga wyższa niż „Umowa”, więc druga osoba nie jest dokładana tylko po to, żeby dobić godziny. Ręczne wpisy zajmują miejsca w limicie, ale same go nie łamią |
 
 Uwaga: przy „Maks. obsadzie” równej 1 osoby dostają tylko tyle godzin, ile
 wymaga obsada placówki — jeśli placówka potrzebuje mniej godzin niż suma
@@ -339,7 +350,8 @@ sprzecznych zasadach) i podpowiada jego zwiększenie.
 ## Eksport i wydruk
 
 - **Eksport** (Excel / JPG / PDF) — grafik aktualnie wybranej placówki, z
-  podglądem przed zapisem. Dino i Ochrona mają osobne układy
+  podglądem przed zapisem. „Wolne płatne” jest na wydruku jako „WP” (8 h w
+  podsumowaniu; na karcie pracy „WP” i 8 h bez godzin dziennych/nocnych). Dino i Ochrona mają osobne układy
   (`export/image_exporter.py`, `export/security_*_exporter.py`).
 - **Karty pracy** — „Lista obecności miesięczna pracownika”: jedna strona na
   osobę, dni w wierszach, godziny dzienne i nocne (22–06), norma, nadgodziny,

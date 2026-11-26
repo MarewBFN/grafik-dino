@@ -156,6 +156,12 @@ class ImageScheduleExporter:
                 self._draw_centered_text(x + self.CELL_W // 2, y + self.CELL_H, "L4", self.font_b)
                 continue
 
+            if ds.is_paid_off:
+                # „Wolne płatne” - liczone 8 h w podsumowaniu wiersza.
+                self.draw.rectangle([x, y, x + self.CELL_W, y + 3 * self.CELL_H], outline=self.GRID)
+                self._draw_centered_text(x + self.CELL_W // 2, y + self.CELL_H, "WP", self.font_b)
+                continue
+
             self.draw.rectangle([x, y, x + self.CELL_W, y + 3 * self.CELL_H], outline=self.GRID)
 
             if not ds.is_empty():

@@ -363,6 +363,7 @@ class MonthSchedule:
                             "is_day_off": ds.is_day_off,
                             "shift_class": ds.shift_class,
                             "is_full_day": ds.is_full_day,
+                            "is_paid_off": ds.is_paid_off,
                         }
                         for day in range(1, self.days_in_month + 1)
                         # Każdy dzień z jakąkolwiek informacją (też samo "wolne"
@@ -425,6 +426,7 @@ class MonthSchedule:
                 ds.is_leave = False
                 ds.is_half_leave = False
                 ds.is_full_day = False
+                ds.is_paid_off = False
 
             for day, dd in ed.get("days", {}).items():
                 ds = sched.get_day(emp, int(day))
@@ -437,6 +439,7 @@ class MonthSchedule:
                 ds.is_day_off = dd.get("is_day_off", False)
                 ds.shift_class = dd.get("shift_class")
                 ds.is_full_day = dd.get("is_full_day", False)
+                ds.is_paid_off = bool(dd.get("is_paid_off", False))
 
         sched.employees.sort(key=cls._employee_sort_key)
         return sched
@@ -475,15 +478,29 @@ class MonthSchedule:
                     day_data.start = None
                     day_data.end = None
                     day_data.is_full_day = False
+                    day_data.is_paid_off = False
                     if hasattr(day_data, "is_day_off"):
                         day_data.is_day_off = False
+
+    def clear_paid_off_days(self, employees=None):
+        """Kasuje „Wolne płatne” (WP) wybranych pracowników - generator
+        traktuje takie komórki jak puste i nadpisuje je, także przy
+        „Popraw” (patrz AutoScheduleGenerator._generate_run, DaySchedule.
+        is_paid_off). Szef wpisuje WP ręcznie, już po wygenerowaniu."""
+        for emp in (employees if employees is not None else self.employees):
+            for d in range(1, self.days_in_month + 1):
+                ds = self.get_day(emp, d)
+                if ds.is_paid_off:
+                    ds.is_paid_off = False
 
     def clear_generated_days(self):
         for emp in self.employees:
             for d in range(1, self.days_in_month + 1):
                 ds = self.get_day(emp, d)
 
-                if ds.is_locked:
+                # „Wolne płatne” wpisuje szef ręcznie - to nie jest
+                # wygenerowana zmiana.
+                if ds.is_locked or ds.is_paid_off:
                     continue
 
                 ds.start = None

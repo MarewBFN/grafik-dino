@@ -233,6 +233,12 @@ class AutoScheduleGenerator:
 
         schedule_before_generation = self.schedule.snapshot()
 
+        # „Wolne płatne” (WP) wpisuje szef ręcznie - generator go nie zna i
+        # traktuje taką komórkę jak pustą: kasuje ją (także przy „Popraw”)
+        # i może ją nadpisać zmianą. Brak rozwiązania przywraca stan sprzed
+        # generowania (z WP) - patrz restore niżej.
+        self.schedule.clear_paid_off_days(employees)
+
         if not is_fix:
             self.schedule.clear_unlocked_days(employees)
 

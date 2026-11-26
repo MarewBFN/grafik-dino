@@ -36,7 +36,9 @@ Zasady modelu dla pracowników takiej placówki:
 - odpoczynek: 11 h po każdej zmianie, po zmianie 24 h - (N-1)x24 h, nie
   mniej niż 24 h (N = osoby placówki bez „Nie chce 24h”, jak rotacja 24/7);
 - „Obłożenie godzin otwarcia” (OPENING_HOURS_COVERAGE_POLICY, domyślnie
-  Wymagana): w każdym kwadransie okna co najmniej 1 osoba z placówki;
+  Wymagana): w każdym kwadransie okna co najmniej 1 osoba z placówki
+  („Ilość osób na obłożeniu” placówki, domyślnie 1 - przy N > 1 co
+  najmniej N osób, a „Maks. obsada naraz” nigdy nie mniej niż N);
 - „Nie chce 24h”: bez zmiany 24 h w sobotę/niedzielę (zasada
   duty_rotation_no24h, jak w rotacji 24/7).
 """
@@ -44,6 +46,8 @@ Zasady modelu dla pracowników takiej placówki:
 import calendar
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+
+from model.location import coverage_staff_from
 
 DAY = 24 * 60
 HALF_DAY = DAY // 2
@@ -326,6 +330,11 @@ class OpeningHoursModel:
             key: sum(1 for e in members if not _has_no24h_role(ctx.employees[e]))
             for key, members in self.members.items()
         }
+        # „Ilość osób na obłożeniu” placówki (model/location.py, domyślnie 1)
+        # - tyle osób naraz w każdej chwili okna.
+        self.coverage_staff = {
+            key: coverage_staff_from(view.constraints) for key, view in self.views.items()
+        }
 
         base = {}  # (klucz, dzień komórki) -> [Shape]
         for key, windows in self.windows_by_location.items():
@@ -434,9 +443,14 @@ class OpeningHoursModel:
 
     def required_rest_after(self, location_key, length) -> int:
         """11 h; po zmianie 24 h - (N-1)x24 h, nie mniej niż 24 h (jak
-        rotacja 24/7, duty_rotation_rest_constraint._required_rest)."""
+        rotacja 24/7, duty_rotation_rest_constraint._required_rest). Przy
+        „Ilości osób na obłożeniu” H > 1 N to N // H (rotują H-osobowe składy)."""
         if length >= DAY:
-            return DAY * max(self.capable_24h.get(location_key, 0) - 1, 1)
+            capable = self.capable_24h.get(location_key, 0)
+            staff = self.coverage_staff.get(location_key, 1)
+            if staff > 1:
+                capable //= staff
+            return DAY * max(capable - 1, 1)
         return MIN_REST_MINUTES
 
     def max_staff(self, location_key) -> int:
@@ -444,12 +458,15 @@ class OpeningHoursModel:
 
     @staticmethod
     def max_staff_for_view(view) -> int:
-        """„Maks. obsada naraz” placówki (Konfiguracja, domyślnie 1)."""
+        """„Maks. obsada naraz” placówki (Konfiguracja, domyślnie 1) - nigdy
+        mniej niż „Ilość osób na obłożeniu” (obie zasady naraz byłyby
+        sprzeczne)."""
         value = view.constraints.get(MAX_STAFF_CONSTRAINT_KEY, DEFAULT_MAX_STAFF)
         try:
-            return max(1, int(value))
+            cap = max(1, int(value))
         except (TypeError, ValueError):
-            return DEFAULT_MAX_STAFF
+            cap = DEFAULT_MAX_STAFF
+        return max(cap, coverage_staff_from(view.constraints))
 
     def fixed_days(self, e):
         return {d for d, _s, _e in self.fixed.get(e, ())}
@@ -629,8 +646,9 @@ def add_opening_hours_rest_constraint(ctx, soft, schedule=None):
 
 def add_opening_hours_coverage_constraint(ctx, soft):
     """Co najmniej 1 osoba z placówki w każdym kwadransie jej okien (ręczne
-    stałe przedziały też się liczą). Część okna ostatniego dnia po końcu
-    miesiąca należy już do następnego grafiku."""
+    stałe przedziały też się liczą) - przy „Ilości osób na obłożeniu” N > 1
+    co najmniej N osób. Część okna ostatniego dnia po końcu miesiąca należy
+    już do następnego grafiku."""
     model = get_model(ctx)
     if model is None:
         return []
@@ -639,6 +657,7 @@ def add_opening_hours_coverage_constraint(ctx, soft):
 
     violations = []
     for key, members in model.members.items():
+        staff = model.coverage_staff.get(key, 1)
         fixed = [(s, en) for e in members for _d, s, en in model.fixed.get(e, ())]
         by_window = {}
         for e in members:
@@ -652,20 +671,27 @@ def add_opening_hours_coverage_constraint(ctx, soft):
             shapes = by_window.get(day, [])
             intervals = [(s, en) for s, en, *_ in shapes] + fixed
             for a, b in _segments(window.start, end, intervals):
-                if any(fs <= a and b <= fe for fs, fe in fixed):
+                # Ręczne stałe przedziały zajmują miejsca obłożenia.
+                need = staff - sum(1 for fs, fe in fixed if fs <= a and b <= fe)
+                if need <= 0:
                     continue
                 terms = [ctx.x[e, d, sid] for s, en, e, d, sid in shapes if s <= a and b <= en]
                 if not soft:
-                    if terms:
-                        ctx.model.Add(sum(terms) >= 1)
+                    if len(terms) >= need:
+                        ctx.model.Add(sum(terms) >= need)
                     else:
-                        # Nikt z placówki nie może tu pracować (np. wszyscy na
-                        # urlopie) - Wymagana zasada jest niespełnialna.
+                        # Za mało osób z placówki może tu pracować (np.
+                        # wszyscy na urlopie) - Wymagana zasada jest
+                        # niespełnialna.
                         ctx.model.AddBoolOr([])
-                else:
+                elif need == 1:
                     v = ctx.model.NewBoolVar(f"opening_cov_{key}_d{day}_{fmt_minutes(a)}")
                     ctx.model.Add(sum(terms) + v >= 1)
                     violations.append(v * _slots(b - a))
+                else:
+                    short = ctx.model.NewIntVar(0, need, f"opening_cov_{key}_d{day}_{fmt_minutes(a)}")
+                    ctx.model.Add(sum(terms) + short >= need)
+                    violations.append(short * _slots(b - a))
     return violations
 
 

@@ -4,6 +4,10 @@ from datetime import datetime, timedelta
 
 _TIME_FORMAT = "%H:%M"
 
+# „Wolne płatne” (WP) liczy się zawsze jako 8 h, w każdej placówce,
+# niezależnie od wymiaru dnia pracownika - patrz DaySchedule.is_paid_off.
+PAID_OFF_MINUTES = 8 * 60
+
 
 def _parse_time(value: str) -> datetime:
     return datetime.strptime(value, _TIME_FORMAT)
@@ -52,6 +56,15 @@ class DaySchedule:
     # urlopu i do nominału godzin liczy się połowa dnia (leave_fraction()).
     is_half_leave: bool = False
 
+    # „Wolne płatne” (WP, tryb szybki) - dzień wolny za święto, za który
+    # firma płaci: pracownika fizycznie nie ma, ale do czasu pracy liczy się
+    # zawsze 8 h (PAID_OFF_MINUTES, w każdej placówce). Szef wpisuje go
+    # wyłącznie ręcznie; komórka NIE jest zablokowana (is_locked=False) -
+    # generator traktuje ją jak pustą i nadpisuje (AutoScheduleGenerator
+    # czyści WP pracowników, dla których generuje, patrz
+    # MonthSchedule.clear_paid_off_days). start/end zawsze None.
+    is_paid_off: bool = False
+
 
     def leave_fraction(self) -> float:
         """Ile dnia urlopu to jest: 1 (urlop), 0,5 (pół dnia urlopu), 0 (nie
@@ -87,6 +100,7 @@ class DaySchedule:
         self.is_day_off = False
         self.shift_class = None
         self.is_full_day = False
+        self.is_paid_off = False
 
     def set_free(self) -> None:
         """Ustawia dzień jako wolny."""
@@ -97,6 +111,21 @@ class DaySchedule:
         self.is_sick = False
         self.is_day_off = True
         self.is_full_day = False
+        self.is_paid_off = False
+
+    def set_paid_off(self) -> None:
+        """Ustawia dzień jako „Wolne płatne” (WP) - patrz is_paid_off.
+        Bez blokady: generator nadpisuje taką komórkę jak pustą."""
+        self.start = None
+        self.end = None
+        self.is_leave = False
+        self.is_half_leave = False
+        self.is_sick = False
+        self.is_day_off = False
+        self.is_full_day = False
+        self.is_locked = False
+        self.shift_class = None
+        self.is_paid_off = True
 
     def set_leave(self, half: bool = False) -> None:
         """Ustawia dzień jako urlop (`half` - pół dnia urlopu)."""
@@ -107,6 +136,7 @@ class DaySchedule:
         self.is_sick = False
         self.is_day_off = False
         self.is_full_day = False
+        self.is_paid_off = False
 
     def set_hours(self, start: str, end: str) -> None:
         """
@@ -131,6 +161,7 @@ class DaySchedule:
         self.is_sick = False
         self.is_day_off = False
         self.is_full_day = False
+        self.is_paid_off = False
 
     def set_full_day_shift(self, start: str) -> None:
         """Zmiana trwająca dokładnie 24h: zaczyna się o `start` i kończy o
@@ -144,6 +175,7 @@ class DaySchedule:
         self.is_sick = False
         self.is_day_off = False
         self.is_full_day = True
+        self.is_paid_off = False
 
     def crosses_midnight(self) -> bool:
         """Czy to zmiana nocna (albo 24h), kończąca się w kolejnej dobie
@@ -158,8 +190,12 @@ class DaySchedule:
 
     def total_duration(self) -> timedelta | None:
         """
-        Zwraca czas pracy jako timedelta.
+        Zwraca czas pracy jako timedelta. „Wolne płatne” (WP) - zawsze 8 h
+        (liczy się do czasu pracy, choć pracownika fizycznie nie ma).
         """
+        if self.is_paid_off:
+            return timedelta(minutes=PAID_OFF_MINUTES)
+
         if self.is_empty() or self.is_leave or self.is_sick:
             return None
 
@@ -200,6 +236,9 @@ class DaySchedule:
         if self.shift_class and self.is_empty():
             return self.shift_class, "", ""
 
+        if self.is_paid_off:
+            return "WP", "", self.total_as_str() or ""
+
         if self.is_leave:
             return ("🌴½" if self.is_half_leave else "🌴"), "", ""
 
@@ -223,6 +262,7 @@ class DaySchedule:
         self.is_sick = True
         self.is_day_off = False
         self.is_full_day = False
+        self.is_paid_off = False
 
     def set_shift_class(self, code: str) -> None:
         """
@@ -236,6 +276,7 @@ class DaySchedule:
         self.is_sick = False
         self.is_day_off = False
         self.is_full_day = False
+        self.is_paid_off = False
         self.shift_class = code
 
     def total_minutes(self, employee=None, shop=None) -> int:

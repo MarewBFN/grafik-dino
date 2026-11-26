@@ -22,6 +22,7 @@ from ortools.sat.python import cp_model
 
 from logic.utils.time_utils import get_effective_daily_hours
 from model.constraint_policy import ConstraintPolicy
+from model.location import coverage_staff_for, coverage_staff_from
 
 
 POLICY_STAGES = (
@@ -380,6 +381,9 @@ def _add_opening_hours_supply_messages(schedule, shop, add) -> None:
         name = location.name if location is not None else location_key
         view = shop.get_location(employees[0])
         windows = location_windows(view, shop.year, shop.month, schedule.days_in_month)
+        # „Ilość osób na obłożeniu” - podpowiedzi o 1 dostępnej osobie niżej
+        # dotyczą tylko placówek 1-osobowych; przy N > 1 - brak N osób.
+        staff = coverage_staff_from(view.constraints)
         # „Dni pod rząd” Wymagane dla tej placówki: kolejne dni, w które
         # dostępna jest tylko ta sama 1 osoba (np. urlop drugiej z dwóch),
         # a jest ich więcej niż limit - ta osoba musiałaby pracować dłużej.
@@ -394,7 +398,7 @@ def _add_opening_hours_supply_messages(schedule, shop, add) -> None:
                 run.append(day)
             else:
                 run, run_person = ([day], only) if only is not None else ([], None)
-            if consecutive_mandatory and len(run) == limit + 1:
+            if staff == 1 and consecutive_mandatory and len(run) == limit + 1:
                 add(
                     f"{name}, dni {run[0]}–{day}: dostępna jest tylko 1 osoba ({only.display_name()}), "
                     f"a „Dni pod rząd” w tej placówce to {limit} (zasada Wymagana) - musiałaby "
@@ -408,8 +412,16 @@ def _add_opening_hours_supply_messages(schedule, shop, add) -> None:
                     f"(urlop/L4/wolne), a okno {span} wymaga obsady (zasada „Obłożenie "
                     "godzin otwarcia” jest Wymagana)."
                 )
+            elif len(available) < staff:
+                add(
+                    f"{name}, dzień {day}: dostępnych jest tylko {len(available)} os. "
+                    f"({', '.join(e.display_name() for e in available)}), a „Ilość osób na "
+                    f"obłożeniu” tej placówki to {staff} - okno {span} wymaga {staff} osób naraz "
+                    "(zasada „Obłożenie godzin otwarcia” jest Wymagana)."
+                )
             elif (
-                window.is_full_day
+                staff == 1
+                and window.is_full_day
                 and shop.weekday(day) >= 5
                 and len(available) == 1
                 and _has_no24h_role(available[0])
@@ -421,7 +433,8 @@ def _add_opening_hours_supply_messages(schedule, shop, add) -> None:
                     "doby nie da się obsadzić (dwie połówki wymagają dwóch osób)."
                 )
             if (
-                previous is not None
+                staff == 1
+                and previous is not None
                 and policies.get("rest_11h", ConstraintPolicy.MANDATORY) == ConstraintPolicy.MANDATORY
             ):
                 prev_day, prev_window, prev_available = previous
@@ -663,7 +676,8 @@ def _is_unavailable(state) -> bool:
 
 def _add_duty_rotation_supply_messages(schedule, shop, add) -> None:
     """Rotacja służby 24/7: doba placówki wymaga dokładnie jednej osoby
-    naraz. Dowodliwe z samych danych przyczyny braku rozwiązania - nikt z
+    naraz (przy „Ilości osób na obłożeniu” N > 1 - dokładnie N osób).
+    Dowodliwe z samych danych przyczyny braku rozwiązania - nikt z
     placówki nie jest tego dnia dostępny (urlop/L4/wolne), albo jedyna
     dostępna osoba nie może wziąć zmiany 24h, a dwóch osób do podziału
     doby nie ma."""
@@ -683,6 +697,8 @@ def _add_duty_rotation_supply_messages(schedule, shop, add) -> None:
         location = shop.locations.get(location_key)
         name = location.name if location is not None else location_key
         policies = shop.effective_constraint_policies(location_key)
+        # „Ilość osób na obłożeniu” - tyle osób naraz na każdej zmianie doby.
+        staff = coverage_staff_for(shop, location_key)
         for day in range(1, schedule.days_in_month + 1):
             # Ręcznie zablokowana zmiana 24h (dokładnie zmiana 24h rotacji)
             # osobie z "Nie chce zmian 24h", gdy ta zasada jest Wymagana -
@@ -718,15 +734,17 @@ def _add_duty_rotation_supply_messages(schedule, shop, add) -> None:
                     and not _is_unavailable(schedule.get_day(employees[e], day))
                 ]
                 if shop.weekday(day) < 5 and not rotation.get("only_12_24h"):
-                    capacity = sum(1 for key in ("weekday_long", "weekday_short") if rotation.get(key))
+                    shifts = sum(1 for key in ("weekday_long", "weekday_short") if rotation.get(key))
                 else:
-                    capacity = 2
+                    shifts = 2
+                capacity = shifts * staff
                 if len(can_work) > capacity:
+                    per_shift = "dokładnie 1 osoba" if staff == 1 else f"dokładnie {staff} os."
                     add(
                         f"{name}, dzień {day}: typ zmiany „W” ma {len(can_work)} os. "
                         f"({', '.join(e.display_name() for e in can_work)}), a doba tej placówki "
-                        f"ma najwyżej {capacity} {'zmianę' if capacity == 1 else 'zmiany'} "
-                        "(na każdej dokładnie 1 osoba)."
+                        f"ma najwyżej {shifts} {'zmianę' if shifts == 1 else 'zmiany'} "
+                        f"(na każdej {per_shift})."
                     )
             available = [
                 employees[e] for e in indices
@@ -737,7 +755,13 @@ def _add_duty_rotation_supply_messages(schedule, shop, add) -> None:
                     f"{name}, dzień {day}: nikt z pracowników placówki nie jest "
                     "dostępny (urlop/L4/wolne) - doby nie da się obsadzić."
                 )
-            elif len(available) == 1 and not (plan is not None and plan.is_planned(location_key, day)):
+            elif staff > 1 and len(available) < staff:
+                add(
+                    f"{name}, dzień {day}: dostępnych jest tylko {len(available)} os. "
+                    f"({', '.join(e.display_name() for e in available)}), a „Ilość osób na "
+                    f"obłożeniu” tej placówki to {staff} - doby nie da się obsadzić."
+                )
+            elif staff == 1 and len(available) == 1 and not (plan is not None and plan.is_planned(location_key, day)):
                 only = available[0]
                 weekday_split = shop.weekday(day) < 5 and not rotation.get("only_12_24h")
                 if weekday_split:

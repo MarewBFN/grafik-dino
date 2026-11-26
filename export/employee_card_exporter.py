@@ -188,6 +188,11 @@ def _day_rows(schedule, employee):
         if getattr(ds, "is_sick", False):
             rows.append((day_label, "L4", "", "", "", ""))
             continue
+        if ds.is_paid_off:
+            # „Wolne płatne” - 8 h do czasu pracy, bez godzin dziennych/nocnych
+            # (pracownika fizycznie nie ma).
+            rows.append((day_label, "WP", "", _strip_zero_minutes(ds.total_as_str() or ""), "", ""))
+            continue
         if ds.is_empty():
             rows.append((day_label, "", "", "", "", ""))
             continue

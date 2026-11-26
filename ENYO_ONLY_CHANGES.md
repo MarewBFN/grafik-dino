@@ -2076,3 +2076,70 @@ projektu (per placówka był tylko limit „Dni pod rząd”).
 | `ui/config_dialog.py`, `ui/locations_dialog.py` | Ustawienia zaawansowane per placówka | DO USTALENIA |
 | `tests/schedule_validator.py`, `tests/generator_audit_harness.py` | Ocena wg placówki, tryby placówki w specyfikacji | NIE |
 | `README.md` | Opis ustawień per placówka | TAK (po dopasowaniu do DinGo!) |
+
+## „Wolne płatne” (WP) i „Ilość osób na obłożeniu” per placówka (2026-11-26)
+
+### „Wolne płatne” (WP)
+
+Prośba użytkownika: dzień wolny za święto, za który firma płaci - pracownika
+nie ma, ale do czasu pracy liczy się zawsze 8 h, w każdej placówce. Szef
+wpisuje go wyłącznie ręcznie; generator ma go ignorować.
+
+- **Model**: `DaySchedule.is_paid_off` (+ `set_paid_off()`, `PAID_OFF_MINUTES`
+  = 480). Komórka bez godzin i **bez blokady**; `total_duration()` = 8 h, więc
+  kolumny Praca/Razem/Nadgodziny, eksporty i karta pracy liczą +8 h na dzień
+  bez osobnych sum. Każdy inny stan dnia (godziny, wolne, urlop, L4, typ
+  zmiany, Usuń) kasuje WP. Zapis/odczyt projektu, kopiuj/wklej dzień.
+- **Generator: bez nowej logiki** - `AutoScheduleGenerator._generate_run`
+  woła `MonthSchedule.clear_paid_off_days()` dla generowanych pracowników
+  (także przy „Popraw”), więc komórka jest dla niego pusta i może dostać
+  zmianę. Brak rozwiązania przywraca WP razem z resztą grafiku. Żaden
+  constraint się nie zmienił.
+- **UI**: przycisk „Wolne płatne” w trybie szybkim (domyślnie widoczny,
+  przełącznik w Ustawieniach trybu szybkiego -> Tryby domyślne) i w menu
+  PPM; w siatce „WP” (kompaktowy) / „WP” + 8:00 (rozszerzony), osobny kolor
+  i legenda. „Wyczyść auto” zostawia WP (wpis ręczny), „Wyczyść grafik” je
+  kasuje.
+- **Wydruki**: „WP” w Excel/JPG/PDF (oba układy) i na karcie pracy (8 h,
+  bez godzin dziennych/nocnych).
+
+### „Ilość osób na obłożeniu” per placówka
+
+Prośba użytkownika: część placówek pilnują jednocześnie np. 2 osoby (w tych
+samych godzinach) zamiast sztywno 1. Pole w Konfiguracja -> Lokalizacje obok
+„Maks. dni pracy pod rząd”, domyślnie 1, zapis w
+`LocationConfig.constraints["coverage_staff"]` (brak wpisu = 1 - stare
+projekty bez zmian).
+
+Zmienione constrainty (przy N = 1 kod idzie dokładnie dotychczasową ścieżką -
+te same zmienne i ograniczenia co wcześniej):
+
+- `duty_rotation_coverage` (rotacja 24/7): każda zmiana tygodnia dokładnie N
+  osób; doba 24h/12h+12h: k osób na 24 h i po N-k na każdej połówce
+  (`use_24h` = IntVar 0..N; przy N = 1 nadal BoolVar).
+- Plan ręcznych wpisów (`duty_rotation_manual_coverage.py`): doba ma N
+  "warstw", ręczny wpis przycina tylko jedną (`_assign_layers`); przy N = 1
+  jedna warstwa = dotychczasowy plan.
+- Odpoczynek po 24 h (`duty_rotation_rest_constraint.py`,
+  `OpeningHoursModel.required_rest_after`): (N_24h // N - 1) x 24 h, min.
+  24 h - rotują N-osobowe składy (4 osoby po 2 na dobę = 24 h odpoczynku).
+  Bez tego przy N = 2 cykl (N_24h-1) x 24 h byłby niespełnialny.
+- `opening_hours_coverage` (placówki z godzinami, Ochrona): co najmniej N osób
+  w każdym kwadransie okna (ręczne stałe przedziały zajmują miejsca);
+  „Maks. obsada naraz” nigdy mniejsza niż N (`max_staff_for_view`).
+- Diagnostyka: komunikat „dostępnych jest tylko k os., a „Ilość osób na
+  obłożeniu” tej placówki to N”; podpowiedzi o „tylko 1 osobie” tylko dla
+  placówek 1-osobowych.
+- Wiersz „Obłożenie” (`duty_coverage_presenter.py`): rotacja - dokładnie N
+  osób w każdej chwili doby, godziny otwarcia - co najmniej N; dymek podaje
+  oczekiwaną liczbę osób.
+
+| Plik | Zmiana | Przywrócić do main? |
+|---|---|---|
+| `model/day_schedule.py`, `model/month_schedule.py` | `is_paid_off`, `clear_paid_off_days`, zapis/odczyt | TAK |
+| `logic/schedule_controller.py`, `ui/main_window.py`, `ui/grid_view.py`, `ui/grid_legend.py`, `ui/theme.py`, `logic/schedule_presenter.py`, `model/shop_config.py` | Przycisk i komórka WP | TAK |
+| `export/*` | „WP” na wydrukach | TAK |
+| `logic/auto_generator.py` | Czyszczenie WP przed generowaniem | TAK |
+| `model/location.py`, `ui/locations_dialog.py` | `coverage_staff`, pole w Lokalizacjach | DO USTALENIA |
+| `logic/generator/duty_rotation_constraint.py`, `duty_rotation_manual_coverage.py`, `duty_rotation_rest_constraint.py`, `opening_hours_coverage.py`, `diagnostics.py`, `logic/duty_coverage_presenter.py` | Obłożenie N osób | DO USTALENIA |
+| `tests/test_paid_off_day.py`, `tests/test_coverage_staff.py` (nowe) | Testy | TAK |
