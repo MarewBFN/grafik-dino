@@ -1,5 +1,5 @@
 {
-  "latest_version": "1.1.8.enyo",
-  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.1.8-enyo/EnyoSetup.exe",
-  "changelog": "- Wyczyść grafik i Wyczyść auto działają tylko na wybranej placówce, okno potwierdzenia podaje jej nazwę\n- Okno aktualizacji pokazuje zmiany jako listę punktów, a pytanie o instalację pod nimi"
+  "latest_version": "1.1.9.enyo",
+  "download_url": "https://github.com/MarewBFN/grafik-dino/releases/download/v1.1.9-enyo/EnyoSetup.exe",
+  "changelog": "- Nowy przycisk „Wolne płatne” (WP): dzień wolny za święto, zawsze płatny 8 h, liczony w kolumnach godzin i na karcie pracy\n- „Wyczyść auto” zostawia WP, generator może je nadpisać\n- Lokalizacje: nowe pole „Ilość osób na obłożeniu” – generator obsadza każdą zmianę wskazaną liczbą osób\n- Wiersz „Obłożenie” i komunikaty o braku rozwiązania uwzględniają liczbę osób na obłożeniu"
 }
